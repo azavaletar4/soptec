@@ -66,7 +66,7 @@
 <body>
 
 <header>
-  <span class="tag">SmartRayco · Fase 5</span>
+  <span class="tag">SmartRayco · Fase 5 — actualizado</span>
   <h1>Módulo MikroTik (REST API)</h1>
   <p class="sub">Conexión a RouterOS v7+ vía su REST API, usuarios PPPoE con estado en vivo,
   conexiones activas y leases DHCP.</p>
@@ -127,25 +127,35 @@ GET    /api/mikrotik-devices/:id/ip-addresses          IPs configuradas</pre>
   </section>
 
   <section>
-    <h2><span class="num">3</span> Verificación realizada</h2>
+    <h2><span class="num">3</span> ✅ Validado contra tu MikroTik real</h2>
+    <div class="callout ok">
+      <h3>Conexión exitosa — CCR2116-12G-4S+, RouterOS 7.16.2</h3>
+      <p>Router real: <b>MikroTik CCR2116-12G-4S+</b> (16 núcleos ARM64, 16 GB RAM), RouterOS
+      <b>7.16.2 (stable)</b> — confirma que el requisito v7+ de la REST API se cumple. Conexión
+      en <b>8ms</b>.</p>
+      <table>
+        <tr><th>Endpoint</th><th>Resultado real</th></tr>
+        <tr><td><code>/system/resource</code></td><td>✓ CPU, RAM, versión, uptime correctos</td></tr>
+        <tr><td><code>/ppp/secret</code></td><td>✓ <b>691</b> usuarios PPPoE reales</td></tr>
+        <tr><td><code>/ppp/active</code></td><td>✓ <b>629</b> conexiones activas reales</td></tr>
+        <tr><td><code>/ip/dhcp-server/lease</code></td><td>✓ leases reales, con MAC/IP/hostname</td></tr>
+      </table>
+      <p style="margin-top:10px"><b>Detalle importante encontrado:</b> tu router responde por
+      <b>HTTP simple en el puerto 80</b> (<code>use_tls: false</code>), no HTTPS/443 como asume el
+      valor por defecto del formulario. El puerto 8998 probado inicialmente no correspondía al
+      servicio <code>www</code>/<code>www-ssl</code>. El formulario ya soporta desmarcar "Usar
+      HTTPS" para este caso.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span> Verificación técnica</h2>
     <table>
       <tr><th>Comprobación</th><th>Resultado</th></tr>
       <tr><td><code>npm run build</code> / <code>tsc</code> backend</td><td><span class="check">✓</span> sin errores, 102 módulos</td></tr>
       <tr><td>Rutas protegidas por autenticación</td><td><span class="check">✓</span> <code>401 "No autenticado"</code> sin token</td></tr>
-      <tr><td>Conexión real contra tu MikroTik</td><td><span class="pill warn">pendiente</span> — necesito que registres tu router real y probemos, igual que hicimos con la OLT</td></tr>
+      <tr><td>Conexión real contra tu MikroTik</td><td><span class="check">✓</span> validado end-to-end con datos de producción (ver sección 3)</td></tr>
     </table>
-  </section>
-
-  <section>
-    <h2><span class="num">4</span> Acción tuya para probar esta fase</h2>
-    <div class="callout warn">
-      <ol>
-        <li>Aplica la migración <code>supabase/migrations/20260910160000_fase5_mikrotik.sql</code> (Table Editor o SQL Editor, igual que las anteriores).</li>
-        <li>Confirma que tu RouterOS tiene la REST API habilitada: <b>IP → Services</b> → <code>www-ssl</code> (o <code>www</code>) en estado <i>running</i>.</li>
-        <li>Ve a <code>/mikrotik</code> en la app, registra tu router (IP, usuario, contraseña) y presiona "Probar conexión".</li>
-        <li>Pégame el resultado — si tu router usa un puerto o versión distinta a lo esperado, lo ajustamos como hicimos con la OLT.</li>
-      </ol>
-    </div>
   </section>
 
   <section>
