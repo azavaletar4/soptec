@@ -100,8 +100,16 @@ mikrotikRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
   const start = Date.now();
   try {
     const resource = await mikrotikRequest(targetFor(device), '/system/resource');
+    await supabaseAdmin
+      .from('mikrotik_devices')
+      .update({ last_test_ok: true, last_tested_at: new Date().toISOString() })
+      .eq('id', device.id);
     return c.json({ status: 'ok', ms: Date.now() - start, resource });
   } catch (e) {
+    await supabaseAdmin
+      .from('mikrotik_devices')
+      .update({ last_test_ok: false, last_tested_at: new Date().toISOString() })
+      .eq('id', device.id);
     return c.json({ status: 'error', message: e instanceof Error ? e.message : 'Error de conexion' }, 502);
   }
 });

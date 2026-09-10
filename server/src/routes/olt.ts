@@ -109,11 +109,19 @@ oltRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
     const outputs = await runTelnetCommands(telnetTargetFor(device), testConnectionCommands());
     // eslint-disable-next-line no-console
     console.log(`[olt/test] OK en ${Date.now() - start}ms. Output:\n${outputs.join('\n')}`);
+    await supabaseAdmin
+      .from('olt_devices')
+      .update({ last_test_ok: true, last_tested_at: new Date().toISOString() })
+      .eq('id', device.id);
     return c.json({ status: 'ok', ms: Date.now() - start, output: outputs.join('\n') });
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Error de conexion';
     // eslint-disable-next-line no-console
     console.error(`[olt/test] FALLO tras ${Date.now() - start}ms:`, e);
+    await supabaseAdmin
+      .from('olt_devices')
+      .update({ last_test_ok: false, last_tested_at: new Date().toISOString() })
+      .eq('id', device.id);
     return c.json({ status: 'error', message }, 502);
   }
 });
