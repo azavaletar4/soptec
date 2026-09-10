@@ -19,10 +19,13 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
   const body = await res.json().catch(() => null);
 
   if (!res.ok) {
-    const message =
-      body && typeof body === 'object' && 'error' in body
-        ? String((body as { error?: unknown }).error)
-        : `Error ${res.status}`;
+    // Distintas rutas usan 'error' (la mayoria) o 'message' (ej. /olt-devices/:id/test).
+    let message = `Error ${res.status}`;
+    if (body && typeof body === 'object') {
+      const b = body as Record<string, unknown>;
+      if (typeof b.error === 'string') message = b.error;
+      else if (typeof b.message === 'string') message = b.message;
+    }
     throw new Error(message);
   }
 
