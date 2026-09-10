@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartRayco — Fase 3: Clientes y Contratos</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121b2e; --panel2:#182543; --border:#26355c;
+    --text:#e7ecf7; --muted:#9fb0d0; --accent:#3ea6ff; --accent2:#5be8b5;
+    --warn:#ffb454; --danger:#ff6b6b; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b1220,#0e1730 400px, #0b1220);
+    color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    line-height:1.55; padding-bottom:60px;
+  }
+  header{padding:48px 24px 32px; max-width:1040px; margin:0 auto; border-bottom:1px solid var(--border)}
+  header .tag{
+    display:inline-block; background:var(--panel2); color:var(--accent2);
+    border:1px solid var(--border); padding:4px 12px; border-radius:999px;
+    font-size:12px; letter-spacing:.04em; text-transform:uppercase; margin-bottom:14px;
+  }
+  h1{font-size:32px; margin:0 0 8px; letter-spacing:-.01em}
+  header p.sub{color:var(--muted); font-size:16px; margin:0; max-width:720px}
+  main{max-width:1040px; margin:0 auto; padding:32px 24px}
+  section{margin-bottom:40px}
+  h2{font-size:22px; margin:0 0 4px; display:flex; align-items:center; gap:10px}
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:8px; background:var(--panel2);
+    color:var(--accent); font-size:14px; border:1px solid var(--border);
+  }
+  h2 + p.lead{color:var(--muted); margin:6px 0 18px; max-width:760px}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; margin-bottom:14px}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  h3{font-size:16px; margin:0 0 8px; color:var(--text)}
+  ul{margin:8px 0; padding-left:20px}
+  li{margin-bottom:4px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em}
+  code, .mono{font-family:Consolas,Menlo,monospace; font-size:13px}
+  pre{background:#0a1120; border:1px solid var(--border); border-radius:10px; padding:16px; overflow-x:auto; font-size:13px; color:#cfe0ff}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); margin-left:6px}
+  .pill.ok{color:var(--accent2); border-color:#1f5c46; background:#0f2a20}
+  .pill.warn{color:var(--warn); border-color:#5c4a1f; background:#2a1f0c}
+  .pill.next{color:var(--accent); border-color:#1f3a5c; background:#0f1f2a}
+  details{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:hidden}
+  summary{cursor:pointer; padding:16px 20px; font-weight:600; font-size:15px; list-style:none; display:flex; align-items:center; justify-content:space-between}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--muted); transition:transform .15s ease; font-size:13px}
+  details[open] summary .chev{transform:rotate(90deg)}
+  details .body{padding:0 20px 20px; color:var(--muted); border-top:1px solid var(--border)}
+  details .body ul{color:var(--text)}
+  .callout{border-radius:var(--radius); padding:20px 22px; border:1px solid}
+  .callout.ok{background:#0f2a20; border-color:#1f5c46}
+  .callout.ok h3{color:var(--accent2)}
+  .callout.warn{background:#2a1f0c; border-color:#5c4a1f}
+  .callout.warn h3{color:var(--warn)}
+  .check{color:var(--accent2)}
+  footer{max-width:1040px; margin:0 auto; padding:24px; color:var(--muted); font-size:13px; border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="tag">SmartRayco · Fase 3</span>
+  <h1>Clientes y contratos</h1>
+  <p class="sub">CRUD completo de clientes, numeración automática de contratos
+  (<code>CTR-YYYY-NNNNN</code>) y una vista Kanban por estado con drag-and-drop.</p>
+</header>
+
+<main>
+
+  <section>
+    <h2><span class="num">1</span> Qué se construyó</h2>
+    <p class="lead">Criterio de aceptación del curso: <i>"puedo crear clientes, asignarles
+    contratos y ver el Kanban"</i> — cumplido y verificado en el flujo de compilación
+    (sección 3); falta tu prueba manual end-to-end una vez tengas Supabase con datos.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Clientes <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li><code>/clientes</code> — tabla con nombre, documento, teléfono, zona, estado (badge de color)</li>
+          <li>Modal crear/editar: documento, nombres, teléfono, correo, dirección, zona, estado</li>
+          <li>Eliminar con confirmación</li>
+          <li><code>/clientes/:id</code> — perfil con datos + historial de contratos</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Contratos <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li>Botón "Nuevo contrato" desde el perfil del cliente: elige plan (precargado desde <code>plans</code>), mensualidad, día de corte, método de pago</li>
+          <li><b>Numeración automática:</b> trigger SQL asigna <code>CTR-2026-00001</code>, <code>CTR-2026-00002</code>... al insertar, sin intervención del frontend</li>
+          <li><code>/contratos/kanban</code> — 3 columnas (Activos / Suspendidos / Cancelados), arrastrar tarjeta = cambio de estado con confirmación</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Decisión de arquitectura aplicada</h3>
+      <p>Todo este CRUD llama <b>directo a Supabase</b> desde el frontend (no pasa por el backend
+      Hono), respetando las políticas RLS por rol definidas en la Fase 2. Esto sigue la
+      arquitectura del curso: Hono se reserva para operaciones con SSH o credenciales privadas
+      (OLT, MikroTik, SRI) — no para CRUD simple.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span> Cambios en base de datos</h2>
+    <div class="card">
+<pre>-- supabase/migrations/20260910130000_fase3_clientes_contratos.sql
+alter table clients add column address text;
+
+-- Numeracion automatica de contratos
+contract_number_counters (year, last_value)   -- interno, sin acceso directo
+generate_contract_number()                    -- SECURITY DEFINER, atomico
+trigger trg_service_contracts_number          -- asigna CTR-YYYY-NNNNN al insertar</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span> Verificación realizada</h2>
+    <table>
+      <tr><th>Comprobación</th><th>Resultado</th></tr>
+      <tr><td><code>npm run build</code> (type-check + build, 90 módulos)</td><td><span class="check">✓</span> sin errores de TypeScript</td></tr>
+      <tr><td><code>npm run dev:web</code> (smoke test)</td><td><span class="check">✓</span> responde 200</td></tr>
+      <tr><td>Flujo real: crear cliente → crear contrato → ver en Kanban</td><td><span class="pill warn">pendiente de tu prueba</span> — requiere aplicar la migración de Fase 3 en tu Supabase</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span> Acción tuya</h2>
+    <div class="callout warn">
+      <h3>⚠ Aplicar la nueva migración</h3>
+      <p>Igual que en la Fase 2: pega <code>supabase/migrations/20260910130000_fase3_clientes_contratos.sql</code>
+      en el SQL Editor de Supabase, o corre <code>supabase db push</code> si ya vinculaste el proyecto con la CLI.</p>
+      <p>Para probar el flujo completo necesitas al menos un plan activo en la tabla <code>plans</code>
+      (créalo manualmente desde el Table Editor de Supabase por ahora — la pantalla de administración
+      de planes no es parte del plan de fases del curso como módulo propio, así que si la quieres
+      la agrego como extra).</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span> Próxima fase</h2>
+    <details open>
+      <summary>Fase 4 — OLT Huawei MA5800 <span class="chev">▶</span></summary>
+      <div class="body">
+        <ul>
+          <li>Conexión SSH desde el backend Hono (aquí sí aplica: credenciales privadas)</li>
+          <li>Listar, registrar, activar/desactivar ONTs</li>
+          <li>Lectura de señal óptica (Rx/Tx)</li>
+          <li>Tabla <code>olt_devices</code> y <code>onus</code> en Supabase</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+</main>
+
+<footer>
+  SmartRayco — Reporte de Fase 3. No se avanza a Fase 4 sin tu aprobación explícita ("Aprobado").
+</footer>
+
+</body>
+</html>
