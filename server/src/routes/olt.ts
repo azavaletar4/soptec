@@ -100,12 +100,19 @@ oltRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
+  // eslint-disable-next-line no-console
+  console.log(`[olt/test] Conectando a ${device.host}:${device.ssh_port} (usuario: ${device.username})...`);
   const start = Date.now();
   try {
     const outputs = await runSshCommands(sshTargetFor(device), testConnectionCommands());
+    // eslint-disable-next-line no-console
+    console.log(`[olt/test] OK en ${Date.now() - start}ms. Output:\n${outputs.join('\n')}`);
     return c.json({ status: 'ok', ms: Date.now() - start, output: outputs.join('\n') });
   } catch (e) {
-    return c.json({ status: 'error', message: e instanceof Error ? e.message : 'Error de conexion' }, 502);
+    const message = e instanceof Error ? e.message : 'Error de conexion';
+    // eslint-disable-next-line no-console
+    console.error(`[olt/test] FALLO tras ${Date.now() - start}ms:`, e);
+    return c.json({ status: 'error', message }, 502);
   }
 });
 

@@ -76,6 +76,8 @@ export function runSshCommands(
 
     conn
       .on('ready', () => {
+        // eslint-disable-next-line no-console
+        console.log(`[ssh] Conexion SSH establecida con ${target.host}:${target.port}, abriendo shell...`);
         conn.shell((err, stream) => {
           if (err) return fail(err);
 
@@ -127,13 +129,61 @@ export function runSshCommands(
           });
         });
       })
-      .on('error', (err) => fail(err))
+      .on('error', (err) => {
+        // eslint-disable-next-line no-console
+        console.error(`[ssh] Error conectando a ${target.host}:${target.port}:`, err.message);
+        fail(err);
+      })
       .connect({
         host: target.host,
         port: target.port,
         username: target.username,
         password: target.password,
         readyTimeout: timeoutMs,
+        // Muchos equipos GPON (OLTs) embebidos, incluida la ZTE C300, solo
+        // soportan algoritmos SSH viejos que Node deshabilita por defecto
+        // (por seguridad). Sin esto, el handshake falla con ECONNRESET.
+        algorithms: {
+          kex: [
+            'diffie-hellman-group1-sha1',
+            'diffie-hellman-group14-sha1',
+            'diffie-hellman-group14-sha256',
+            'diffie-hellman-group-exchange-sha1',
+            'diffie-hellman-group-exchange-sha256',
+            'ecdh-sha2-nistp256',
+            'ecdh-sha2-nistp384',
+            'ecdh-sha2-nistp521',
+          ],
+          cipher: [
+            '3des-cbc',
+            'aes128-cbc',
+            'aes192-cbc',
+            'aes256-cbc',
+            'aes128-ctr',
+            'aes192-ctr',
+            'aes256-ctr',
+            'aes128-gcm',
+            'aes256-gcm',
+          ],
+          serverHostKey: [
+            'ssh-rsa',
+            'ssh-dss',
+            'ecdsa-sha2-nistp256',
+            'ecdsa-sha2-nistp384',
+            'ecdsa-sha2-nistp521',
+            'ssh-ed25519',
+          ],
+          hmac: ['hmac-sha1', 'hmac-sha2-256', 'hmac-sha2-512', 'hmac-md5'],
+        },
+        // Temporal, para diagnosticar el handshake real contra la ZTE. Quitar
+        // (o condicionar a una env var) una vez confirmado que conecta bien.
+        debug: (msg: string) => {
+          // eslint-disable-next-line no-console
+          console.log(`[ssh:debug] ${msg}`);
+        },
       });
+
+    // eslint-disable-next-line no-console
+    console.log(`[ssh] Intentando conectar a ${target.host}:${target.port} como ${target.username}...`);
   });
 }
