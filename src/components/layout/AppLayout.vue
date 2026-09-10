@@ -7,7 +7,8 @@ const router = useRouter();
 
 const MODULOS = [
   { label: 'Dashboard', to: '/dashboard', disabled: false },
-  { label: 'Clientes', to: '#', disabled: true },
+  { label: 'Clientes', to: '/clientes', disabled: false },
+  { label: 'Contratos', to: '/contratos/kanban', disabled: false },
   { label: 'Red & OLTs', to: '#', disabled: true },
   { label: 'MikroTik', to: '#', disabled: true },
   { label: 'Facturacion', to: '#', disabled: true },

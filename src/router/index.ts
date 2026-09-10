@@ -12,6 +12,24 @@ const router = createRouter({
       component: () => import('@/views/DashboardView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/clientes',
+      name: 'clientes',
+      component: () => import('@/views/clientes/ClientesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/clientes/:id',
+      name: 'cliente-detalle',
+      component: () => import('@/views/clientes/ClientDetailView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/contratos/kanban',
+      name: 'contratos-kanban',
+      component: () => import('@/views/contratos/ContratosKanbanView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 });
 
