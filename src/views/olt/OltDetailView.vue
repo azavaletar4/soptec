@@ -36,9 +36,40 @@ const STATUS_CLASS: Record<string, string> = {
   unknown: 'bg-slate-500/15 text-slate-400',
 };
 
+interface OltSummary {
+  unconfigured: number;
+  online: number;
+  offline: number;
+  lowSignal: number;
+  syncedTotal: number;
+  checkedAt: string;
+}
+
+const summary = ref<OltSummary | null>(null);
+const summaryLoading = ref(true);
+const summaryError = ref<string | null>(null);
+
+const checkedAtLabel = computed(() => {
+  if (!summary.value) return '';
+  const d = new Date(summary.value.checkedAt);
+  return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+});
+
+async function loadSummary() {
+  summaryLoading.value = true;
+  summaryError.value = null;
+  try {
+    summary.value = await oltStore.fetchSummary(deviceId.value);
+  } catch (e) {
+    summaryError.value = getErrorMessage(e, 'Error al consultar el resumen de la OLT');
+  } finally {
+    summaryLoading.value = false;
+  }
+}
+
 onMounted(async () => {
   if (!oltStore.devices.length) await oltStore.fetchDevices();
-  await oltStore.fetchOnts(deviceId.value);
+  await Promise.all([oltStore.fetchOnts(deviceId.value), loadSummary()]);
 });
 
 async function handleSync() {
@@ -130,6 +161,49 @@ async function handleSignal(ont: OltOnt) {
     <template v-else>
       <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
       <p class="text-slate-400 text-sm mb-6">{{ device.host }}:{{ device.telnet_port }} · {{ device.brand.toUpperCase() }}</p>
+
+      <!-- Resumen estilo SmartOLT -->
+      <div class="grid gap-4 mb-2" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
+        <div class="rounded-xl p-5 flex items-start justify-between" style="background:#2f6fed">
+          <div>
+            <div class="text-3xl font-bold text-white">{{ summaryLoading ? '—' : summary?.unconfigured ?? 0 }}</div>
+            <div class="text-sm text-white/90 mt-1">Sin autorizar</div>
+          </div>
+          <span class="text-2xl">✨</span>
+        </div>
+        <div class="rounded-xl p-5 flex items-start justify-between" style="background:#16a34a">
+          <div>
+            <div class="text-3xl font-bold text-white">{{ summaryLoading ? '—' : summary?.online ?? 0 }}</div>
+            <div class="text-sm text-white/90 mt-1">Online</div>
+          </div>
+          <span class="text-2xl">🖧</span>
+        </div>
+        <div class="rounded-xl p-5 flex items-start justify-between" style="background:#475569">
+          <div>
+            <div class="text-3xl font-bold text-white">{{ summaryLoading ? '—' : summary?.offline ?? 0 }}</div>
+            <div class="text-sm text-white/90 mt-1">Total offline</div>
+          </div>
+          <span class="text-2xl">✕</span>
+        </div>
+        <div class="rounded-xl p-5 flex items-start justify-between" style="background:#ea580c">
+          <div>
+            <div class="text-3xl font-bold text-white">{{ summaryLoading ? '—' : summary?.lowSignal ?? 0 }}</div>
+            <div class="text-sm text-white/90 mt-1">Señales bajas</div>
+          </div>
+          <span class="text-2xl">⚠</span>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 text-right mb-1">
+        {{ summaryLoading ? 'Consultando...' : `Informacion valida a las ${checkedAtLabel}` }}
+        <button class="ml-2 text-sky-400 hover:underline" @click="loadSummary">Actualizar</button>
+      </p>
+      <p v-if="summaryError" class="text-xs text-red-400 mb-4">{{ summaryError }}</p>
+      <p class="text-xs text-slate-500 mb-6">
+        "Sin autorizar" es en vivo (consulta directa a la OLT). "Online/Offline/Señales bajas" se
+        calculan con los puertos que ya sincronizaste aquí abajo — sincroniza más puertos para
+        totales más completos (SmartOLT los mantiene con un escaneo continuo en segundo plano,
+        que SmartRayco aún no tiene).
+      </p>
 
       <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">
         <h2 class="text-sm font-semibold mb-3">Consultar puerto GPON</h2>

@@ -5,12 +5,16 @@ import { runTelnetCommands } from '../telnet/client';
 import {
   testConnectionCommands,
   listOntsCommands,
+  listUnconfiguredOntsCommands,
   registerOntCommands,
   setAdminStateCommands,
   deleteOntCommands,
   opticalInfoCommands,
 } from '../ssh/zteCommands';
-import { parseOntList, parseOpticalInfo } from '../ssh/zteParsers';
+import { parseOntList, parseOpticalInfo, parseUnconfiguredOnts } from '../ssh/zteParsers';
+
+// Rango de senal optica GPON aceptable segun el glosario del curso: -8 a -27 dBm.
+const LOW_SIGNAL_THRESHOLD_DBM = -27;
 
 export const oltRoutes = new Hono();
 
@@ -124,6 +128,44 @@ oltRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
       .eq('id', device.id);
     return c.json({ status: 'error', message }, 502);
   }
+});
+
+/**
+ * Resumen estilo SmartOLT: sin autorizar (en vivo, ~200ms confirmado en Fase 4),
+ * online/offline/senal baja (del cache local olt_onts — solo refleja los
+ * puertos ya sincronizados, no es un escaneo completo de la OLT).
+ */
+oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  let unconfigured = 0;
+  try {
+    const outputs = await runTelnetCommands(telnetTargetFor(device), listUnconfiguredOntsCommands());
+    unconfigured = parseUnconfiguredOnts(outputs.join('\n')).length;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[olt/summary] No se pudo consultar ONUs sin autorizar:', e);
+  }
+
+  const { data: onts } = await supabaseAdmin
+    .from('olt_onts')
+    .select('status, rx_power')
+    .eq('olt_device_id', device.id);
+
+  const rows = onts ?? [];
+  const online = rows.filter((r) => r.status === 'online').length;
+  const offline = rows.filter((r) => r.status === 'offline').length;
+  const lowSignal = rows.filter((r) => r.rx_power != null && r.rx_power < LOW_SIGNAL_THRESHOLD_DBM).length;
+
+  return c.json({
+    unconfigured,
+    online,
+    offline,
+    lowSignal,
+    syncedTotal: rows.length,
+    checkedAt: new Date().toISOString(),
+  });
 });
 
 // ---- ONTs (cache local en olt_onts, sincronizada bajo demanda por Telnet) ----

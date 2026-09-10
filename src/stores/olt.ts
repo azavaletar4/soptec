@@ -116,6 +116,17 @@ export const useOltStore = defineStore('olt', () => {
     );
   }
 
+  function fetchSummary(deviceId: string) {
+    return apiFetch<{
+      unconfigured: number;
+      online: number;
+      offline: number;
+      lowSignal: number;
+      syncedTotal: number;
+      checkedAt: string;
+    }>(`/api/olt-devices/${deviceId}/summary`);
+  }
+
   return {
     devices,
     onts,
@@ -132,5 +143,6 @@ export const useOltStore = defineStore('olt', () => {
     toggleOnt,
     deleteOnt,
     getSignal,
+    fetchSummary,
   };
 });
