@@ -5,6 +5,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { getErrorMessage } from '@/lib/errors';
 import type { ContractStatus, ServiceContract } from '@/types/domain';
 
 const route = useRoute();
@@ -81,7 +82,7 @@ async function handleCreateContract() {
     showContractModal.value = false;
     await loadContracts();
   } catch (e) {
-    contractError.value = e instanceof Error ? e.message : 'Error al crear el contrato';
+    contractError.value = getErrorMessage(e, 'Error al crear el contrato');
   } finally {
     savingContract.value = false;
   }

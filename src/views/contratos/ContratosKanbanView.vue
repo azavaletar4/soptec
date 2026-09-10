@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useContractsStore } from '@/stores/contracts';
+import { getErrorMessage } from '@/lib/errors';
 import type { ContractStatus, ServiceContract } from '@/types/domain';
 
 const contractsStore = useContractsStore();
@@ -42,7 +43,7 @@ async function onDrop(status: ContractStatus) {
   try {
     await contractsStore.updateContractStatus(contract.id, status);
   } catch (e) {
-    alert(e instanceof Error ? e.message : 'Error al cambiar el estado del contrato');
+    alert(getErrorMessage(e, 'Error al cambiar el estado del contrato'));
   }
 }
 </script>

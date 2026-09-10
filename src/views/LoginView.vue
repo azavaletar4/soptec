@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { getErrorMessage } from '@/lib/errors';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -18,7 +19,7 @@ async function handleSubmit() {
     await auth.signIn(email.value, password.value);
     router.push('/dashboard');
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Error al iniciar sesion';
+    error.value = getErrorMessage(e, 'Error al iniciar sesion');
   } finally {
     loading.value = false;
   }

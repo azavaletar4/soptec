@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { getErrorMessage } from '@/lib/errors';
 import type { Client, ClientStatus, DocumentType } from '@/types/domain';
 
 const router = useRouter();
@@ -88,7 +89,7 @@ async function handleSubmit() {
     }
     showModal.value = false;
   } catch (e) {
-    formError.value = e instanceof Error ? e.message : 'Error al guardar el cliente';
+    formError.value = getErrorMessage(e, 'Error al guardar el cliente');
   } finally {
     saving.value = false;
   }
@@ -100,7 +101,7 @@ async function handleDelete(client: Client) {
   try {
     await clientsStore.deleteClient(client.id);
   } catch (e) {
-    alert(e instanceof Error ? e.message : 'Error al eliminar el cliente');
+    alert(getErrorMessage(e, 'Error al eliminar el cliente'));
   }
 }
 
