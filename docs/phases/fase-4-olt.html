@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartRayco — Fase 4: OLT ZTE C300</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121b2e; --panel2:#182543; --border:#26355c;
+    --text:#e7ecf7; --muted:#9fb0d0; --accent:#3ea6ff; --accent2:#5be8b5;
+    --warn:#ffb454; --danger:#ff6b6b; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b1220,#0e1730 400px, #0b1220);
+    color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    line-height:1.55; padding-bottom:60px;
+  }
+  header{padding:48px 24px 32px; max-width:1040px; margin:0 auto; border-bottom:1px solid var(--border)}
+  header .tag{
+    display:inline-block; background:var(--panel2); color:var(--accent2);
+    border:1px solid var(--border); padding:4px 12px; border-radius:999px;
+    font-size:12px; letter-spacing:.04em; text-transform:uppercase; margin-bottom:14px;
+  }
+  h1{font-size:32px; margin:0 0 8px; letter-spacing:-.01em}
+  header p.sub{color:var(--muted); font-size:16px; margin:0; max-width:760px}
+  main{max-width:1040px; margin:0 auto; padding:32px 24px}
+  section{margin-bottom:40px}
+  h2{font-size:22px; margin:0 0 4px; display:flex; align-items:center; gap:10px}
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:8px; background:var(--panel2);
+    color:var(--accent); font-size:14px; border:1px solid var(--border);
+  }
+  h2 + p.lead{color:var(--muted); margin:6px 0 18px; max-width:760px}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; margin-bottom:14px}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  h3{font-size:16px; margin:0 0 8px; color:var(--text)}
+  ul{margin:8px 0; padding-left:20px}
+  li{margin-bottom:4px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em}
+  code, .mono{font-family:Consolas,Menlo,monospace; font-size:13px}
+  pre{background:#0a1120; border:1px solid var(--border); border-radius:10px; padding:16px; overflow-x:auto; font-size:13px; color:#cfe0ff}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); margin-left:6px}
+  .pill.ok{color:var(--accent2); border-color:#1f5c46; background:#0f2a20}
+  .pill.warn{color:var(--warn); border-color:#5c4a1f; background:#2a1f0c}
+  .pill.next{color:var(--accent); border-color:#1f3a5c; background:#0f1f2a}
+  details{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:hidden}
+  summary{cursor:pointer; padding:16px 20px; font-weight:600; font-size:15px; list-style:none; display:flex; align-items:center; justify-content:space-between}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--muted); transition:transform .15s ease; font-size:13px}
+  details[open] summary .chev{transform:rotate(90deg)}
+  details .body{padding:0 20px 20px; color:var(--muted); border-top:1px solid var(--border)}
+  details .body ul{color:var(--text)}
+  .callout{border-radius:var(--radius); padding:20px 22px; border:1px solid}
+  .callout.danger{background:#2a1414; border-color:#5c2626}
+  .callout.danger h3{color:var(--danger)}
+  .callout.warn{background:#2a1f0c; border-color:#5c4a1f}
+  .callout.warn h3{color:var(--warn)}
+  .callout.ok{background:#0f2a20; border-color:#1f5c46}
+  .callout.ok h3{color:var(--accent2)}
+  .check{color:var(--accent2)}
+  footer{max-width:1040px; margin:0 auto; padding:24px; color:var(--muted); font-size:13px; border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="tag">SmartRayco · Fase 4</span>
+  <h1>Módulo OLT — ZTE C300</h1>
+  <p class="sub">CRUD de OLTs, cliente SSH interactivo genérico, y comandos/parsers específicos
+  para tu equipo real (ZTE C300) — no Huawei como proponía el material original del curso.</p>
+</header>
+
+<main>
+
+  <section>
+    <h2><span class="num">1</span> Cambio de marca durante la fase</h2>
+    <div class="callout warn">
+      <h3>⚠ El curso solo documenta Huawei y V-SOL — tu OLT es ZTE</h3>
+      <p>A mitad de esta fase confirmaste que tu OLT real es una <b>ZTE C300</b>. El material de
+      referencia (<code>curso/04-administracion-olt.md</code>, <code>curso/05-gestion-ont.md</code>)
+      solo cubre Huawei MA5800 y V-SOL con comandos verificados contra esos equipos reales.
+      Para ZTE no hay ese respaldo, así que los comandos SSH implementados aquí se basan en las
+      <b>convenciones generales y públicamente conocidas</b> de la CLI ZXA10 C300 (estilo Cisco:
+      <code>enable</code> / <code>configure terminal</code> / <code>interface gpon-olt_S/L/P</code>),
+      con un nivel de confianza menor que si fuera Huawei.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span> Qué se construyó</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Seguridad y arquitectura <span class="pill ok">✓ nuevo</span></h3>
+        <ul>
+          <li><b>Primera vez que Hono valida autenticación:</b> middleware que verifica el JWT de Supabase y el rol del usuario antes de ejecutar cualquier comando SSH</li>
+          <li><code>olt_devices</code> / <code>olt_onts</code>: RLS habilitado <b>sin políticas</b> — inaccesibles directo desde el frontend, solo vía backend con <code>service_role</code></li>
+          <li>La contraseña SSH de la OLT nunca se devuelve en ningún <code>GET</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Cliente SSH <span class="pill ok">✓ funcional (infraestructura)</span></h3>
+        <ul>
+          <li><code>server/src/ssh/client.ts</code>: shell interactivo genérico — detecta el prompt, pagina automáticamente, responde confirmaciones "(y/n)" y contraseñas de "enable" si hacen falta</li>
+          <li>Reutilizable para futuras marcas (si algún día agregas otra OLT distinta a la ZTE)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>CRUD de OLTs <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li><code>/olt</code>: registrar, editar, eliminar OLTs; botón "Probar conexión"</li>
+          <li>Formulario con host, puerto SSH, usuario, contraseña, zona</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Gestión de ONTs <span class="pill warn">funcional, comandos sin validar en hardware</span></h3>
+        <ul>
+          <li><code>/olt/:id</code>: seleccionar slot/puerto → sincronizar ONTs desde la OLT (cache local)</li>
+          <li>Registrar ONT nueva (ID auto-detectado o manual, tipo de ONU, VLAN, descripción)</li>
+          <li>Activar / desactivar / eliminar ONT, lectura de señal óptica (Rx/Tx)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span> Comandos ZTE implementados (a validar)</h2>
+    <div class="card">
+<pre>Conectar / probar:     enable → show version
+Listar ONTs de un puerto:  enable → show gpon onu state gpon-olt_{shelf}/{slot}/{port}
+Registrar ONT:          enable → configure terminal → interface gpon-olt_.../...
+                        onu {id} type {tipo} sn {serial} → exit
+                        interface gpon-onu_.../...:{id} → tcont/gemport/service-port → exit
+Activar/Desactivar:     onu {id} admin-state enable|disable
+Eliminar:               no onu {id}
+Senal optica:           show pon power attenuation gpon-onu_.../...:{id}</pre>
+    </div>
+    <div class="callout danger">
+      <h3>🛑 No probar comandos de escritura contra un puerto con clientes activos</h3>
+      <p>Antes de usar "Registrar ONT", "Activar/Desactivar" o "Eliminar" en producción:</p>
+      <ol>
+        <li>Verifica a mano por SSH/consola que los comandos de <b>lectura</b> (<code>show gpon onu state</code>, <code>show pon power attenuation</code>) devuelven el formato que esperan los parsers en <code>server/src/ssh/zteParsers.ts</code> — ajusta los regex si tu firmware difiere.</li>
+        <li>Prueba los comandos de <b>escritura</b> primero en un puerto de pruebas o con una ONU de repuesto.</li>
+        <li>Si algo no coincide, dime el output real de tu OLT y ajusto los comandos/parsers.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span> Bugs de infraestructura encontrados y corregidos</h2>
+    <p class="lead">Esta fase destapó dos problemas reales en lo ya construido, no relacionados con ZTE:</p>
+    <table>
+      <tr><th>Problema</th><th>Impacto</th><th>Corrección</th></tr>
+      <tr>
+        <td><code>supabaseAdmin.ts</code> creaba el cliente Supabase al cargar el módulo</td>
+        <td>Si faltaba <code>SUPABASE_SERVICE_ROLE_KEY</code>, <b>todo el backend se caía</b> al iniciar (hasta <code>/api/health</code>)</td>
+        <td>Cliente perezoso (Proxy): solo falla, con mensaje claro, la ruta que realmente necesita la service_role key</td>
+      </tr>
+      <tr>
+        <td><code>vite.config.ts</code> tenía el proxy <code>/api</code> fijo a <code>localhost:3001</code></td>
+        <td>Desincronizado del <code>PORT=3000</code> real de Hono → las llamadas del frontend al backend fallaban en desarrollo</td>
+        <td>Ambos ahora leen la misma variable <code>PORT</code> del <code>.env</code></td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span> Verificación realizada</h2>
+    <table>
+      <tr><th>Comprobación</th><th>Resultado</th></tr>
+      <tr><td><code>npm run build</code> (frontend)</td><td><span class="check">✓</span> compila sin errores, 97 módulos</td></tr>
+      <tr><td><code>tsc -p tsconfig.server.json</code> (backend)</td><td><span class="check">✓</span> sin errores de tipos</td></tr>
+      <tr><td>Backend arranca sin <code>SUPABASE_SERVICE_ROLE_KEY</code>/<code>JWT_SECRET</code></td><td><span class="check">✓</span> ya no se cae; <code>/api/health</code> sigue respondiendo</td></tr>
+      <tr><td>Proxy Vite → Hono con puertos sincronizados</td><td><span class="check">✓</span> <code>/api/health</code> vía <code>localhost:5173</code> responde 200</td></tr>
+      <tr><td>Middleware de auth rechaza peticiones sin token</td><td><span class="check">✓</span> <code>401 {"error":"No autenticado"}</code></td></tr>
+      <tr><td>Conexión SSH real contra tu OLT ZTE C300</td><td><span class="pill warn">pendiente</span> — necesito que completes <code>SUPABASE_SERVICE_ROLE_KEY</code> y <code>JWT_SECRET</code>, y que registres tu OLT real con sus credenciales</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">6</span> Acción tuya para poder probar esta fase</h2>
+    <div class="callout warn">
+      <ol>
+        <li>Completa en tu <code>.env</code>: <code>SUPABASE_SERVICE_ROLE_KEY</code> y <code>JWT_SECRET</code> (Project Settings → API, ver <code>docs/architecture/supabase-setup.md</code>).</li>
+        <li>Aplica la migración <code>supabase/migrations/20260910140000_fase4_olt.sql</code>.</li>
+        <li>Reinicia <code>npm run dev</code> para que el backend cargue las nuevas variables.</li>
+        <li>Ve a <code>/olt</code>, registra tu ZTE C300 (IP, usuario, contraseña SSH) y usa "Probar conexión" — con eso confirmamos si <code>enable</code> + <code>show version</code> funcionan tal cual contra tu equipo.</li>
+        <li>Pégame el resultado (el output real, o el error) para ajustar los comandos si hace falta.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">7</span> Próxima fase</h2>
+    <details open>
+      <summary>Fase 5 (curso) — OLT V-SOL <span class="pill next">reemplazada</span> <span class="chev">▶</span></summary>
+      <div class="body">
+        El curso dedica esta fase a soporte multi-marca (Huawei + V-SOL). Como tu única OLT es
+        ZTE, no aplica agregar V-SOL. Sugerencia: usar esta fase para <b>terminar de validar y
+        afinar los comandos ZTE</b> contra tu equipo real (con los datos que me pases en la
+        sección 6), en vez de sumar una marca que no usas.
+      </div>
+    </details>
+    <details>
+      <summary>Fase 6 (curso) — MikroTik REST API <span class="chev">▶</span></summary>
+      <div class="body">Conexión a RouterOS vía REST, usuarios PPPoE, leases DHCP, cruce MAC→IP con las ONTs.</div>
+    </details>
+  </section>
+
+</main>
+
+<footer>
+  SmartRayco — Reporte de Fase 4. No se avanza a la siguiente fase sin tu aprobación explícita ("Aprobado").
+</footer>
+
+</body>
+</html>

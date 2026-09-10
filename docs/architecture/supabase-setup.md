@@ -56,6 +56,27 @@ update public.profiles set role = 'SUPERADMIN' where email = 'tu-correo@dominio.
 ### Backend (Hono)
 
 ```bash
-npm run dev:api     # solo backend, http://localhost:3001/api/health
+npm run dev:api     # solo backend (puerto segun PORT en .env)
 npm run dev         # backend + frontend en paralelo
 ```
+
+## Fase 4 — OLT (ZTE C300)
+
+A partir de esta fase el backend valida el JWT de cada usuario antes de ejecutar comandos SSH,
+y usa la `service_role` key para leer/escribir `olt_devices`/`olt_onts` (tablas sin acceso directo
+desde el frontend). Completa en tu `.env`:
+
+| Valor (Project Settings → API) | Variable |
+|---|---|
+| `service_role` key | `SUPABASE_SERVICE_ROLE_KEY` |
+| `JWT Secret` (API → JWT Settings) | `JWT_SECRET` |
+
+Sin estas dos variables, `/api/olt-devices/*` responde 500 (con un mensaje claro) — el resto de
+la app (login, clientes, contratos) sigue funcionando igual, no depende de ellas.
+
+Luego aplica la migración `supabase/migrations/20260910140000_fase4_olt.sql` (SQL Editor o
+`supabase db push`), y registra tu primera OLT desde `/olt` en la app.
+
+⚠️ Los comandos SSH implementados para la ZTE C300 son un punto de partida basado en
+convenciones generales de su CLI — no están validados contra tu equipo real. Antes de usarlos en
+producción, revisa `server/src/ssh/zteCommands.ts` y `docs/phases/fase-4-olt.html`.
