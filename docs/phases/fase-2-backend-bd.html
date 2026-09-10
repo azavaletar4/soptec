@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartRayco — Fase 2: Backend y Base de Datos</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121b2e; --panel2:#182543; --border:#26355c;
+    --text:#e7ecf7; --muted:#9fb0d0; --accent:#3ea6ff; --accent2:#5be8b5;
+    --warn:#ffb454; --danger:#ff6b6b; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b1220,#0e1730 400px, #0b1220);
+    color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    line-height:1.55; padding-bottom:60px;
+  }
+  header{padding:48px 24px 32px; max-width:1040px; margin:0 auto; border-bottom:1px solid var(--border)}
+  header .tag{
+    display:inline-block; background:var(--panel2); color:var(--accent2);
+    border:1px solid var(--border); padding:4px 12px; border-radius:999px;
+    font-size:12px; letter-spacing:.04em; text-transform:uppercase; margin-bottom:14px;
+  }
+  h1{font-size:32px; margin:0 0 8px; letter-spacing:-.01em}
+  header p.sub{color:var(--muted); font-size:16px; margin:0; max-width:720px}
+  main{max-width:1040px; margin:0 auto; padding:32px 24px}
+  section{margin-bottom:40px}
+  h2{font-size:22px; margin:0 0 4px; display:flex; align-items:center; gap:10px}
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:8px; background:var(--panel2);
+    color:var(--accent); font-size:14px; border:1px solid var(--border);
+  }
+  h2 + p.lead{color:var(--muted); margin:6px 0 18px; max-width:760px}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; margin-bottom:14px}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  h3{font-size:16px; margin:0 0 8px; color:var(--text)}
+  ul{margin:8px 0; padding-left:20px}
+  li{margin-bottom:4px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em}
+  code, .mono{font-family:Consolas,Menlo,monospace; font-size:13px}
+  pre{background:#0a1120; border:1px solid var(--border); border-radius:10px; padding:16px; overflow-x:auto; font-size:13px; color:#cfe0ff}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); margin-left:6px}
+  .pill.ok{color:var(--accent2); border-color:#1f5c46; background:#0f2a20}
+  .pill.warn{color:var(--warn); border-color:#5c4a1f; background:#2a1f0c}
+  .pill.next{color:var(--accent); border-color:#1f3a5c; background:#0f1f2a}
+  details{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:hidden}
+  summary{cursor:pointer; padding:16px 20px; font-weight:600; font-size:15px; list-style:none; display:flex; align-items:center; justify-content:space-between}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--muted); transition:transform .15s ease; font-size:13px}
+  details[open] summary .chev{transform:rotate(90deg)}
+  details .body{padding:0 20px 20px; color:var(--muted); border-top:1px solid var(--border)}
+  details .body ul{color:var(--text)}
+  .callout{border-radius:var(--radius); padding:20px 22px; border:1px solid}
+  .callout.ok{background:#0f2a20; border-color:#1f5c46}
+  .callout.ok h3{color:var(--accent2)}
+  .callout.warn{background:#2a1f0c; border-color:#5c4a1f}
+  .callout.warn h3{color:var(--warn)}
+  .check{color:var(--accent2)}
+  footer{max-width:1040px; margin:0 auto; padding:24px; color:var(--muted); font-size:13px; border-top:1px solid var(--border)}
+  .erd{color:#cfe0ff}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="tag">SmartRayco · Fase 2</span>
+  <h1>Backend Hono y base de datos</h1>
+  <p class="sub">Servidor Hono con healthcheck, y el esquema inicial en Supabase: perfiles con
+  rol, zonas, planes, clientes y contratos — con Row Level Security por rol. Decisión confirmada
+  contigo: <b>single-tenant</b> (una sola empresa, sin <code>tenant_id</code>).</p>
+</header>
+
+<main>
+
+  <section>
+    <h2><span class="num">1</span> Qué se construyó</h2>
+    <p class="lead">Corresponde a la <b>Fase 2 — Backend Hono y base de datos</b> del curso.
+    Criterio de aceptación: <i>"el servidor Hono responde en /api/health"</i> — cumplido y
+    verificado (sección 3).</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Backend Hono <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li><code>server/src/index.ts</code> — servidor Hono sobre Node.js (ESM, vía <code>tsx</code>)</li>
+          <li><code>server/src/routes/health.ts</code> — <code>GET /api/health</code></li>
+          <li><code>server/src/lib/supabaseAdmin.ts</code> — cliente con <code>service_role</code> key (bypassea RLS), listo para Fase 3</li>
+          <li><code>npm run dev</code> levanta frontend (Vite, 5173) + backend (Hono, 3001) en paralelo con <code>concurrently</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Base de datos <span class="pill ok">✓ migración lista</span></h3>
+        <ul>
+          <li><code>supabase/migrations/20260910120000_fase2_esquema_inicial.sql</code></li>
+          <li>Tablas: <code>profiles</code>, <code>zones</code>, <code>plans</code>, <code>clients</code>, <code>service_contracts</code></li>
+          <li>Tipos enum: <code>user_role</code>, <code>connection_technology</code>, <code>document_type</code>, <code>client_status</code>, <code>contract_status</code></li>
+          <li>Trigger <code>handle_new_user</code>: crea el <code>profile</code> al registrarse en Supabase Auth</li>
+          <li>RLS habilitado en las 5 tablas, con función helper <code>current_user_role()</code></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span> Modelo de datos</h2>
+    <div class="card">
+<pre class="erd">profiles (id = auth.users.id)
+  role: SUPERADMIN | ADMIN | TECNICO_RED | SOPORTE | FACTURACION | CLIENTE
+
+zones
+  id · name · description
+
+plans
+  id · name · download_speed · upload_speed · price
+  technology (fiber|radio|cable|dsl) · mikrotik_profile · is_active
+
+clients
+  id · zone_id (FK zones) · document_type · document_number (unico)
+  first_name · last_name · phone · email · status (prospect|active|suspended|retired)
+
+service_contracts
+  id · contract_number (numeracion automatica -> Fase 3)
+  client_id (FK clients) · plan_id (FK plans)
+  monthly_fee · status (active|suspended|cancelled) · billing_day (1-28)</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span> Verificación realizada</h2>
+    <table>
+      <tr><th>Comprobación</th><th>Resultado</th></tr>
+      <tr><td><code>npm install</code> (hono, @hono/node-server, tsx, concurrently, dotenv)</td><td><span class="check">✓</span> 30 paquetes agregados sin errores</td></tr>
+      <tr><td><code>npm run start:api</code> → <code>curl http://localhost:3001/api/health</code></td><td><span class="check">✓</span> <code>200</code> — <code>{"status":"ok","service":"smartrayco-api",...}</code></td></tr>
+      <tr><td><code>tsc -p tsconfig.server.json --noEmit</code></td><td><span class="check">✓</span> sin errores de tipos en el backend</td></tr>
+      <tr><td><code>npm run build</code> (frontend, sigue intacto)</td><td><span class="check">✓</span> compila igual que en Fase 1</td></tr>
+      <tr><td>Migración SQL aplicada en tu proyecto Supabase real</td><td><span class="pill warn">pendiente de tu parte</span> — ver sección 4</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span> Acción tuya: aplicar la migración</h2>
+    <div class="callout warn">
+      <h3>⚠ La tabla aún no existe en tu Supabase hasta que la apliques</h3>
+      <p>Dos formas, detalladas en <code>docs/architecture/supabase-setup.md</code>:</p>
+      <ol>
+        <li><b>Rápida:</b> copiar el contenido de la migración y pegarlo en el <b>SQL Editor</b> del dashboard de Supabase.</li>
+        <li><b>Con CLI</b> (recomendada de aquí en adelante): <code>supabase link --project-ref TU_PROJECT_REF</code> y luego <code>supabase db push</code>.</li>
+      </ol>
+      <p>Después, completa <code>SUPABASE_SERVICE_ROLE_KEY</code> y <code>JWT_SECRET</code> en tu <code>.env</code>, y crea tu primer <code>SUPERADMIN</code> (pasos en el mismo documento).</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span> Próxima fase</h2>
+    <details open>
+      <summary>Fase 3 — Clientes y contratos <span class="chev">▶</span></summary>
+      <div class="body">
+        <ul>
+          <li>CRUD completo de clientes (vista lista + formulario)</li>
+          <li>Numeración automática de contratos (<code>CTR-YYYY-NNNNN</code>) vía función RPC en Supabase</li>
+          <li>Vista Kanban de contratos por estado (activo, suspendido, cancelado)</li>
+          <li>Detalle de cliente con su historial de contratos</li>
+          <li>Endpoints en <code>server/src/routes/clients.ts</code> (lista con filtros/paginación, crear, actualizar, cambiar estado)</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+</main>
+
+<footer>
+  SmartRayco — Reporte de Fase 2. No se avanza a Fase 3 sin tu aprobación explícita ("Aprobado").
+</footer>
+
+</body>
+</html>
