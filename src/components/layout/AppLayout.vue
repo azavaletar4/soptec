@@ -10,7 +10,7 @@ const MODULOS = [
   { label: 'Clientes', to: '/clientes', disabled: false },
   { label: 'Contratos', to: '/contratos/kanban', disabled: false },
   { label: 'Red & OLTs', to: '/olt', disabled: false },
-  { label: 'MikroTik', to: '#', disabled: true },
+  { label: 'MikroTik', to: '/mikrotik', disabled: false },
   { label: 'Facturacion', to: '#', disabled: true },
   { label: 'Soporte', to: '#', disabled: true },
 ];

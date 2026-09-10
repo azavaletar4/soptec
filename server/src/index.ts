@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { healthRoutes } from './routes/health';
 import { oltRoutes } from './routes/olt';
+import { mikrotikRoutes } from './routes/mikrotik';
 
 const app = new Hono();
 
@@ -17,8 +18,8 @@ app.use(
 
 app.route('/api/health', healthRoutes);
 app.route('/api/olt-devices', oltRoutes);
-// Las rutas de dominio que siguen (mikrotik, tr069...) se agregan aqui,
-// una por fase: app.route('/api/mikrotik', mikrotikRoutes)
+app.route('/api/mikrotik-devices', mikrotikRoutes);
+// Las rutas de dominio que siguen (tr069...) se agregan aqui por fase.
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
 

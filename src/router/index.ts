@@ -42,6 +42,18 @@ const router = createRouter({
       component: () => import('@/views/olt/OltDetailView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/mikrotik',
+      name: 'mikrotik',
+      component: () => import('@/views/mikrotik/MikrotikDevicesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/mikrotik/:id',
+      name: 'mikrotik-detalle',
+      component: () => import('@/views/mikrotik/MikrotikDetailView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 });
 
