@@ -7,8 +7,8 @@ Fosmikro" (ver `curso/`), adaptado a este proyecto.
 
 ## Estado del proyecto
 
-Fase actual: **Fase 4 completada — OLT ZTE C300** (conexión Telnet validada contra el equipo
-real). Siguiente: **Fase 5 — MikroTik REST API**.
+Fase actual: **Fase 5 completada — MikroTik REST API** (código listo, pendiente de tu prueba
+contra un router real). Siguiente: **Fase 6 — TR-069 / GenieACS**.
 
 > Notas de rumbo: (1) el proyecto arrancó con una arquitectura genérica (NestJS + Next.js) antes
 > de descubrir el material detallado en `curso/`, específico para esta infraestructura, y se
@@ -62,8 +62,8 @@ aplicar — ver nota de rumbo arriba). Detalle de cada fase en `docs/phases/`.
 | 2 | Backend Hono + esquema inicial (profiles, zones, plans, clients, service_contracts + RLS) | ✅ |
 | 3 | Clientes y contratos (CRUD, numeración automática, Kanban) | ✅ |
 | 4 | OLT ZTE C300 (Telnet: CRUD, listar/sincronizar ONTs) | ✅ — comandos de escritura (registrar/activar/eliminar/señal) sin validar aún |
-| 5 | MikroTik REST API | ⏳ En curso |
-| 6 | TR-069 / GenieACS | Pendiente |
+| 5 | MikroTik REST API (CRUD, PPPoE, DHCP leases) | ✅ — pendiente probar contra router real |
+| 6 | TR-069 / GenieACS | ⏳ En curso |
 | 7 | Facturación electrónica SRI Ecuador | Pendiente (confirmar país) |
 | 8 | Cobros y Caja | Pendiente |
 | 9 | Instalaciones y Mapa | Pendiente |

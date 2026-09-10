@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartRayco — Fase 5: MikroTik</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121b2e; --panel2:#182543; --border:#26355c;
+    --text:#e7ecf7; --muted:#9fb0d0; --accent:#3ea6ff; --accent2:#5be8b5;
+    --warn:#ffb454; --danger:#ff6b6b; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b1220,#0e1730 400px, #0b1220);
+    color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    line-height:1.55; padding-bottom:60px;
+  }
+  header{padding:48px 24px 32px; max-width:1040px; margin:0 auto; border-bottom:1px solid var(--border)}
+  header .tag{
+    display:inline-block; background:var(--panel2); color:var(--accent2);
+    border:1px solid var(--border); padding:4px 12px; border-radius:999px;
+    font-size:12px; letter-spacing:.04em; text-transform:uppercase; margin-bottom:14px;
+  }
+  h1{font-size:32px; margin:0 0 8px; letter-spacing:-.01em}
+  header p.sub{color:var(--muted); font-size:16px; margin:0; max-width:760px}
+  main{max-width:1040px; margin:0 auto; padding:32px 24px}
+  section{margin-bottom:40px}
+  h2{font-size:22px; margin:0 0 4px; display:flex; align-items:center; gap:10px}
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:8px; background:var(--panel2);
+    color:var(--accent); font-size:14px; border:1px solid var(--border);
+  }
+  h2 + p.lead{color:var(--muted); margin:6px 0 18px; max-width:760px}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; margin-bottom:14px}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  h3{font-size:16px; margin:0 0 8px; color:var(--text)}
+  ul{margin:8px 0; padding-left:20px}
+  li{margin-bottom:4px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em}
+  code, .mono{font-family:Consolas,Menlo,monospace; font-size:13px}
+  pre{background:#0a1120; border:1px solid var(--border); border-radius:10px; padding:16px; overflow-x:auto; font-size:13px; color:#cfe0ff}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); margin-left:6px}
+  .pill.ok{color:var(--accent2); border-color:#1f5c46; background:#0f2a20}
+  .pill.warn{color:var(--warn); border-color:#5c4a1f; background:#2a1f0c}
+  details{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:hidden}
+  summary{cursor:pointer; padding:16px 20px; font-weight:600; font-size:15px; list-style:none; display:flex; align-items:center; justify-content:space-between}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--muted); transition:transform .15s ease; font-size:13px}
+  details[open] summary .chev{transform:rotate(90deg)}
+  details .body{padding:0 20px 20px; color:var(--muted); border-top:1px solid var(--border)}
+  details .body ul{color:var(--text)}
+  .callout{border-radius:var(--radius); padding:20px 22px; border:1px solid}
+  .callout.warn{background:#2a1f0c; border-color:#5c4a1f}
+  .callout.warn h3{color:var(--warn)}
+  .callout.ok{background:#0f2a20; border-color:#1f5c46}
+  .callout.ok h3{color:var(--accent2)}
+  .check{color:var(--accent2)}
+  footer{max-width:1040px; margin:0 auto; padding:24px; color:var(--muted); font-size:13px; border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="tag">SmartRayco · Fase 5</span>
+  <h1>Módulo MikroTik (REST API)</h1>
+  <p class="sub">Conexión a RouterOS v7+ vía su REST API, usuarios PPPoE con estado en vivo,
+  conexiones activas y leases DHCP.</p>
+</header>
+
+<main>
+
+  <section>
+    <h2><span class="num">1</span> Qué se construyó</h2>
+    <p class="lead">Mismo patrón de seguridad que la Fase 4 (OLT): las credenciales del router
+    nunca llegan al frontend, solo el backend (con <code>service_role</code>) las usa.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>CRUD de routers <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li><code>/mikrotik</code>: registrar, editar, eliminar; botón "Probar conexión"</li>
+          <li>Host, puerto REST (443 por defecto), TLS on/off, usuario, contraseña, zona</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Panel del router <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li><code>/mikrotik/:id</code>: RouterOS, CPU, memoria libre, uptime</li>
+          <li>Tabla de usuarios PPPoE: perfil, conectado (cruzado con <code>/ppp/active</code>), habilitado/deshabilitado</li>
+          <li>Habilitar/deshabilitar un usuario PPPoE con un clic (con confirmación)</li>
+          <li>Tabla de leases DHCP (IP, MAC, hostname, estado)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Endpoints backend</h3>
+<pre>GET    /api/mikrotik-devices                        listar routers
+POST   /api/mikrotik-devices                         crear router
+PUT    /api/mikrotik-devices/:id                      editar router
+DELETE /api/mikrotik-devices/:id                      eliminar router
+POST   /api/mikrotik-devices/:id/test                 probar conexion (system/resource)
+GET    /api/mikrotik-devices/:id/resource             CPU, RAM, version, uptime
+GET    /api/mikrotik-devices/:id/ppp-secrets          usuarios PPPoE
+PUT    /api/mikrotik-devices/:id/ppp-secrets/:id       habilitar/deshabilitar
+GET    /api/mikrotik-devices/:id/ppp-active           conexiones PPPoE activas
+GET    /api/mikrotik-devices/:id/dhcp-leases          leases DHCP
+GET    /api/mikrotik-devices/:id/ip-addresses          IPs configuradas</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span> Decisión técnica: REST API, no la API binaria clásica</h2>
+    <div class="card">
+      <p>El material del curso tenía dos referencias distintas para MikroTik: la <b>REST API</b>
+      moderna (RouterOS v7+, HTTPS, la que especifica el plan original de fases) y la
+      <b>API binaria clásica</b> (puerto 8728, librería <code>node-routeros</code>, usada en otro
+      documento del curso). Se eligió REST API por ser más simple (HTTP+JSON estándar, sin
+      protocolo binario propio) y por ser la que pide explícitamente el plan de fases acordado.</p>
+      <p><b>Requisito en tu router:</b> RouterOS v7 o superior, con el servicio <code>www-ssl</code>
+      (o <code>www</code> sin TLS) habilitado y la REST API activa. Si tu router es v6 o más viejo,
+      avísame para adaptar a la API clásica.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span> Verificación realizada</h2>
+    <table>
+      <tr><th>Comprobación</th><th>Resultado</th></tr>
+      <tr><td><code>npm run build</code> / <code>tsc</code> backend</td><td><span class="check">✓</span> sin errores, 102 módulos</td></tr>
+      <tr><td>Rutas protegidas por autenticación</td><td><span class="check">✓</span> <code>401 "No autenticado"</code> sin token</td></tr>
+      <tr><td>Conexión real contra tu MikroTik</td><td><span class="pill warn">pendiente</span> — necesito que registres tu router real y probemos, igual que hicimos con la OLT</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span> Acción tuya para probar esta fase</h2>
+    <div class="callout warn">
+      <ol>
+        <li>Aplica la migración <code>supabase/migrations/20260910160000_fase5_mikrotik.sql</code> (Table Editor o SQL Editor, igual que las anteriores).</li>
+        <li>Confirma que tu RouterOS tiene la REST API habilitada: <b>IP → Services</b> → <code>www-ssl</code> (o <code>www</code>) en estado <i>running</i>.</li>
+        <li>Ve a <code>/mikrotik</code> en la app, registra tu router (IP, usuario, contraseña) y presiona "Probar conexión".</li>
+        <li>Pégame el resultado — si tu router usa un puerto o versión distinta a lo esperado, lo ajustamos como hicimos con la OLT.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span> Pendiente conocido</h2>
+    <div class="card">
+      <p><b>Cruce automático ONT ↔ IP MikroTik por MAC de WAN:</b> el plan original lo pide, pero
+      requiere el campo <code>wan_mac</code> en <code>olt_onts</code> (ya agregado en esta
+      migración) poblado desde el comando <code>display/show ont wan-info</code> de la OLT — ese
+      comando aún no está validado contra el equipo real (ver Fase 4). Se retoma cuando se valide.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">6</span> Próxima fase</h2>
+    <details open>
+      <summary>Fase 6 — TR-069 / GenieACS <span class="chev">▶</span></summary>
+      <div class="body">
+        <ul>
+          <li>Integración con un servidor ACS (GenieACS) para gestión remota de CPEs</li>
+          <li>Listar dispositivos TR-069, ver parámetros, reboot remoto</li>
+          <li>Requiere un GenieACS instalado y accesible (local o en la nube) — a confirmar contigo</li>
+        </ul>
+      </div>
+    </details>
+  </section>
+
+</main>
+
+<footer>
+  SmartRayco — Reporte de Fase 5. No se avanza a la Fase 6 sin tu aprobación explícita ("Aprobado").
+</footer>
+
+</body>
+</html>
