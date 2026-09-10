@@ -46,7 +46,9 @@ async function handleSync() {
   syncMessage.value = null;
   try {
     const res = await oltStore.syncOnts(deviceId.value, slot.value, port.value);
-    syncMessage.value = `Sincronizadas ${res.synced} ONT(s) en el puerto ${slot.value}/${port.value}`;
+    syncMessage.value = `La OLT reporta ${res.foundInOlt} ONT(s) en el puerto ${slot.value}/${port.value}. Se actualizo el estado de ${res.synced} ya registradas aqui.${
+      res.notInDb.length ? ` ${res.notInDb.length} mas existen en la OLT pero no en SmartRayco (IDs: ${res.notInDb.join(', ')}) — registralas manualmente si son tuyas.` : ''
+    }`;
     await oltStore.fetchOnts(deviceId.value);
   } catch (e) {
     syncMessage.value = getErrorMessage(e, 'Error al sincronizar con la OLT');

@@ -34,7 +34,9 @@ function onuInterface(ref: ZteInterfaceRef, onuId: number): string {
 }
 
 export function testConnectionCommands(): string[] {
-  return ['enable', 'show version'];
+  // "show version" resulto ambiguo en esta CLI real (Error 20204); se usa
+  // un comando de solo lectura ya validado contra el equipo real (10.15.15.2).
+  return ['enable', 'show gpon onu uncfg'];
 }
 
 /** Lista las ONUs ya configuradas/registradas en un puerto PON especifico. */

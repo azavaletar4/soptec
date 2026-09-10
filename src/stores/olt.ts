@@ -87,10 +87,10 @@ export const useOltStore = defineStore('olt', () => {
   }
 
   async function syncOnts(deviceId: string, slot: number, port: number, shelf = 1) {
-    return apiFetch<{ synced: number; raw: string }>(`/api/olt-devices/${deviceId}/onts/sync`, {
-      method: 'POST',
-      body: JSON.stringify({ shelf, slot, port }),
-    });
+    return apiFetch<{ synced: number; foundInOlt: number; notInDb: number[]; raw: string }>(
+      `/api/olt-devices/${deviceId}/onts/sync`,
+      { method: 'POST', body: JSON.stringify({ shelf, slot, port }) },
+    );
   }
 
   async function registerOnt(deviceId: string, payload: Record<string, unknown>) {

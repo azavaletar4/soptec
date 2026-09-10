@@ -146,23 +146,42 @@ oltRoutes.post('/:id/onts/sync', requireRole(...STAFF_WRITE), async (c: Context)
     const raw = outputs.join('\n');
     const parsed = parseOntList(raw);
 
+    // "show gpon onu state" (validado contra el equipo real) no trae numero
+    // de serie, solo el estado por onu-id. Por eso solo actualizamos el
+    // estado de ONTs que ya conocemos (registradas por esta app, que si
+    // tienen serial); las que aparecen en la OLT pero no en nuestra BD se
+    // reportan aparte (para registrarlas manualmente con su serial real,
+    // ej. via "show gpon onu uncfg" si aun no estan configuradas).
+    let updated = 0;
+    const notInDb: number[] = [];
+
     for (const ont of parsed) {
-      await supabaseAdmin.from('olt_onts').upsert(
-        {
-          olt_device_id: device.id,
-          frame: shelf,
-          slot,
-          port,
-          ont_id: ont.onuId,
-          serial: ont.serial,
-          status: ont.runState === 'online' ? 'online' : 'offline',
+      const { data: existing } = await supabaseAdmin
+        .from('olt_onts')
+        .select('id')
+        .eq('olt_device_id', device.id)
+        .eq('frame', shelf)
+        .eq('slot', slot)
+        .eq('port', port)
+        .eq('ont_id', ont.onuId)
+        .maybeSingle();
+
+      if (!existing) {
+        notInDb.push(ont.onuId);
+        continue;
+      }
+
+      await supabaseAdmin
+        .from('olt_onts')
+        .update({
+          status: ont.runState === 'working' ? 'online' : 'offline',
           last_synced_at: new Date().toISOString(),
-        },
-        { onConflict: 'olt_device_id,frame,slot,port,ont_id' },
-      );
+        })
+        .eq('id', existing.id);
+      updated += 1;
     }
 
-    return c.json({ synced: parsed.length, raw });
+    return c.json({ synced: updated, foundInOlt: parsed.length, notInDb, raw });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al sincronizar con la OLT' }, 502);
   }
