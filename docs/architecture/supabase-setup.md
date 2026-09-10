@@ -1,65 +1,61 @@
 # Configuración de Supabase para SmartRayco
 
-Pasos para dejar operativa la autenticación (Fase 1). Las tablas de negocio (clientes, planes,
-OLTs, etc.) se agregan en la Fase 2 vía `supabase/migrations/`.
+## Fase 1 — Autenticación (ya cubierto)
 
-## 1. Crear el proyecto
+1. Crea un proyecto en https://app.supabase.com.
+2. En **Project Settings → API**, copia `Project URL` → `VITE_SUPABASE_URL` y `anon public` key
+   → `VITE_SUPABASE_ANON_KEY` en tu `.env` (raíz del repo, `cp .env.example .env`).
+3. `npm install && npm run dev` → login en `http://localhost:5173/login`.
 
-1. Crea una cuenta / proyecto en https://app.supabase.com (región recomendada: la más cercana,
-   ej. South America).
-2. Guarda la contraseña del usuario `postgres` que pide al crear el proyecto.
+## Fase 2 — Esquema de base de datos (tablas + RLS)
 
-## 2. Copiar credenciales
+La migración vive en `supabase/migrations/20260910120000_fase2_esquema_inicial.sql` y crea:
+`profiles`, `zones`, `plans`, `clients`, `service_contracts`, con RLS por rol
+(`SUPERADMIN`, `ADMIN`, `TECNICO_RED`, `SOPORTE`, `FACTURACION`, `CLIENTE`) y un trigger que crea
+automáticamente el `profile` de cada usuario que se registra.
 
-En **Project Settings → API**:
+### Opción A — rápida, sin CLI (recomendada para probar ya)
 
-| Valor | Variable de entorno (`.env` en la raíz) |
-|---|---|
-| `Project URL` | `VITE_SUPABASE_URL` |
-| `anon public` key | `VITE_SUPABASE_ANON_KEY` |
-| `service_role` key | `SUPABASE_SERVICE_ROLE_KEY` (solo se usa desde Fase 2, backend) |
+1. Abre tu proyecto en https://app.supabase.com → **SQL Editor**.
+2. Pega el contenido completo de
+   `supabase/migrations/20260910120000_fase2_esquema_inicial.sql` y ejecútalo.
+3. Verifica en **Table Editor** que aparecen `profiles`, `zones`, `plans`, `clients`,
+   `service_contracts`.
 
-En **Project Settings → API → JWT Settings**:
-
-| Valor | Variable de entorno |
-|---|---|
-| `JWT Secret` | `JWT_SECRET` (se usa desde Fase 2, para validar tokens en Hono) |
-
-## 3. Preparar el `.env`
-
-```bash
-cp .env.example .env
-```
-
-Completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` (los únicos necesarios para la Fase 1).
-
-## 4. Instalar dependencias y arrancar
-
-```bash
-npm install
-npm run dev
-```
-
-Abre `http://localhost:5173`. Deberías ver la pantalla de login.
-
-## 5. Crear tu primer usuario
-
-Por defecto Supabase permite auto-registro. La forma más simple para la Fase 1:
-
-1. En el dashboard de Supabase: **Authentication → Users → Add user → Create new user**.
-2. Ingresa tu correo y una contraseña.
-3. Inicia sesión con esas credenciales en `http://localhost:5173/login`.
-
-(El flujo de registro propio, roles y perfiles se añaden en la Fase 2 en adelante.)
-
-## 6. Supabase CLI (opcional en esta fase, necesaria desde la Fase 2)
+### Opción B — con Supabase CLI (recomendada a partir de aquí, para futuras migraciones)
 
 ```bash
 npm install -g supabase
 supabase login
 supabase link --project-ref TU_PROJECT_REF
-supabase init      # crea supabase/config.toml
+supabase db push
 ```
 
-Las migraciones (`supabase/migrations/*.sql`) y `supabase db push` se usan a partir de la Fase 2,
-cuando se creen las primeras tablas de negocio.
+`supabase db push` aplica todas las migraciones nuevas de `supabase/migrations/` en orden.
+
+### Completar variables del backend
+
+Para que el backend Hono arranque con acceso admin a Supabase, completa en `.env`:
+
+| Valor (Project Settings → API) | Variable |
+|---|---|
+| `service_role` key | `SUPABASE_SERVICE_ROLE_KEY` |
+| `JWT Secret` (API → JWT Settings) | `JWT_SECRET` |
+
+### Crear tu primer usuario SUPERADMIN
+
+1. El trigger crea automáticamente un `profile` con rol `CLIENTE` para cualquier usuario nuevo.
+2. Crea tu usuario: **Authentication → Users → Add user** (o regístrate desde `/login` si activas
+   signup público).
+3. Promuévelo a `SUPERADMIN` en el **SQL Editor**:
+
+```sql
+update public.profiles set role = 'SUPERADMIN' where email = 'tu-correo@dominio.com';
+```
+
+### Backend (Hono)
+
+```bash
+npm run dev:api     # solo backend, http://localhost:3001/api/health
+npm run dev         # backend + frontend en paralelo
+```

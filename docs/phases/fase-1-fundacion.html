@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartRayco — Fase 1: Fundación</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121b2e; --panel2:#182543; --border:#26355c;
+    --text:#e7ecf7; --muted:#9fb0d0; --accent:#3ea6ff; --accent2:#5be8b5;
+    --warn:#ffb454; --danger:#ff6b6b; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b1220,#0e1730 400px, #0b1220);
+    color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    line-height:1.55; padding-bottom:60px;
+  }
+  header{
+    padding:48px 24px 32px; max-width:1040px; margin:0 auto; text-align:left;
+    border-bottom:1px solid var(--border);
+  }
+  header .tag{
+    display:inline-block; background:var(--panel2); color:var(--accent2);
+    border:1px solid var(--border); padding:4px 12px; border-radius:999px;
+    font-size:12px; letter-spacing:.04em; text-transform:uppercase; margin-bottom:14px;
+  }
+  h1{font-size:32px; margin:0 0 8px; letter-spacing:-.01em}
+  header p.sub{color:var(--muted); font-size:16px; margin:0; max-width:720px}
+  main{max-width:1040px; margin:0 auto; padding:32px 24px}
+  section{margin-bottom:40px}
+  h2{font-size:22px; margin:0 0 4px; display:flex; align-items:center; gap:10px}
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:8px; background:var(--panel2);
+    color:var(--accent); font-size:14px; border:1px solid var(--border);
+  }
+  h2 + p.lead{color:var(--muted); margin:6px 0 18px; max-width:760px}
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    padding:20px 22px; margin-bottom:14px;
+  }
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  h3{font-size:16px; margin:0 0 8px; color:var(--text)}
+  ul{margin:8px 0; padding-left:20px}
+  li{margin-bottom:4px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em}
+  code, .mono{font-family:Consolas,Menlo,monospace; font-size:13px}
+  pre{
+    background:#0a1120; border:1px solid var(--border); border-radius:10px;
+    padding:16px; overflow-x:auto; font-size:13px; color:#cfe0ff;
+  }
+  .pill{
+    display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px;
+    border:1px solid var(--border); background:var(--panel2); color:var(--muted); margin-left:6px;
+  }
+  .pill.ok{color:var(--accent2); border-color:#1f5c46; background:#0f2a20}
+  .pill.warn{color:var(--warn); border-color:#5c4a1f; background:#2a1f0c}
+  .pill.next{color:var(--accent); border-color:#1f3a5c; background:#0f1f2a}
+  details{
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    margin-bottom:12px; overflow:hidden;
+  }
+  summary{
+    cursor:pointer; padding:16px 20px; font-weight:600; font-size:15px;
+    list-style:none; display:flex; align-items:center; justify-content:space-between;
+  }
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--muted); transition:transform .15s ease; font-size:13px}
+  details[open] summary .chev{transform:rotate(90deg)}
+  details .body{padding:0 20px 20px; color:var(--muted); border-top:1px solid var(--border)}
+  details .body ul{color:var(--text)}
+  .callout{border-radius:var(--radius); padding:20px 22px; border:1px solid}
+  .callout.pivot{background:#0d1b2e; border-color:var(--border)}
+  .callout.pivot h3{color:var(--accent)}
+  .callout.ok{background:#0f2a20; border-color:#1f5c46}
+  .callout.ok h3{color:var(--accent2)}
+  .callout.warn{background:#2a1f0c; border-color:#5c4a1f}
+  .callout.warn h3{color:var(--warn)}
+  .tree{color:#cfe0ff}
+  .check{color:var(--accent2)}
+  .cross{color:var(--muted)}
+  footer{max-width:1040px; margin:0 auto; padding:24px; color:var(--muted); font-size:13px; border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="tag">SmartRayco · Fase 1</span>
+  <h1>Fundación del proyecto</h1>
+  <p class="sub">Vue 3 + Vite + Tailwind CSS 4 + Supabase Auth, siguiendo el plan definido en
+  <code>curso/00-indice-general.md</code>. Login funcional, layout base con sidebar y dashboard
+  protegido.</p>
+</header>
+
+<main>
+
+  <section>
+    <h2><span class="num">1</span> Cambio de rumbo (importante)</h2>
+    <div class="callout pivot">
+      <h3>De arquitectura genérica al MEGA PROMPT del curso</h3>
+      <p>El proyecto arrancó (Fase 0) con una arquitectura genérica propuesta por mí: NestJS +
+      Next.js + Prisma + Supabase/Postgres. Al crear la estructura de carpetas encontré que
+      <code>D:\SmartRayco\curso\</code> ya contenía un plan extremadamente detallado y específico
+      para este mismo tipo de sistema — el proyecto <b>"ISP Manager Fosmikro"</b> — con stack
+      <b>Vue 3 + Vite + Tailwind CSS 4 + Hono + Supabase</b>, comandos SSH exactos para OLT Huawei
+      MA5800 y V-SOL, integración MikroTik vía REST API, TR-069/GenieACS, facturación electrónica
+      SRI Ecuador y WhatsApp Business. El appId de la app móvil (<code>com.szfibersystem.fsmk</code>)
+      coincide con tu dominio de correo, lo que indica que este es el plano real de tu propia
+      infraestructura, no un genérico de curso.</p>
+      <p>Te pregunté cómo proceder y elegiste <b>adoptar el MEGA PROMPT del curso</b>. En
+      consecuencia:</p>
+      <ul>
+        <li>Se eliminó el scaffold NestJS/Next.js/Prisma (no se había hecho commit, sin pérdida).</li>
+        <li>Se reinició con el stack real: Vue 3 + Vite + Tailwind CSS 4 + Supabase, y Hono desde
+        la Fase 2.</li>
+        <li>El plan de fases pasa a ser el de <code>curso/00-indice-general.md</code> (15 fases web
+        + 7 fases Android), en lugar del plan genérico de 5 fases de la propuesta inicial.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span> Qué se construyó en esta fase</h2>
+    <p class="lead">Corresponde a la <b>Fase 1 — Fundación</b> del curso: "Crear proyecto Vue 3 +
+    TypeScript + Vite + Tailwind CSS 4. Configurar Supabase. Crear estructura de carpetas. Login
+    con Supabase Auth." Criterio de aceptación del curso: <i>"puedo hacer login y ver el
+    dashboard"</i> — cumplido y verificado (ver sección 4).</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Frontend <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li>Vite + Vue 3 (Composition API, <code>&lt;script setup&gt;</code>) + TypeScript estricto</li>
+          <li>Tailwind CSS 4 vía <code>@tailwindcss/vite</code> (sin config aparte, import directo en CSS)</li>
+          <li>Pinia (<code>stores/auth.ts</code>) para sesión y usuario actual</li>
+          <li>Vue Router con guard: <code>/dashboard</code> exige sesión, <code>/login</code> redirige si ya hay sesión</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Autenticación <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li>Cliente Supabase en <code>src/lib/supabase.ts</code> (<code>@supabase/supabase-js</code>)</li>
+          <li>Login por email/contraseña contra Supabase Auth (<code>LoginView.vue</code>)</li>
+          <li>Cierre de sesión desde el sidebar</li>
+          <li>Sin backend propio todavía: el frontend habla directo con Supabase Auth (correcto para esta fase)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Layout y Dashboard <span class="pill ok">✓ funcional</span></h3>
+        <ul>
+          <li><code>AppLayout.vue</code>: sidebar con los módulos futuros (deshabilitados hasta su fase)</li>
+          <li><code>DashboardView.vue</code>: tarjetas de métricas vacías (clientes, ONUs, facturación, tickets)</li>
+          <li>Email del usuario autenticado visible en el panel</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Placeholders para próximas fases <span class="pill next">preparado</span></h3>
+        <ul>
+          <li><code>server/</code> — backend Hono (Fase 2)</li>
+          <li><code>supabase/</code> — migraciones SQL (Fase 2)</li>
+          <li>Proxy <code>/api/*</code> ya configurado en <code>vite.config.ts</code> hacia el futuro backend</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span> Estructura actual del repositorio</h2>
+    <div class="card">
+<pre class="tree">D:\SmartRayco\
+├── src\
+│   ├── views\           # LoginView.vue, DashboardView.vue
+│   ├── components\layout\  # AppLayout.vue (sidebar)
+│   ├── stores\auth.ts   # Pinia: sesion, signIn, signOut
+│   ├── router\index.ts  # Vue Router + guard de autenticacion
+│   ├── lib\supabase.ts  # Cliente Supabase
+│   └── main.ts, App.vue, style.css
+├── server\              # Backend Hono (placeholder, Fase 2)
+├── supabase\            # Migraciones SQL (placeholder, Fase 2)
+├── curso\               # Material de referencia (MEGA PROMPT, glosario)
+├── docs\
+│   ├── phases\          # Este reporte
+│   └── architecture\    # supabase-setup.md
+├── .vscode\settings.json
+├── index.html, vite.config.ts, tsconfig*.json
+├── package.json
+└── .env.example</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span> Verificación realizada</h2>
+    <table>
+      <tr><th>Comprobación</th><th>Resultado</th></tr>
+      <tr><td><code>npm install</code></td><td><span class="check">✓</span> 76 paquetes instalados sin errores</td></tr>
+      <tr><td><code>npm run build</code> (type-check con <code>vue-tsc</code> + build Vite)</td><td><span class="check">✓</span> compila sin errores de TypeScript, bundle generado (~327 KB / 97 KB gzip)</td></tr>
+      <tr><td><code>npm run dev</code> (servidor de desarrollo)</td><td><span class="check">✓</span> responde <code>200</code> en <code>http://localhost:5173</code>, sirve el HTML de la SPA</td></tr>
+      <tr><td>Login real contra Supabase</td><td><span class="pill warn">pendiente de tus credenciales</span> — no probado end-to-end porque falta crear el proyecto Supabase (paso siguiente, sección 5)</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span> Lo que falta para probar el login (acción tuya)</h2>
+    <div class="callout warn">
+      <h3>⚠ Necesitas crear el proyecto Supabase y completar el .env</h3>
+      <p>Instrucciones paso a paso en <code>docs/architecture/supabase-setup.md</code>. Resumen:</p>
+      <ol>
+        <li>Crear proyecto en <a href="https://app.supabase.com" style="color:var(--accent)">app.supabase.com</a>.</li>
+        <li><code>cp .env.example .env</code> y completar <code>VITE_SUPABASE_URL</code> / <code>VITE_SUPABASE_ANON_KEY</code> (Project Settings → API).</li>
+        <li>Crear un usuario de prueba desde Authentication → Users → Add user.</li>
+        <li><code>npm run dev</code> y probar login en <code>http://localhost:5173/login</code>.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">6</span> Nota de seguridad — no bloqueante</h2>
+    <div class="card" style="font-size:14px">
+      <code>npm audit</code> reporta 2 vulnerabilidades (esbuild/vite) del tipo "el servidor de
+      desarrollo de esbuild permite que cualquier sitio web le envíe peticiones y lea la
+      respuesta" — es un problema conocido, limitado al servidor <b>local de desarrollo</b> (no
+      afecta el build de producción). Corregirlo implica saltar a Vite 8 (cambio disruptivo, no
+      probado con Tailwind 4 en este stack). Se deja pendiente como tarea de hardening antes de
+      exponer el entorno de desarrollo públicamente; no afecta el uso normal en localhost.
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">7</span> Plan de fases (curso) — próximos pasos</h2>
+    <details open>
+      <summary>Fase 2 — Backend Hono y base de datos <span class="chev">▶</span></summary>
+      <div class="body">
+        <ul>
+          <li>Servidor Hono en <code>server/src/index.ts</code>, endpoint <code>/api/health</code></li>
+          <li>Primeras tablas SQL en <code>supabase/migrations/</code>: <code>profiles</code>, <code>clientes</code>, <code>planes</code>, <code>zonas</code>, <code>service_contracts</code></li>
+          <li>RLS básico en todas las tablas</li>
+          <li>Criterio: el servidor Hono responde en <code>/api/health</code></li>
+        </ul>
+      </div>
+    </details>
+    <details>
+      <summary>Fase 3 — Clientes y contratos <span class="chev">▶</span></summary>
+      <div class="body">CRUD de clientes, numeración automática de contratos, vista Kanban y lista.</div>
+    </details>
+    <details>
+      <summary>Fases 4-7 — Red: OLT Huawei/V-SOL, MikroTik, TR-069 <span class="chev">▶</span></summary>
+      <div class="body">Integración SSH con OLTs, REST API MikroTik, GenieACS/TR-069 — comandos exactos ya documentados en <code>curso/03-mikrotik.md</code>, <code>04-administracion-olt.md</code>, <code>05-gestion-ont.md</code>, <code>06-tr069-cpe.md</code>.</div>
+    </details>
+    <details>
+      <summary>Fase 8 — Facturación electrónica SRI Ecuador <span class="pill warn">requiere confirmar país</span> <span class="chev">▶</span></summary>
+      <div class="body">Solo aplica si SmartRayco factura en Ecuador. Te preguntaré esto explícitamente cuando lleguemos a esta fase (o antes, si prefieres confirmarlo ya).</div>
+    </details>
+    <details>
+      <summary>Fases 9-15 — Cobros, instalaciones, inventario, soporte, reportes, recurrencia, producción <span class="chev">▶</span></summary>
+      <div class="body">Detalle completo en <code>curso/00-indice-general.md</code>, sección 4 y MEGA PROMPT.</div>
+    </details>
+    <details>
+      <summary>Fases A-G — App móvil fsMk (Android/Capacitor) <span class="pill next">después del proyecto web</span> <span class="chev">▶</span></summary>
+      <div class="body">Se aborda una vez cerradas las 15 fases web, según el plan del curso.</div>
+    </details>
+  </section>
+
+</main>
+
+<footer>
+  SmartRayco — Reporte de Fase 1. No se avanza a Fase 2 sin tu aprobación explícita ("Aprobado").
+</footer>
+
+</body>
+</html>
