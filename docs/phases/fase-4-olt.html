@@ -63,158 +63,129 @@
   .callout.ok{background:#0f2a20; border-color:#1f5c46}
   .callout.ok h3{color:var(--accent2)}
   .check{color:var(--accent2)}
+  .cross{color:var(--muted)}
+  .timeline{border-left:2px solid var(--border); margin-left:8px; padding-left:20px}
+  .timeline .step{margin-bottom:16px; position:relative}
+  .timeline .step::before{content:''; position:absolute; left:-25px; top:4px; width:9px; height:9px; border-radius:50%; background:var(--accent)}
+  .timeline .step b{display:block; color:var(--text); font-size:14px; margin-bottom:2px}
+  .timeline .step span{color:var(--muted); font-size:13px}
   footer{max-width:1040px; margin:0 auto; padding:24px; color:var(--muted); font-size:13px; border-top:1px solid var(--border)}
 </style>
 </head>
 <body>
 
 <header>
-  <span class="tag">SmartRayco · Fase 4</span>
+  <span class="tag">SmartRayco · Fase 4 — actualizado</span>
   <h1>Módulo OLT — ZTE C300</h1>
-  <p class="sub">CRUD de OLTs, cliente SSH interactivo genérico, y comandos/parsers específicos
-  para tu equipo real (ZTE C300) — no Huawei como proponía el material original del curso.</p>
+  <p class="sub">CRUD de OLTs y gestión de ONTs, con conexión <b>Telnet validada end-to-end contra tu
+  equipo real</b> (10.15.15.2). Esta actualización documenta el diagnóstico completo: de un
+  "502" genérico a una conexión funcional con datos reales de tu red.</p>
 </header>
 
 <main>
 
   <section>
-    <h2><span class="num">1</span> Cambio de marca durante la fase</h2>
-    <div class="callout warn">
-      <h3>⚠ El curso solo documenta Huawei y V-SOL — tu OLT es ZTE</h3>
-      <p>A mitad de esta fase confirmaste que tu OLT real es una <b>ZTE C300</b>. El material de
-      referencia (<code>curso/04-administracion-olt.md</code>, <code>curso/05-gestion-ont.md</code>)
-      solo cubre Huawei MA5800 y V-SOL con comandos verificados contra esos equipos reales.
-      Para ZTE no hay ese respaldo, así que los comandos SSH implementados aquí se basan en las
-      <b>convenciones generales y públicamente conocidas</b> de la CLI ZXA10 C300 (estilo Cisco:
-      <code>enable</code> / <code>configure terminal</code> / <code>interface gpon-olt_S/L/P</code>),
-      con un nivel de confianza menor que si fuera Huawei.</p>
+    <h2><span class="num">1</span> Resultado final: ✅ conexión validada</h2>
+    <div class="callout ok">
+      <h3>Prueba real contra 10.15.15.2:23, exitosa en 279ms</h3>
+<pre>ZXAN#
+
+OnuIndex                 Sn                  State
+---------------------------------------------------------------------
+gpon-onu_1/2/4:1         MSTC8CBF86B4        unknown
+gpon-onu_1/2/4:2         MSTC8CC5E3FE        unknown
+gpon-onu_1/2/5:1         ASKY0077A15F        unknown
+gpon-onu_1/2/5:2         MSTC8CBA10EC        unknown
+gpon-onu_1/2/5:3         MSTC8CBF0659        unknown
+gpon-onu_1/2/6:1         ASKY008F255E        unknown
+gpon-onu_1/2/12:1        ASKY0074C90F        unknown
+gpon-onu_1/2/16:1        MSTC8CBFC329        unknown</pre>
+      <p>Datos reales de tu red: 8 ONUs detectadas sin configurar en los puertos 4, 5, 6, 12 y 16
+      del slot 2. Login automático, modo <code>enable</code> y ejecución de comandos, todo
+      confirmado contra el equipo físico.</p>
     </div>
   </section>
 
   <section>
-    <h2><span class="num">2</span> Qué se construyó</h2>
+    <h2><span class="num">2</span> Cómo se llegó ahí: diagnóstico paso a paso</h2>
+    <p class="lead">Documentado para que quede el rastro de qué se descartó y por qué — útil si
+    algo similar vuelve a pasar con otro equipo.</p>
+    <div class="timeline">
+      <div class="step"><b>1. Primer intento por SSH → "502"</b><span>Mensaje genérico, sin detalle. Bug encontrado: <code>apiFetch</code> solo leía el campo <code>error</code> de la respuesta, no <code>message</code>.</span></div>
+      <div class="step"><b>2. Corregido el mensaje → "ECONNRESET"</b><span>Ya con el error real visible: la conexión SSH se cortaba sola.</span></div>
+      <div class="step"><b>3. Se descartó un problema de algoritmos criptográficos</b><span>El corte pasaba en 2-9ms, antes de cualquier intercambio de protocolo ("Connection lost before handshake") — demasiado rápido para ser negociación de cifrado.</span></div>
+      <div class="step"><b>4. Se probó conectividad de red</b><span><code>ping</code> y <code>Test-NetConnection</code> (puertos 22 y 23) — ambos exitosos. El problema no era de red.</span></div>
+      <div class="step"><b>5. Se probó el cliente OpenSSH nativo de Windows</b><span>Mismo resultado: <code>Connection reset by 10.15.15.2 port 22</code>. Esto descartó por completo la librería SSH de la app — el problema era del propio equipo.</span></div>
+      <div class="step"><b>6. El usuario compartió el panel de SmartOLT</b><span>Mostraba credenciales de <b>Telnet</b> (puerto 23), no de SSH, y "Reachable via VPN tunnel: Yes".</span></div>
+      <div class="step"><b>7. Prueba directa por Telnet → banner real</b><span><code>Welcome to ZXAN product C300 of ZTE Corporation</code>. Confirmado: esta OLT solo tiene Telnet habilitado.</span></div>
+      <div class="step"><b>8. Migración completa de SSH a Telnet</b><span>Nuevo cliente Telnet, mismos comandos de la CLI ZTE (el transporte cambia, la sintaxis de comandos no).</span></div>
+      <div class="step"><b>9. Validación de comandos contra el equipo real</b><span><code>show version</code> resultó ambiguo (Error 20204); reemplazado por <code>show gpon onu uncfg</code> (funciona). El formato real de <code>show gpon onu state</code> no trae número de serie — parser corregido.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span> Qué está validado vs. qué falta</h2>
     <div class="grid">
       <div class="card">
-        <h3>Seguridad y arquitectura <span class="pill ok">✓ nuevo</span></h3>
+        <h3>✅ Validado contra el equipo real</h3>
         <ul>
-          <li><b>Primera vez que Hono valida autenticación:</b> middleware que verifica el JWT de Supabase y el rol del usuario antes de ejecutar cualquier comando SSH</li>
-          <li><code>olt_devices</code> / <code>olt_onts</code>: RLS habilitado <b>sin políticas</b> — inaccesibles directo desde el frontend, solo vía backend con <code>service_role</code></li>
-          <li>La contraseña SSH de la OLT nunca se devuelve en ningún <code>GET</code></li>
+          <li>Conexión Telnet + login automático + modo <code>enable</code></li>
+          <li><code>show gpon onu uncfg</code> — ONUs sin configurar (con serial)</li>
+          <li><code>show gpon onu state gpon-olt_.../...</code> — estado de ONUs configuradas (sin serial, corregido)</li>
+          <li>Test de conexión desde la app (<code>/olt</code> → "Probar conexión")</li>
         </ul>
       </div>
       <div class="card">
-        <h3>Cliente SSH <span class="pill ok">✓ funcional (infraestructura)</span></h3>
+        <h3>⚠ Sin validar — comandos de escritura</h3>
         <ul>
-          <li><code>server/src/ssh/client.ts</code>: shell interactivo genérico — detecta el prompt, pagina automáticamente, responde confirmaciones "(y/n)" y contraseñas de "enable" si hacen falta</li>
-          <li>Reutilizable para futuras marcas (si algún día agregas otra OLT distinta a la ZTE)</li>
+          <li><b>Registrar ONT nueva</b> (<code>onu ... type ... sn ...</code> + tcont/gemport/service-port)</li>
+          <li><b>Activar / Desactivar</b> (<code>admin-state enable/disable</code>)</li>
+          <li><b>Eliminar</b> (<code>no onu ...</code>)</li>
+          <li><b>Señal óptica</b> (<code>show pon power attenuation</code>)</li>
         </ul>
-      </div>
-      <div class="card">
-        <h3>CRUD de OLTs <span class="pill ok">✓ funcional</span></h3>
-        <ul>
-          <li><code>/olt</code>: registrar, editar, eliminar OLTs; botón "Probar conexión"</li>
-          <li>Formulario con host, puerto SSH, usuario, contraseña, zona</li>
-        </ul>
-      </div>
-      <div class="card">
-        <h3>Gestión de ONTs <span class="pill warn">funcional, comandos sin validar en hardware</span></h3>
-        <ul>
-          <li><code>/olt/:id</code>: seleccionar slot/puerto → sincronizar ONTs desde la OLT (cache local)</li>
-          <li>Registrar ONT nueva (ID auto-detectado o manual, tipo de ONU, VLAN, descripción)</li>
-          <li>Activar / desactivar / eliminar ONT, lectura de señal óptica (Rx/Tx)</li>
-        </ul>
+        <p style="margin-top:10px">No se ejecutaron sin tu confirmación explícita porque tocan servicio real de clientes. Antes de usarlas, probar con una ONU de repuesto o un puerto sin clientes activos.</p>
       </div>
     </div>
   </section>
 
   <section>
-    <h2><span class="num">3</span> Comandos ZTE implementados (a validar)</h2>
-    <div class="card">
-<pre>Conectar / probar:     enable → show version
-Listar ONTs de un puerto:  enable → show gpon onu state gpon-olt_{shelf}/{slot}/{port}
-Registrar ONT:          enable → configure terminal → interface gpon-olt_.../...
-                        onu {id} type {tipo} sn {serial} → exit
-                        interface gpon-onu_.../...:{id} → tcont/gemport/service-port → exit
-Activar/Desactivar:     onu {id} admin-state enable|disable
-Eliminar:               no onu {id}
-Senal optica:           show pon power attenuation gpon-onu_.../...:{id}</pre>
-    </div>
-    <div class="callout danger">
-      <h3>🛑 No probar comandos de escritura contra un puerto con clientes activos</h3>
-      <p>Antes de usar "Registrar ONT", "Activar/Desactivar" o "Eliminar" en producción:</p>
-      <ol>
-        <li>Verifica a mano por SSH/consola que los comandos de <b>lectura</b> (<code>show gpon onu state</code>, <code>show pon power attenuation</code>) devuelven el formato que esperan los parsers en <code>server/src/ssh/zteParsers.ts</code> — ajusta los regex si tu firmware difiere.</li>
-        <li>Prueba los comandos de <b>escritura</b> primero en un puerto de pruebas o con una ONU de repuesto.</li>
-        <li>Si algo no coincide, dime el output real de tu OLT y ajusto los comandos/parsers.</li>
-      </ol>
-    </div>
-  </section>
-
-  <section>
-    <h2><span class="num">4</span> Bugs de infraestructura encontrados y corregidos</h2>
-    <p class="lead">Esta fase destapó dos problemas reales en lo ya construido, no relacionados con ZTE:</p>
-    <table>
-      <tr><th>Problema</th><th>Impacto</th><th>Corrección</th></tr>
-      <tr>
-        <td><code>supabaseAdmin.ts</code> creaba el cliente Supabase al cargar el módulo</td>
-        <td>Si faltaba <code>SUPABASE_SERVICE_ROLE_KEY</code>, <b>todo el backend se caía</b> al iniciar (hasta <code>/api/health</code>)</td>
-        <td>Cliente perezoso (Proxy): solo falla, con mensaje claro, la ruta que realmente necesita la service_role key</td>
-      </tr>
-      <tr>
-        <td><code>vite.config.ts</code> tenía el proxy <code>/api</code> fijo a <code>localhost:3001</code></td>
-        <td>Desincronizado del <code>PORT=3000</code> real de Hono → las llamadas del frontend al backend fallaban en desarrollo</td>
-        <td>Ambos ahora leen la misma variable <code>PORT</code> del <code>.env</code></td>
-      </tr>
-    </table>
-  </section>
-
-  <section>
-    <h2><span class="num">5</span> Verificación realizada</h2>
+    <h2><span class="num">4</span> Verificación (actualizada)</h2>
     <table>
       <tr><th>Comprobación</th><th>Resultado</th></tr>
-      <tr><td><code>npm run build</code> (frontend)</td><td><span class="check">✓</span> compila sin errores, 97 módulos</td></tr>
-      <tr><td><code>tsc -p tsconfig.server.json</code> (backend)</td><td><span class="check">✓</span> sin errores de tipos</td></tr>
-      <tr><td>Backend arranca sin <code>SUPABASE_SERVICE_ROLE_KEY</code>/<code>JWT_SECRET</code></td><td><span class="check">✓</span> ya no se cae; <code>/api/health</code> sigue respondiendo</td></tr>
-      <tr><td>Proxy Vite → Hono con puertos sincronizados</td><td><span class="check">✓</span> <code>/api/health</code> vía <code>localhost:5173</code> responde 200</td></tr>
-      <tr><td>Middleware de auth rechaza peticiones sin token</td><td><span class="check">✓</span> <code>401 {"error":"No autenticado"}</code></td></tr>
-      <tr><td>Conexión SSH real contra tu OLT ZTE C300</td><td><span class="pill warn">pendiente</span> — necesito que completes <code>SUPABASE_SERVICE_ROLE_KEY</code> y <code>JWT_SECRET</code>, y que registres tu OLT real con sus credenciales</td></tr>
+      <tr><td><code>npm run build</code> / <code>tsc</code> backend</td><td><span class="check">✓</span> sin errores</td></tr>
+      <tr><td>Conexión Telnet real a 10.15.15.2</td><td><span class="check">✓</span> exitosa, 279ms</td></tr>
+      <tr><td>Login automático (usuario/contraseña reales)</td><td><span class="check">✓</span></td></tr>
+      <tr><td><code>show gpon onu uncfg</code> (comando de prueba de conexión)</td><td><span class="check">✓</span> 8 ONUs reales listadas</td></tr>
+      <tr><td><code>show gpon onu state</code> + parser</td><td><span class="check">✓</span> corregido y validado (34/39 ONTs en el puerto 1/2/4)</td></tr>
+      <tr><td>Registrar / activar / desactivar / eliminar ONT, señal óptica</td><td><span class="pill warn">pendiente</span> — requiere tu autorización para probar contra servicio real</td></tr>
     </table>
   </section>
 
   <section>
-    <h2><span class="num">6</span> Acción tuya para poder probar esta fase</h2>
+    <h2><span class="num">5</span> Ruta de fases actualizada</h2>
     <div class="callout warn">
-      <ol>
-        <li>Completa en tu <code>.env</code>: <code>SUPABASE_SERVICE_ROLE_KEY</code> y <code>JWT_SECRET</code> (Project Settings → API, ver <code>docs/architecture/supabase-setup.md</code>).</li>
-        <li>Aplica la migración <code>supabase/migrations/20260910140000_fase4_olt.sql</code>.</li>
-        <li>Reinicia <code>npm run dev</code> para que el backend cargue las nuevas variables.</li>
-        <li>Ve a <code>/olt</code>, registra tu ZTE C300 (IP, usuario, contraseña SSH) y usa "Probar conexión" — con eso confirmamos si <code>enable</code> + <code>show version</code> funcionan tal cual contra tu equipo.</li>
-        <li>Pégame el resultado (el output real, o el error) para ajustar los comandos si hace falta.</li>
-      </ol>
+      <h3>Se omite la Fase 5 original del curso (OLT V-SOL)</h3>
+      <p>No aplica: tu única OLT es ZTE. En vez de sumar una marca que no usas, seguimos directo a
+      la gestión de red MikroTik (Fase 6 del curso, renombrada aquí como Fase 5 de SmartRayco).</p>
     </div>
-  </section>
-
-  <section>
-    <h2><span class="num">7</span> Próxima fase</h2>
     <details open>
-      <summary>Fase 5 (curso) — OLT V-SOL <span class="pill next">reemplazada</span> <span class="chev">▶</span></summary>
+      <summary>Fase 5 (SmartRayco) — MikroTik REST API <span class="chev">▶</span></summary>
       <div class="body">
-        El curso dedica esta fase a soporte multi-marca (Huawei + V-SOL). Como tu única OLT es
-        ZTE, no aplica agregar V-SOL. Sugerencia: usar esta fase para <b>terminar de validar y
-        afinar los comandos ZTE</b> contra tu equipo real (con los datos que me pases en la
-        sección 6), en vez de sumar una marca que no usas.
+        <ul>
+          <li>Conexión a RouterOS v7+ vía REST API (Basic Auth, TLS autofirmado aceptado)</li>
+          <li>Usuarios PPPoE (activos e inactivos), leases DHCP</li>
+          <li>Cruce MAC de la ONT ↔ IP asignada por MikroTik</li>
+          <li>CRUD de dispositivos MikroTik, similar al de OLTs (credenciales solo en backend)</li>
+        </ul>
       </div>
-    </details>
-    <details>
-      <summary>Fase 6 (curso) — MikroTik REST API <span class="chev">▶</span></summary>
-      <div class="body">Conexión a RouterOS vía REST, usuarios PPPoE, leases DHCP, cruce MAC→IP con las ONTs.</div>
     </details>
   </section>
 
 </main>
 
 <footer>
-  SmartRayco — Reporte de Fase 4. No se avanza a la siguiente fase sin tu aprobación explícita ("Aprobado").
+  SmartRayco — Reporte de Fase 4 (actualizado tras validación con hardware real). Aprobado por el
+  usuario para avanzar a la Fase 5 — MikroTik.
 </footer>
 
 </body>

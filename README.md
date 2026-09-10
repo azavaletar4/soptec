@@ -7,18 +7,21 @@ Fosmikro" (ver `curso/`), adaptado a este proyecto.
 
 ## Estado del proyecto
 
-Fase actual: **Fase 1 — Fundación** (Vue 3 + Vite + Tailwind CSS 4 + Supabase Auth).
+Fase actual: **Fase 4 completada — OLT ZTE C300** (conexión Telnet validada contra el equipo
+real). Siguiente: **Fase 5 — MikroTik REST API**.
 
-> Nota de rumbo: el proyecto arrancó con una arquitectura genérica (NestJS + Next.js) antes de
-> descubrir el material detallado en `curso/`, específico para esta infraestructura (OLT
-> Huawei/V-SOL, MikroTik REST, TR-069, facturación SRI Ecuador). Se decidió adoptar ese plan.
-> Detalle completo en `docs/phases/fase-1-fundacion.html`.
+> Notas de rumbo: (1) el proyecto arrancó con una arquitectura genérica (NestJS + Next.js) antes
+> de descubrir el material detallado en `curso/`, específico para esta infraestructura, y se
+> adoptó ese plan (`docs/phases/fase-1-fundacion.html`). (2) La OLT real es **ZTE C300**, no
+> Huawei/V-SOL como asumía el curso, y solo tiene **Telnet** habilitado, no SSH — la Fase 5
+> original del curso (V-SOL) se omite por no aplicar (`docs/phases/fase-4-olt.html`).
 
 ## Stack
 
 - **Frontend:** Vue 3 (Composition API) + TypeScript + Vite + Tailwind CSS 4 + Pinia + Vue Router
-- **Backend:** Hono (Node.js) — se agrega en la Fase 2, en `server/`
+- **Backend:** Hono (Node.js) en `server/` — auth vía JWKS (Supabase), rutas privadas para OLT
 - **Base de datos:** Supabase (PostgreSQL + Auth + Storage + RLS)
+- **Red:** OLT ZTE C300 vía Telnet (`server/src/telnet/`); MikroTik REST API desde la Fase 5
 - **App móvil de campo:** Capacitor 8 + Android (fases A-G, más adelante)
 - **Producción:** PM2 + Cloudflare Tunnel
 
@@ -50,25 +53,25 @@ npm run dev             # http://localhost:5173
 
 ## Plan de fases (proyecto web)
 
-Ver el detalle completo en `curso/00-indice-general.md`. Resumen:
+Numeración propia de SmartRayco (la Fase 5 original del curso, OLT V-SOL, se omite por no
+aplicar — ver nota de rumbo arriba). Detalle de cada fase en `docs/phases/`.
 
 | # | Fase | Estado |
 |---|------|--------|
-| 1 | Fundación (Vue+Vite+Tailwind, login Supabase, layout, dashboard vacío) | ✅ En este commit |
-| 2 | Backend Hono + primeras tablas (clientes, planes, zonas) | Pendiente |
-| 3 | Clientes y contratos | Pendiente |
-| 4 | OLT Huawei MA5800 (SSH) | Pendiente |
-| 5 | OLT V-SOL | Pendiente |
-| 6 | MikroTik REST API | Pendiente |
-| 7 | TR-069 / GenieACS | Pendiente |
-| 8 | Facturación electrónica SRI Ecuador | Pendiente (confirmar país) |
-| 9 | Cobros y Caja | Pendiente |
-| 10 | Instalaciones y Mapa | Pendiente |
-| 11 | Inventario | Pendiente |
-| 12 | Soporte técnico y portal del cliente | Pendiente |
-| 13 | Reportes y estadísticas | Pendiente |
-| 14 | Facturación recurrente + WhatsApp | Pendiente |
-| 15 | Producción (PM2 + Cloudflare Tunnel) | Pendiente |
+| 1 | Fundación (Vue+Vite+Tailwind, login Supabase, layout, dashboard vacío) | ✅ |
+| 2 | Backend Hono + esquema inicial (profiles, zones, plans, clients, service_contracts + RLS) | ✅ |
+| 3 | Clientes y contratos (CRUD, numeración automática, Kanban) | ✅ |
+| 4 | OLT ZTE C300 (Telnet: CRUD, listar/sincronizar ONTs) | ✅ — comandos de escritura (registrar/activar/eliminar/señal) sin validar aún |
+| 5 | MikroTik REST API | ⏳ En curso |
+| 6 | TR-069 / GenieACS | Pendiente |
+| 7 | Facturación electrónica SRI Ecuador | Pendiente (confirmar país) |
+| 8 | Cobros y Caja | Pendiente |
+| 9 | Instalaciones y Mapa | Pendiente |
+| 10 | Inventario | Pendiente |
+| 11 | Soporte técnico y portal del cliente | Pendiente |
+| 12 | Reportes y estadísticas | Pendiente |
+| 13 | Facturación recurrente + WhatsApp | Pendiente |
+| 14 | Producción (PM2 + Cloudflare Tunnel) | Pendiente |
 
 App móvil (fsMk, Capacitor/Android): fases A-G, después de cerrar el proyecto web.
 
