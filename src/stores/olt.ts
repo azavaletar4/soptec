@@ -7,7 +7,7 @@ export interface OltDevice {
   name: string;
   host: string;
   brand: 'zte' | 'huawei' | 'vsol';
-  ssh_port: number;
+  telnet_port: number;
   username: string;
   zone_id: string | null;
   is_active: boolean;

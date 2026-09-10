@@ -20,7 +20,7 @@ const emptyForm = () => ({
   name: '',
   host: '',
   brand: 'zte' as 'zte' | 'huawei' | 'vsol',
-  ssh_port: 22,
+  telnet_port: 23,
   username: '',
   password: '',
   zone_id: '',
@@ -44,7 +44,7 @@ function openEdit(device: OltDevice) {
     name: device.name,
     host: device.host,
     brand: device.brand,
-    ssh_port: device.ssh_port,
+    telnet_port: device.telnet_port,
     username: device.username,
     password: '',
     zone_id: device.zone_id ?? '',
@@ -129,7 +129,7 @@ async function handleTest(device: OltDevice) {
                 {{ d.name }}
               </button>
             </td>
-            <td class="px-4 py-3 text-slate-400 font-mono text-xs">{{ d.host }}:{{ d.ssh_port }}</td>
+            <td class="px-4 py-3 text-slate-400 font-mono text-xs">{{ d.host }}:{{ d.telnet_port }}</td>
             <td class="px-4 py-3 text-slate-400 uppercase">{{ d.brand }}</td>
             <td class="px-4 py-3 text-xs">
               <button class="text-sky-400 hover:underline" @click="handleTest(d)">Probar conexion</button>
@@ -168,8 +168,8 @@ async function handleTest(device: OltDevice) {
               <input v-model="form.host" required class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Puerto SSH</label>
-              <input v-model.number="form.ssh_port" type="number" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+              <label class="block text-xs text-slate-400 mb-1">Puerto Telnet</label>
+              <input v-model.number="form.telnet_port" type="number" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
             </div>
           </div>
 
@@ -193,11 +193,11 @@ async function handleTest(device: OltDevice) {
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Usuario SSH</label>
+              <label class="block text-xs text-slate-400 mb-1">Usuario Telnet</label>
               <input v-model="form.username" required class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Contrasena SSH</label>
+              <label class="block text-xs text-slate-400 mb-1">Contrasena Telnet</label>
               <input
                 v-model="form.password"
                 type="password"
@@ -209,7 +209,7 @@ async function handleTest(device: OltDevice) {
           </div>
 
           <p class="text-xs text-slate-500 mb-4">
-            La contrasena solo la usa el backend para conectarse por SSH; nunca se muestra de vuelta al frontend.
+            La contrasena solo la usa el backend para conectarse por Telnet; nunca se muestra de vuelta al frontend.
           </p>
 
           <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>

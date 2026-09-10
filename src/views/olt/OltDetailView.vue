@@ -127,7 +127,7 @@ async function handleSignal(ont: OltOnt) {
     <div v-if="!device" class="text-slate-500">OLT no encontrada.</div>
     <template v-else>
       <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
-      <p class="text-slate-400 text-sm mb-6">{{ device.host }}:{{ device.ssh_port }} · {{ device.brand.toUpperCase() }}</p>
+      <p class="text-slate-400 text-sm mb-6">{{ device.host }}:{{ device.telnet_port }} · {{ device.brand.toUpperCase() }}</p>
 
       <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">
         <h2 class="text-sm font-semibold mb-3">Consultar puerto GPON</h2>

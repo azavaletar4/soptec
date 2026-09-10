@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
-import { runSshCommands } from '../ssh/client';
+import { runTelnetCommands } from '../telnet/client';
 import {
   testConnectionCommands,
   listOntsCommands,
@@ -17,14 +17,14 @@ export const oltRoutes = new Hono();
 const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
 const STAFF_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
-const DEVICE_PUBLIC_FIELDS = 'id, name, host, brand, ssh_port, username, zone_id, is_active, created_at';
+const DEVICE_PUBLIC_FIELDS = 'id, name, host, brand, telnet_port, username, zone_id, is_active, created_at';
 
 oltRoutes.use('*', requireAuth);
 
 interface OltDeviceRow {
   id: string;
   host: string;
-  ssh_port: number;
+  telnet_port: number;
   username: string;
   password: string;
   brand: string;
@@ -37,8 +37,10 @@ async function getDeviceOrNull(id: string | undefined): Promise<OltDeviceRow | n
   return data as OltDeviceRow;
 }
 
-function sshTargetFor(device: OltDeviceRow) {
-  return { host: device.host, port: device.ssh_port, username: device.username, password: device.password };
+// La OLT ZTE C300 solo tiene Telnet habilitado (SSH resetea la conexion,
+// confirmado manualmente). Ver server/src/telnet/client.ts.
+function telnetTargetFor(device: OltDeviceRow) {
+  return { host: device.host, port: device.telnet_port, username: device.username, password: device.password };
 }
 
 // ---- CRUD olt_devices ----
@@ -60,7 +62,7 @@ oltRoutes.post('/', requireRole(...STAFF_WRITE), async (c) => {
       name: body.name,
       host: body.host,
       brand: body.brand ?? 'zte',
-      ssh_port: body.ssh_port ?? 22,
+      telnet_port: body.telnet_port ?? 23,
       username: body.username,
       password: body.password,
       zone_id: body.zone_id ?? null,
@@ -75,7 +77,7 @@ oltRoutes.put('/:id', requireRole(...STAFF_WRITE), async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
   const update: Record<string, unknown> = {};
-  for (const key of ['name', 'host', 'brand', 'ssh_port', 'username', 'zone_id', 'is_active'] as const) {
+  for (const key of ['name', 'host', 'brand', 'telnet_port', 'username', 'zone_id', 'is_active'] as const) {
     if (key in body) update[key] = body[key];
   }
   if (body.password) update.password = body.password; // solo si mandan una nueva
@@ -101,10 +103,10 @@ oltRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
   // eslint-disable-next-line no-console
-  console.log(`[olt/test] Conectando a ${device.host}:${device.ssh_port} (usuario: ${device.username})...`);
+  console.log(`[olt/test] Conectando a ${device.host}:${device.telnet_port} (usuario: ${device.username})...`);
   const start = Date.now();
   try {
-    const outputs = await runSshCommands(sshTargetFor(device), testConnectionCommands());
+    const outputs = await runTelnetCommands(telnetTargetFor(device), testConnectionCommands());
     // eslint-disable-next-line no-console
     console.log(`[olt/test] OK en ${Date.now() - start}ms. Output:\n${outputs.join('\n')}`);
     return c.json({ status: 'ok', ms: Date.now() - start, output: outputs.join('\n') });
@@ -116,7 +118,7 @@ oltRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
   }
 });
 
-// ---- ONTs (cache local en olt_onts, sincronizada bajo demanda por SSH) ----
+// ---- ONTs (cache local en olt_onts, sincronizada bajo demanda por Telnet) ----
 
 oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
   const { data, error } = await supabaseAdmin
@@ -140,7 +142,7 @@ oltRoutes.post('/:id/onts/sync', requireRole(...STAFF_WRITE), async (c: Context)
   if (slot == null || port == null) return c.json({ error: 'slot y port son requeridos' }, 400);
 
   try {
-    const outputs = await runSshCommands(sshTargetFor(device), listOntsCommands({ shelf, slot, port }));
+    const outputs = await runTelnetCommands(telnetTargetFor(device), listOntsCommands({ shelf, slot, port }));
     const raw = outputs.join('\n');
     const parsed = parseOntList(raw);
 
@@ -188,8 +190,8 @@ oltRoutes.post('/:id/onts', requireRole(...STAFF_WRITE), async (c) => {
   }
 
   try {
-    await runSshCommands(
-      sshTargetFor(device),
+    await runTelnetCommands(
+      telnetTargetFor(device),
       registerOntCommands({ ref: { shelf, slot, port }, onuId, serial, onuType, vlan, description }),
     );
   } catch (e) {
@@ -238,8 +240,8 @@ async function toggleActivation(c: Context, activate: boolean) {
   if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
 
   try {
-    await runSshCommands(
-      sshTargetFor(device),
+    await runTelnetCommands(
+      telnetTargetFor(device),
       setAdminStateCommands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id, activate),
     );
   } catch (e) {
@@ -263,8 +265,8 @@ oltRoutes.delete('/:id/onts/:ontDbId', requireRole(...STAFF_WRITE), async (c) =>
   if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
 
   try {
-    await runSshCommands(
-      sshTargetFor(device),
+    await runTelnetCommands(
+      telnetTargetFor(device),
       deleteOntCommands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id),
     );
   } catch (e) {
@@ -283,8 +285,8 @@ oltRoutes.get('/:id/onts/:ontDbId/signal', requireRole(...STAFF_READ), async (c)
   if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
 
   try {
-    const outputs = await runSshCommands(
-      sshTargetFor(device),
+    const outputs = await runTelnetCommands(
+      telnetTargetFor(device),
       opticalInfoCommands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id),
     );
     const info = parseOpticalInfo(outputs.join('\n'));
