@@ -1,5 +1,5 @@
 import type { Context, Next } from 'hono';
-import jwt from 'jsonwebtoken';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import type { Role } from '../types';
 
@@ -15,31 +15,45 @@ declare module 'hono' {
   }
 }
 
+// Este proyecto Supabase firma los JWT de Auth con una clave asimetrica
+// (ES256), publicada en /auth/v1/.well-known/jwks.json — no con un secreto
+// compartido (JWT_SECRET). `createRemoteJWKSet` descarga y cachea esas
+// llaves publicas automaticamente (y las refresca si rotan).
+let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+
+function getJwks() {
+  if (jwks) return jwks;
+
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error('Falta VITE_SUPABASE_URL en el .env del backend');
+  }
+
+  jwks = createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`));
+  return jwks;
+}
+
 /**
- * Verifica el JWT de Supabase (HS256, firmado con JWT_SECRET) que llega en
- * el header Authorization: Bearer <token>, y adjunta el usuario + su rol
- * (leido de public.profiles con la service_role key, sin pasar por RLS).
+ * Verifica el JWT de Supabase (header Authorization: Bearer <token>) contra
+ * las llaves publicas del proyecto, y adjunta el usuario + su rol (leido de
+ * public.profiles con la service_role key, sin pasar por RLS).
  */
 export async function requireAuth(c: Context, next: Next) {
   const authHeader = c.req.header('Authorization');
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return c.json({ error: 'No autenticado' }, 401);
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    // eslint-disable-next-line no-console
-    console.error('[auth] Falta JWT_SECRET en el .env del backend');
-    return c.json({ error: 'Backend mal configurado (falta JWT_SECRET)' }, 500);
-  }
-
-  let payload: jwt.JwtPayload;
+  let userId: string | undefined;
+  let email: string | undefined;
   try {
-    payload = jwt.verify(token, secret) as jwt.JwtPayload;
-  } catch {
-    return c.json({ error: 'Token invalido o expirado' }, 401);
+    const { payload } = await jwtVerify(token, getJwks());
+    userId = typeof payload.sub === 'string' ? payload.sub : undefined;
+    email = typeof payload.email === 'string' ? payload.email : undefined;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Token invalido';
+    return c.json({ error: `Token invalido o expirado: ${message}` }, 401);
   }
 
-  const userId = payload.sub;
   if (!userId) return c.json({ error: 'Token invalido' }, 401);
 
   const { data: profile } = await supabaseAdmin
@@ -50,7 +64,7 @@ export async function requireAuth(c: Context, next: Next) {
 
   c.set('user', {
     id: userId,
-    email: typeof payload.email === 'string' ? payload.email : undefined,
+    email,
     role: (profile?.role as Role | undefined) ?? 'CLIENTE',
   });
 

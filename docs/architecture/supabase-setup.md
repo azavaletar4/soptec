@@ -63,16 +63,21 @@ npm run dev         # backend + frontend en paralelo
 ## Fase 4 — OLT (ZTE C300)
 
 A partir de esta fase el backend valida el JWT de cada usuario antes de ejecutar comandos SSH,
-y usa la `service_role` key para leer/escribir `olt_devices`/`olt_onts` (tablas sin acceso directo
-desde el frontend). Completa en tu `.env`:
+y usa la `service_role` (o `secret`, en el sistema nuevo de API keys) key para leer/escribir
+`olt_devices`/`olt_onts` (tablas sin acceso directo desde el frontend). Completa en tu `.env`:
 
 | Valor (Project Settings → API) | Variable |
 |---|---|
-| `service_role` key | `SUPABASE_SERVICE_ROLE_KEY` |
-| `JWT Secret` (API → JWT Settings) | `JWT_SECRET` |
+| `service_role` / `secret` key (sección "Project API keys") | `SUPABASE_SERVICE_ROLE_KEY` |
 
-Sin estas dos variables, `/api/olt-devices/*` responde 500 (con un mensaje claro) — el resto de
-la app (login, clientes, contratos) sigue funcionando igual, no depende de ellas.
+**No hace falta `JWT_SECRET`.** Tu proyecto firma los tokens de Auth con una llave asimétrica
+(ES256), publicada en `{VITE_SUPABASE_URL}/auth/v1/.well-known/jwks.json` — el backend verifica
+ahí mismo usando la librería `jose`, sin necesitar ningún secreto compartido. (Si algún día
+migras a un proyecto Supabase que use el esquema clásico HS256 con secreto compartido, este
+endpoint no publica nada y habría que volver a un flujo con `JWT_SECRET`; no es el caso hoy.)
+
+Sin `SUPABASE_SERVICE_ROLE_KEY`, `/api/olt-devices/*` responde 500 (con un mensaje claro) — el
+resto de la app (login, clientes, contratos) sigue funcionando igual, no depende de ella.
 
 Luego aplica la migración `supabase/migrations/20260910140000_fase4_olt.sql` (SQL Editor o
 `supabase db push`), y registra tu primera OLT desde `/olt` en la app.
