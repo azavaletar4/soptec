@@ -30,6 +30,18 @@ const router = createRouter({
       component: () => import('@/views/contratos/ContratosKanbanView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/olt',
+      name: 'olt',
+      component: () => import('@/views/olt/OltDevicesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/olt/:id',
+      name: 'olt-detalle',
+      component: () => import('@/views/olt/OltDetailView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 });
 
