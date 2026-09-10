@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.log
+*.local
+coverage/
+.DS_Store
+Thumbs.db
+*.pem
+*.key
+supabase/.branches/
+supabase/.temp/
