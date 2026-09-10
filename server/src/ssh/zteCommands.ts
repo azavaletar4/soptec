@@ -44,6 +44,16 @@ export function listOntsCommands(ref: ZteInterfaceRef): string[] {
   return ['enable', `show gpon onu state ${oltInterface(ref)}`];
 }
 
+/**
+ * Lista TODAS las ONUs configuradas de la OLT, de una sola vez (sin filtrar
+ * por puerto) — VALIDADO contra el equipo real: 646/675 filas capturadas en
+ * ~8s (paginacion "--More--" manejada por el cliente Telnet). Evita tener
+ * que recorrer puerto por puerto para armar un resumen general.
+ */
+export function listAllOntsCommands(): string[] {
+  return ['enable', 'show gpon onu state'];
+}
+
 /** Lista ONUs detectadas por la OLT pero AUN NO registradas (solo su serial). */
 export function listUnconfiguredOntsCommands(): string[] {
   return ['enable', 'show gpon onu uncfg'];

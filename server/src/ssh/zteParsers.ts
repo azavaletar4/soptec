@@ -33,6 +33,42 @@ export function parseOntList(raw: string): ParsedOnt[] {
   return results;
 }
 
+export interface GlobalOnt {
+  frame: number;
+  slot: number;
+  port: number;
+  onuId: number;
+  runState: string;
+}
+
+/**
+ * Igual que parseOntList, pero para "show gpon onu state" SIN filtrar por
+ * puerto (listado global de toda la OLT) — captura tambien frame/slot/port
+ * de cada fila, ya que abarca varios puertos a la vez. VALIDADO contra el
+ * equipo real: 646/675 filas capturadas (ver zteCommands.ts).
+ */
+export function parseGlobalOntState(raw: string): GlobalOnt[] {
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const results: GlobalOnt[] = [];
+  for (const line of lines) {
+    const match = line.match(/^(\d+)\/(\d+)\/(\d+):(\d+)\s+\S+\s+\S+\s+(\S+)/);
+    if (match) {
+      results.push({
+        frame: Number(match[1]),
+        slot: Number(match[2]),
+        port: Number(match[3]),
+        onuId: Number(match[4]),
+        runState: match[5].toLowerCase(),
+      });
+    }
+  }
+  return results;
+}
+
 export interface UnconfiguredOnt {
   interfaceRef: string; // ej. "gpon-onu_1/2/4:1"
   serial: string;

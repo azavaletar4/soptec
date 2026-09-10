@@ -41,7 +41,7 @@ interface OltSummary {
   online: number;
   offline: number;
   lowSignal: number;
-  syncedTotal: number;
+  scanComplete: boolean;
   checkedAt: string;
 }
 
@@ -198,11 +198,14 @@ async function handleSignal(ont: OltOnt) {
         <button class="ml-2 text-sky-400 hover:underline" @click="loadSummary">Actualizar</button>
       </p>
       <p v-if="summaryError" class="text-xs text-red-400 mb-4">{{ summaryError }}</p>
+      <p v-if="summary && !summary.scanComplete" class="text-xs text-amber-400/80 mb-4">
+        ⚠ El escaneo completo de la OLT falló esta vez; "Online/Offline" se muestran con el último
+        dato local disponible.
+      </p>
       <p class="text-xs text-slate-500 mb-6">
-        "Sin autorizar" es en vivo (consulta directa a la OLT). "Online/Offline/Señales bajas" se
-        calculan con los puertos que ya sincronizaste aquí abajo — sincroniza más puertos para
-        totales más completos (SmartOLT los mantiene con un escaneo continuo en segundo plano,
-        que SmartRayco aún no tiene).
+        "Sin autorizar" y "Online/Offline" se consultan en vivo a toda la OLT en cada actualización
+        (un solo comando, ~8-10s). "Señales bajas" todavía depende de leer la señal óptica ONT por
+        ONT (ver botón "Señal" en la tabla) — se está evaluando automatizarlo.
       </p>
 
       <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">

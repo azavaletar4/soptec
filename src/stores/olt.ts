@@ -122,7 +122,7 @@ export const useOltStore = defineStore('olt', () => {
       online: number;
       offline: number;
       lowSignal: number;
-      syncedTotal: number;
+      scanComplete: boolean;
       checkedAt: string;
     }>(`/api/olt-devices/${deviceId}/summary`);
   }

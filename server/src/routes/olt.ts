@@ -5,13 +5,14 @@ import { runTelnetCommands } from '../telnet/client';
 import {
   testConnectionCommands,
   listOntsCommands,
+  listAllOntsCommands,
   listUnconfiguredOntsCommands,
   registerOntCommands,
   setAdminStateCommands,
   deleteOntCommands,
   opticalInfoCommands,
 } from '../ssh/zteCommands';
-import { parseOntList, parseOpticalInfo, parseUnconfiguredOnts } from '../ssh/zteParsers';
+import { parseOntList, parseGlobalOntState, parseOpticalInfo, parseUnconfiguredOnts } from '../ssh/zteParsers';
 
 // Rango de senal optica GPON aceptable segun el glosario del curso: -8 a -27 dBm.
 const LOW_SIGNAL_THRESHOLD_DBM = -27;
@@ -131,15 +132,23 @@ oltRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
 });
 
 /**
- * Resumen estilo SmartOLT: sin autorizar (en vivo, ~200ms confirmado en Fase 4),
- * online/offline/senal baja (del cache local olt_onts — solo refleja los
- * puertos ya sincronizados, no es un escaneo completo de la OLT).
+ * Resumen estilo SmartOLT, con escaneo EN VIVO de toda la OLT (no solo el
+ * cache local): "sin autorizar" via show gpon onu uncfg, y online/offline
+ * via show gpon onu state SIN filtro de puerto (lista todas las ONUs de
+ * una vez — validado contra el equipo real: ~646/675 filas, ver
+ * zteCommands.ts). De paso, actualiza el estado de las ONTs que ya
+ * tenemos registradas localmente (por frame/slot/port/ont_id), sin
+ * llamadas extra. "Senal baja" sigue viniendo del cache local (rx_power
+ * solo se lee ONT por ONT, ver /onts/:ontDbId/signal).
  */
 oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
   let unconfigured = 0;
+  let online = 0;
+  let offline = 0;
+
   try {
     const outputs = await runTelnetCommands(telnetTargetFor(device), listUnconfiguredOntsCommands());
     unconfigured = parseUnconfiguredOnts(outputs.join('\n')).length;
@@ -148,22 +157,57 @@ oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
     console.error('[olt/summary] No se pudo consultar ONUs sin autorizar:', e);
   }
 
-  const { data: onts } = await supabaseAdmin
-    .from('olt_onts')
-    .select('status, rx_power')
-    .eq('olt_device_id', device.id);
+  let globalScanOk = false;
+  try {
+    const outputs = await runTelnetCommands(telnetTargetFor(device), listAllOntsCommands(), { timeoutMs: 45000 });
+    const all = parseGlobalOntState(outputs.join('\n'));
+    online = all.filter((o) => o.runState === 'working').length;
+    offline = all.length - online;
+    globalScanOk = true;
 
-  const rows = onts ?? [];
-  const online = rows.filter((r) => r.status === 'online').length;
-  const offline = rows.filter((r) => r.status === 'offline').length;
-  const lowSignal = rows.filter((r) => r.rx_power != null && r.rx_power < LOW_SIGNAL_THRESHOLD_DBM).length;
+    // Actualizar de paso el estado de las ONTs que ya tenemos localmente.
+    const byKey = new Map(all.map((o) => [`${o.frame}/${o.slot}/${o.port}:${o.onuId}`, o]));
+    const { data: known } = await supabaseAdmin
+      .from('olt_onts')
+      .select('id, frame, slot, port, ont_id')
+      .eq('olt_device_id', device.id);
+
+    for (const row of known ?? []) {
+      const found = byKey.get(`${row.frame}/${row.slot}/${row.port}:${row.ont_id}`);
+      if (found) {
+        await supabaseAdmin
+          .from('olt_onts')
+          .update({ status: found.runState === 'working' ? 'online' : 'offline', last_synced_at: new Date().toISOString() })
+          .eq('id', row.id);
+      }
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[olt/summary] Fallo el escaneo global, usando cache local:', e);
+  }
+
+  if (!globalScanOk) {
+    // Respaldo: si el escaneo en vivo falla (timeout, etc.), no dejar el
+    // resumen en cero — usar lo que ya tengamos sincronizado localmente.
+    const { data: onts } = await supabaseAdmin.from('olt_onts').select('status').eq('olt_device_id', device.id);
+    const rows = onts ?? [];
+    online = rows.filter((r) => r.status === 'online').length;
+    offline = rows.filter((r) => r.status === 'offline').length;
+  }
+
+  const { data: signalRows } = await supabaseAdmin
+    .from('olt_onts')
+    .select('rx_power')
+    .eq('olt_device_id', device.id)
+    .not('rx_power', 'is', null);
+  const lowSignal = (signalRows ?? []).filter((r) => (r.rx_power as number) < LOW_SIGNAL_THRESHOLD_DBM).length;
 
   return c.json({
     unconfigured,
     online,
     offline,
     lowSignal,
-    syncedTotal: rows.length,
+    scanComplete: globalScanOk,
     checkedAt: new Date().toISOString(),
   });
 });

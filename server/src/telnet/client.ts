@@ -18,6 +18,7 @@ export interface TelnetTarget {
 // Mismas heuristicas que el cliente SSH (ver server/src/ssh/client.ts).
 const PROMPT_RE = /[#>]\s*$/;
 const MORE_RE = /--\s*more\s*--|press\s+.q.\s+to\s+break/i;
+const MORE_CLEAN_RE = /--\s*more\s*--/gi;
 const USERNAME_RE = /username\s*:?\s*$/i;
 const PASSWORD_RE = /password\s*:?\s*$/i;
 
@@ -44,6 +45,11 @@ export function runTelnetCommands(
     const socket = new Socket();
     const outputs: string[] = [];
     let buffer = '';
+    // Acumula paginas ya leidas cuando el comando pagina con "--More--"
+    // (sin esto, cada pagina nueva pisaba a la anterior y solo sobrevivia
+    // la ultima — bug real encontrado al listar "show gpon onu state" sin
+    // filtro de puerto, que devuelve cientos de lineas paginadas).
+    let accumulated = '';
     let commandIndex = 0;
     let loggedIn = false;
     let usernameSent = false;
@@ -106,8 +112,9 @@ export function runTelnetCommands(
       buffer += stripIac(chunk);
 
       if (MORE_RE.test(buffer)) {
-        socket.write(' ');
+        accumulated += buffer.replace(MORE_CLEAN_RE, '');
         buffer = '';
+        socket.write(' ');
         return;
       }
 
@@ -137,7 +144,8 @@ export function runTelnetCommands(
       }
 
       if (PROMPT_RE.test(buffer)) {
-        outputs.push(buffer);
+        outputs.push(accumulated + buffer);
+        accumulated = '';
         buffer = '';
         commandIndex += 1;
 
