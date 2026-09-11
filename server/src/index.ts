@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { healthRoutes } from './routes/health';
@@ -28,6 +29,15 @@ app.route('/api/dashboard', dashboardRoutes);
 app.route('/api/genieacs', genieacsRoutes);
 app.route('/api/tr069-sync', tr069SyncRoutes);
 app.route('/api/genieacs-sync', genieacsSyncRoutes);
+
+// En produccion (Fase 14: PM2 + Cloudflare Tunnel) un solo proceso sirve
+// API + frontend compilado — no hace falta un servidor separado (Vite dev
+// server es solo para desarrollo). El fallback a index.html permite el
+// modo history del router de Vue.
+if (process.env.NODE_ENV === 'production') {
+  app.use('/*', serveStatic({ root: './dist' }));
+  app.get('*', serveStatic({ path: './dist/index.html' }));
+}
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
 

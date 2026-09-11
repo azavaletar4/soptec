@@ -97,7 +97,7 @@ aplicar — ver nota de rumbo arriba). Detalle de cada fase en `docs/phases/`.
 | — | Cobros y Caja (arqueo/cierre) | Pendiente |
 | 12 | Reportes y estadísticas (clientes, financiero, soporte — sin doc de curso, diseñado a medida) | ✅ código — sin migración pendiente (reusa tablas existentes) |
 | 13 | Facturación recurrente + WhatsApp | Pendiente |
-| 14 | Producción (PM2 + Cloudflare Tunnel) | Pendiente |
+| 14 | Producción (PM2 + Cloudflare Tunnel) | En progreso — servir dist/ desde el backend probado (`ecosystem.production.config.cjs`); falta el login de Cloudflare del usuario y crear/enrutar el tunel |
 
 App móvil (fsMk, Capacitor/Android): fases A-G, después de cerrar el proyecto web.
 
