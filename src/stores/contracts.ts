@@ -48,9 +48,13 @@ export const useContractsStore = defineStore('contracts', () => {
   }
 
   async function updateContractStatus(id: string, status: ContractStatus) {
+    return updateContract(id, { status });
+  }
+
+  async function updateContract(id: string, payload: Partial<ServiceContract>) {
     const { data, error: err } = await supabase
       .from('service_contracts')
-      .update({ status })
+      .update(payload)
       .eq('id', id)
       .select(CONTRACT_SELECT)
       .single();
@@ -67,6 +71,7 @@ export const useContractsStore = defineStore('contracts', () => {
     fetchContracts,
     fetchContractsByClient,
     createContract,
+    updateContract,
     updateContractStatus,
   };
 });

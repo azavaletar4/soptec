@@ -1,20 +1,33 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useOltStore, type OltDevice } from '@/stores/olt';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 
 const router = useRouter();
 const oltStore = useOltStore();
 const catalogs = useCatalogsStore();
+const auth = useAuthStore();
+
+// Dar de alta/editar/eliminar el registro de la OLT es tarea de
+// administracion; el tecnico de campo solo gestiona ONTs (ver OltDetailView).
+const canManageDevices = computed(() => auth.role !== 'TECNICO_RED');
 
 const showModal = ref(false);
 const editingId = ref<string | null>(null);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const testResults = reactive<Record<string, string>>({});
+const searchQuery = ref('');
+
+const filteredDevices = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return oltStore.devices;
+  return oltStore.devices.filter((d) => `${d.name} ${d.host} ${d.brand}`.toLowerCase().includes(q));
+});
 
 const emptyForm = () => ({
   name: '',
@@ -93,19 +106,29 @@ async function handleTest(device: OltDevice) {
 
 <template>
   <AppLayout>
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Red & OLTs</h1>
         <p class="text-slate-400 text-sm mt-1">{{ oltStore.devices.length }} OLT(s) registradas</p>
       </div>
-      <button class="px-4 py-2 rounded-lg bg-sky-500 text-slate-950 font-semibold text-sm" @click="openCreate">
+      <button
+        v-if="canManageDevices"
+        class="btn-primary"
+        @click="openCreate"
+      >
         + Nueva OLT
       </button>
     </div>
 
     <p v-if="oltStore.error" class="mb-4 text-sm text-red-400">{{ oltStore.error }}</p>
 
-    <div class="rounded-xl border border-slate-800 overflow-hidden overflow-x-auto">
+    <input
+      v-model="searchQuery"
+      placeholder="Buscar por nombre, host o marca..."
+      class="field-input mb-6"
+    />
+
+    <div class="table-shell">
       <table class="w-full text-sm min-w-[720px]">
         <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
           <tr>
@@ -120,10 +143,12 @@ async function handleTest(device: OltDevice) {
           <tr v-if="oltStore.loading">
             <td colspan="5" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
-          <tr v-else-if="!oltStore.devices.length">
-            <td colspan="5" class="px-4 py-6 text-center text-slate-500">No hay OLTs. Registra la primera.</td>
+          <tr v-else-if="!filteredDevices.length">
+            <td colspan="5" class="px-4 py-6 text-center text-slate-500">
+              {{ searchQuery ? 'Sin resultados para esa busqueda.' : 'No hay OLTs. Registra la primera.' }}
+            </td>
           </tr>
-          <tr v-for="d in oltStore.devices" :key="d.id" class="border-t border-slate-800 hover:bg-slate-900/50">
+          <tr v-for="d in filteredDevices" :key="d.id" class="border-t border-slate-800 hover:bg-slate-900/50">
             <td class="px-4 py-3">
               <button class="text-slate-100 hover:text-sky-400 font-medium" @click="router.push(`/olt/${d.id}`)">
                 {{ d.name }}
@@ -136,8 +161,11 @@ async function handleTest(device: OltDevice) {
               <span v-if="testResults[d.id]" class="block text-slate-500 mt-1">{{ testResults[d.id] }}</span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
-              <button class="text-slate-400 hover:text-slate-100 text-xs" @click="openEdit(d)">Editar</button>
-              <button class="text-red-500/80 hover:text-red-400 text-xs" @click="handleDelete(d)">Eliminar</button>
+              <template v-if="canManageDevices">
+                <button class="text-slate-400 hover:text-slate-100 text-xs" @click="openEdit(d)">Editar</button>
+                <button class="text-red-500/80 hover:text-red-400 text-xs" @click="handleDelete(d)">Eliminar</button>
+              </template>
+              <span v-else class="text-xs text-slate-600">—</span>
             </td>
           </tr>
         </tbody>
@@ -145,9 +173,9 @@ async function handleTest(device: OltDevice) {
     </div>
 
     <Teleport to="body">
-      <div v-if="showModal" class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div v-if="showModal" class="modal-overlay">
         <form
-          class="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-6 max-h-[90vh] overflow-y-auto"
+          class="w-full max-w-md modal-panel max-h-[90vh] overflow-y-auto"
           @submit.prevent="handleSubmit"
         >
           <h2 class="text-lg font-semibold mb-4">{{ editingId ? 'Editar OLT' : 'Nueva OLT' }}</h2>
@@ -158,25 +186,25 @@ async function handleTest(device: OltDevice) {
               v-model="form.name"
               required
               placeholder="OLT-Principal"
-              class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm"
+              class="field-input"
             />
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label class="block text-xs text-slate-400 mb-1">Host (IP)</label>
-              <input v-model="form.host" required class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+              <input v-model="form.host" required class="field-input" />
             </div>
             <div>
               <label class="block text-xs text-slate-400 mb-1">Puerto Telnet</label>
-              <input v-model.number="form.telnet_port" type="number" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+              <input v-model.number="form.telnet_port" type="number" class="field-input" />
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label class="block text-xs text-slate-400 mb-1">Marca</label>
-              <select v-model="form.brand" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm">
+              <select v-model="form.brand" class="field-input">
                 <option value="zte">ZTE (C300)</option>
                 <option value="huawei" disabled>Huawei (no implementado)</option>
                 <option value="vsol" disabled>V-SOL (no implementado)</option>
@@ -184,7 +212,7 @@ async function handleTest(device: OltDevice) {
             </div>
             <div>
               <label class="block text-xs text-slate-400 mb-1">Zona</label>
-              <select v-model="form.zone_id" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm">
+              <select v-model="form.zone_id" class="field-input">
                 <option value="">Sin asignar</option>
                 <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
               </select>
@@ -194,7 +222,7 @@ async function handleTest(device: OltDevice) {
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label class="block text-xs text-slate-400 mb-1">Usuario Telnet</label>
-              <input v-model="form.username" required class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+              <input v-model="form.username" required class="field-input" />
             </div>
             <div>
               <label class="block text-xs text-slate-400 mb-1">Contrasena Telnet</label>
@@ -203,7 +231,7 @@ async function handleTest(device: OltDevice) {
                 type="password"
                 :required="!editingId"
                 :placeholder="editingId ? 'Dejar vacio para no cambiar' : ''"
-                class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm"
+                class="field-input"
               />
             </div>
           </div>
@@ -215,10 +243,10 @@ async function handleTest(device: OltDevice) {
           <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>
 
           <div class="flex justify-end gap-2">
-            <button type="button" class="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-100" @click="showModal = false">
+            <button type="button" class="btn-ghost" @click="showModal = false">
               Cancelar
             </button>
-            <button type="submit" :disabled="saving" class="px-4 py-2 rounded-lg bg-sky-500 text-slate-950 font-semibold text-sm disabled:opacity-60">
+            <button type="submit" :disabled="saving" class="btn-primary">
               {{ saving ? 'Guardando...' : 'Guardar' }}
             </button>
           </div>

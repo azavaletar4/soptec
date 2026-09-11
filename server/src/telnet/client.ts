@@ -56,6 +56,11 @@ export function runTelnetCommands(
     let settled = false;
 
     const timer = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[telnet] TIMEOUT en comando #${commandIndex} ("${commands[commandIndex]}"). ` +
+          `Buffer pendiente sin coincidir con prompt:\n---\n${accumulated + buffer}\n---`,
+      );
       fail(new Error(`Timeout de ${timeoutMs}ms esperando respuesta del equipo`));
     }, timeoutMs);
 

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
+import logoIcon from '@/assets/logo-icon.png';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -27,36 +28,36 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <main class="min-h-screen flex items-center justify-center px-4">
-    <form
-      class="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900 p-8"
-      @submit.prevent="handleSubmit"
-    >
-      <h1 class="text-xl font-semibold mb-1">SmartRayco</h1>
-      <p class="text-sm text-slate-400 mb-6">Ingresa a tu panel de gestion</p>
+  <main class="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+    <div
+      class="pointer-events-none absolute -top-40 -left-40 w-96 h-96 rounded-full bg-sky-500/10 blur-3xl"
+    ></div>
+    <div
+      class="pointer-events-none absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-sky-500/10 blur-3xl"
+    ></div>
 
+    <form class="w-full max-w-sm modal-panel relative" @submit.prevent="handleSubmit">
+      <div class="flex flex-col items-center text-center mb-6">
+        <img :src="logoIcon" alt="SmartRayco" class="w-16 h-16 mb-3 drop-shadow-[0_0_20px_rgba(14,165,233,0.35)]" />
+        <h1 class="text-xl font-bold">SmartRayco</h1>
+        <p class="text-sm text-slate-500 mt-1">Ingresa a tu panel de gestión</p>
+      </div>
+
+      <label class="field-label">Correo</label>
       <input
         v-model="email"
         type="email"
         placeholder="correo@empresa.com"
         required
-        class="w-full mb-3 px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-slate-100 outline-none focus:border-sky-500"
+        autofocus
+        class="field-input mb-3"
       />
-      <input
-        v-model="password"
-        type="password"
-        placeholder="Contrasena"
-        required
-        class="w-full mb-4 px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-slate-100 outline-none focus:border-sky-500"
-      />
+      <label class="field-label">Contraseña</label>
+      <input v-model="password" type="password" placeholder="••••••••" required class="field-input mb-5" />
 
-      <p v-if="error" class="text-sm text-red-400 mb-3">{{ error }}</p>
+      <p v-if="error" class="text-sm text-red-400 mb-3 text-center">{{ error }}</p>
 
-      <button
-        type="submit"
-        :disabled="loading"
-        class="w-full py-2 rounded-lg bg-sky-500 text-slate-950 font-semibold disabled:opacity-60"
-      >
+      <button type="submit" :disabled="loading" class="btn-primary w-full">
         {{ loading ? 'Ingresando...' : 'Ingresar' }}
       </button>
     </form>

@@ -26,6 +26,20 @@ const active = ref<PppActive[]>([]);
 const leases = ref<DhcpLease[]>([]);
 
 const activeByName = computed(() => new Set(active.value.map((a) => a.name)));
+
+const secretSearch = ref('');
+const filteredSecrets = computed(() => {
+  const q = secretSearch.value.trim().toLowerCase();
+  if (!q) return secrets.value;
+  return secrets.value.filter((s) => `${s.name} ${s.profile} ${s.comment ?? ''}`.toLowerCase().includes(q));
+});
+
+const leaseSearch = ref('');
+const filteredLeases = computed(() => {
+  const q = leaseSearch.value.trim().toLowerCase();
+  if (!q) return leases.value;
+  return leases.value.filter((l) => `${l.address} ${l['mac-address']} ${l['host-name'] ?? ''}`.toLowerCase().includes(q));
+});
 // Cruce ONT <-> IP por MAC de WAN: pendiente hasta validar "wan-info" en la OLT real (ver Fase 4).
 
 async function loadAll() {
@@ -83,26 +97,31 @@ async function handleToggleSecret(secret: PppSecret) {
 
       <template v-else>
         <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
-          <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">RouterOS</div>
             <div class="text-lg font-semibold">{{ resource?.version ?? '—' }}</div>
           </div>
-          <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">CPU</div>
             <div class="text-lg font-semibold">{{ resource?.['cpu-load'] ?? '—' }}%</div>
           </div>
-          <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">Memoria libre</div>
             <div class="text-lg font-semibold">{{ resource?.['free-memory'] ?? '—' }}</div>
           </div>
-          <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">Uptime</div>
             <div class="text-lg font-semibold">{{ resource?.uptime ?? '—' }}</div>
           </div>
         </div>
 
         <h2 class="text-lg font-semibold mb-3">Usuarios PPPoE ({{ secrets.length }})</h2>
-        <div class="rounded-xl border border-slate-800 overflow-hidden overflow-x-auto mb-8">
+        <input
+          v-model="secretSearch"
+          placeholder="Buscar por usuario, perfil o comentario..."
+          class="field-input mb-3"
+        />
+        <div class="table-shell mb-8">
           <table class="w-full text-sm min-w-[640px]">
             <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
               <tr>
@@ -114,13 +133,17 @@ async function handleToggleSecret(secret: PppSecret) {
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!secrets.length"><td colspan="5" class="px-4 py-6 text-center text-slate-500">Sin usuarios PPPoE.</td></tr>
-              <tr v-for="s in secrets" :key="s['.id']" class="border-t border-slate-800">
+              <tr v-if="!filteredSecrets.length">
+                <td colspan="5" class="px-4 py-6 text-center text-slate-500">
+                  {{ secretSearch ? 'Sin resultados para esa busqueda.' : 'Sin usuarios PPPoE.' }}
+                </td>
+              </tr>
+              <tr v-for="s in filteredSecrets" :key="s['.id']" class="border-t border-slate-800">
                 <td class="px-4 py-3 font-mono text-xs">{{ s.name }}</td>
                 <td class="px-4 py-3 text-slate-400">{{ s.profile }}</td>
                 <td class="px-4 py-3">
                   <span
-                    class="px-2 py-1 rounded-md text-xs font-medium"
+                    class="badge"
                     :class="activeByName.has(s.name) ? 'bg-green-500/15 text-green-400' : 'bg-slate-500/15 text-slate-400'"
                   >
                     {{ activeByName.has(s.name) ? 'Si' : 'No' }}
@@ -128,7 +151,7 @@ async function handleToggleSecret(secret: PppSecret) {
                 </td>
                 <td class="px-4 py-3">
                   <span
-                    class="px-2 py-1 rounded-md text-xs font-medium"
+                    class="badge"
                     :class="s.disabled === 'true' ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400'"
                   >
                     {{ s.disabled === 'true' ? 'Deshabilitado' : 'Habilitado' }}
@@ -145,7 +168,12 @@ async function handleToggleSecret(secret: PppSecret) {
         </div>
 
         <h2 class="text-lg font-semibold mb-3">Leases DHCP ({{ leases.length }})</h2>
-        <div class="rounded-xl border border-slate-800 overflow-hidden overflow-x-auto">
+        <input
+          v-model="leaseSearch"
+          placeholder="Buscar por IP, MAC o hostname..."
+          class="field-input mb-3"
+        />
+        <div class="table-shell">
           <table class="w-full text-sm min-w-[560px]">
             <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
               <tr>
@@ -156,8 +184,12 @@ async function handleToggleSecret(secret: PppSecret) {
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!leases.length"><td colspan="4" class="px-4 py-6 text-center text-slate-500">Sin leases DHCP.</td></tr>
-              <tr v-for="l in leases" :key="l['.id']" class="border-t border-slate-800">
+              <tr v-if="!filteredLeases.length">
+                <td colspan="4" class="px-4 py-6 text-center text-slate-500">
+                  {{ leaseSearch ? 'Sin resultados para esa busqueda.' : 'Sin leases DHCP.' }}
+                </td>
+              </tr>
+              <tr v-for="l in filteredLeases" :key="l['.id']" class="border-t border-slate-800">
                 <td class="px-4 py-3 font-mono text-xs">{{ l.address }}</td>
                 <td class="px-4 py-3 font-mono text-xs text-slate-400">{{ l['mac-address'] }}</td>
                 <td class="px-4 py-3 text-slate-400">{{ l['host-name'] || '—' }}</td>

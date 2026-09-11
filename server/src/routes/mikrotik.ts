@@ -6,7 +6,11 @@ import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 export const mikrotikRoutes = new Hono();
 
 const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
-const STAFF_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
+// Dar de alta/editar/eliminar el registro del router es tarea de
+// administracion, no del tecnico de campo (igual criterio que OLT).
+const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
+// Gestionar usuarios PPPoE (habilitar/deshabilitar) si es trabajo de campo.
+const PPP_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
 const DEVICE_PUBLIC_FIELDS = 'id, name, host, port, use_tls, username, zone_id, is_active, created_at';
 
@@ -49,7 +53,7 @@ mikrotikRoutes.get('/', requireRole(...STAFF_READ), async (c) => {
   return c.json(data);
 });
 
-mikrotikRoutes.post('/', requireRole(...STAFF_WRITE), async (c) => {
+mikrotikRoutes.post('/', requireRole(...DEVICE_WRITE), async (c) => {
   const body = await c.req.json();
   const { data, error } = await supabaseAdmin
     .from('mikrotik_devices')
@@ -68,7 +72,7 @@ mikrotikRoutes.post('/', requireRole(...STAFF_WRITE), async (c) => {
   return c.json(data, 201);
 });
 
-mikrotikRoutes.put('/:id', requireRole(...STAFF_WRITE), async (c) => {
+mikrotikRoutes.put('/:id', requireRole(...DEVICE_WRITE), async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
   const update: Record<string, unknown> = {};
@@ -87,7 +91,7 @@ mikrotikRoutes.put('/:id', requireRole(...STAFF_WRITE), async (c) => {
   return c.json(data);
 });
 
-mikrotikRoutes.delete('/:id', requireRole(...STAFF_WRITE), async (c) => {
+mikrotikRoutes.delete('/:id', requireRole(...DEVICE_WRITE), async (c) => {
   const { error } = await supabaseAdmin.from('mikrotik_devices').delete().eq('id', c.req.param('id'));
   if (error) return c.json({ error: error.message }, 400);
   return c.json({ ok: true });
@@ -138,7 +142,7 @@ mikrotikRoutes.get('/:id/ppp-secrets', requireRole(...STAFF_READ), async (c) => 
   }
 });
 
-mikrotikRoutes.put('/:id/ppp-secrets/:secretId', requireRole(...STAFF_WRITE), async (c) => {
+mikrotikRoutes.put('/:id/ppp-secrets/:secretId', requireRole(...PPP_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
   const body = await c.req.json();

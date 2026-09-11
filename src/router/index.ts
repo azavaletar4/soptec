@@ -25,12 +25,6 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/contratos/kanban',
-      name: 'contratos-kanban',
-      component: () => import('@/views/contratos/ContratosKanbanView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
       path: '/olt',
       name: 'olt',
       component: () => import('@/views/olt/OltDevicesView.vue'),
@@ -41,6 +35,24 @@ const router = createRouter({
       name: 'olt-detalle',
       component: () => import('@/views/olt/OltDetailView.vue'),
       meta: { requiresAuth: true },
+    },
+    {
+      path: '/soporte',
+      name: 'soporte',
+      component: () => import('@/views/soporte/TicketsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/soporte/:id',
+      name: 'soporte-detalle',
+      component: () => import('@/views/soporte/TicketDetailView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/facturacion',
+      name: 'facturacion',
+      component: () => import('@/views/facturacion/FacturacionView.vue'),
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'FACTURACION'] },
     },
     {
       path: '/mikrotik',
@@ -63,6 +75,10 @@ router.beforeEach(async (to) => {
 
   if (to.meta.requiresAuth && !auth.user) {
     return { name: 'login' };
+  }
+  const roles = to.meta.roles as string[] | undefined;
+  if (roles && !roles.includes(auth.role ?? '')) {
+    return { name: 'dashboard' };
   }
   if (to.name === 'login' && auth.user) {
     return { name: 'dashboard' };

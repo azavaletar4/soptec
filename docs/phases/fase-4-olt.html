@@ -120,6 +120,7 @@ gpon-onu_1/2/16:1        MSTC8CBFC329        unknown</pre>
       <div class="step"><b>7. Prueba directa por Telnet → banner real</b><span><code>Welcome to ZXAN product C300 of ZTE Corporation</code>. Confirmado: esta OLT solo tiene Telnet habilitado.</span></div>
       <div class="step"><b>8. Migración completa de SSH a Telnet</b><span>Nuevo cliente Telnet, mismos comandos de la CLI ZTE (el transporte cambia, la sintaxis de comandos no).</span></div>
       <div class="step"><b>9. Validación de comandos contra el equipo real</b><span><code>show version</code> resultó ambiguo (Error 20204); reemplazado por <code>show gpon onu uncfg</code> (funciona). El formato real de <code>show gpon onu state</code> no trae número de serie — parser corregido.</span></div>
+      <div class="step"><b>10. Validación de comandos de escritura (registrar/activar/desactivar/eliminar) → timeout de 30s</b><span>Bug real encontrado: la secuencia terminaba con dos <code>exit</code> seguidos. El primero regresa correctamente del modo de interfaz al modo de configuración global, pero el segundo (para salir de configuración global) en este firmware no vuelve al modo privilegiado — la OLT lo interpreta como intento de cerrar sesión y responde <code>The configuration is changed,confirm to logout without saving? [yes/no]:</code>, un prompt que no termina en <code>#</code>/<code>&gt;</code> y por eso el cliente Telnet se quedaba esperando. Se agregó un log de diagnóstico del buffer pendiente al momento del timeout (permanente, útil para futuros casos similares) y se quitó el <code>exit</code> sobrante de <code>registerOntCommands</code>, <code>setAdminStateCommands</code> y <code>deleteOntCommands</code>. Re-probado contra el equipo real (ONU de prueba <code>ZTE0QL4T2129823</code>, puerto 1/2/2): registrar, activar, desactivar y eliminar funcionaron.</span></div>
     </div>
   </section>
 
@@ -133,17 +134,17 @@ gpon-onu_1/2/16:1        MSTC8CBFC329        unknown</pre>
           <li><code>show gpon onu uncfg</code> — ONUs sin configurar (con serial)</li>
           <li><code>show gpon onu state gpon-olt_.../...</code> — estado de ONUs configuradas (sin serial, corregido)</li>
           <li>Test de conexión desde la app (<code>/olt</code> → "Probar conexión")</li>
+          <li><b>Registrar ONT nueva</b> (<code>onu ... type ... sn ...</code> + tcont/gemport/service-port) — probado con ONU de repuesto (<code>ZTE0QL4T2129823</code>, puerto 1/2/2, tipo <code>ZTE-F6600P</code>)</li>
+          <li><b>Activar / Desactivar</b> (<code>admin-state enable/disable</code>) — probado sobre la misma ONU</li>
+          <li><b>Eliminar</b> (<code>no onu ...</code>) — probado sobre la misma ONU</li>
         </ul>
       </div>
       <div class="card">
-        <h3>⚠ Sin validar — comandos de escritura</h3>
+        <h3>⚠ Sin validar</h3>
         <ul>
-          <li><b>Registrar ONT nueva</b> (<code>onu ... type ... sn ...</code> + tcont/gemport/service-port)</li>
-          <li><b>Activar / Desactivar</b> (<code>admin-state enable/disable</code>)</li>
-          <li><b>Eliminar</b> (<code>no onu ...</code>)</li>
           <li><b>Señal óptica</b> (<code>show pon power attenuation</code>)</li>
         </ul>
-        <p style="margin-top:10px">No se ejecutaron sin tu confirmación explícita porque tocan servicio real de clientes. Antes de usarlas, probar con una ONU de repuesto o un puerto sin clientes activos.</p>
+        <p style="margin-top:10px">Es de solo lectura (menor riesgo), pero todavía no se probó contra el equipo real.</p>
       </div>
     </div>
   </section>
@@ -157,7 +158,8 @@ gpon-onu_1/2/16:1        MSTC8CBFC329        unknown</pre>
       <tr><td>Login automático (usuario/contraseña reales)</td><td><span class="check">✓</span></td></tr>
       <tr><td><code>show gpon onu uncfg</code> (comando de prueba de conexión)</td><td><span class="check">✓</span> 8 ONUs reales listadas</td></tr>
       <tr><td><code>show gpon onu state</code> + parser</td><td><span class="check">✓</span> corregido y validado (34/39 ONTs en el puerto 1/2/4)</td></tr>
-      <tr><td>Registrar / activar / desactivar / eliminar ONT, señal óptica</td><td><span class="pill warn">pendiente</span> — requiere tu autorización para probar contra servicio real</td></tr>
+      <tr><td>Registrar / activar / desactivar / eliminar ONT</td><td><span class="check">✓</span> validado con ONU de prueba (bug del doble <code>exit</code> corregido)</td></tr>
+      <tr><td>Señal óptica (<code>show pon power attenuation</code>)</td><td><span class="pill warn">pendiente</span></td></tr>
     </table>
   </section>
 

@@ -81,7 +81,6 @@ export function registerOntCommands(params: {
     'gemport 1 tcont 1',
     `service-port 1 vport 1 user-vlan ${vlan} vlan ${vlan}`,
     'exit',
-    'exit',
   ];
 }
 
@@ -92,7 +91,6 @@ export function setAdminStateCommands(ref: ZteInterfaceRef, onuId: number, enabl
     `interface ${oltInterface(ref)}`,
     `onu ${onuId} admin-state ${enable ? 'enable' : 'disable'}`,
     'exit',
-    'exit',
   ];
 }
 
@@ -102,7 +100,6 @@ export function deleteOntCommands(ref: ZteInterfaceRef, onuId: number): string[]
     'configure terminal',
     `interface ${oltInterface(ref)}`,
     `no onu ${onuId}`,
-    'exit',
     'exit',
   ];
 }

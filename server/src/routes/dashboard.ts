@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { computeOltSummary, type OltDeviceRow } from './olt';
 
 export const dashboardRoutes = new Hono();
 
@@ -49,4 +50,33 @@ dashboardRoutes.get('/network-status', async (c) => {
     mikrotik: summarize(mtRows),
     problems,
   });
+});
+
+/**
+ * Resumen estilo SmartOLT agregado de TODAS las OLTs activas (suma de
+ * sin-autorizar/online/offline/senal-baja), con el mismo escaneo en vivo
+ * que /api/olt-devices/:id/summary — reutiliza esa misma logica.
+ */
+dashboardRoutes.get('/olt-summary', async (c) => {
+  const { data: devices, error } = await supabaseAdmin
+    .from('olt_devices')
+    .select('*')
+    .eq('is_active', true);
+  if (error) return c.json({ error: error.message }, 500);
+
+  const rows = (devices ?? []) as OltDeviceRow[];
+  const results = await Promise.all(rows.map((d) => computeOltSummary(d)));
+
+  const totals = results.reduce(
+    (acc, r) => ({
+      unconfigured: acc.unconfigured + r.unconfigured,
+      online: acc.online + r.online,
+      offline: acc.offline + r.offline,
+      lowSignal: acc.lowSignal + r.lowSignal,
+      scanComplete: acc.scanComplete && r.scanComplete,
+    }),
+    { unconfigured: 0, online: 0, offline: 0, lowSignal: 0, scanComplete: true },
+  );
+
+  return c.json({ ...totals, deviceCount: rows.length, checkedAt: new Date().toISOString() });
 });

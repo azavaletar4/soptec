@@ -29,6 +29,16 @@ const registerForm = ref({
 });
 
 const signalLoadingId = ref<string | null>(null);
+const ontSearch = ref('');
+const filteredOnts = computed(() => {
+  const q = ontSearch.value.trim().toLowerCase();
+  if (!q) return oltStore.onts;
+  return oltStore.onts.filter((o) =>
+    `${o.serial} ${o.clients?.first_name ?? ''} ${o.clients?.last_name ?? ''} ${o.frame}/${o.slot}/${o.port}:${o.ont_id}`
+      .toLowerCase()
+      .includes(q),
+  );
+});
 
 const STATUS_CLASS: Record<string, string> = {
   online: 'bg-green-500/15 text-green-400',
@@ -219,21 +229,27 @@ async function handleSignal(ont: OltOnt) {
             <label class="block text-xs text-slate-400 mb-1">Puerto</label>
             <input v-model.number="port" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
           </div>
-          <button :disabled="syncing" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm disabled:opacity-60" @click="handleSync">
+          <button :disabled="syncing" class="btn-secondary" @click="handleSync">
             {{ syncing ? 'Sincronizando...' : 'Sincronizar desde la OLT' }}
           </button>
-          <button class="px-4 py-2 rounded-lg bg-sky-500 text-slate-950 font-semibold text-sm" @click="openRegister">
+          <button class="btn-primary" @click="openRegister">
             + Registrar ONT
           </button>
         </div>
         <p v-if="syncMessage" class="text-xs text-slate-400 mt-3">{{ syncMessage }}</p>
-        <p class="text-xs text-amber-400/80 mt-3">
-          ⚠ Comandos ZTE C300 sin validar contra tu equipo real todavia — revisa el reporte de esta fase antes de usar en producción.
+        <p class="text-xs text-slate-500 mt-3">
+          Registrar / activar / desactivar / eliminar ya validados contra tu OLT real (ver reporte de la Fase 4).
+          Solo la lectura de señal óptica sigue sin probar.
         </p>
       </div>
 
       <h2 class="text-lg font-semibold mb-3">ONTs registradas</h2>
-      <div class="rounded-xl border border-slate-800 overflow-hidden overflow-x-auto">
+      <input
+        v-model="ontSearch"
+        placeholder="Buscar por serial, cliente o shelf/slot/port..."
+        class="field-input mb-3"
+      />
+      <div class="table-shell">
         <table class="w-full text-sm min-w-[760px]">
           <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
             <tr>
@@ -246,17 +262,19 @@ async function handleSignal(ont: OltOnt) {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="!oltStore.onts.length">
-              <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin ONTs. Sincroniza un puerto o registra una nueva.</td>
+            <tr v-if="!filteredOnts.length">
+              <td colspan="6" class="px-4 py-6 text-center text-slate-500">
+                {{ ontSearch ? 'Sin resultados para esa busqueda.' : 'Sin ONTs. Sincroniza un puerto o registra una nueva.' }}
+              </td>
             </tr>
-            <tr v-for="ont in oltStore.onts" :key="ont.id" class="border-t border-slate-800">
+            <tr v-for="ont in filteredOnts" :key="ont.id" class="border-t border-slate-800">
               <td class="px-4 py-3 font-mono text-xs">{{ ont.frame }}/{{ ont.slot }}/{{ ont.port }}:{{ ont.ont_id }}</td>
               <td class="px-4 py-3 font-mono text-xs">{{ ont.serial }}</td>
               <td class="px-4 py-3 text-slate-400">
                 {{ ont.clients ? `${ont.clients.first_name} ${ont.clients.last_name}` : '—' }}
               </td>
               <td class="px-4 py-3">
-                <span class="px-2 py-1 rounded-md text-xs font-medium" :class="STATUS_CLASS[ont.status]">{{ ont.status }}</span>
+                <span class="badge" :class="STATUS_CLASS[ont.status]">{{ ont.status }}</span>
               </td>
               <td class="px-4 py-3 text-slate-400 text-xs">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
               <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
@@ -275,9 +293,9 @@ async function handleSignal(ont: OltOnt) {
     </template>
 
     <Teleport to="body">
-      <div v-if="showRegisterModal" class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div v-if="showRegisterModal" class="modal-overlay">
         <form
-          class="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-6 max-h-[90vh] overflow-y-auto"
+          class="w-full max-w-md modal-panel max-h-[90vh] overflow-y-auto"
           @submit.prevent="handleRegister"
         >
           <h2 class="text-lg font-semibold mb-1">Registrar ONT</h2>
@@ -289,18 +307,18 @@ async function handleSignal(ont: OltOnt) {
               v-model="registerForm.serial"
               required
               placeholder="ZTEGC1234567"
-              class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm font-mono"
+              class="field-input font-mono"
             />
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label class="block text-xs text-slate-400 mb-1">ID de ONU (vacio = auto)</label>
-              <input v-model.number="registerForm.onuId" type="number" min="0" placeholder="auto" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+              <input v-model.number="registerForm.onuId" type="number" min="0" placeholder="auto" class="field-input" />
             </div>
             <div>
               <label class="block text-xs text-slate-400 mb-1">VLAN</label>
-              <input v-model.number="registerForm.vlan" type="number" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+              <input v-model.number="registerForm.vlan" type="number" class="field-input" />
             </div>
           </div>
 
@@ -310,22 +328,22 @@ async function handleSignal(ont: OltOnt) {
               v-model="registerForm.onuType"
               required
               placeholder="ej. ZTE-F660"
-              class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm"
+              class="field-input"
             />
           </div>
 
           <div class="mb-4">
             <label class="block text-xs text-slate-400 mb-1">Descripcion</label>
-            <input v-model="registerForm.description" placeholder="Nombre del cliente" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+            <input v-model="registerForm.description" placeholder="Nombre del cliente" class="field-input" />
           </div>
 
           <p v-if="registerError" class="text-sm text-red-400 mb-3">{{ registerError }}</p>
 
           <div class="flex justify-end gap-2">
-            <button type="button" class="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-100" @click="showRegisterModal = false">
+            <button type="button" class="btn-ghost" @click="showRegisterModal = false">
               Cancelar
             </button>
-            <button type="submit" :disabled="registering" class="px-4 py-2 rounded-lg bg-sky-500 text-slate-950 font-semibold text-sm disabled:opacity-60">
+            <button type="submit" :disabled="registering" class="btn-primary">
               {{ registering ? 'Registrando...' : 'Registrar en la OLT' }}
             </button>
           </div>

@@ -20,13 +20,18 @@ const LOW_SIGNAL_THRESHOLD_DBM = -27;
 export const oltRoutes = new Hono();
 
 const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
-const STAFF_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
+// Gestionar el registro de la OLT (alta/edicion/baja del equipo) es tarea de
+// administracion, no del tecnico de campo.
+const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
+// Gestionar ONTs (registrar, activar/desactivar, eliminar, senal) si es
+// trabajo del tecnico de campo con el equipo ya dado de alta.
+const ONT_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
 const DEVICE_PUBLIC_FIELDS = 'id, name, host, brand, telnet_port, username, zone_id, is_active, created_at';
 
 oltRoutes.use('*', requireAuth);
 
-interface OltDeviceRow {
+export interface OltDeviceRow {
   id: string;
   host: string;
   telnet_port: number;
@@ -48,103 +53,21 @@ function telnetTargetFor(device: OltDeviceRow) {
   return { host: device.host, port: device.telnet_port, username: device.username, password: device.password };
 }
 
-// ---- CRUD olt_devices ----
-
-oltRoutes.get('/', requireRole(...STAFF_READ), async (c) => {
-  const { data, error } = await supabaseAdmin
-    .from('olt_devices')
-    .select(DEVICE_PUBLIC_FIELDS)
-    .order('created_at', { ascending: false });
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json(data);
-});
-
-oltRoutes.post('/', requireRole(...STAFF_WRITE), async (c) => {
-  const body = await c.req.json();
-  const { data, error } = await supabaseAdmin
-    .from('olt_devices')
-    .insert({
-      name: body.name,
-      host: body.host,
-      brand: body.brand ?? 'zte',
-      telnet_port: body.telnet_port ?? 23,
-      username: body.username,
-      password: body.password,
-      zone_id: body.zone_id ?? null,
-    })
-    .select(DEVICE_PUBLIC_FIELDS)
-    .single();
-  if (error) return c.json({ error: error.message }, 400);
-  return c.json(data, 201);
-});
-
-oltRoutes.put('/:id', requireRole(...STAFF_WRITE), async (c) => {
-  const id = c.req.param('id');
-  const body = await c.req.json();
-  const update: Record<string, unknown> = {};
-  for (const key of ['name', 'host', 'brand', 'telnet_port', 'username', 'zone_id', 'is_active'] as const) {
-    if (key in body) update[key] = body[key];
-  }
-  if (body.password) update.password = body.password; // solo si mandan una nueva
-
-  const { data, error } = await supabaseAdmin
-    .from('olt_devices')
-    .update(update)
-    .eq('id', id)
-    .select(DEVICE_PUBLIC_FIELDS)
-    .single();
-  if (error) return c.json({ error: error.message }, 400);
-  return c.json(data);
-});
-
-oltRoutes.delete('/:id', requireRole(...STAFF_WRITE), async (c) => {
-  const { error } = await supabaseAdmin.from('olt_devices').delete().eq('id', c.req.param('id'));
-  if (error) return c.json({ error: error.message }, 400);
-  return c.json({ ok: true });
-});
-
-oltRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
-  const device = await getDeviceOrNull(c.req.param('id'));
-  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
-
-  // eslint-disable-next-line no-console
-  console.log(`[olt/test] Conectando a ${device.host}:${device.telnet_port} (usuario: ${device.username})...`);
-  const start = Date.now();
-  try {
-    const outputs = await runTelnetCommands(telnetTargetFor(device), testConnectionCommands());
-    // eslint-disable-next-line no-console
-    console.log(`[olt/test] OK en ${Date.now() - start}ms. Output:\n${outputs.join('\n')}`);
-    await supabaseAdmin
-      .from('olt_devices')
-      .update({ last_test_ok: true, last_tested_at: new Date().toISOString() })
-      .eq('id', device.id);
-    return c.json({ status: 'ok', ms: Date.now() - start, output: outputs.join('\n') });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Error de conexion';
-    // eslint-disable-next-line no-console
-    console.error(`[olt/test] FALLO tras ${Date.now() - start}ms:`, e);
-    await supabaseAdmin
-      .from('olt_devices')
-      .update({ last_test_ok: false, last_tested_at: new Date().toISOString() })
-      .eq('id', device.id);
-    return c.json({ status: 'error', message }, 502);
-  }
-});
+export interface OltSummaryResult {
+  unconfigured: number;
+  online: number;
+  offline: number;
+  lowSignal: number;
+  scanComplete: boolean;
+}
 
 /**
- * Resumen estilo SmartOLT, con escaneo EN VIVO de toda la OLT (no solo el
- * cache local): "sin autorizar" via show gpon onu uncfg, y online/offline
- * via show gpon onu state SIN filtro de puerto (lista todas las ONUs de
- * una vez — validado contra el equipo real: ~646/675 filas, ver
- * zteCommands.ts). De paso, actualiza el estado de las ONTs que ya
- * tenemos registradas localmente (por frame/slot/port/ont_id), sin
- * llamadas extra. "Senal baja" sigue viniendo del cache local (rx_power
- * solo se lee ONT por ONT, ver /onts/:ontDbId/signal).
+ * Resumen estilo SmartOLT de una sola OLT, con escaneo EN VIVO ("sin
+ * autorizar" via show gpon onu uncfg, online/offline via show gpon onu
+ * state sin filtro de puerto). Compartido entre el endpoint por-OLT y el
+ * agregado del Dashboard. Ver comentario original en la ruta /:id/summary.
  */
-oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
-  const device = await getDeviceOrNull(c.req.param('id'));
-  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
-
+export async function computeOltSummary(device: OltDeviceRow): Promise<OltSummaryResult> {
   let unconfigured = 0;
   let online = 0;
   let offline = 0;
@@ -202,14 +125,108 @@ oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
     .not('rx_power', 'is', null);
   const lowSignal = (signalRows ?? []).filter((r) => (r.rx_power as number) < LOW_SIGNAL_THRESHOLD_DBM).length;
 
-  return c.json({
-    unconfigured,
-    online,
-    offline,
-    lowSignal,
-    scanComplete: globalScanOk,
-    checkedAt: new Date().toISOString(),
-  });
+  return { unconfigured, online, offline, lowSignal, scanComplete: globalScanOk };
+}
+
+// ---- CRUD olt_devices ----
+
+oltRoutes.get('/', requireRole(...STAFF_READ), async (c) => {
+  const { data, error } = await supabaseAdmin
+    .from('olt_devices')
+    .select(DEVICE_PUBLIC_FIELDS)
+    .order('created_at', { ascending: false });
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json(data);
+});
+
+oltRoutes.post('/', requireRole(...DEVICE_WRITE), async (c) => {
+  const body = await c.req.json();
+  const { data, error } = await supabaseAdmin
+    .from('olt_devices')
+    .insert({
+      name: body.name,
+      host: body.host,
+      brand: body.brand ?? 'zte',
+      telnet_port: body.telnet_port ?? 23,
+      username: body.username,
+      password: body.password,
+      zone_id: body.zone_id ?? null,
+    })
+    .select(DEVICE_PUBLIC_FIELDS)
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json(data, 201);
+});
+
+oltRoutes.put('/:id', requireRole(...DEVICE_WRITE), async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const update: Record<string, unknown> = {};
+  for (const key of ['name', 'host', 'brand', 'telnet_port', 'username', 'zone_id', 'is_active'] as const) {
+    if (key in body) update[key] = body[key];
+  }
+  if (body.password) update.password = body.password; // solo si mandan una nueva
+
+  const { data, error } = await supabaseAdmin
+    .from('olt_devices')
+    .update(update)
+    .eq('id', id)
+    .select(DEVICE_PUBLIC_FIELDS)
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json(data);
+});
+
+oltRoutes.delete('/:id', requireRole(...DEVICE_WRITE), async (c) => {
+  const { error } = await supabaseAdmin.from('olt_devices').delete().eq('id', c.req.param('id'));
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json({ ok: true });
+});
+
+oltRoutes.post('/:id/test', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  // eslint-disable-next-line no-console
+  console.log(`[olt/test] Conectando a ${device.host}:${device.telnet_port} (usuario: ${device.username})...`);
+  const start = Date.now();
+  try {
+    const outputs = await runTelnetCommands(telnetTargetFor(device), testConnectionCommands());
+    // eslint-disable-next-line no-console
+    console.log(`[olt/test] OK en ${Date.now() - start}ms. Output:\n${outputs.join('\n')}`);
+    await supabaseAdmin
+      .from('olt_devices')
+      .update({ last_test_ok: true, last_tested_at: new Date().toISOString() })
+      .eq('id', device.id);
+    return c.json({ status: 'ok', ms: Date.now() - start, output: outputs.join('\n') });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Error de conexion';
+    // eslint-disable-next-line no-console
+    console.error(`[olt/test] FALLO tras ${Date.now() - start}ms:`, e);
+    await supabaseAdmin
+      .from('olt_devices')
+      .update({ last_test_ok: false, last_tested_at: new Date().toISOString() })
+      .eq('id', device.id);
+    return c.json({ status: 'error', message }, 502);
+  }
+});
+
+/**
+ * Resumen estilo SmartOLT, con escaneo EN VIVO de toda la OLT (no solo el
+ * cache local): "sin autorizar" via show gpon onu uncfg, y online/offline
+ * via show gpon onu state SIN filtro de puerto (lista todas las ONUs de
+ * una vez — validado contra el equipo real: ~646/675 filas, ver
+ * zteCommands.ts). De paso, actualiza el estado de las ONTs que ya
+ * tenemos registradas localmente (por frame/slot/port/ont_id), sin
+ * llamadas extra. "Senal baja" sigue viniendo del cache local (rx_power
+ * solo se lee ONT por ONT, ver /onts/:ontDbId/signal).
+ */
+oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  const summary = await computeOltSummary(device);
+  return c.json({ ...summary, checkedAt: new Date().toISOString() });
 });
 
 // ---- ONTs (cache local en olt_onts, sincronizada bajo demanda por Telnet) ----
@@ -226,7 +243,7 @@ oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
   return c.json(data);
 });
 
-oltRoutes.post('/:id/onts/sync', requireRole(...STAFF_WRITE), async (c: Context) => {
+oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
@@ -281,7 +298,7 @@ oltRoutes.post('/:id/onts/sync', requireRole(...STAFF_WRITE), async (c: Context)
   }
 });
 
-oltRoutes.post('/:id/onts', requireRole(...STAFF_WRITE), async (c) => {
+oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
@@ -343,8 +360,8 @@ async function getOntOrNull(id: string | undefined) {
   return data;
 }
 
-oltRoutes.post('/:id/onts/:ontDbId/activate', requireRole(...STAFF_WRITE), (c) => toggleActivation(c, true));
-oltRoutes.post('/:id/onts/:ontDbId/deactivate', requireRole(...STAFF_WRITE), (c) => toggleActivation(c, false));
+oltRoutes.post('/:id/onts/:ontDbId/activate', requireRole(...ONT_WRITE), (c) => toggleActivation(c, true));
+oltRoutes.post('/:id/onts/:ontDbId/deactivate', requireRole(...ONT_WRITE), (c) => toggleActivation(c, false));
 
 async function toggleActivation(c: Context, activate: boolean) {
   const device = await getDeviceOrNull(c.req.param('id'));
@@ -371,7 +388,7 @@ async function toggleActivation(c: Context, activate: boolean) {
   return c.json(data);
 }
 
-oltRoutes.delete('/:id/onts/:ontDbId', requireRole(...STAFF_WRITE), async (c) => {
+oltRoutes.delete('/:id/onts/:ontDbId', requireRole(...ONT_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
   const ont = await getOntOrNull(c.req.param('ontDbId'));
@@ -402,7 +419,12 @@ oltRoutes.get('/:id/onts/:ontDbId/signal', requireRole(...STAFF_READ), async (c)
       telnetTargetFor(device),
       opticalInfoCommands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id),
     );
-    const info = parseOpticalInfo(outputs.join('\n'));
+    const raw = outputs.join('\n');
+    const info = parseOpticalInfo(raw);
+    if (info.rxPower == null && info.txPower == null) {
+      // eslint-disable-next-line no-console
+      console.error(`[olt/signal] Parser no encontro Rx/Tx en la salida real:\n---\n${raw}\n---`);
+    }
     await supabaseAdmin.from('olt_onts').update({ rx_power: info.rxPower, tx_power: info.txPower }).eq('id', ont.id);
     return c.json(info);
   } catch (e) {

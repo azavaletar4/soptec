@@ -17,6 +17,13 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      // host: true expone el dev server en la red local (no solo localhost),
+      // asi un celular en la misma WiFi puede entrar por la IP de esta PC.
+      host: true,
+      // Necesario para el Cloudflare Quick Tunnel: Vite rechaza por defecto
+      // cualquier Host que no sea localhost/la IP local (proteccion contra
+      // DNS rebinding). Solo para pruebas externas temporales.
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: `http://localhost:${apiPort}`,

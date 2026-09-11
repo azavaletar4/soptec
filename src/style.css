@@ -1,5 +1,150 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
 body {
-  @apply bg-slate-950 text-slate-100;
+  @apply bg-slate-950 text-slate-100 antialiased;
+}
+
+/* Scrollbar mas discreto, consistente con el tema oscuro. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme(colors.slate.700) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: theme(colors.slate.700);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: theme(colors.slate.600);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight;
+  }
+
+  button {
+    @apply transition-colors duration-150;
+  }
+  button:active:not(:disabled) {
+    transform: translateY(0.5px);
+  }
+
+  input,
+  select,
+  textarea {
+    @apply transition-colors duration-150 outline-none;
+  }
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply border-sky-500/70 ring-2 ring-sky-500/20;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-slate-600;
+  }
+
+  table {
+    @apply border-collapse;
+  }
+
+  a {
+    @apply transition-colors duration-150;
+  }
+}
+
+@layer components {
+  /* Botones */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
+      transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+      bg-sky-500 text-slate-950 shadow-sm shadow-sky-500/20 hover:bg-sky-400 active:bg-sky-500;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
+      transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+      bg-slate-800 text-slate-100 border border-slate-700/60 hover:bg-slate-700 hover:border-slate-600;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+      transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+      bg-transparent text-slate-400 hover:text-slate-100 hover:bg-slate-800/60;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+      transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+      bg-transparent text-red-400 hover:bg-red-500/10 hover:text-red-300;
+  }
+
+  /* Tarjetas / superficies */
+  .surface {
+    @apply rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm;
+  }
+  .surface-hover {
+    @apply rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm transition-colors duration-150 hover:border-slate-700;
+  }
+
+  /* Campos de formulario */
+  .field-label {
+    @apply block text-xs font-medium text-slate-400 mb-1.5;
+  }
+  .field-input {
+    @apply w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950/80 text-sm text-slate-100
+      placeholder:text-slate-600;
+  }
+
+  /* Tablas */
+  .table-shell {
+    @apply rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden overflow-x-auto;
+  }
+  .table-shell table {
+    @apply w-full text-sm;
+  }
+  .table-shell thead {
+    @apply bg-slate-900/80 text-slate-500 text-[11px] uppercase tracking-wider;
+  }
+  .table-shell tbody tr {
+    @apply border-t border-slate-800/80 transition-colors duration-150;
+  }
+  .table-shell tbody tr:hover {
+    @apply bg-slate-800/40;
+  }
+
+  /* Insignias de estado */
+  .badge {
+    @apply inline-flex items-center px-2 py-1 rounded-md text-xs font-medium;
+  }
+
+  /* Modales */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4;
+  }
+  .modal-panel {
+    @apply rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-black/40;
+  }
+
+  /* Tarjeta de KPI a color (estilo SmartOLT) */
+  .kpi-tile {
+    @apply rounded-xl p-5 flex items-start justify-between text-left shadow-lg
+      transition-transform duration-150 hover:-translate-y-0.5;
+  }
 }
