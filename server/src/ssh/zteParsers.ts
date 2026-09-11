@@ -139,6 +139,120 @@ export function parseOpticalInfo(raw: string): OpticalInfo {
   return { rxPower, txPower };
 }
 
+/**
+ * Parsea "show pon power onu-rx/onu-tx gpon-olt_S/L/P" — VALIDADO contra el
+ * equipo real: trae la potencia de TODAS las ONUs de un puerto en un solo
+ * comando (mucho mas barato que consultar ONU por ONU con
+ * parseOpticalInfo/opticalInfoCommands cuando se necesita masivo). Formato:
+ *   Onu                 Rx power
+ *   ------------------------------------
+ *   gpon-onu_1/2/2:1    -21.368(dbm)
+ *   gpon-onu_1/2/2:2    -14.831(dbm)
+ */
+export function parseBulkPower(raw: string): Map<number, number> {
+  const result = new Map<number, number>();
+  const re = /^gpon-onu_\d+\/\d+\/\d+:(\d+)\s+(-?\d+(?:\.\d+)?)\(dbm\)/gm;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw))) {
+    result.set(Number(match[1]), Number(match[2]));
+  }
+  return result;
+}
+
+export interface FullConfigOnt {
+  onuType: string;
+  serial: string;
+  name: string | null;
+  description: string | null;
+  tcontProfile: string | null;
+  trafficProfile: string | null;
+  vlan: number | null;
+}
+
+/**
+ * Parsea "show running-config" (TODO el equipo, sin filtro) — VALIDADO
+ * contra el equipo real: en un solo comando (~10s con 675 ONUs) trae tanto
+ * los bindings "onu <id> type <tipo> sn <serial>" (bajo cada bloque
+ * "interface gpon-olt_S/L/P") como el name/description/tcont/traffic/vlan
+ * de cada ONU (bloques "interface gpon-onu_S/L/P:ID"). Evita tener que
+ * consultar cada ONU por separado (675 comandos) para traer esos datos.
+ * Devuelve un mapa clave "shelf/slot/port:onuId" -> datos combinados.
+ */
+export function parseFullRunningConfig(raw: string): Map<string, FullConfigOnt> {
+  const result = new Map<string, FullConfigOnt>();
+  const bindings = new Map<string, { onuType: string; serial: string }>();
+
+  let oltRef: string | null = null; // "shelf/slot/port" mientras estamos dentro de un bloque gpon-olt_*
+  let onuKey: string | null = null; // "shelf/slot/port:id" mientras estamos dentro de un bloque gpon-onu_*:N
+  let current: Partial<FullConfigOnt> = {};
+
+  for (const line of raw.split('\n')) {
+    const oltHeader = line.match(/^interface gpon-olt_(\d+\/\d+\/\d+)\s*$/);
+    if (oltHeader) {
+      oltRef = oltHeader[1];
+      onuKey = null;
+      continue;
+    }
+    const onuHeader = line.match(/^interface gpon-onu_(\d+\/\d+\/\d+):(\d+)\s*$/);
+    if (onuHeader) {
+      if (onuKey) result.set(onuKey, current as FullConfigOnt);
+      oltRef = null;
+      onuKey = `${onuHeader[1]}:${onuHeader[2]}`;
+      current = {};
+      continue;
+    }
+    if (line.trim() === '!') {
+      if (onuKey) {
+        result.set(onuKey, current as FullConfigOnt);
+        onuKey = null;
+        current = {};
+      }
+      oltRef = null;
+      continue;
+    }
+
+    if (oltRef) {
+      const m = line.match(/^\s*onu (\d+) type (\S+) sn (\S+)/);
+      if (m) bindings.set(`${oltRef}:${m[1]}`, { onuType: m[2], serial: m[3] });
+      continue;
+    }
+
+    if (onuKey) {
+      const name = line.match(/^\s*name\s+(.+?)\s*$/);
+      if (name) current.name = name[1];
+      const desc = line.match(/^\s*description\s+(.+?)\s*$/);
+      if (desc) current.description = desc[1];
+      const tcont = line.match(/^\s*tcont\s+\d+\s+profile\s+(\S+)/);
+      if (tcont) current.tcontProfile = tcont[1];
+      const traffic = line.match(/^\s*gemport\s+\d+\s+traffic-limit\s+downstream\s+(\S+)/);
+      if (traffic) current.trafficProfile = traffic[1];
+      const vlan = line.match(/^\s*service-port\s+\d+\s+vport\s+\d+\s+user-vlan\s+(\d+)/);
+      if (vlan) current.vlan = Number(vlan[1]);
+    }
+  }
+  if (onuKey) result.set(onuKey, current as FullConfigOnt);
+
+  for (const [key, entry] of result) {
+    const b = bindings.get(key);
+    entry.onuType = b?.onuType ?? '';
+    entry.serial = b?.serial ?? '';
+    entry.name = entry.name ?? null;
+    entry.description = entry.description ?? null;
+    entry.tcontProfile = entry.tcontProfile ?? null;
+    entry.trafficProfile = entry.trafficProfile ?? null;
+    entry.vlan = entry.vlan ?? null;
+  }
+  // ONUs que solo tienen binding (type/sn) pero ningun bloque de servicio
+  // (ej. autorizadas pero sin tcont/vlan configurado todavia).
+  for (const [key, b] of bindings) {
+    if (!result.has(key)) {
+      result.set(key, { ...b, name: null, description: null, tcontProfile: null, trafficProfile: null, vlan: null });
+    }
+  }
+
+  return result;
+}
+
 export interface OltUptime {
   /** Ej. "42d 4h 48m" */
   raw: string;

@@ -51,12 +51,22 @@ function ssid(dev: Record<string, unknown>): string | null {
   return null;
 }
 
-tr069SyncRoutes.post('/', async (c) => {
+export type Tr069SyncResult =
+  | { ok: true; synced: number; created: number; total: number }
+  | { ok: false; error: string };
+
+/**
+ * Sincroniza la lista de dispositivos de GenieACS hacia tr069_devices.
+ * Extraido de la ruta POST / para poder llamarlo tanto desde el panel
+ * (boton "Sincronizar") como desde el scheduler automatico (ver
+ * server/src/services/tr069Scheduler.ts).
+ */
+export async function syncTr069Devices(): Promise<Tr069SyncResult> {
   const NBI = process.env.GENIEACS_NBI || 'http://localhost:7557';
 
   try {
     const genieRes = await fetch(`${NBI}/devices`, { signal: AbortSignal.timeout(30_000) });
-    if (!genieRes.ok) return c.json({ ok: false, error: 'GenieACS NBI no disponible' }, 502);
+    if (!genieRes.ok) return { ok: false, error: 'GenieACS NBI no disponible' };
     const devices = (await genieRes.json()) as Record<string, unknown>[];
 
     const { data: existing } = await supabaseAdmin.from('tr069_devices').select('id, genieacs_id');
@@ -92,8 +102,13 @@ tr069SyncRoutes.post('/', async (c) => {
       }
     }
 
-    return c.json({ ok: true, synced, created, total: devices.length });
+    return { ok: true, synced, created, total: devices.length };
   } catch (e) {
-    return c.json({ ok: false, error: e instanceof Error ? e.message : 'Error al sincronizar' }, 502);
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al sincronizar' };
   }
+}
+
+tr069SyncRoutes.post('/', async (c) => {
+  const result = await syncTr069Devices();
+  return c.json(result, result.ok ? 200 : 502);
 });

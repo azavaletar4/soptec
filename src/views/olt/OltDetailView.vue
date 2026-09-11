@@ -4,15 +4,31 @@ import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useOltStore, type OltOnt, type OltHealth } from '@/stores/olt';
 import { useTr069Store } from '@/stores/tr069';
+import { useCatalogsStore } from '@/stores/catalogs';
 import { getErrorMessage } from '@/lib/errors';
+import OntDetailModal from './OntDetailModal.vue';
 
 const route = useRoute();
 const router = useRouter();
 const oltStore = useOltStore();
 const tr069Store = useTr069Store();
+const catalogsStore = useCatalogsStore();
 
 const deviceId = computed(() => route.params.id as string);
 const device = computed(() => oltStore.devices.find((d) => d.id === deviceId.value));
+const deviceZoneName = computed(
+  () => catalogsStore.zones.find((z) => z.id === device.value?.zone_id)?.name ?? null,
+);
+
+const detailOntId = ref<string | null>(null);
+const detailOnt = computed(() => oltStore.onts.find((o) => o.id === detailOntId.value) ?? null);
+function openOntDetail(ont: OltOnt) {
+  detailOntId.value = ont.id;
+}
+function handleOpenTr069FromDetail(ont: OltOnt) {
+  detailOntId.value = null;
+  openTr069Modal(ont);
+}
 
 const slot = ref(1);
 const port = ref(1);
@@ -104,7 +120,7 @@ async function loadHealth() {
 
 onMounted(async () => {
   if (!oltStore.devices.length) await oltStore.fetchDevices();
-  await Promise.all([oltStore.fetchOnts(deviceId.value), loadSummary(), loadHealth()]);
+  await Promise.all([oltStore.fetchOnts(deviceId.value), loadSummary(), loadHealth(), catalogsStore.fetchZones()]);
 });
 
 async function handleSync() {
@@ -120,6 +136,28 @@ async function handleSync() {
     syncMessage.value = getErrorMessage(e, 'Error al sincronizar con la OLT');
   } finally {
     syncing.value = false;
+  }
+}
+
+const importing = ref(false);
+const importMessage = ref<string | null>(null);
+async function handleImportExisting() {
+  const ok = confirm(
+    'Esto escanea TODA la OLT (solo lectura, no cambia nada) y trae/actualiza serial, tipo, nombre, plan, VLAN y señal de todas las ONTs. Con cientos de ONTs puede tardar varios minutos. ¿Continuar?',
+  );
+  if (!ok) return;
+  importing.value = true;
+  importMessage.value = null;
+  try {
+    const res = await oltStore.importExistingOnts(deviceId.value);
+    importMessage.value = `Escaneadas ${res.scanned} ONTs en ${res.ports} puertos PON. Importadas/actualizadas: ${res.imported}.${
+      res.failedPorts.length ? ` Fallaron ${res.failedPorts.length} puertos: ${res.failedPorts.join(', ')}.` : ''
+    }`;
+    await oltStore.fetchOnts(deviceId.value);
+  } catch (e) {
+    importMessage.value = getErrorMessage(e, 'Error al importar las ONTs existentes');
+  } finally {
+    importing.value = false;
   }
 }
 
@@ -655,6 +693,20 @@ const gauges = computed(() => {
         </p>
       </div>
 
+      <div class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4 mb-6">
+        <h2 class="text-sm font-semibold mb-1">¿Ves menos ONTs de las que tienes, o sin nombre/señal?</h2>
+        <p class="text-xs text-slate-400 mb-3">
+          Si esta OLT ya tenia ONTs configuradas desde antes de usar SmartRayco (ej. desde SmartOLT), no
+          apareceran aqui hasta importarlas. Trae serial, tipo, nombre (de la OLT), plan, VLAN y señal
+          Rx/Tx de todas. Esto solo lee la OLT (sin cambiar nada) y puede tardar varios minutos con
+          cientos de ONTs — se puede repetir cuando quieras para refrescar todo.
+        </p>
+        <button :disabled="importing" class="btn-secondary" @click="handleImportExisting">
+          {{ importing ? 'Importando...' : 'Importar / actualizar ONTs desde la OLT' }}
+        </button>
+        <p v-if="importMessage" class="text-xs text-slate-400 mt-3">{{ importMessage }}</p>
+      </div>
+
       <h2 class="text-lg font-semibold mb-3">ONTs registradas</h2>
       <input
         v-model="ontSearch"
@@ -680,11 +732,21 @@ const gauges = computed(() => {
                 {{ ontSearch ? 'Sin resultados para esa busqueda.' : 'Sin ONTs. Sincroniza un puerto o registra una nueva.' }}
               </td>
             </tr>
-            <tr v-for="ont in filteredOnts" :key="ont.id" class="border-t border-slate-800">
+            <tr
+              v-for="ont in filteredOnts"
+              :key="ont.id"
+              class="border-t border-slate-800 cursor-pointer hover:bg-slate-900/40"
+              @click="openOntDetail(ont)"
+            >
               <td class="px-4 py-3 font-mono text-xs">{{ ont.frame }}/{{ ont.slot }}/{{ ont.port }}:{{ ont.ont_id }}</td>
               <td class="px-4 py-3 font-mono text-xs">{{ ont.serial }}</td>
               <td class="px-4 py-3 text-slate-400">
-                {{ ont.clients ? `${ont.clients.first_name} ${ont.clients.last_name}` : '—' }}
+                <template v-if="ont.clients">{{ ont.clients.first_name }} {{ ont.clients.last_name }}</template>
+                <template v-else-if="ont.description">
+                  {{ ont.description }}
+                  <span class="block text-[10px] text-slate-600">de la OLT, sin vincular</span>
+                </template>
+                <template v-else>—</template>
               </td>
               <td class="px-4 py-3">
                 <span class="badge" :class="STATUS_CLASS[ont.status]">{{ ont.status }}</span>
@@ -694,7 +756,7 @@ const gauges = computed(() => {
                 <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-400">Activo</span>
                 <span v-else class="text-slate-500 text-xs">—</span>
               </td>
-              <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
+              <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs" @click.stop>
                 <button class="text-sky-400 hover:underline" :disabled="signalLoadingId === ont.id" @click="handleSignal(ont)">
                   {{ signalLoadingId === ont.id ? 'Leyendo...' : 'Senal' }}
                 </button>
@@ -827,5 +889,14 @@ const gauges = computed(() => {
         </form>
       </div>
     </Teleport>
+
+    <OntDetailModal
+      v-if="detailOnt && device"
+      :ont="detailOnt"
+      :device="device"
+      :zone-name="deviceZoneName"
+      @close="detailOntId = null"
+      @open-tr069="handleOpenTr069FromDetail"
+    />
   </AppLayout>
 </template>

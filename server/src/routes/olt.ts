@@ -11,6 +11,10 @@ import {
   setAdminStateCommands,
   deleteOntCommands,
   opticalInfoCommands,
+  runningConfigCommands,
+  fullRunningConfigCommand,
+  bulkOnuRxCommands,
+  bulkOnuTxCommands,
   oltHealthCommands,
   listTcontProfilesCommands,
   listTrafficProfilesCommands,
@@ -21,6 +25,8 @@ import {
   parseOntList,
   parseGlobalOntState,
   parseOpticalInfo,
+  parseBulkPower,
+  parseFullRunningConfig,
   parseUnconfiguredOnts,
   parseUptime,
   parseCardTemperatures,
@@ -309,13 +315,108 @@ oltRoutes.get('/:id/profiles', requireRole(...STAFF_READ), async (c) => {
 oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .select('*, clients(id, first_name, last_name)')
+    .select('*, clients(id, first_name, last_name, phone, address)')
     .eq('olt_device_id', c.req.param('id'))
     .order('slot')
     .order('port')
     .order('ont_id');
   if (error) return c.json({ error: error.message }, 500);
   return c.json(data);
+});
+
+/**
+ * Importa TODAS las ONTs ya configuradas en la OLT (heredadas de SmartOLT u
+ * otra herramienta, nunca registradas via esta app) hacia olt_onts, con su
+ * nombre/plan/VLAN/senal. Solo lectura contra la OLT (no toca la config
+ * real):
+ *   1. "show gpon onu state" global -> frame/slot/port/onuId/runState de
+ *      TODAS las ONUs de una sola vez (mismo comando que usa el resumen).
+ *   2. "show running-config" (TODO el equipo, sin filtro) -> UN SOLO
+ *      comando (~10s con 675 ONUs, validado) trae serial/tipo/nombre/
+ *      descripcion/plan/VLAN de TODAS las ONUs a la vez. Mucho mas barato
+ *      que pedir el running-config de cada ONU por separado (675 comandos).
+ *   3. Por cada puerto PON unico, 2 comandos que traen la senal optica de
+ *      TODAS sus ONUs de una vez (bulkOnuRxCommands/bulkOnuTxCommands) — la
+ *      senal es telemetria en vivo, no config, asi que no sale del dump
+ *      anterior. Secuencial, NO en paralelo: 3 conexiones Telnet
+ *      simultaneas al mismo equipo causaron timeouts reales en los puertos
+ *      con mas ONUs (ver incidente 2026-09-11 — 8 de 19 puertos fallaron).
+ *   4. Upsert en bloque. Nunca pisa client_id (esa vinculacion es decision
+ *      de esta app, no de la OLT) — todo lo demas se sincroniza desde la
+ *      OLT en cada import, que es la fuente de verdad de su propia config.
+ */
+oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  let globalOnts: ReturnType<typeof parseGlobalOntState>;
+  let fullConfig: ReturnType<typeof parseFullRunningConfig>;
+  try {
+    const stateOut = await runTelnetCommands(telnetTargetFor(device), listAllOntsCommands(), { timeoutMs: 60000 });
+    globalOnts = parseGlobalOntState(stateOut.join('\n'));
+    const configOut = await runTelnetCommands(telnetTargetFor(device), fullRunningConfigCommand(), { timeoutMs: 120000 });
+    fullConfig = parseFullRunningConfig(configOut[1] ?? '');
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al escanear la OLT' }, 502);
+  }
+
+  const ports = new Map<string, { shelf: number; slot: number; port: number }>();
+  for (const o of globalOnts) {
+    const key = `${o.frame}/${o.slot}/${o.port}`;
+    if (!ports.has(key)) ports.set(key, { shelf: o.frame, slot: o.slot, port: o.port });
+  }
+
+  const rxByPort = new Map<string, Map<number, number>>();
+  const txByPort = new Map<string, Map<number, number>>();
+  const failedPorts: string[] = [];
+  for (const ref of ports.values()) {
+    const key = `${ref.shelf}/${ref.slot}/${ref.port}`;
+    try {
+      const rxOut = await runTelnetCommands(telnetTargetFor(device), bulkOnuRxCommands(ref), { timeoutMs: 30000 });
+      const txOut = await runTelnetCommands(telnetTargetFor(device), bulkOnuTxCommands(ref), { timeoutMs: 30000 });
+      rxByPort.set(key, parseBulkPower(rxOut[1] ?? ''));
+      txByPort.set(key, parseBulkPower(txOut[1] ?? ''));
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error(`[olt/import] fallo el puerto ${key}:`, e);
+      failedPorts.push(key);
+    }
+  }
+
+  const now = new Date().toISOString();
+  const rows = globalOnts
+    .map((o) => {
+      const key = `${o.frame}/${o.slot}/${o.port}`;
+      const b = fullConfig.get(`${key}:${o.onuId}`);
+      if (!b || !b.serial) return null;
+      return {
+        olt_device_id: device.id,
+        frame: o.frame,
+        slot: o.slot,
+        port: o.port,
+        ont_id: o.onuId,
+        serial: b.serial,
+        onu_type: b.onuType,
+        description: b.name,
+        tcont_profile: b.tcontProfile,
+        traffic_profile: b.trafficProfile,
+        vlan: b.vlan,
+        status: o.runState === 'working' ? 'online' : 'offline',
+        rx_power: rxByPort.get(key)?.get(o.onuId) ?? null,
+        tx_power: txByPort.get(key)?.get(o.onuId) ?? null,
+        last_synced_at: now,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  if (rows.length) {
+    const { error } = await supabaseAdmin
+      .from('olt_onts')
+      .upsert(rows, { onConflict: 'olt_device_id,frame,slot,port,ont_id' });
+    if (error) return c.json({ error: error.message }, 400);
+  }
+
+  return c.json({ ok: true, scanned: globalOnts.length, imported: rows.length, ports: ports.size, failedPorts });
 });
 
 oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) => {
@@ -522,6 +623,25 @@ oltRoutes.get('/:id/onts/:ontDbId/signal', requireRole(...STAFF_READ), async (c)
     return c.json(info);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al leer la senal optica' }, 502);
+  }
+});
+
+/** Config aplicada en la OLT para esta ONT puntual (solo lectura, texto crudo). */
+oltRoutes.get('/:id/onts/:ontDbId/running-config', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
+
+  try {
+    const outputs = await runTelnetCommands(
+      telnetTargetFor(device),
+      runningConfigCommands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id),
+      { timeoutMs: 15000 },
+    );
+    return c.json({ raw: outputs[1] ?? '' });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al leer la configuracion de la ONT' }, 502);
   }
 });
 

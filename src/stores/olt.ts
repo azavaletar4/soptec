@@ -34,7 +34,8 @@ export interface OltOnt {
   rx_power: number | null;
   tx_power: number | null;
   last_synced_at: string | null;
-  clients?: { id: string; first_name: string; last_name: string } | null;
+  created_at: string;
+  clients?: { id: string; first_name: string; last_name: string; phone: string | null; address: string | null } | null;
 }
 
 export interface OltUptime {
@@ -113,6 +114,13 @@ export const useOltStore = defineStore('olt', () => {
     onts.value = await apiFetch<OltOnt[]>(`/api/olt-devices/${deviceId}/onts`);
   }
 
+  function importExistingOnts(deviceId: string) {
+    return apiFetch<{ ok: boolean; scanned: number; imported: number; ports: number; failedPorts: string[] }>(
+      `/api/olt-devices/${deviceId}/onts/import-existing`,
+      { method: 'POST' },
+    );
+  }
+
   async function syncOnts(deviceId: string, slot: number, port: number, shelf = 1) {
     return apiFetch<{ synced: number; foundInOlt: number; notInDb: number[]; raw: string }>(
       `/api/olt-devices/${deviceId}/onts/sync`,
@@ -172,6 +180,10 @@ export const useOltStore = defineStore('olt', () => {
     return updated;
   }
 
+  function fetchRunningConfig(deviceId: string, ontDbId: string) {
+    return apiFetch<{ raw: string }>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/running-config`);
+  }
+
   async function removeTr069(deviceId: string, ontDbId: string, veip = 1) {
     const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/tr069?veip=${veip}`, {
       method: 'DELETE',
@@ -192,6 +204,7 @@ export const useOltStore = defineStore('olt', () => {
     deleteDevice,
     testDevice,
     fetchOnts,
+    importExistingOnts,
     syncOnts,
     registerOnt,
     toggleOnt,
@@ -202,5 +215,6 @@ export const useOltStore = defineStore('olt', () => {
     fetchProfiles,
     assignTr069,
     removeTr069,
+    fetchRunningConfig,
   };
 });

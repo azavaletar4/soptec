@@ -9,6 +9,7 @@ import { dashboardRoutes } from './routes/dashboard';
 import { genieacsRoutes } from './routes/genieacs';
 import { tr069SyncRoutes } from './routes/tr069sync';
 import { genieacsSyncRoutes } from './routes/genieacsSync';
+import { startTr069Scheduler } from './services/tr069Scheduler';
 
 const app = new Hono();
 
@@ -34,3 +35,5 @@ serve({ fetch: app.fetch, port }, (info) => {
   // eslint-disable-next-line no-console
   console.log(`SmartRayco API (Hono) escuchando en http://localhost:${info.port}`);
 });
+
+startTr069Scheduler();

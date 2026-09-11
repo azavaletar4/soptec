@@ -166,6 +166,35 @@ export function opticalInfoCommands(ref: ZteInterfaceRef, onuId: number): string
   return ['enable', `show pon power attenuation ${onuInterface(ref, onuId)}`];
 }
 
+/** Config aplicada en la OLT para una ONT puntual — solo lectura. */
+export function runningConfigCommands(ref: ZteInterfaceRef, onuId: number): string[] {
+  return ['enable', `show running-config interface ${onuInterface(ref, onuId)}`];
+}
+
+/**
+ * Config COMPLETA del equipo (todas las OLT/ONU en un solo comando, ~10s
+ * con 675 ONUs) — VALIDADO contra el equipo real. Fuente mas barata para
+ * traer serial/tipo/nombre/descripcion/plan/VLAN de TODAS las ONUs a la
+ * vez; ver parseFullRunningConfig() en zteParsers.ts.
+ */
+export function fullRunningConfigCommand(): string[] {
+  return ['enable', 'show running-config'];
+}
+
+/**
+ * Potencia optica de TODAS las ONUs de un puerto PON en un solo comando —
+ * VALIDADO contra el equipo real. "onu-rx" = lo que la ONU recibe (downstream,
+ * usado como rx_power); "onu-tx" = lo que la ONU transmite (upstream, usado
+ * como tx_power). Ver parseBulkPower() en zteParsers.ts.
+ */
+export function bulkOnuRxCommands(ref: ZteInterfaceRef): string[] {
+  return ['enable', `show pon power onu-rx ${oltInterface(ref)}`];
+}
+
+export function bulkOnuTxCommands(ref: ZteInterfaceRef): string[] {
+  return ['enable', `show pon power onu-tx ${oltInterface(ref)}`];
+}
+
 /**
  * Salud del chasis (uptime, temperatura y carga por tarjeta) — VALIDADO
  * contra el equipo real (10.15.15.2):
