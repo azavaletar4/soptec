@@ -51,6 +51,16 @@ const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
 const ONT_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
 const DEVICE_PUBLIC_FIELDS = 'id, name, host, brand, telnet_port, username, zone_id, is_active, created_at';
+// extra_params solo se pide en el listado para sacar lat/lng (capa OLT del
+// mapa, Fase 7) — nunca se expone completo al frontend, solo esos dos campos.
+const DEVICE_LIST_FIELDS = `${DEVICE_PUBLIC_FIELDS}, extra_params`;
+
+function withCoords<T extends { extra_params?: Record<string, unknown> | null }>(row: T) {
+  const { extra_params, ...rest } = row;
+  const lat = typeof extra_params?.lat === 'number' ? extra_params.lat : null;
+  const lng = typeof extra_params?.lng === 'number' ? extra_params.lng : null;
+  return { ...rest, lat, lng };
+}
 
 oltRoutes.use('*', requireAuth);
 
@@ -183,10 +193,36 @@ export async function computeOltHealth(device: OltDeviceRow): Promise<OltHealthR
 oltRoutes.get('/', requireRole(...STAFF_READ), async (c) => {
   const { data, error } = await supabaseAdmin
     .from('olt_devices')
-    .select(DEVICE_PUBLIC_FIELDS)
+    .select(DEVICE_LIST_FIELDS)
     .order('created_at', { ascending: false });
   if (error) return c.json({ error: error.message }, 500);
-  return c.json(data);
+  return c.json((data ?? []).map(withCoords));
+});
+
+/** Guarda la posicion del marcador OLT en el mapa (capa OLT, Fase 7). */
+oltRoutes.put('/:id/coords', requireRole(...STAFF_READ), async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const { lat, lng } = body;
+  if (typeof lat !== 'number' || typeof lng !== 'number') {
+    return c.json({ error: 'lat y lng son requeridos (numeros)' }, 400);
+  }
+
+  const { data: current, error: fetchError } = await supabaseAdmin
+    .from('olt_devices')
+    .select('extra_params')
+    .eq('id', id)
+    .single();
+  if (fetchError || !current) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  const { data, error } = await supabaseAdmin
+    .from('olt_devices')
+    .update({ extra_params: { ...(current.extra_params ?? {}), lat, lng } })
+    .eq('id', id)
+    .select(DEVICE_LIST_FIELDS)
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json(withCoords(data));
 });
 
 oltRoutes.post('/', requireRole(...DEVICE_WRITE), async (c) => {
@@ -297,10 +333,11 @@ oltRoutes.get('/:id/profiles', requireRole(...STAFF_READ), async (c) => {
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
   try {
-    const [tcontOut, trafficOut] = await Promise.all([
-      runTelnetCommands(telnetTargetFor(device), listTcontProfilesCommands(), { timeoutMs: 15000 }),
-      runTelnetCommands(telnetTargetFor(device), listTrafficProfilesCommands(), { timeoutMs: 15000 }),
-    ]);
+    // Secuencial, no en paralelo (ver leccion aprendida en /onts/import-existing
+    // mas abajo: multiples conexiones Telnet simultaneas a la misma OLT
+    // causaron timeouts reales).
+    const tcontOut = await runTelnetCommands(telnetTargetFor(device), listTcontProfilesCommands(), { timeoutMs: 15000 });
+    const trafficOut = await runTelnetCommands(telnetTargetFor(device), listTrafficProfilesCommands(), { timeoutMs: 15000 });
     return c.json({
       tcontProfiles: parseProfileNames(tcontOut[1] ?? ''),
       trafficProfiles: parseProfileNames(trafficOut[1] ?? ''),
@@ -310,12 +347,49 @@ oltRoutes.get('/:id/profiles', requireRole(...STAFF_READ), async (c) => {
   }
 });
 
+/**
+ * ONUs detectadas por la OLT pero SIN autorizar/registrar todavia — estilo
+ * "unconfigured ONUs" de SmartOLT. Solo lectura ("show gpon onu uncfg").
+ *
+ * OJO: el sufijo ":N" en el interfaceRef que devuelve la OLT (ej.
+ * "gpon-onu_1/2/2:1") NO es un onu-id libre confiable — fue la causa real
+ * de un incidente (2026-09-11, ver memoria del proyecto) donde se asumio
+ * que ese numero era un ID disponible y en realidad ya pertenecia a una
+ * clienta real. El frontend NO debe usar ese sufijo como onuId al
+ * registrar; debe dejarlo en blanco para que POST /onts lo calcule con un
+ * escaneo en vivo (mismo mecanismo ya usado ahi).
+ */
+oltRoutes.get('/:id/onts/unconfigured', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  try {
+    const outputs = await runTelnetCommands(telnetTargetFor(device), listUnconfiguredOntsCommands(), { timeoutMs: 20000 });
+    const list = parseUnconfiguredOnts(outputs.join('\n'));
+    // "gpon-onu_1/2/2:1" -> { frame: 1, slot: 2, port: 2 } (se descarta el
+    // sufijo, ver advertencia arriba).
+    const withRef = list.map((o) => {
+      const m = o.interfaceRef.match(/^gpon-onu_(\d+)\/(\d+)\/(\d+):/);
+      return {
+        serial: o.serial,
+        interfaceRef: o.interfaceRef,
+        frame: m ? Number(m[1]) : 1,
+        slot: m ? Number(m[2]) : null,
+        port: m ? Number(m[3]) : null,
+      };
+    });
+    return c.json(withRef);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar ONUs sin autorizar' }, 502);
+  }
+});
+
 // ---- ONTs (cache local en olt_onts, sincronizada bajo demanda por Telnet) ----
 
 oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .select('*, clients(id, first_name, last_name, phone, address)')
+    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
     .eq('olt_device_id', c.req.param('id'))
     .order('slot')
     .order('port')
@@ -545,7 +619,59 @@ oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
     .single();
 
   if (error) return c.json({ error: error.message }, 400);
-  return c.json(data, 201);
+
+  // Best-effort: asignar TR-069 automaticamente (perfil ACS por defecto de
+  // la OLT, si hay uno configurado) y leer la senal optica inicial. Nunca
+  // debe fallar el registro por esto — si algo sale mal aqui, la ONT ya
+  // quedo registrada y el usuario puede reintentar TR-069/senal a mano
+  // (botones "TR-069"/"Senal" en la tabla).
+  const ref = { shelf, slot, port };
+  const autoUpdate: Record<string, unknown> = {};
+
+  try {
+    const { data: acsProfile } = await supabaseAdmin
+      .from('olt_tr069_acs_profiles')
+      .select('acs_url')
+      .eq('olt_device_id', device.id)
+      .eq('is_default', true)
+      .maybeSingle();
+
+    if (acsProfile?.acs_url) {
+      // El canal OMCI tarda unos segundos en quedar listo tras el registro
+      // — un intento inmediato puede hacer timeout (visto contra el equipo
+      // real). Se espera antes de intentar TR-069.
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      await runTelnetCommands(telnetTargetFor(device), setTr069AcsCommands(ref, onuId, 1, acsProfile.acs_url), {
+        timeoutMs: 25000,
+      });
+      autoUpdate.tr069_enabled = true;
+      autoUpdate.tr069_acs_url = acsProfile.acs_url;
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[olt/register] No se pudo asignar TR-069 automaticamente:', e);
+  }
+
+  try {
+    const sigOut = await runTelnetCommands(telnetTargetFor(device), opticalInfoCommands(ref, onuId), { timeoutMs: 15000 });
+    const signal = parseOpticalInfo(sigOut.join('\n'));
+    autoUpdate.rx_power = signal.rxPower;
+    autoUpdate.tx_power = signal.txPower;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[olt/register] No se pudo leer la senal inicial:', e);
+  }
+
+  if (Object.keys(autoUpdate).length === 0) return c.json(data, 201);
+
+  const { data: finalData } = await supabaseAdmin
+    .from('olt_onts')
+    .update(autoUpdate)
+    .eq('id', data.id)
+    .select()
+    .single();
+
+  return c.json(finalData ?? data, 201);
 });
 
 async function getOntOrNull(id: string | undefined) {
@@ -581,6 +707,33 @@ async function toggleActivation(c: Context, activate: boolean) {
   if (error) return c.json({ error: error.message }, 400);
   return c.json(data);
 }
+
+/**
+ * Metadata de topologia/contacto de una ONT (zona, splitter, direccion,
+ * contacto, coordenadas) — estilo SmartOLT. Solo escribe en Supabase, NO
+ * toca la OLT (a diferencia de activate/deactivate/delete de arriba).
+ */
+const ONT_META_FIELDS = ['zone_id', 'splitter', 'splitter_port', 'description', 'address_comment', 'contact', 'latitude', 'longitude'] as const;
+
+oltRoutes.put('/:id/onts/:ontDbId/meta', requireRole(...ONT_WRITE), async (c) => {
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
+
+  const body = await c.req.json();
+  const update: Record<string, unknown> = {};
+  for (const key of ONT_META_FIELDS) {
+    if (key in body) update[key] = body[key] === '' ? null : body[key];
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('olt_onts')
+    .update(update)
+    .eq('id', ont.id)
+    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json(data);
+});
 
 oltRoutes.delete('/:id/onts/:ontDbId', requireRole(...ONT_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));

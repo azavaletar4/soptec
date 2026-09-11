@@ -8,6 +8,7 @@ export type TicketCategory = 'no_service' | 'slow_speed' | 'billing' | 'installa
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled';
 export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
 export type InventoryMovementType = 'ingreso' | 'egreso';
+export type InfraElementoTipo = 'caja_nap' | 'splitter' | 'manga' | 'armario' | 'poste' | 'camara' | 'otro';
 
 export interface Zone {
   id: string;
@@ -148,9 +149,27 @@ export interface InventoryMovement {
   quantity: number;
   reason: string | null;
   balance_after: number;
+  ticket_id: string | null;
+  installation_id: string | null;
   created_by: string | null;
   created_at: string;
   author?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+  product?: Pick<InventoryProduct, 'id' | 'name' | 'unit'> | null;
+}
+
+export interface InfraElemento {
+  id: string;
+  name: string;
+  tipo: InfraElementoTipo;
+  potencia: string | null;
+  spliteo: string | null;
+  is_active: boolean;
+  photo_path: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Tr069Device {

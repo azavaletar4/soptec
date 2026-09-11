@@ -4,13 +4,15 @@ import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { useInventoryStore } from '@/stores/inventory';
 import { getErrorMessage } from '@/lib/errors';
-import type { Ticket, TicketComment, TicketPriority, TicketStatus } from '@/types/domain';
+import type { Ticket, TicketComment, TicketPriority, TicketStatus, InventoryMovement } from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
 const ticketsStore = useTicketsStore();
 const catalogs = useCatalogsStore();
+const inventoryStore = useInventoryStore();
 
 const ticketId = computed(() => route.params.id as string);
 const ticket = ref<Ticket | null>(null);
@@ -68,8 +70,44 @@ async function loadComments() {
   loadingComments.value = false;
 }
 
+// ---- Materiales usados (Fase 11b: vincula Inventario con Soporte) ----
+const materials = ref<InventoryMovement[]>([]);
+const loadingMaterials = ref(true);
+const materialForm = ref({ productId: '', quantity: 1 });
+const savingMaterial = ref(false);
+const materialError = ref<string | null>(null);
+
+async function loadMaterials() {
+  loadingMaterials.value = true;
+  try {
+    materials.value = await inventoryStore.fetchMovementsByTicket(ticketId.value);
+  } finally {
+    loadingMaterials.value = false;
+  }
+}
+
+async function handleAddMaterial() {
+  if (!ticket.value || !materialForm.value.productId || materialForm.value.quantity <= 0) return;
+  savingMaterial.value = true;
+  materialError.value = null;
+  try {
+    await inventoryStore.registerUsage({
+      productId: materialForm.value.productId,
+      quantity: materialForm.value.quantity,
+      ticketId: ticket.value.id,
+      reason: `Ticket ${ticket.value.ticket_number}`,
+    });
+    materialForm.value = { productId: '', quantity: 1 };
+    await loadMaterials();
+  } catch (e) {
+    materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa el stock disponible)');
+  } finally {
+    savingMaterial.value = false;
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadTicket(), loadComments(), catalogs.fetchStaff()]);
+  await Promise.all([loadTicket(), loadComments(), loadMaterials(), catalogs.fetchStaff(), inventoryStore.fetchProducts()]);
 });
 
 async function handleStatusChange(status: TicketStatus) {
@@ -209,6 +247,40 @@ function formatDate(value: string) {
       <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-8 text-sm">
         <div class="text-slate-500 text-xs mb-2">Descripción</div>
         <p class="whitespace-pre-wrap">{{ ticket.description || 'Sin descripción.' }}</p>
+      </div>
+
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-8 text-sm">
+        <h2 class="text-sm font-semibold mb-3">Materiales usados</h2>
+        <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
+        <template v-else>
+          <p v-if="!materials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en este ticket.</p>
+          <ul v-else class="space-y-1.5 mb-3">
+            <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
+              <span>{{ m.product?.name ?? 'Producto' }}</span>
+              <span class="text-slate-400">{{ m.quantity }} {{ m.product?.unit }} · {{ formatDate(m.created_at) }}</span>
+            </li>
+          </ul>
+        </template>
+
+        <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
+          <div class="flex-1 min-w-[160px]">
+            <label class="block text-xs text-slate-400 mb-1">Producto</label>
+            <select v-model="materialForm.productId" required class="field-input">
+              <option value="" disabled>Selecciona...</option>
+              <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">
+                {{ p.name }} ({{ p.current_stock }} {{ p.unit }} disp.)
+              </option>
+            </select>
+          </div>
+          <div class="w-24">
+            <label class="block text-xs text-slate-400 mb-1">Cantidad</label>
+            <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
+          </div>
+          <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
+            {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
+          </button>
+        </form>
+        <p v-if="materialError" class="text-xs text-red-400 mt-2">{{ materialError }}</p>
       </div>
 
       <h2 class="text-lg font-semibold mb-3">Seguimiento</h2>

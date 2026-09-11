@@ -12,6 +12,8 @@ export interface OltDevice {
   zone_id: string | null;
   is_active: boolean;
   created_at: string;
+  lat: number | null;
+  lng: number | null;
 }
 
 export interface OltOnt {
@@ -35,7 +37,26 @@ export interface OltOnt {
   tx_power: number | null;
   last_synced_at: string | null;
   created_at: string;
+  zone_id: string | null;
+  splitter: string | null;
+  splitter_port: string | null;
+  address_comment: string | null;
+  contact: string | null;
+  latitude: number | null;
+  longitude: number | null;
   clients?: { id: string; first_name: string; last_name: string; phone: string | null; address: string | null } | null;
+  zones?: { id: string; name: string } | null;
+}
+
+export interface OntMetaUpdate {
+  zone_id?: string | null;
+  splitter?: string | null;
+  splitter_port?: string | null;
+  description?: string | null;
+  address_comment?: string | null;
+  contact?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface OltUptime {
@@ -59,6 +80,14 @@ export interface OltHealth {
   temperature: OltSlotTemperature[];
   load: OltSlotLoad[];
   checkedAt: string;
+}
+
+export interface UnconfiguredOnt {
+  serial: string;
+  interfaceRef: string;
+  frame: number;
+  slot: number | null;
+  port: number | null;
 }
 
 export const useOltStore = defineStore('olt', () => {
@@ -93,6 +122,16 @@ export const useOltStore = defineStore('olt', () => {
     const device = await apiFetch<OltDevice>(`/api/olt-devices/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
+    });
+    const idx = devices.value.findIndex((d) => d.id === id);
+    if (idx !== -1) devices.value[idx] = device;
+    return device;
+  }
+
+  async function updateCoords(id: string, lat: number, lng: number) {
+    const device = await apiFetch<OltDevice>(`/api/olt-devices/${id}/coords`, {
+      method: 'PUT',
+      body: JSON.stringify({ lat, lng }),
     });
     const idx = devices.value.findIndex((d) => d.id === id);
     if (idx !== -1) devices.value[idx] = device;
@@ -170,6 +209,10 @@ export const useOltStore = defineStore('olt', () => {
     return apiFetch<{ tcontProfiles: string[]; trafficProfiles: string[] }>(`/api/olt-devices/${deviceId}/profiles`);
   }
 
+  function fetchUnconfiguredOnts(deviceId: string) {
+    return apiFetch<UnconfiguredOnt[]>(`/api/olt-devices/${deviceId}/onts/unconfigured`);
+  }
+
   async function assignTr069(deviceId: string, ontDbId: string, acsUrl: string, veip = 1) {
     const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/tr069`, {
       method: 'POST',
@@ -182,6 +225,16 @@ export const useOltStore = defineStore('olt', () => {
 
   function fetchRunningConfig(deviceId: string, ontDbId: string) {
     return apiFetch<{ raw: string }>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/running-config`);
+  }
+
+  async function updateOntMeta(deviceId: string, ontDbId: string, payload: OntMetaUpdate) {
+    const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/meta`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    const idx = onts.value.findIndex((o) => o.id === ontDbId);
+    if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...updated };
+    return updated;
   }
 
   async function removeTr069(deviceId: string, ontDbId: string, veip = 1) {
@@ -201,6 +254,7 @@ export const useOltStore = defineStore('olt', () => {
     fetchDevices,
     createDevice,
     updateDevice,
+    updateCoords,
     deleteDevice,
     testDevice,
     fetchOnts,
@@ -213,8 +267,10 @@ export const useOltStore = defineStore('olt', () => {
     fetchSummary,
     fetchHealth,
     fetchProfiles,
+    fetchUnconfiguredOnts,
     assignTr069,
     removeTr069,
     fetchRunningConfig,
+    updateOntMeta,
   };
 });

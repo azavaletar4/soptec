@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import type { InventoryMovement, InventoryMovementType, InventoryProduct } from '@/types/domain';
 
 const MOVEMENT_SELECT = '*, author:profiles!inventory_movements_created_by_fkey(id, full_name, email)';
+const MOVEMENT_WITH_PRODUCT_SELECT = `${MOVEMENT_SELECT}, product:inventory_products(id, name, unit)`;
 
 export const useInventoryStore = defineStore('inventory', () => {
   const products = ref<InventoryProduct[]>([]);
@@ -67,6 +68,8 @@ export const useInventoryStore = defineStore('inventory', () => {
     type: InventoryMovementType;
     quantity: number;
     reason?: string;
+    ticketId?: string;
+    installationId?: string;
   }) {
     const { data, error: err } = await supabase
       .from('inventory_movements')
@@ -75,6 +78,8 @@ export const useInventoryStore = defineStore('inventory', () => {
         movement_type: params.type,
         quantity: params.quantity,
         reason: params.reason || null,
+        ticket_id: params.ticketId || null,
+        installation_id: params.installationId || null,
       })
       .select(MOVEMENT_SELECT)
       .single();
@@ -88,6 +93,46 @@ export const useInventoryStore = defineStore('inventory', () => {
     return movement;
   }
 
+  /** Materiales usados en un ticket de soporte (Fase 11b). */
+  async function fetchMovementsByTicket(ticketId: string) {
+    const { data, error: err } = await supabase
+      .from('inventory_movements')
+      .select(MOVEMENT_WITH_PRODUCT_SELECT)
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: false });
+    if (err) throw err;
+    return (data ?? []) as unknown as InventoryMovement[];
+  }
+
+  /** Materiales usados en una instalacion (Fase 11b). */
+  async function fetchMovementsByInstallation(installationId: string) {
+    const { data, error: err } = await supabase
+      .from('inventory_movements')
+      .select(MOVEMENT_WITH_PRODUCT_SELECT)
+      .eq('installation_id', installationId)
+      .order('created_at', { ascending: false });
+    if (err) throw err;
+    return (data ?? []) as unknown as InventoryMovement[];
+  }
+
+  /** Registra un egreso de material usado en un ticket o instalacion. */
+  function registerUsage(params: {
+    productId: string;
+    quantity: number;
+    ticketId?: string;
+    installationId?: string;
+    reason?: string;
+  }) {
+    return registerMovement({
+      productId: params.productId,
+      type: 'egreso',
+      quantity: params.quantity,
+      reason: params.reason,
+      ticketId: params.ticketId,
+      installationId: params.installationId,
+    });
+  }
+
   return {
     products,
     loading,
@@ -98,5 +143,8 @@ export const useInventoryStore = defineStore('inventory', () => {
     deactivateProduct,
     fetchMovements,
     registerMovement,
+    fetchMovementsByTicket,
+    fetchMovementsByInstallation,
+    registerUsage,
   };
 });

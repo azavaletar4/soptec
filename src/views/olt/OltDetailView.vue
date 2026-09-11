@@ -2,11 +2,12 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import { useOltStore, type OltOnt, type OltHealth } from '@/stores/olt';
+import { useOltStore, type OltOnt, type OltHealth, type UnconfiguredOnt } from '@/stores/olt';
 import { useTr069Store } from '@/stores/tr069';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { getErrorMessage } from '@/lib/errors';
 import OntDetailModal from './OntDetailModal.vue';
+import OntZoneEditModal from './OntZoneEditModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -28,6 +29,16 @@ function openOntDetail(ont: OltOnt) {
 function handleOpenTr069FromDetail(ont: OltOnt) {
   detailOntId.value = null;
   openTr069Modal(ont);
+}
+
+const zoneEditOntId = ref<string | null>(null);
+const zoneEditOnt = computed(() => oltStore.onts.find((o) => o.id === zoneEditOntId.value) ?? null);
+function openZoneEdit(ont: OltOnt) {
+  zoneEditOntId.value = ont.id;
+}
+function handleEditZoneFromDetail(ont: OltOnt) {
+  detailOntId.value = null;
+  openZoneEdit(ont);
 }
 
 const slot = ref(1);
@@ -118,9 +129,28 @@ async function loadHealth() {
   }
 }
 
+const unconfiguredOnts = ref<UnconfiguredOnt[]>([]);
+const unconfiguredLoading = ref(false);
+const unconfiguredError = ref<string | null>(null);
+
+async function loadUnconfigured() {
+  unconfiguredLoading.value = true;
+  unconfiguredError.value = null;
+  try {
+    unconfiguredOnts.value = await oltStore.fetchUnconfiguredOnts(deviceId.value);
+  } catch (e) {
+    unconfiguredError.value = getErrorMessage(e, 'Error al consultar ONUs sin autorizar');
+  } finally {
+    unconfiguredLoading.value = false;
+  }
+}
+
 onMounted(async () => {
   if (!oltStore.devices.length) await oltStore.fetchDevices();
   await Promise.all([oltStore.fetchOnts(deviceId.value), loadSummary(), loadHealth(), catalogsStore.fetchZones()]);
+  // Secuencial (no sumada al Promise.all de arriba): evitar mas conexiones
+  // Telnet simultaneas a la misma OLT (ver leccion aprendida en el backend).
+  await loadUnconfigured();
 });
 
 async function handleSync() {
@@ -161,8 +191,15 @@ async function handleImportExisting() {
   }
 }
 
-async function openRegister() {
-  registerForm.value = { onuId: '', serial: '', onuType: '', description: '', vlan: 100, tcontProfile: '', trafficProfile: '' };
+async function openRegister(prefill?: { serial: string; slot: number; port: number }) {
+  if (prefill) {
+    slot.value = prefill.slot;
+    port.value = prefill.port;
+  }
+  // onuId siempre vacio (= auto): el sufijo ":N" que trae "sin autorizar" NO
+  // es un id libre confiable (ver advertencia en GET /onts/unconfigured) —
+  // se deja que el backend lo calcule con un escaneo en vivo del puerto.
+  registerForm.value = { onuId: '', serial: prefill?.serial ?? '', onuType: '', description: '', vlan: 100, tcontProfile: '', trafficProfile: '' };
   registerError.value = null;
   showRegisterModal.value = true;
 
@@ -199,7 +236,7 @@ async function handleRegister() {
       trafficProfile: registerForm.value.trafficProfile,
     });
     showRegisterModal.value = false;
-    await oltStore.fetchOnts(deviceId.value);
+    await Promise.all([oltStore.fetchOnts(deviceId.value), loadUnconfigured()]);
   } catch (e) {
     registerError.value = getErrorMessage(e, 'Error al registrar la ONT en la OLT');
   } finally {
@@ -291,6 +328,57 @@ async function handleTr069Remove() {
     tr069Error.value = getErrorMessage(e, 'Error al desactivar TR-069 en la OLT');
   } finally {
     tr069Saving.value = false;
+  }
+}
+
+// ---- Perfil ACS (GenieACS) por defecto de esta OLT ----
+const showAcsProfileModal = ref(false);
+const acsProfileId = ref<string | null>(null);
+const acsProfileForm = ref({
+  acs_url: '',
+  acs_username: '',
+  acs_password: '',
+  inform_interval: 300,
+});
+const acsProfileLoading = ref(false);
+const acsProfileSaving = ref(false);
+const acsProfileError = ref<string | null>(null);
+const acsProfileSaved = ref(false);
+
+async function openAcsProfileModal() {
+  showAcsProfileModal.value = true;
+  acsProfileError.value = null;
+  acsProfileSaved.value = false;
+  acsProfileLoading.value = true;
+  try {
+    const profile = await tr069Store.fetchAcsProfile(deviceId.value);
+    acsProfileId.value = profile?.id ?? null;
+    acsProfileForm.value = {
+      acs_url: profile?.acs_url ?? '',
+      acs_username: profile?.acs_username ?? '',
+      acs_password: profile?.acs_password ?? '',
+      inform_interval: profile?.inform_interval ?? 300,
+    };
+  } catch (e) {
+    acsProfileError.value = getErrorMessage(e, 'Error al cargar el perfil ACS');
+  } finally {
+    acsProfileLoading.value = false;
+  }
+}
+
+async function handleSaveAcsProfile() {
+  if (!acsProfileForm.value.acs_url) return;
+  acsProfileSaving.value = true;
+  acsProfileError.value = null;
+  acsProfileSaved.value = false;
+  try {
+    const saved = await tr069Store.saveAcsProfile(deviceId.value, acsProfileForm.value, acsProfileId.value ?? undefined);
+    acsProfileId.value = saved.id;
+    acsProfileSaved.value = true;
+  } catch (e) {
+    acsProfileError.value = getErrorMessage(e, 'Error al guardar el perfil ACS');
+  } finally {
+    acsProfileSaving.value = false;
   }
 }
 
@@ -467,8 +555,13 @@ const gauges = computed(() => {
 
     <div v-if="!device" class="text-slate-500">OLT no encontrada.</div>
     <template v-else>
-      <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
-      <p class="text-slate-400 text-sm mb-6">{{ device.host }}:{{ device.telnet_port }} · {{ device.brand.toUpperCase() }}</p>
+      <div class="flex items-start justify-between gap-3 mb-6">
+        <div>
+          <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
+          <p class="text-slate-400 text-sm">{{ device.host }}:{{ device.telnet_port }} · {{ device.brand.toUpperCase() }}</p>
+        </div>
+        <button class="btn-ghost text-xs" @click="openAcsProfileModal">ACS (GenieACS) por defecto</button>
+      </div>
 
       <!-- Resumen estilo SmartOLT -->
       <div class="grid gap-4 mb-2" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
@@ -682,7 +775,7 @@ const gauges = computed(() => {
           <button :disabled="syncing" class="btn-secondary" @click="handleSync">
             {{ syncing ? 'Sincronizando...' : 'Sincronizar desde la OLT' }}
           </button>
-          <button class="btn-primary" @click="openRegister">
+          <button class="btn-primary" @click="openRegister()">
             + Registrar ONT
           </button>
         </div>
@@ -690,6 +783,49 @@ const gauges = computed(() => {
         <p class="text-xs text-slate-500 mt-3">
           Registrar / activar / desactivar / eliminar ya validados contra tu OLT real (ver reporte de la Fase 4).
           Solo la lectura de señal óptica sigue sin probar.
+        </p>
+      </div>
+
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold">ONTs sin autorizar ({{ unconfiguredOnts.length }})</h2>
+          <button class="text-xs text-sky-400 hover:underline" :disabled="unconfiguredLoading" @click="loadUnconfigured">
+            {{ unconfiguredLoading ? 'Consultando...' : 'Actualizar' }}
+          </button>
+        </div>
+        <p v-if="unconfiguredError" class="text-xs text-red-400 mb-3">{{ unconfiguredError }}</p>
+        <p v-else-if="!unconfiguredLoading && !unconfiguredOnts.length" class="text-sm text-slate-500">
+          No hay ONUs detectadas sin autorizar en este momento.
+        </p>
+        <div v-else class="table-shell">
+          <table class="w-full text-sm min-w-[500px]">
+            <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+              <tr>
+                <th class="text-left px-4 py-2">Serial</th>
+                <th class="text-left px-4 py-2">Puerto detectado</th>
+                <th class="text-right px-4 py-2">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="u in unconfiguredOnts" :key="u.interfaceRef" class="border-t border-slate-800">
+                <td class="px-4 py-2 font-mono text-xs">{{ u.serial }}</td>
+                <td class="px-4 py-2 font-mono text-xs text-slate-400">{{ u.frame }}/{{ u.slot }}/{{ u.port }}</td>
+                <td class="px-4 py-2 text-right">
+                  <button
+                    class="text-sky-400 hover:underline text-xs"
+                    :disabled="u.slot === null || u.port === null"
+                    @click="openRegister({ serial: u.serial, slot: u.slot!, port: u.port! })"
+                  >
+                    Configurar
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-[11px] text-slate-600 mt-3">
+          El ID de ONU se calcula automáticamente al registrar (el número que muestra la OLT aquí no es
+          confiable como ID libre).
         </p>
       </div>
 
@@ -720,6 +856,7 @@ const gauges = computed(() => {
               <th class="text-left px-4 py-3">Shelf/Slot/Port/ID</th>
               <th class="text-left px-4 py-3">Serial</th>
               <th class="text-left px-4 py-3">Cliente</th>
+              <th class="text-left px-4 py-3">Zona</th>
               <th class="text-left px-4 py-3">Estado</th>
               <th class="text-left px-4 py-3">Rx / Tx (dBm)</th>
               <th class="text-left px-4 py-3">TR-069</th>
@@ -728,7 +865,7 @@ const gauges = computed(() => {
           </thead>
           <tbody>
             <tr v-if="!filteredOnts.length">
-              <td colspan="7" class="px-4 py-6 text-center text-slate-500">
+              <td colspan="8" class="px-4 py-6 text-center text-slate-500">
                 {{ ontSearch ? 'Sin resultados para esa busqueda.' : 'Sin ONTs. Sincroniza un puerto o registra una nueva.' }}
               </td>
             </tr>
@@ -748,6 +885,11 @@ const gauges = computed(() => {
                 </template>
                 <template v-else>—</template>
               </td>
+              <td class="px-4 py-3 text-slate-400 text-xs">
+                <span v-if="ont.zones">{{ ont.zones.name }}</span>
+                <span v-else-if="ont.splitter">{{ ont.splitter }}<span v-if="ont.splitter_port"> / {{ ont.splitter_port }}</span></span>
+                <span v-else class="text-slate-600">—</span>
+              </td>
               <td class="px-4 py-3">
                 <span class="badge" :class="STATUS_CLASS[ont.status]">{{ ont.status }}</span>
               </td>
@@ -760,6 +902,7 @@ const gauges = computed(() => {
                 <button class="text-sky-400 hover:underline" :disabled="signalLoadingId === ont.id" @click="handleSignal(ont)">
                   {{ signalLoadingId === ont.id ? 'Leyendo...' : 'Senal' }}
                 </button>
+                <button class="text-slate-400 hover:text-slate-100" @click="openZoneEdit(ont)">Zona</button>
                 <button class="text-slate-400 hover:text-slate-100" @click="openTr069Modal(ont)">TR-069</button>
                 <button class="text-slate-400 hover:text-slate-100" @click="handleToggle(ont)">
                   {{ ont.status === 'online' ? 'Desactivar' : 'Activar' }}
@@ -808,6 +951,49 @@ const gauges = computed(() => {
                 {{ tr069Saving ? 'Guardando...' : 'Asignar' }}
               </button>
             </div>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showAcsProfileModal" class="modal-overlay">
+        <form class="w-full max-w-md modal-panel" @submit.prevent="handleSaveAcsProfile">
+          <h2 class="text-lg font-semibold mb-1">ACS (GenieACS) por defecto</h2>
+          <p class="text-xs text-slate-500 mb-4">
+            Se usa para prellenar la URL del ACS al asignar TR-069 a cualquier ONT de esta OLT.
+          </p>
+
+          <p v-if="acsProfileLoading" class="text-xs text-slate-500 mb-3">Cargando...</p>
+          <template v-else>
+            <div class="mb-3">
+              <label class="block text-xs text-slate-400 mb-1">URL del ACS</label>
+              <input v-model="acsProfileForm.acs_url" required placeholder="http://192.168.100.136:7547" class="field-input" />
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Usuario (opcional)</label>
+                <input v-model="acsProfileForm.acs_username" class="field-input" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Contraseña (opcional)</label>
+                <input v-model="acsProfileForm.acs_password" type="password" class="field-input" />
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block text-xs text-slate-400 mb-1">Intervalo de Inform (segundos)</label>
+              <input v-model.number="acsProfileForm.inform_interval" type="number" min="30" class="field-input" />
+            </div>
+          </template>
+
+          <p v-if="acsProfileError" class="text-sm text-red-400 mb-3">{{ acsProfileError }}</p>
+          <p v-if="acsProfileSaved" class="text-sm text-emerald-400 mb-3">Guardado.</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showAcsProfileModal = false">Cerrar</button>
+            <button type="submit" :disabled="acsProfileSaving || acsProfileLoading || !acsProfileForm.acs_url" class="btn-primary">
+              {{ acsProfileSaving ? 'Guardando...' : 'Guardar' }}
+            </button>
           </div>
         </form>
       </div>
@@ -877,13 +1063,17 @@ const gauges = computed(() => {
           </div>
 
           <p v-if="registerError" class="text-sm text-red-400 mb-3">{{ registerError }}</p>
+          <p class="text-[11px] text-slate-600 mb-3">
+            Tras registrar, la app intenta asignar TR-069 automáticamente (si hay un ACS por defecto
+            configurado) y leer la señal inicial — puede tardar ~10-15s extra.
+          </p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showRegisterModal = false">
               Cancelar
             </button>
             <button type="submit" :disabled="registering" class="btn-primary">
-              {{ registering ? 'Registrando...' : 'Registrar en la OLT' }}
+              {{ registering ? 'Registrando (puede tardar ~15s)...' : 'Registrar en la OLT' }}
             </button>
           </div>
         </form>
@@ -894,9 +1084,18 @@ const gauges = computed(() => {
       v-if="detailOnt && device"
       :ont="detailOnt"
       :device="device"
-      :zone-name="deviceZoneName"
+      :zone-name="detailOnt.zones?.name ?? deviceZoneName"
       @close="detailOntId = null"
       @open-tr069="handleOpenTr069FromDetail"
+      @edit-zone="handleEditZoneFromDetail"
+    />
+
+    <OntZoneEditModal
+      v-if="zoneEditOnt"
+      :ont="zoneEditOnt"
+      :device-id="deviceId"
+      @close="zoneEditOntId = null"
+      @saved="zoneEditOntId = null"
     />
   </AppLayout>
 </template>

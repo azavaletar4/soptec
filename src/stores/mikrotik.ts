@@ -12,6 +12,8 @@ export interface MikrotikDevice {
   zone_id: string | null;
   is_active: boolean;
   created_at: string;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface PppSecret {

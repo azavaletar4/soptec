@@ -12,7 +12,7 @@ const props = defineProps<{
   zoneName: string | null;
 }>();
 
-const emit = defineEmits<{ close: []; openTr069: [ont: OltOnt] }>();
+const emit = defineEmits<{ close: []; openTr069: [ont: OltOnt]; editZone: [ont: OltOnt] }>();
 
 const oltStore = useOltStore();
 
@@ -112,12 +112,19 @@ async function toggleConfig() {
             <div class="flex justify-between gap-3"><dt class="text-slate-500">Tipo de ONU</dt><dd class="text-right">{{ ont.onu_type ?? '—' }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-slate-500">Perfil (subida/bajada)</dt><dd class="text-right">{{ profileLabel }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-slate-500">Zona</dt><dd class="text-right">{{ zoneName ?? '—' }}</dd></div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-slate-500">Splitter</dt>
+              <dd class="text-right">{{ ont.splitter ?? '—' }}<span v-if="ont.splitter_port"> / {{ ont.splitter_port }}</span></dd>
+            </div>
             <div class="flex justify-between gap-3"><dt class="text-slate-500">Nombre</dt><dd class="text-right">{{ clientName }}</dd></div>
             <div class="flex justify-between gap-3">
               <dt class="text-slate-500">Dirección</dt>
-              <dd class="text-right">{{ ont.clients?.address ?? '—' }}</dd>
+              <dd class="text-right">{{ ont.clients?.address ?? ont.address_comment ?? '—' }}</dd>
             </div>
-            <div class="flex justify-between gap-3"><dt class="text-slate-500">Contacto</dt><dd class="text-right">{{ ont.clients?.phone ?? '—' }}</dd></div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-slate-500">Contacto</dt>
+              <dd class="text-right">{{ ont.clients?.phone ?? ont.contact ?? '—' }}</dd>
+            </div>
             <div class="flex justify-between gap-3"><dt class="text-slate-500">Registrado</dt><dd class="text-right">{{ formatDate(ont.created_at) }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-slate-500">ID externo (ONU)</dt><dd class="text-right font-mono text-xs">{{ ont.serial }}</dd></div>
           </dl>
@@ -183,6 +190,7 @@ async function toggleConfig() {
           <button class="btn-secondary" :disabled="signalLoading" @click="refreshSignal">
             {{ signalLoading ? 'Consultando...' : 'Consultar señal' }}
           </button>
+          <button class="btn-secondary" @click="emit('editZone', ont)">Editar zona</button>
           <button class="btn-secondary" @click="toggleConfig">
             {{ configOpen ? 'Ocultar running-config' : 'Ver running-config' }}
           </button>

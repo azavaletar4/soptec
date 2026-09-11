@@ -12,7 +12,7 @@ const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
 // Gestionar usuarios PPPoE (habilitar/deshabilitar) si es trabajo de campo.
 const PPP_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
-const DEVICE_PUBLIC_FIELDS = 'id, name, host, port, use_tls, username, zone_id, is_active, created_at';
+const DEVICE_PUBLIC_FIELDS = 'id, name, host, port, use_tls, username, zone_id, is_active, latitude, longitude, created_at';
 
 mikrotikRoutes.use('*', requireAuth);
 
@@ -76,7 +76,7 @@ mikrotikRoutes.put('/:id', requireRole(...DEVICE_WRITE), async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
   const update: Record<string, unknown> = {};
-  for (const key of ['name', 'host', 'port', 'use_tls', 'username', 'zone_id', 'is_active'] as const) {
+  for (const key of ['name', 'host', 'port', 'use_tls', 'username', 'zone_id', 'is_active', 'latitude', 'longitude'] as const) {
     if (key in body) update[key] = body[key];
   }
   if (body.password) update.password = body.password;

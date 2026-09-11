@@ -6,14 +6,16 @@ import { useInstallationsStore } from '@/stores/installations';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { useInventoryStore } from '@/stores/inventory';
 import { getErrorMessage } from '@/lib/errors';
-import type { Installation, InstallationStatus, ServiceContract } from '@/types/domain';
+import type { Installation, InstallationStatus, ServiceContract, InventoryMovement } from '@/types/domain';
 
 const router = useRouter();
 const installationsStore = useInstallationsStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
+const inventoryStore = useInventoryStore();
 
 const showModal = ref(false);
 const saving = ref(false);
@@ -86,8 +88,51 @@ onMounted(async () => {
     clientsStore.fetchClients(),
     contractsStore.fetchContracts(),
     catalogsStore.fetchStaff(),
+    inventoryStore.fetchProducts(),
   ]);
 });
+
+// ---- Materiales usados (Fase 11b: vincula Inventario con Instalaciones) ----
+const showMaterialsModal = ref(false);
+const materialsInstallation = ref<Installation | null>(null);
+const materials = ref<InventoryMovement[]>([]);
+const loadingMaterials = ref(false);
+const materialForm = ref({ productId: '', quantity: 1 });
+const savingMaterial = ref(false);
+const materialError = ref<string | null>(null);
+
+async function openMaterialsModal(inst: Installation) {
+  materialsInstallation.value = inst;
+  materialForm.value = { productId: '', quantity: 1 };
+  materialError.value = null;
+  showMaterialsModal.value = true;
+  loadingMaterials.value = true;
+  try {
+    materials.value = await inventoryStore.fetchMovementsByInstallation(inst.id);
+  } finally {
+    loadingMaterials.value = false;
+  }
+}
+
+async function handleAddMaterial() {
+  if (!materialsInstallation.value || !materialForm.value.productId || materialForm.value.quantity <= 0) return;
+  savingMaterial.value = true;
+  materialError.value = null;
+  try {
+    await inventoryStore.registerUsage({
+      productId: materialForm.value.productId,
+      quantity: materialForm.value.quantity,
+      installationId: materialsInstallation.value.id,
+      reason: `Instalación ${materialsInstallation.value.contracts?.contract_number ?? materialsInstallation.value.id}`,
+    });
+    materialForm.value = { productId: '', quantity: 1 };
+    materials.value = await inventoryStore.fetchMovementsByInstallation(materialsInstallation.value.id);
+  } catch (e) {
+    materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa el stock disponible)');
+  } finally {
+    savingMaterial.value = false;
+  }
+}
 
 function openCreate() {
   form.value = emptyForm();
@@ -245,6 +290,7 @@ function formatDate(value: string | null) {
               </select>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
+              <button class="text-sky-400 hover:underline" @click="openMaterialsModal(inst)">Materiales</button>
               <button
                 v-if="inst.status !== 'completed' && inst.status !== 'cancelled'"
                 class="text-green-400 hover:underline"
@@ -321,6 +367,52 @@ function formatDate(value: string | null) {
             </button>
           </div>
         </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showMaterialsModal" class="modal-overlay" @click.self="showMaterialsModal = false">
+        <div class="w-full max-w-md modal-panel">
+          <h2 class="text-lg font-semibold mb-1">Materiales usados</h2>
+          <p class="text-xs text-slate-500 mb-4">
+            {{ materialsInstallation?.clients ? `${materialsInstallation.clients.first_name} ${materialsInstallation.clients.last_name}` : '' }}
+          </p>
+
+          <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
+          <template v-else>
+            <p v-if="!materials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en esta instalación.</p>
+            <ul v-else class="space-y-1.5 mb-4">
+              <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
+                <span>{{ m.product?.name ?? 'Producto' }}</span>
+                <span class="text-slate-400">{{ m.quantity }} {{ m.product?.unit }}</span>
+              </li>
+            </ul>
+          </template>
+
+          <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
+            <div class="flex-1 min-w-[160px]">
+              <label class="block text-xs text-slate-400 mb-1">Producto</label>
+              <select v-model="materialForm.productId" required class="field-input">
+                <option value="" disabled>Selecciona...</option>
+                <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">
+                  {{ p.name }} ({{ p.current_stock }} {{ p.unit }} disp.)
+                </option>
+              </select>
+            </div>
+            <div class="w-24">
+              <label class="block text-xs text-slate-400 mb-1">Cantidad</label>
+              <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
+            </div>
+            <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
+              {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
+            </button>
+          </form>
+          <p v-if="materialError" class="text-xs text-red-400 mt-2">{{ materialError }}</p>
+
+          <div class="flex justify-end mt-4">
+            <button class="btn-ghost" @click="showMaterialsModal = false">Cerrar</button>
+          </div>
+        </div>
       </div>
     </Teleport>
   </AppLayout>
