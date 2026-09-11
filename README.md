@@ -95,7 +95,7 @@ aplicar — ver nota de rumbo arriba). Detalle de cada fase en `docs/phases/`.
 | 6d-g | TR-069 / GenieACS (proxy NBI, sync/métricas automáticos, asignar ACS por ONT, panel) | ✅ validado contra CPE simulado y comandos probados contra OLT real — falta confirmar Inform de una ONT física TR-069/VEIP real |
 | — | Facturación electrónica SRI Ecuador | Pendiente (confirmar país) |
 | — | Cobros y Caja (arqueo/cierre) | Pendiente |
-| 12 | Reportes y estadísticas | Pendiente |
+| 12 | Reportes y estadísticas (clientes, financiero, soporte — sin doc de curso, diseñado a medida) | ✅ código — sin migración pendiente (reusa tablas existentes) |
 | 13 | Facturación recurrente + WhatsApp | Pendiente |
 | 14 | Producción (PM2 + Cloudflare Tunnel) | Pendiente |
 
