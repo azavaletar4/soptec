@@ -7,9 +7,18 @@ Fosmikro" (ver `curso/`), adaptado a este proyecto.
 
 ## Estado del proyecto
 
-Fase actual: **Fase 5 completada y validada — MikroTik REST API** (probado contra un
-MikroTik CCR2116-12G-4S+ real, RouterOS 7.16.2: 691 usuarios PPPoE, 629 activos).
-Siguiente: **Fase 6 — TR-069 / GenieACS**.
+Fase actual: **Fase 6d-6g — TR-069 / GenieACS** (migraciones aplicadas; backend, panel y stack
+Docker validados de punta a punta contra un CPE simulado — `docker compose --profile testing up -d`,
+ver `docker-compose.yml` — sync a `tr069_devices` confirmado. Falta validar contra una ONT real
+con VEIP conectada a la OLT ZTE, ver checklist en `REPLICA-TR069-GENIEACS.md`). Ojo: la imagen
+Docker de GenieACS que asumia originalmente `REPLICA-TR069-GENIEACS.md`
+(`genieacs/genieacs:1.2`) no existe en Docker Hub — se corrigio a `drumsergio/genieacs:1.2.16.0`,
+ver nota al inicio de ese doc. La Fase 11 (Inventario) también tiene su migración aplicada. La
+Fase 9 (Instalaciones y Mapa) ya quedó aplicada y funcionando. La numeración de fases se reordenó
+en el camino: Soporte (6a-c) y TR-069 (6d-g) comparten el número 6; se priorizó Soporte,
+Facturación básica (Fase 7), Instalaciones/Mapa (Fase 9) e Inventario (Fase 11) antes de completar
+TR-069; Facturación SRI y
+Cobros/Caja siguen pendientes.
 
 > Notas de rumbo: (1) el proyecto arrancó con una arquitectura genérica (NestJS + Next.js) antes
 > de descubrir el material detallado en `curso/`, específico para esta infraestructura, y se
@@ -64,12 +73,13 @@ aplicar — ver nota de rumbo arriba). Detalle de cada fase en `docs/phases/`.
 | 3 | Clientes y contratos (CRUD, numeración automática, Kanban) | ✅ |
 | 4 | OLT ZTE C300 (Telnet: CRUD, listar/sincronizar ONTs) | ✅ — comandos de escritura (registrar/activar/eliminar/señal) sin validar aún |
 | 5 | MikroTik REST API (CRUD, PPPoE, DHCP leases) | ✅ validado contra router real |
-| 6 | TR-069 / GenieACS | ⏳ En curso |
-| 7 | Facturación electrónica SRI Ecuador | Pendiente (confirmar país) |
-| 8 | Cobros y Caja | Pendiente |
-| 9 | Instalaciones y Mapa | Pendiente |
-| 10 | Inventario | Pendiente |
-| 11 | Soporte técnico y portal del cliente | Pendiente |
+| 6 | Soporte técnico (tickets, con sub-fases 6b puntaje y 6c permisos) | ✅ |
+| 7 | Facturación básica (facturas, pagos, cobros; sin comprobantes SRI) | ✅ |
+| 9 | Instalaciones (agenda por contrato) y Mapa (Leaflet, clientes + instalaciones) | ✅ |
+| 11 | Inventario (productos, ingreso/egreso, Kardex con saldo acumulado) | ✅ |
+| 6d-g | TR-069 / GenieACS (proxy NBI, sync, métricas ópticas, asignar ACS por ONT, panel) | ✅ validado contra CPE simulado — falta ONT real con VEIP |
+| — | Facturación electrónica SRI Ecuador | Pendiente (confirmar país) |
+| — | Cobros y Caja (arqueo/cierre) | Pendiente |
 | 12 | Reportes y estadísticas | Pendiente |
 | 13 | Facturación recurrente + WhatsApp | Pendiente |
 | 14 | Producción (PM2 + Cloudflare Tunnel) | Pendiente |

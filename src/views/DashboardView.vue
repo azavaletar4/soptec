@@ -56,9 +56,9 @@ const oltCheckedAtLabel = computed(() => {
 
 const recaudoBarClass = computed(() => {
   const rate = dashboard.summary?.billing.collectionRate ?? 0;
-  if (rate >= 80) return 'bg-green-500';
-  if (rate >= 50) return 'bg-amber-500';
-  return 'bg-red-500';
+  if (rate >= 80) return 'bg-green-500/80';
+  if (rate >= 50) return 'bg-amber-500/80';
+  return 'bg-red-500/80';
 });
 
 const CHART_WIDTH = 600;
@@ -112,31 +112,96 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
     <p v-if="dashboard.error" class="mb-4 text-sm text-red-400">{{ dashboard.error }}</p>
 
     <template v-if="dashboard.summary">
+      <!-- Estado de la red: encabezado del dashboard -->
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Estado de la red — OLTs</h2>
+      <div class="grid gap-4 mb-1" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
+        <button class="kpi-tile bg-sky-600/80" @click="goTo('/olt')">
+          <div>
+            <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.unconfigured }}</div>
+            <div class="text-sm text-white/85 mt-1">Sin autorizar</div>
+          </div>
+          <span class="text-2xl">✨</span>
+        </button>
+        <button class="kpi-tile bg-green-600/80" @click="goTo('/olt')">
+          <div>
+            <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.online }}</div>
+            <div class="text-sm text-white/85 mt-1">En línea</div>
+          </div>
+          <span class="text-2xl">🖧</span>
+        </button>
+        <button class="kpi-tile bg-slate-600/80" @click="goTo('/olt')">
+          <div>
+            <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.offline }}</div>
+            <div class="text-sm text-white/85 mt-1">Desconectado</div>
+          </div>
+          <span class="text-2xl">✕</span>
+        </button>
+        <button class="kpi-tile bg-orange-600/80" @click="goTo('/olt')">
+          <div>
+            <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.lowSignal }}</div>
+            <div class="text-sm text-white/85 mt-1">Señales bajas</div>
+          </div>
+          <span class="text-2xl">⚠</span>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 text-right mb-8">
+        Total autorizado: {{ dashboard.summary.oltSummary.online + dashboard.summary.oltSummary.offline }}
+        · {{ dashboard.summary.oltSummary.deviceCount }} OLT(s)
+        · Información válida a las {{ oltCheckedAtLabel }}
+        <span v-if="!dashboard.summary.oltSummary.scanComplete" class="text-amber-400/80">(escaneo parcial)</span>
+      </p>
+
+      <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
+        <button class="text-left surface-hover p-5" @click="goTo('/olt')">
+          <div class="text-sm font-semibold mb-3">OLTs (conexión)</div>
+          <div class="flex gap-2 flex-wrap text-sm">
+            <span class="badge bg-green-500/15 text-green-400">{{ dashboard.summary.network.olt.ok }} ok</span>
+            <span class="badge bg-red-500/15 text-red-400">{{ dashboard.summary.network.olt.down }} caídas</span>
+            <span class="badge bg-slate-500/15 text-slate-400">{{ dashboard.summary.network.olt.untested }} sin probar</span>
+          </div>
+        </button>
+        <button class="text-left surface-hover p-5" @click="goTo('/mikrotik')">
+          <div class="text-sm font-semibold mb-3">MikroTiks</div>
+          <div class="flex gap-2 flex-wrap text-sm">
+            <span class="badge bg-green-500/15 text-green-400">{{ dashboard.summary.network.mikrotik.ok }} ok</span>
+            <span class="badge bg-red-500/15 text-red-400">{{ dashboard.summary.network.mikrotik.down }} caídos</span>
+            <span class="badge bg-slate-500/15 text-slate-400">{{ dashboard.summary.network.mikrotik.untested }} sin probar</span>
+          </div>
+        </button>
+        <div class="surface p-5">
+          <div class="text-sm font-semibold mb-2">Con problemas</div>
+          <p v-if="!dashboard.summary.network.problems.length" class="text-sm text-green-400">Todos los equipos responden</p>
+          <ul v-else class="text-sm text-red-400 space-y-1">
+            <li v-for="p in dashboard.summary.network.problems" :key="p.kind + p.host">{{ p.kind }} — {{ p.name }} ({{ p.host }})</li>
+          </ul>
+        </div>
+      </div>
+
       <!-- Clientes -->
       <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Clientes</h2>
       <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
-        <button class="kpi-tile bg-green-600" @click="goTo('/clientes')">
+        <button class="kpi-tile bg-green-600/80" @click="goTo('/clientes')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.clients.active }}</div>
             <div class="text-sm text-white/85 mt-1">Activos</div>
           </div>
           <span class="text-2xl">✓</span>
         </button>
-        <button class="kpi-tile bg-red-600" @click="goTo('/clientes')">
+        <button class="kpi-tile bg-red-600/80" @click="goTo('/clientes')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.clients.suspended }}</div>
             <div class="text-sm text-white/85 mt-1">Suspendidos</div>
           </div>
           <span class="text-2xl">⏸</span>
         </button>
-        <button class="kpi-tile bg-amber-600" @click="goTo('/clientes')">
+        <button class="kpi-tile bg-amber-600/80" @click="goTo('/clientes')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.clients.prospect }}</div>
             <div class="text-sm text-white/85 mt-1">Prospectos</div>
           </div>
           <span class="text-2xl">★</span>
         </button>
-        <button class="kpi-tile bg-sky-600" @click="goTo('/clientes')">
+        <button class="kpi-tile bg-sky-600/80" @click="goTo('/clientes')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.activeContracts }}</div>
             <div class="text-sm text-white/85 mt-1">Contratos activos</div>
@@ -148,21 +213,21 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
       <!-- Soporte -->
       <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Soporte</h2>
       <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
-        <button class="kpi-tile bg-amber-600" @click="goTo('/soporte')">
+        <button class="kpi-tile bg-amber-600/80" @click="goTo('/soporte')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.tickets.open }}</div>
             <div class="text-sm text-white/85 mt-1">Tickets abiertos</div>
           </div>
           <span class="text-2xl">🎫</span>
         </button>
-        <button class="kpi-tile bg-sky-600" @click="goTo('/soporte')">
+        <button class="kpi-tile bg-sky-600/80" @click="goTo('/soporte')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.tickets.inProgress }}</div>
             <div class="text-sm text-white/85 mt-1">En progreso</div>
           </div>
           <span class="text-2xl">🔧</span>
         </button>
-        <button class="kpi-tile bg-red-600" @click="goTo('/soporte')">
+        <button class="kpi-tile bg-red-600/80" @click="goTo('/soporte')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.tickets.urgent }}</div>
             <div class="text-sm text-white/85 mt-1">Urgentes</div>
@@ -235,72 +300,6 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
           </g>
         </svg>
         <p v-else class="text-sm text-slate-500">Sin datos de facturación en este periodo.</p>
-      </div>
-
-      <!-- Red: OLTs estilo SmartOLT -->
-      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Estado de la red — OLTs</h2>
-      <div class="grid gap-4 mb-1" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
-        <button class="kpi-tile bg-sky-600" @click="goTo('/olt')">
-          <div>
-            <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.unconfigured }}</div>
-            <div class="text-sm text-white/85 mt-1">Sin autorizar</div>
-          </div>
-          <span class="text-2xl">✨</span>
-        </button>
-        <button class="kpi-tile bg-green-600" @click="goTo('/olt')">
-          <div>
-            <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.online }}</div>
-            <div class="text-sm text-white/85 mt-1">En línea</div>
-          </div>
-          <span class="text-2xl">🖧</span>
-        </button>
-        <button class="kpi-tile bg-slate-600" @click="goTo('/olt')">
-          <div>
-            <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.offline }}</div>
-            <div class="text-sm text-white/85 mt-1">Desconectado</div>
-          </div>
-          <span class="text-2xl">✕</span>
-        </button>
-        <button class="kpi-tile bg-orange-600" @click="goTo('/olt')">
-          <div>
-            <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.lowSignal }}</div>
-            <div class="text-sm text-white/85 mt-1">Señales bajas</div>
-          </div>
-          <span class="text-2xl">⚠</span>
-        </button>
-      </div>
-      <p class="text-xs text-slate-500 text-right mb-8">
-        Total autorizado: {{ dashboard.summary.oltSummary.online + dashboard.summary.oltSummary.offline }}
-        · {{ dashboard.summary.oltSummary.deviceCount }} OLT(s)
-        · Información válida a las {{ oltCheckedAtLabel }}
-        <span v-if="!dashboard.summary.oltSummary.scanComplete" class="text-amber-400/80">(escaneo parcial)</span>
-      </p>
-
-      <!-- Red: OLTs (conexion) + MikroTiks -->
-      <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
-        <button class="text-left surface-hover p-5" @click="goTo('/olt')">
-          <div class="text-sm font-semibold mb-3">OLTs (conexión)</div>
-          <div class="flex gap-2 flex-wrap text-sm">
-            <span class="badge bg-green-500/15 text-green-400">{{ dashboard.summary.network.olt.ok }} ok</span>
-            <span class="badge bg-red-500/15 text-red-400">{{ dashboard.summary.network.olt.down }} caídas</span>
-            <span class="badge bg-slate-500/15 text-slate-400">{{ dashboard.summary.network.olt.untested }} sin probar</span>
-          </div>
-        </button>
-        <button class="text-left surface-hover p-5" @click="goTo('/mikrotik')">
-          <div class="text-sm font-semibold mb-3">MikroTiks</div>
-          <div class="flex gap-2 flex-wrap text-sm">
-            <span class="badge bg-green-500/15 text-green-400">{{ dashboard.summary.network.mikrotik.ok }} ok</span>
-            <span class="badge bg-red-500/15 text-red-400">{{ dashboard.summary.network.mikrotik.down }} caídos</span>
-            <span class="badge bg-slate-500/15 text-slate-400">{{ dashboard.summary.network.mikrotik.untested }} sin probar</span>
-          </div>
-        </button>
-        <div class="surface p-5">
-          <div class="text-sm font-semibold mb-2">Con problemas</div>
-          <p v-if="!dashboard.summary.network.problems.length" class="text-sm text-green-400">Todos los equipos responden</p>
-          <ul v-else class="text-sm text-red-400 space-y-1">
-            <li v-for="p in dashboard.summary.network.problems" :key="p.kind + p.host">{{ p.kind }} — {{ p.name }} ({{ p.host }})</li>
-          </ul>
-        </div>
       </div>
 
       <!-- Actividad reciente -->

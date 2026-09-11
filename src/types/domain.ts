@@ -6,6 +6,8 @@ export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TicketCategory = 'no_service' | 'slow_speed' | 'billing' | 'installation' | 'equipment' | 'other';
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled';
+export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
+export type InventoryMovementType = 'ingreso' | 'egreso';
 
 export interface Zone {
   id: string;
@@ -106,6 +108,92 @@ export interface Ticket {
   closed_at: string | null;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+export interface Installation {
+  id: string;
+  client_id: string;
+  contract_id: string | null;
+  status: InstallationStatus;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
+  assigned_to: string | null;
+  notes: string | null;
+  completed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'address' | 'latitude' | 'longitude'> | null;
+  contracts?: Pick<ServiceContract, 'id' | 'contract_number'> | null;
+  assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+export interface InventoryProduct {
+  id: string;
+  name: string;
+  category: string | null;
+  unit: string;
+  price: number;
+  min_stock: number;
+  current_stock: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryMovement {
+  id: string;
+  product_id: string;
+  movement_type: InventoryMovementType;
+  quantity: number;
+  reason: string | null;
+  balance_after: number;
+  created_by: string | null;
+  created_at: string;
+  author?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+export interface Tr069Device {
+  id: string;
+  genieacs_id: string;
+  cpe_oui: string | null;
+  cpe_product_class: string | null;
+  cpe_serial: string;
+  service_contract_id: string | null;
+  notes: string | null;
+  last_seen_at: string | null;
+  model_name: string | null;
+  firmware_version: string | null;
+  wan_ip: string | null;
+  ssid: string | null;
+  created_at: string;
+  updated_at: string;
+  contracts?: Pick<ServiceContract, 'id' | 'contract_number'> | null;
+}
+
+export interface Tr069PerformanceMetric {
+  id: string;
+  tr069_device_id: string;
+  rx_power: number | null;
+  tx_power: number | null;
+  temperature: number | null;
+  uptime: number | null;
+  connection_status: string | null;
+  collected_at: string;
+  created_at: string;
+}
+
+export interface OltTr069AcsProfile {
+  id: string;
+  olt_device_id: string;
+  profile_name: string;
+  acs_url: string;
+  acs_username: string | null;
+  acs_password: string | null;
+  inform_interval: number;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TicketComment {

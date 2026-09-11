@@ -49,6 +49,36 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/instalaciones',
+      name: 'instalaciones',
+      component: () => import('@/views/instalaciones/InstalacionesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/mapa',
+      name: 'mapa',
+      component: () => import('@/views/mapa/MapaView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/inventario',
+      name: 'inventario',
+      component: () => import('@/views/inventario/InventarioView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/inventario/:id',
+      name: 'inventario-detalle',
+      component: () => import('@/views/inventario/InventarioProductoView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/tr069',
+      name: 'tr069',
+      component: () => import('@/views/tr069/Tr069View.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/facturacion',
       name: 'facturacion',
       component: () => import('@/views/facturacion/FacturacionView.vue'),

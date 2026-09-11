@@ -27,13 +27,21 @@ const ICONS: Record<string, string> = {
   mikrotik: 'M2 9.5a15 15 0 0 1 20 0M5.5 13a10 10 0 0 1 13 0M9 16.5a5 5 0 0 1 6 0M12 20v0',
   soporte: 'M12 15a3 3 0 0 0 3-3M12 15a3 3 0 0 1-3-3m3 3v4m-8-7a8 8 0 1 1 16 0v3a2 2 0 0 1-2 2h-1v-5a1 1 0 0 1 1-1h2M4 11h2a1 1 0 0 1 1 1v5H5a2 2 0 0 1-2-2v-3Z',
   facturacion: 'M7 4h10a1 1 0 0 1 1 1v15l-3-2-2 2-2-2-2 2-3-2V5a1 1 0 0 1 1-1Zm2 5h6M9 12h6M9 15h3',
+  instalaciones: 'M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21ZM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
+  mapa: 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14M15 6v14',
+  inventario: 'M3 7l9-4 9 4-9 4-9-4Zm0 0v10l9 4 9-4V7M12 11v10',
+  tr069: 'M12 20v-6m0 0a4 4 0 0 0 4-4V7a4 4 0 0 0-8 0v3a4 4 0 0 0 4 4Zm-7 2h14M5 8H3m18 0h-2M5 4 3 2m16 2 2-2',
 };
 
 const MODULOS = [
   { key: 'dashboard', label: 'Dashboard', to: '/dashboard', disabled: false },
   { key: 'clientes', label: 'Clientes', to: '/clientes', disabled: false },
+  { key: 'instalaciones', label: 'Instalaciones', to: '/instalaciones', disabled: false },
+  { key: 'mapa', label: 'Mapa', to: '/mapa', disabled: false },
   { key: 'olt', label: 'Red & OLTs', to: '/olt', disabled: false },
   { key: 'mikrotik', label: 'MikroTik', to: '/mikrotik', disabled: false },
+  { key: 'tr069', label: 'TR-069', to: '/tr069', disabled: false },
+  { key: 'inventario', label: 'Inventario', to: '/inventario', disabled: false },
   { key: 'soporte', label: 'Soporte', to: '/soporte', disabled: false },
   { key: 'facturacion', label: 'Facturación', to: '/facturacion', disabled: false, requiresBilling: true },
 ];

@@ -1,0 +1,22 @@
+# SmartRayco — HTTPS automatico on-prem via Caddy/Let's Encrypt.
+# Cambia el email y el dominio por los tuyos antes de usarlo.
+#
+# Requisitos: el dominio debe resolver a tu IP publica (No-IP DUC o similar
+# si no tienes IP fija), y port-forward 80+443 en el router hacia esta PC.
+
+{
+    email admin@TU-DOMINIO.com
+}
+
+TU-DOMINIO.com {
+    encode gzip zstd
+
+    reverse_proxy frontend:80
+
+    reverse_proxy /api/* frontend:80 {
+        transport http {
+            read_timeout 120s
+            write_timeout 120s
+        }
+    }
+}

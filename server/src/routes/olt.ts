@@ -11,8 +11,25 @@ import {
   setAdminStateCommands,
   deleteOntCommands,
   opticalInfoCommands,
+  oltHealthCommands,
+  listTcontProfilesCommands,
+  listTrafficProfilesCommands,
+  setTr069AcsCommands,
+  disableTr069Commands,
 } from '../ssh/zteCommands';
-import { parseOntList, parseGlobalOntState, parseOpticalInfo, parseUnconfiguredOnts } from '../ssh/zteParsers';
+import {
+  parseOntList,
+  parseGlobalOntState,
+  parseOpticalInfo,
+  parseUnconfiguredOnts,
+  parseUptime,
+  parseCardTemperatures,
+  parseProcessorLoad,
+  parseProfileNames,
+  type OltUptime,
+  type SlotTemperature,
+  type SlotLoad,
+} from '../ssh/zteParsers';
 
 // Rango de senal optica GPON aceptable segun el glosario del curso: -8 a -27 dBm.
 const LOW_SIGNAL_THRESHOLD_DBM = -27;
@@ -33,6 +50,7 @@ oltRoutes.use('*', requireAuth);
 
 export interface OltDeviceRow {
   id: string;
+  name: string;
   host: string;
   telnet_port: number;
   username: string;
@@ -126,6 +144,32 @@ export async function computeOltSummary(device: OltDeviceRow): Promise<OltSummar
   const lowSignal = (signalRows ?? []).filter((r) => (r.rx_power as number) < LOW_SIGNAL_THRESHOLD_DBM).length;
 
   return { unconfigured, online, offline, lowSignal, scanComplete: globalScanOk };
+}
+
+export interface OltHealthResult {
+  uptime: OltUptime | null;
+  temperature: SlotTemperature[];
+  load: SlotLoad[];
+}
+
+/**
+ * Salud del chasis (uptime, temperatura y CPU/RAM por tarjeta), en vivo via
+ * Telnet. Compartida entre el endpoint por-OLT y el agregado del Dashboard.
+ * Ver comentarios de oltHealthCommands() en zteCommands.ts.
+ */
+export async function computeOltHealth(device: OltDeviceRow): Promise<OltHealthResult> {
+  try {
+    const outputs = await runTelnetCommands(telnetTargetFor(device), oltHealthCommands());
+    return {
+      uptime: parseUptime(outputs[1] ?? ''),
+      temperature: parseCardTemperatures(outputs[2] ?? ''),
+      load: parseProcessorLoad(outputs[3] ?? ''),
+    };
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[olt/health] No se pudo consultar la salud de la OLT:', e);
+    return { uptime: null, temperature: [], load: [] };
+  }
 }
 
 // ---- CRUD olt_devices ----
@@ -229,6 +273,37 @@ oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
   return c.json({ ...summary, checkedAt: new Date().toISOString() });
 });
 
+/**
+ * Salud del chasis en vivo: horas activas (uptime), temperatura y CPU/RAM
+ * por tarjeta. Ver computeOltHealth().
+ */
+oltRoutes.get('/:id/health', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  const health = await computeOltHealth(device);
+  return c.json({ ...health, checkedAt: new Date().toISOString() });
+});
+
+/** Perfiles de ancho de banda (tcont/traffic) ya configurados en la OLT. */
+oltRoutes.get('/:id/profiles', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  try {
+    const [tcontOut, trafficOut] = await Promise.all([
+      runTelnetCommands(telnetTargetFor(device), listTcontProfilesCommands(), { timeoutMs: 15000 }),
+      runTelnetCommands(telnetTargetFor(device), listTrafficProfilesCommands(), { timeoutMs: 15000 }),
+    ]);
+    return c.json({
+      tcontProfiles: parseProfileNames(tcontOut[1] ?? ''),
+      trafficProfiles: parseProfileNames(trafficOut[1] ?? ''),
+    });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar los perfiles de la OLT' }, 502);
+  }
+});
+
 // ---- ONTs (cache local en olt_onts, sincronizada bajo demanda por Telnet) ----
 
 oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
@@ -304,25 +379,41 @@ oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
 
   const body = await c.req.json();
   const shelf = body.shelf ?? 1;
-  const { slot, port, serial, onuType, description, vlan, clientId } = body;
+  const { slot, port, serial, onuType, description, vlan, clientId, tcontProfile, trafficProfile } = body;
+  if (!tcontProfile || !trafficProfile) {
+    return c.json({ error: 'tcontProfile y trafficProfile son requeridos (ver "show gpon profile tcont/traffic" en la OLT)' }, 400);
+  }
   let onuId: number = body.onuId;
 
   if (onuId == null) {
+    // El ID libre se calcula contra la OLT EN VIVO, no solo contra nuestra
+    // cache local (olt_onts) — la cache puede estar incompleta y reusar un
+    // ID que ya pertenece a una ONT real existente en el equipo.
+    let usedLive = new Set<number>();
+    try {
+      const outputs = await runTelnetCommands(telnetTargetFor(device), listOntsCommands({ shelf, slot, port }), {
+        timeoutMs: 20000,
+      });
+      usedLive = new Set(parseOntList(outputs.join('\n')).map((o) => o.onuId));
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'No se pudo verificar los IDs en uso en la OLT' }, 502);
+    }
     const { data: existing } = await supabaseAdmin
       .from('olt_onts')
       .select('ont_id')
       .eq('olt_device_id', device.id)
       .eq('slot', slot)
       .eq('port', port);
-    const used = new Set((existing ?? []).map((r: { ont_id: number }) => r.ont_id));
-    onuId = 0;
-    while (used.has(onuId)) onuId += 1;
+    for (const r of existing ?? []) usedLive.add((r as { ont_id: number }).ont_id);
+
+    onuId = 1;
+    while (usedLive.has(onuId)) onuId += 1;
   }
 
   try {
     await runTelnetCommands(
       telnetTargetFor(device),
-      registerOntCommands({ ref: { shelf, slot, port }, onuId, serial, onuType, vlan, description }),
+      registerOntCommands({ ref: { shelf, slot, port }, onuId, serial, onuType, vlan, description, tcontProfile, trafficProfile }),
     );
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al registrar en la OLT' }, 502);
@@ -342,6 +433,8 @@ oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
         description,
         onu_type: onuType,
         vlan,
+        tcont_profile: tcontProfile,
+        traffic_profile: trafficProfile,
         status: 'unknown',
         last_synced_at: new Date().toISOString(),
       },
@@ -430,4 +523,66 @@ oltRoutes.get('/:id/onts/:ontDbId/signal', requireRole(...STAFF_READ), async (c)
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al leer la senal optica' }, 502);
   }
+});
+
+/**
+ * Asigna el ACS (GenieACS) a una ONT via TR-069. body: { acsUrl, veip? }.
+ * Ver setTr069AcsCommands() en zteCommands.ts — sintaxis confirmada contra
+ * el equipo real, pero sin verificar aun de punta a punta (requiere una
+ * ONT con VEIP, ej. tipo ZTE-F660, y GenieACS corriendo).
+ */
+oltRoutes.post('/:id/onts/:ontDbId/tr069', requireRole(...ONT_WRITE), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
+
+  const body = await c.req.json();
+  const acsUrl: string = body.acsUrl;
+  const veip: number = body.veip ?? 1;
+  if (!acsUrl) return c.json({ error: 'acsUrl es requerido' }, 400);
+
+  try {
+    await runTelnetCommands(
+      telnetTargetFor(device),
+      setTr069AcsCommands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id, veip, acsUrl),
+    );
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al configurar TR-069 en la OLT' }, 502);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('olt_onts')
+    .update({ tr069_enabled: true, tr069_acs_url: acsUrl })
+    .eq('id', ont.id)
+    .select()
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json(data);
+});
+
+oltRoutes.delete('/:id/onts/:ontDbId/tr069', requireRole(...ONT_WRITE), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
+  const veip = Number(c.req.query('veip') ?? 1);
+
+  try {
+    await runTelnetCommands(
+      telnetTargetFor(device),
+      disableTr069Commands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id, veip),
+    );
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al desactivar TR-069 en la OLT' }, 502);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('olt_onts')
+    .update({ tr069_enabled: false })
+    .eq('id', ont.id)
+    .select()
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json(data);
 });

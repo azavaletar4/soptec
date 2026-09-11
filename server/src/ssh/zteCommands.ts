@@ -59,6 +59,55 @@ export function listUnconfiguredOntsCommands(): string[] {
   return ['enable', 'show gpon onu uncfg'];
 }
 
+/**
+ * Perfiles de ancho de banda ya configurados en la OLT (heredados de
+ * SmartOLT: convencion "SMARTOLT-{N}M-UP" para tcont / "SMARTOLT-{N}M-DOWN"
+ * para traffic) — VALIDADO contra el equipo real. Necesarios para registrar
+ * una ONT con servicio real (ver registerOntCommands()).
+ */
+/**
+ * Asigna el servidor ACS (GenieACS) a una ONT via TR-069 — VALIDADO
+ * parcialmente contra el equipo real (10.15.15.2): la sintaxis fue
+ * confirmada por el CLI (autocompletado + "?"), pero el "acs <url>" solo
+ * se probo hasta el punto de aceptar la sintaxis, sin verificar aun que la
+ * ONU efectivamente reporte a GenieACS (requiere una ONT con VEIP, ej. el
+ * tipo ZTE-F660). A diferencia de Huawei (perfiles TR-069 numerados en la
+ * OLT), la ZTE C300 apunta la URL del ACS directo por ONU:
+ *   pon-onu-mng gpon-onu_S/L/P:ID
+ *     tr069-mgmt {veip} acs <url>
+ *     tr069-mgmt {veip} state {lock|unlock}
+ * "veip" casi siempre es 1 (una sola interfaz virtual de gestion por ONU).
+ */
+export function setTr069AcsCommands(ref: ZteInterfaceRef, onuId: number, veip: number, acsUrl: string): string[] {
+  return [
+    'enable',
+    'configure terminal',
+    `pon-onu-mng ${onuInterface(ref, onuId)}`,
+    `tr069-mgmt ${veip} acs ${acsUrl}`,
+    `tr069-mgmt ${veip} state unlock`,
+    'exit',
+  ];
+}
+
+/** Desactiva la gestion TR-069 de una ONT (sin borrar la URL configurada). */
+export function disableTr069Commands(ref: ZteInterfaceRef, onuId: number, veip: number): string[] {
+  return [
+    'enable',
+    'configure terminal',
+    `pon-onu-mng ${onuInterface(ref, onuId)}`,
+    `tr069-mgmt ${veip} state lock`,
+    'exit',
+  ];
+}
+
+export function listTcontProfilesCommands(): string[] {
+  return ['enable', 'show gpon profile tcont'];
+}
+
+export function listTrafficProfilesCommands(): string[] {
+  return ['enable', 'show gpon profile traffic'];
+}
+
 export function registerOntCommands(params: {
   ref: ZteInterfaceRef;
   onuId: number;
@@ -66,8 +115,10 @@ export function registerOntCommands(params: {
   onuType: string;
   vlan: number;
   description: string;
+  tcontProfile: string;
+  trafficProfile: string;
 }): string[] {
-  const { ref, onuId, serial, onuType, vlan, description } = params;
+  const { ref, onuId, serial, onuType, vlan, description, tcontProfile, trafficProfile } = params;
   const safeDesc = description.replace(/"/g, "'");
   return [
     'enable',
@@ -77,8 +128,15 @@ export function registerOntCommands(params: {
     'exit',
     `interface ${onuInterface(ref, onuId)}`,
     `description "${safeDesc}"`,
-    'tcont 1 name INTERNET',
+    // "tcont 1 name ..." (sin perfil) es rechazado por el firmware real
+    // ("Incomplete command") y deja la ONU sin ancho de banda real, aunque
+    // el resto de la config se vea aplicada — CONFIRMADO contra el equipo
+    // real. Los perfiles (ej. "SMARTOLT-100M-UP"/"SMARTOLT-100M-DOWN") ya
+    // existen en la OLT (heredados de SmartOLT); listarlos con
+    // "show gpon profile tcont" / "show gpon profile traffic".
+    `tcont 1 profile ${tcontProfile}`,
     'gemport 1 tcont 1',
+    `gemport 1 traffic-limit downstream ${trafficProfile}`,
     `service-port 1 vport 1 user-vlan ${vlan} vlan ${vlan}`,
     'exit',
   ];
@@ -106,4 +164,15 @@ export function deleteOntCommands(ref: ZteInterfaceRef, onuId: number): string[]
 
 export function opticalInfoCommands(ref: ZteInterfaceRef, onuId: number): string[] {
   return ['enable', `show pon power attenuation ${onuInterface(ref, onuId)}`];
+}
+
+/**
+ * Salud del chasis (uptime, temperatura y carga por tarjeta) — VALIDADO
+ * contra el equipo real (10.15.15.2):
+ *   - "show system-group" trae "Started before: N days, N hours, N minutes".
+ *   - "show card-temperature" trae una fila por slot con su temperatura.
+ *   - "show processor" trae CPU% (5s/1m/5m) y memoria% por slot.
+ */
+export function oltHealthCommands(): string[] {
+  return ['enable', 'show system-group', 'show card-temperature', 'show processor'];
 }

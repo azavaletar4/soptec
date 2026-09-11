@@ -53,6 +53,7 @@ export function runTelnetCommands(
     let commandIndex = 0;
     let loggedIn = false;
     let usernameSent = false;
+    let warmupDone = false;
     let settled = false;
 
     const timer = setTimeout(() => {
@@ -138,12 +139,29 @@ export function runTelnetCommands(
         if (usernameSent && PROMPT_RE.test(buffer)) {
           loggedIn = true;
           buffer = '';
+          // "terminal length 0" desactiva la paginacion "--More--" para toda
+          // la sesion. Sin esto, un bug real encontrado en produccion: en
+          // comandos largos y paginados (ej. "show gpon onu state" sin
+          // filtro, cientos de filas) se pierde ~1 fila por cada salto de
+          // pagina (24 lineas), descuadrando los conteos silenciosamente
+          // (confirmado contra el equipo real: 646/675 ONUs capturadas sin
+          // esto, 675/675 con esto). Se envia una sola vez por conexion,
+          // antes de los comandos del caller, y su respuesta no se expone.
+          socket.write('terminal length 0\r\n');
+          return;
+        }
+        return;
+      }
+
+      if (!warmupDone) {
+        if (PROMPT_RE.test(buffer)) {
+          warmupDone = true;
+          buffer = '';
           if (commands.length === 0) {
             finish();
             return;
           }
           socket.write(`${commands[0]}\r\n`);
-          return;
         }
         return;
       }

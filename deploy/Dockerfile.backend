@@ -1,0 +1,17 @@
+# SmartRayco backend (Node + Hono, corrido con tsx). ARM64/AMD64.
+# Uso: docker compose -f docker-compose.onprem.yml up -d --build
+FROM node:20-slim
+
+# Toolchain para modulos nativos (ssh2 usa bindings nativos).
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+
+ENV NODE_ENV=production
+EXPOSE 3000
+
+CMD ["npx", "tsx", "server/src/index.ts"]

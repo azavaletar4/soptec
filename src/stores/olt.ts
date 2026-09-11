@@ -26,11 +26,38 @@ export interface OltOnt {
   description: string | null;
   onu_type: string | null;
   vlan: number | null;
+  tcont_profile: string | null;
+  traffic_profile: string | null;
+  tr069_enabled: boolean;
+  tr069_acs_url: string | null;
   status: 'online' | 'offline' | 'unknown';
   rx_power: number | null;
   tx_power: number | null;
   last_synced_at: string | null;
   clients?: { id: string; first_name: string; last_name: string } | null;
+}
+
+export interface OltUptime {
+  raw: string;
+  totalHours: number;
+}
+
+export interface OltSlotTemperature {
+  slot: number;
+  tempC: number;
+}
+
+export interface OltSlotLoad {
+  slot: number;
+  cpuPercent: number;
+  memPercent: number;
+}
+
+export interface OltHealth {
+  uptime: OltUptime | null;
+  temperature: OltSlotTemperature[];
+  load: OltSlotLoad[];
+  checkedAt: string;
 }
 
 export const useOltStore = defineStore('olt', () => {
@@ -127,6 +154,33 @@ export const useOltStore = defineStore('olt', () => {
     }>(`/api/olt-devices/${deviceId}/summary`);
   }
 
+  function fetchHealth(deviceId: string) {
+    return apiFetch<OltHealth>(`/api/olt-devices/${deviceId}/health`);
+  }
+
+  function fetchProfiles(deviceId: string) {
+    return apiFetch<{ tcontProfiles: string[]; trafficProfiles: string[] }>(`/api/olt-devices/${deviceId}/profiles`);
+  }
+
+  async function assignTr069(deviceId: string, ontDbId: string, acsUrl: string, veip = 1) {
+    const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/tr069`, {
+      method: 'POST',
+      body: JSON.stringify({ acsUrl, veip }),
+    });
+    const idx = onts.value.findIndex((o) => o.id === ontDbId);
+    if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...updated };
+    return updated;
+  }
+
+  async function removeTr069(deviceId: string, ontDbId: string, veip = 1) {
+    const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/tr069?veip=${veip}`, {
+      method: 'DELETE',
+    });
+    const idx = onts.value.findIndex((o) => o.id === ontDbId);
+    if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...updated };
+    return updated;
+  }
+
   return {
     devices,
     onts,
@@ -144,5 +198,9 @@ export const useOltStore = defineStore('olt', () => {
     deleteOnt,
     getSignal,
     fetchSummary,
+    fetchHealth,
+    fetchProfiles,
+    assignTr069,
+    removeTr069,
   };
 });
