@@ -123,21 +123,39 @@ export async function computeOltSummary(device: OltDeviceRow): Promise<OltSummar
     globalScanOk = true;
 
     // Actualizar de paso el estado de las ONTs que ya tenemos localmente.
+    // Agrupado en lotes por estado (en vez de un UPDATE por fila) — con
+    // cientos de ONTs, un round-trip a Supabase por fila (~0.5-0.8s) hacia
+    // que este escaneo tardara varios minutos y el Dashboard se quedara
+    // "cargando" indefinidamente. Con 678 filas, ~2-4 requests en paralelo.
     const byKey = new Map(all.map((o) => [`${o.frame}/${o.slot}/${o.port}:${o.onuId}`, o]));
     const { data: known } = await supabaseAdmin
       .from('olt_onts')
       .select('id, frame, slot, port, ont_id')
       .eq('olt_device_id', device.id);
 
+    const onlineIds: string[] = [];
+    const offlineIds: string[] = [];
     for (const row of known ?? []) {
       const found = byKey.get(`${row.frame}/${row.slot}/${row.port}:${row.ont_id}`);
-      if (found) {
-        await supabaseAdmin
-          .from('olt_onts')
-          .update({ status: found.runState === 'working' ? 'online' : 'offline', last_synced_at: new Date().toISOString() })
-          .eq('id', row.id);
-      }
+      if (!found) continue;
+      (found.runState === 'working' ? onlineIds : offlineIds).push(row.id);
     }
+
+    const BATCH_SIZE = 200;
+    const chunk = (ids: string[]) => {
+      const batches: string[][] = [];
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) batches.push(ids.slice(i, i + BATCH_SIZE));
+      return batches;
+    };
+    const now = new Date().toISOString();
+    await Promise.all([
+      ...chunk(onlineIds).map((ids) =>
+        supabaseAdmin.from('olt_onts').update({ status: 'online', last_synced_at: now }).in('id', ids),
+      ),
+      ...chunk(offlineIds).map((ids) =>
+        supabaseAdmin.from('olt_onts').update({ status: 'offline', last_synced_at: now }).in('id', ids),
+      ),
+    ]);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[olt/summary] Fallo el escaneo global, usando cache local:', e);
