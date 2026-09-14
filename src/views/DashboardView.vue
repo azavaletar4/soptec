@@ -51,12 +51,13 @@ function goTo(path: string) {
 }
 
 /**
- * La lista real de "ONTs sin autorizar" vive en el detalle de cada OLT
- * (/olt/:id), no en /olt (que solo lista las OLTs registradas) — si hay una
- * sola OLT activa (caso normal), saltamos directo a su detalle en vez de
- * dejar al usuario un paso antes de ver el listado.
+ * Las listas reales ("sin autorizar", online/offline, señales bajas) viven
+ * en el detalle de cada OLT (/olt/:id), no en /olt (que solo lista las OLTs
+ * registradas) — si hay una sola OLT activa (caso normal), saltamos directo
+ * a su detalle (con el filtro correspondiente ya aplicado) en vez de dejar
+ * al usuario un paso antes de ver el listado.
  */
-async function goToUnconfigured() {
+async function goToOlt(filter?: 'online' | 'offline' | 'lowSignal') {
   if (!oltStore.devices.length) {
     try {
       await oltStore.fetchDevices();
@@ -65,11 +66,12 @@ async function goToUnconfigured() {
     }
   }
   if (oltStore.devices.length === 1) {
-    router.push(`/olt/${oltStore.devices[0].id}`);
+    router.push({ path: `/olt/${oltStore.devices[0].id}`, query: filter ? { filter } : undefined });
   } else {
     router.push('/olt');
   }
 }
+const goToUnconfigured = () => goToOlt();
 
 const oltCheckedAtLabel = computed(() => {
   const iso = dashboard.summary?.oltSummary.checkedAt;
@@ -145,21 +147,21 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
           </div>
           <span class="text-2xl">✨</span>
         </button>
-        <button class="kpi-tile bg-green-600/80" @click="goTo('/olt')">
+        <button class="kpi-tile bg-green-600/80" @click="goToOlt('online')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.online }}</div>
             <div class="text-sm text-white/85 mt-1">En línea</div>
           </div>
           <span class="text-2xl">🖧</span>
         </button>
-        <button class="kpi-tile bg-slate-600/80" @click="goTo('/olt')">
+        <button class="kpi-tile bg-slate-600/80" @click="goToOlt('offline')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.offline }}</div>
             <div class="text-sm text-white/85 mt-1">Desconectado</div>
           </div>
           <span class="text-2xl">✕</span>
         </button>
-        <button class="kpi-tile bg-orange-600/80" @click="goTo('/olt')">
+        <button class="kpi-tile bg-orange-600/80" @click="goToOlt('lowSignal')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.lowSignal }}</div>
             <div class="text-sm text-white/85 mt-1">Señales bajas</div>

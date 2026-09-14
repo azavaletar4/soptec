@@ -65,14 +65,39 @@ const profilesError = ref<string | null>(null);
 
 const signalLoadingId = ref<string | null>(null);
 const ontSearch = ref('');
+
+// Mismo umbral que server/src/routes/olt.ts (LOW_SIGNAL_THRESHOLD_DBM) — se
+// usa aqui solo para filtrar la tabla de abajo, el conteo real de la
+// tarjeta "Señales bajas" sigue viniendo del backend.
+const LOW_SIGNAL_THRESHOLD_DBM = -27;
+
+type OntStatusFilter = 'all' | 'online' | 'offline' | 'lowSignal';
+const statusFilter = ref<OntStatusFilter>('all');
+const STATUS_FILTER_LABEL: Record<OntStatusFilter, string> = {
+  all: 'Todas',
+  online: 'Online',
+  offline: 'Total offline',
+  lowSignal: 'Señales bajas',
+};
+
+const ontsTableEl = ref<HTMLElement | null>(null);
+/** Usado por las tarjetas del resumen: filtra la tabla de ONTs y hace scroll hasta ella. */
+function filterOntsBy(status: OntStatusFilter) {
+  statusFilter.value = status;
+  ontsTableEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 const filteredOnts = computed(() => {
   const q = ontSearch.value.trim().toLowerCase();
-  if (!q) return oltStore.onts;
-  return oltStore.onts.filter((o) =>
-    `${o.serial} ${o.clients?.first_name ?? ''} ${o.clients?.last_name ?? ''} ${o.frame}/${o.slot}/${o.port}:${o.ont_id}`
+  return oltStore.onts.filter((o) => {
+    if (statusFilter.value === 'online' && o.status !== 'online') return false;
+    if (statusFilter.value === 'offline' && o.status !== 'offline') return false;
+    if (statusFilter.value === 'lowSignal' && !(o.rx_power != null && o.rx_power < LOW_SIGNAL_THRESHOLD_DBM)) return false;
+    if (!q) return true;
+    return `${o.serial} ${o.clients?.first_name ?? ''} ${o.clients?.last_name ?? ''} ${o.frame}/${o.slot}/${o.port}:${o.ont_id}`
       .toLowerCase()
-      .includes(q),
-  );
+      .includes(q);
+  });
 });
 
 const STATUS_CLASS: Record<string, string> = {
@@ -146,6 +171,13 @@ async function loadUnconfigured() {
 }
 
 onMounted(async () => {
+  // Llegando desde el Dashboard (ej. tarjeta "Total offline") con
+  // ?filter=offline|online|lowSignal — aplica el filtro de una vez.
+  const queryFilter = route.query.filter;
+  if (queryFilter === 'online' || queryFilter === 'offline' || queryFilter === 'lowSignal') {
+    statusFilter.value = queryFilter;
+  }
+
   if (!oltStore.devices.length) await oltStore.fetchDevices();
   await Promise.all([oltStore.fetchOnts(deviceId.value), loadSummary(), loadHealth(), catalogsStore.fetchZones()]);
   // Secuencial (no sumada al Promise.all de arriba): evitar mas conexiones
@@ -572,27 +604,39 @@ const gauges = computed(() => {
           </div>
           <span class="text-2xl">✨</span>
         </div>
-        <div class="rounded-xl p-5 flex items-start justify-between" style="background:#16a34a">
+        <button
+          class="rounded-xl p-5 flex items-start justify-between text-left"
+          style="background:#16a34a"
+          @click="filterOntsBy('online')"
+        >
           <div>
             <div class="text-3xl font-bold text-white">{{ summaryLoading ? '—' : summary?.online ?? 0 }}</div>
             <div class="text-sm text-white/90 mt-1">Online</div>
           </div>
           <span class="text-2xl">🖧</span>
-        </div>
-        <div class="rounded-xl p-5 flex items-start justify-between" style="background:#475569">
+        </button>
+        <button
+          class="rounded-xl p-5 flex items-start justify-between text-left"
+          style="background:#475569"
+          @click="filterOntsBy('offline')"
+        >
           <div>
             <div class="text-3xl font-bold text-white">{{ summaryLoading ? '—' : summary?.offline ?? 0 }}</div>
             <div class="text-sm text-white/90 mt-1">Total offline</div>
           </div>
           <span class="text-2xl">✕</span>
-        </div>
-        <div class="rounded-xl p-5 flex items-start justify-between" style="background:#ea580c">
+        </button>
+        <button
+          class="rounded-xl p-5 flex items-start justify-between text-left"
+          style="background:#ea580c"
+          @click="filterOntsBy('lowSignal')"
+        >
           <div>
             <div class="text-3xl font-bold text-white">{{ summaryLoading ? '—' : summary?.lowSignal ?? 0 }}</div>
             <div class="text-sm text-white/90 mt-1">Señales bajas</div>
           </div>
           <span class="text-2xl">⚠</span>
-        </div>
+        </button>
       </div>
       <p class="text-xs text-slate-500 text-right mb-1">
         {{ summaryLoading ? 'Consultando...' : `Informacion valida a las ${checkedAtLabel}` }}
@@ -843,14 +887,20 @@ const gauges = computed(() => {
         <p v-if="importMessage" class="text-xs text-slate-400 mt-3">{{ importMessage }}</p>
       </div>
 
-      <h2 class="text-lg font-semibold mb-3">ONTs registradas</h2>
+      <div ref="ontsTableEl" class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 class="text-lg font-semibold">ONTs registradas</h2>
+        <div v-if="statusFilter !== 'all'" class="flex items-center gap-2 text-xs">
+          <span class="badge bg-sky-500/15 text-sky-400">Filtro: {{ STATUS_FILTER_LABEL[statusFilter] }} ({{ filteredOnts.length }})</span>
+          <button class="text-slate-400 hover:text-slate-100" @click="statusFilter = 'all'">Quitar filtro</button>
+        </div>
+      </div>
       <input
         v-model="ontSearch"
         placeholder="Buscar por serial, cliente o shelf/slot/port..."
         class="field-input mb-3"
       />
       <div class="table-shell">
-        <table class="w-full text-sm min-w-[760px]">
+        <table class="w-full text-sm min-w-[900px]">
           <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
             <tr>
               <th class="text-left px-4 py-3">Shelf/Slot/Port/ID</th>
@@ -859,14 +909,17 @@ const gauges = computed(() => {
               <th class="text-left px-4 py-3">Zona</th>
               <th class="text-left px-4 py-3">Estado</th>
               <th class="text-left px-4 py-3">Rx / Tx (dBm)</th>
+              <th class="text-left px-4 py-3">VLAN</th>
+              <th class="text-left px-4 py-3">Tipo</th>
+              <th class="text-left px-4 py-3">Autorizado</th>
               <th class="text-left px-4 py-3">TR-069</th>
               <th class="text-right px-4 py-3">Acciones</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="!filteredOnts.length">
-              <td colspan="8" class="px-4 py-6 text-center text-slate-500">
-                {{ ontSearch ? 'Sin resultados para esa busqueda.' : 'Sin ONTs. Sincroniza un puerto o registra una nueva.' }}
+              <td colspan="11" class="px-4 py-6 text-center text-slate-500">
+                {{ ontSearch || statusFilter !== 'all' ? 'Sin resultados para ese filtro/busqueda.' : 'Sin ONTs. Sincroniza un puerto o registra una nueva.' }}
               </td>
             </tr>
             <tr
@@ -894,6 +947,9 @@ const gauges = computed(() => {
                 <span class="badge" :class="STATUS_CLASS[ont.status]">{{ ont.status }}</span>
               </td>
               <td class="px-4 py-3 text-slate-400 text-xs">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
+              <td class="px-4 py-3 text-slate-400 text-xs">{{ ont.vlan ?? '—' }}</td>
+              <td class="px-4 py-3 text-slate-400 text-xs">{{ ont.onu_type ?? '—' }}</td>
+              <td class="px-4 py-3 text-slate-500 text-xs">{{ new Date(ont.created_at).toLocaleDateString('es-EC') }}</td>
               <td class="px-4 py-3">
                 <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-400">Activo</span>
                 <span v-else class="text-slate-500 text-xs">—</span>
