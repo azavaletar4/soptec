@@ -3,11 +3,15 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInventoryStore } from '@/stores/inventory';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type { InventoryProduct } from '@/types/domain';
 
 const router = useRouter();
 const inventoryStore = useInventoryStore();
+const auth = useAuthStore();
+
+const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
 const showModal = ref(false);
 const saving = ref(false);
@@ -22,6 +26,8 @@ const emptyForm = () => ({
   unit: 'unidad',
   price: 0,
   min_stock: 0,
+  purchase_date: '',
+  is_serialized: false,
 });
 const form = ref(emptyForm());
 
@@ -74,6 +80,8 @@ async function handleSubmit() {
       unit: form.value.unit || 'unidad',
       price: form.value.price,
       min_stock: form.value.min_stock,
+      purchase_date: form.value.purchase_date || null,
+      is_serialized: form.value.is_serialized,
     });
     showModal.value = false;
   } catch (e) {
@@ -86,6 +94,17 @@ async function handleSubmit() {
 function goToDetail(p: InventoryProduct) {
   router.push(`/inventario/${p.id}`);
 }
+
+async function handleDelete(p: InventoryProduct) {
+  if (!canDelete.value) return;
+  const ok = confirm(`¿Eliminar "${p.name}"? Dejará de aparecer en el inventario, pero se conserva su historial (Kardex/equipos) para auditoría.`);
+  if (!ok) return;
+  try {
+    await inventoryStore.deactivateProduct(p.id);
+  } catch (e) {
+    inventoryStore.error = getErrorMessage(e, 'Error al eliminar el producto');
+  }
+}
 </script>
 
 <template>
@@ -95,7 +114,10 @@ function goToDetail(p: InventoryProduct) {
         <h1 class="text-2xl font-semibold">Inventario</h1>
         <p class="text-slate-400 text-sm mt-1">{{ kpis.total }} productos · {{ kpis.lowStock }} con stock bajo</p>
       </div>
-      <button class="btn-primary" @click="openCreate">+ Nuevo producto</button>
+      <div class="flex gap-2">
+        <button class="btn-secondary" @click="router.push('/inventario/devoluciones')">Devoluciones</button>
+        <button class="btn-primary" @click="openCreate">+ Nuevo producto</button>
+      </div>
     </div>
 
     <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))">
@@ -108,7 +130,7 @@ function goToDetail(p: InventoryProduct) {
         <div class="text-xs text-slate-500 mt-1">Con stock bajo el mínimo</div>
       </div>
       <div class="surface p-4">
-        <div class="text-2xl font-semibold">$ {{ kpis.totalValue.toFixed(2) }}</div>
+        <div class="text-2xl font-semibold">S/ {{ kpis.totalValue.toFixed(2) }}</div>
         <div class="text-xs text-slate-500 mt-1">Valor total en stock</div>
       </div>
     </div>
@@ -140,14 +162,17 @@ function goToDetail(p: InventoryProduct) {
             <th class="text-right px-4 py-3">Mínimo</th>
             <th class="text-left px-4 py-3">Unidad</th>
             <th class="text-right px-4 py-3">Precio</th>
+            <th class="text-left px-4 py-3">Fecha de compra</th>
+            <th class="text-left px-4 py-3">Control</th>
+            <th class="text-right px-4 py-3">Acciones</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="inventoryStore.loading">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+            <td colspan="9" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!filteredProducts.length">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">No hay productos en este filtro.</td>
+            <td colspan="9" class="px-4 py-6 text-center text-slate-500">No hay productos en este filtro.</td>
           </tr>
           <tr
             v-for="p in filteredProducts"
@@ -164,7 +189,15 @@ function goToDetail(p: InventoryProduct) {
             </td>
             <td class="px-4 py-3 text-right text-slate-400">{{ p.min_stock }}</td>
             <td class="px-4 py-3 text-slate-400">{{ p.unit }}</td>
-            <td class="px-4 py-3 text-right text-slate-400">$ {{ Number(p.price).toFixed(2) }}</td>
+            <td class="px-4 py-3 text-right text-slate-400">S/ {{ Number(p.price).toFixed(2) }}</td>
+            <td class="px-4 py-3 text-slate-400 text-xs">{{ p.purchase_date ?? '—' }}</td>
+            <td class="px-4 py-3">
+              <span v-if="p.is_serialized" class="badge bg-sky-500/15 text-sky-400">Por serie/MAC</span>
+              <span v-else class="text-slate-600 text-xs">Por cantidad</span>
+            </td>
+            <td class="px-4 py-3 text-right">
+              <button v-if="canDelete" class="text-xs text-red-400 hover:text-red-300" @click.stop="handleDelete(p)">Eliminar</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -191,7 +224,7 @@ function goToDetail(p: InventoryProduct) {
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label class="block text-xs text-slate-400 mb-1">Precio</label>
               <input v-model.number="form.price" type="number" step="0.01" min="0" class="field-input" />
@@ -201,6 +234,19 @@ function goToDetail(p: InventoryProduct) {
               <input v-model.number="form.min_stock" type="number" step="1" min="0" class="field-input" />
             </div>
           </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-400 mb-1">Fecha de compra</label>
+            <input v-model="form.purchase_date" type="date" class="field-input" />
+          </div>
+
+          <label class="flex items-start gap-2 mb-4 text-sm text-slate-300">
+            <input v-model="form.is_serialized" type="checkbox" class="mt-0.5" />
+            <span>
+              Control por número de serie / MAC
+              <span class="block text-xs text-slate-500">Para ONUs, routers o antenas: cada equipo se registra individualmente en vez de llevar solo un stock numérico.</span>
+            </span>
+          </label>
 
           <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>
 

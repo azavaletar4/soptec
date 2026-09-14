@@ -7,8 +7,9 @@ import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
+import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { getErrorMessage } from '@/lib/errors';
-import type { Installation, InstallationStatus, ServiceContract, InventoryMovement } from '@/types/domain';
+import type { Installation, InstallationStatus, ServiceContract, InventoryMovement, InventoryUnit } from '@/types/domain';
 
 const router = useRouter();
 const installationsStore = useInstallationsStore();
@@ -16,6 +17,7 @@ const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
 const inventoryStore = useInventoryStore();
+const inventoryUnitsStore = useInventoryUnitsStore();
 
 const showModal = ref(false);
 const saving = ref(false);
@@ -107,10 +109,59 @@ async function openMaterialsModal(inst: Installation) {
   materialError.value = null;
   showMaterialsModal.value = true;
   loadingMaterials.value = true;
+  unitForm.value = { productId: '', unitId: '' };
+  unitError.value = null;
   try {
-    materials.value = await inventoryStore.fetchMovementsByInstallation(inst.id);
+    const [mats, units] = await Promise.all([
+      inventoryStore.fetchMovementsByInstallation(inst.id),
+      inventoryUnitsStore.fetchUnitsByInstallation(inst.id),
+    ]);
+    materials.value = mats;
+    assignedUnits.value = units;
   } finally {
     loadingMaterials.value = false;
+  }
+}
+
+// ---- Equipos serializados asignados a la instalacion (control por serie/MAC) ----
+const serializedProducts = computed(() => inventoryStore.products.filter((p) => p.is_serialized));
+const assignedUnits = ref<InventoryUnit[]>([]);
+const availableUnits = ref<InventoryUnit[]>([]);
+const loadingAvailableUnits = ref(false);
+const unitForm = ref({ productId: '', unitId: '' });
+const savingUnit = ref(false);
+const unitError = ref<string | null>(null);
+
+async function onUnitProductChange() {
+  unitForm.value.unitId = '';
+  availableUnits.value = [];
+  if (!unitForm.value.productId) return;
+  loadingAvailableUnits.value = true;
+  try {
+    const units = await inventoryUnitsStore.fetchUnitsByProduct(unitForm.value.productId);
+    availableUnits.value = units.filter((u) => u.status === 'in_stock');
+  } finally {
+    loadingAvailableUnits.value = false;
+  }
+}
+
+async function handleAssignUnit() {
+  if (!materialsInstallation.value || !unitForm.value.unitId) return;
+  savingUnit.value = true;
+  unitError.value = null;
+  try {
+    await inventoryUnitsStore.assignUnit(
+      unitForm.value.unitId,
+      materialsInstallation.value.client_id,
+      materialsInstallation.value.id,
+      `Instalación ${materialsInstallation.value.contracts?.contract_number ?? materialsInstallation.value.id}`,
+    );
+    assignedUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(materialsInstallation.value.id);
+    await onUnitProductChange();
+  } catch (e) {
+    unitError.value = getErrorMessage(e, 'Error al asignar el equipo');
+  } finally {
+    savingUnit.value = false;
   }
 }
 
@@ -408,6 +459,44 @@ function formatDate(value: string | null) {
             </button>
           </form>
           <p v-if="materialError" class="text-xs text-red-400 mt-2">{{ materialError }}</p>
+
+          <div class="border-t border-slate-800 mt-4 pt-4">
+            <h3 class="text-sm font-semibold mb-1">Equipos asignados (serie/MAC)</h3>
+            <p v-if="!serializedProducts.length" class="text-xs text-slate-500">No hay productos con control por serie/MAC configurados en Inventario.</p>
+            <template v-else>
+              <ul v-if="assignedUnits.length" class="space-y-1.5 mb-3">
+                <li v-for="u in assignedUnits" :key="u.id" class="flex justify-between text-xs">
+                  <span>{{ u.product?.name ?? 'Equipo' }} — {{ u.serial_number || u.mac_address }}</span>
+                  <span class="text-slate-500">{{ u.serial_number && u.mac_address ? u.mac_address : '' }}</span>
+                </li>
+              </ul>
+              <p v-else class="text-xs text-slate-500 mb-3">Sin equipos asignados a esta instalación todavía.</p>
+
+              <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAssignUnit">
+                <div class="flex-1 min-w-[160px]">
+                  <label class="block text-xs text-slate-400 mb-1">Producto</label>
+                  <select v-model="unitForm.productId" required class="field-input" @change="onUnitProductChange">
+                    <option value="" disabled>Selecciona...</option>
+                    <option v-for="p in serializedProducts" :key="p.id" :value="p.id">{{ p.name }}</option>
+                  </select>
+                </div>
+                <div class="flex-1 min-w-[180px]">
+                  <label class="block text-xs text-slate-400 mb-1">Equipo disponible</label>
+                  <select v-model="unitForm.unitId" required class="field-input" :disabled="!unitForm.productId || loadingAvailableUnits">
+                    <option value="" disabled>{{ loadingAvailableUnits ? 'Cargando...' : 'Selecciona...' }}</option>
+                    <option v-for="u in availableUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
+                  </select>
+                  <p v-if="unitForm.productId && !loadingAvailableUnits && !availableUnits.length" class="text-xs text-amber-400 mt-1">
+                    Sin unidades disponibles en bodega para este producto.
+                  </p>
+                </div>
+                <button type="submit" :disabled="savingUnit || !unitForm.unitId" class="btn-secondary text-xs">
+                  {{ savingUnit ? 'Asignando...' : '+ Asignar' }}
+                </button>
+              </form>
+              <p v-if="unitError" class="text-xs text-red-400 mt-2">{{ unitError }}</p>
+            </template>
+          </div>
 
           <div class="flex justify-end mt-4">
             <button class="btn-ghost" @click="showMaterialsModal = false">Cerrar</button>

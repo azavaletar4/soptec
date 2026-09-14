@@ -8,6 +8,7 @@ export type TicketCategory = 'no_service' | 'slow_speed' | 'billing' | 'installa
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled';
 export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
 export type InventoryMovementType = 'ingreso' | 'egreso';
+export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired';
 export type InfraElementoTipo = 'caja_nap' | 'splitter' | 'manga' | 'armario' | 'poste' | 'camara' | 'otro';
 
 export interface Zone {
@@ -138,8 +139,41 @@ export interface InventoryProduct {
   min_stock: number;
   current_stock: number;
   is_active: boolean;
+  is_serialized: boolean;
+  purchase_date: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface InventoryUnit {
+  id: string;
+  product_id: string;
+  serial_number: string | null;
+  mac_address: string | null;
+  status: InventoryUnitStatus;
+  client_id: string | null;
+  installation_id: string | null;
+  assigned_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  product?: Pick<InventoryProduct, 'id' | 'name' | 'category'> | null;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
+}
+
+export interface InventoryUnitEvent {
+  id: string;
+  unit_id: string;
+  from_status: InventoryUnitStatus | null;
+  to_status: InventoryUnitStatus;
+  client_id: string | null;
+  installation_id: string | null;
+  reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  author?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name'> | null;
 }
 
 export interface InventoryMovement {

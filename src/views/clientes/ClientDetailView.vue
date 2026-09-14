@@ -9,6 +9,7 @@ import { useTicketsStore } from '@/stores/tickets';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
+import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type {
@@ -17,6 +18,8 @@ import type {
   ContractStatus,
   DocumentType,
   Invoice,
+  InventoryUnit,
+  InventoryUnitStatus,
   InvoiceStatus,
   ServiceContract,
   Ticket,
@@ -32,6 +35,7 @@ const ticketsStore = useTicketsStore();
 const invoicesStore = useInvoicesStore();
 const mikrotikStore = useMikrotikStore();
 const clientPhotosStore = useClientPhotosStore();
+const inventoryUnitsStore = useInventoryUnitsStore();
 const auth = useAuthStore();
 
 const canCreateTickets = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
@@ -252,6 +256,12 @@ async function loadInvoices() {
   loadingInvoices.value = false;
 }
 
+async function loadUnits() {
+  loadingUnits.value = true;
+  assignedUnits.value = await inventoryUnitsStore.fetchUnitsByClient(clientId.value);
+  loadingUnits.value = false;
+}
+
 onMounted(async () => {
   if (!clientsStore.clients.length) await clientsStore.fetchClients();
   gpsForm.value = { latitude: client.value?.latitude ?? null, longitude: client.value?.longitude ?? null };
@@ -261,9 +271,57 @@ onMounted(async () => {
     loadTickets(),
     loadInvoices(),
     loadPhotos(),
+    loadUnits(),
     mikrotikStore.fetchDevices(),
   ]);
 });
+
+// ---- Equipos asignados (control por serie/MAC, Fase 11c) ----
+const assignedUnits = ref<InventoryUnit[]>([]);
+const loadingUnits = ref(true);
+
+const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
+  in_stock: 'En bodega',
+  assigned: 'Asignado',
+  damaged: 'Dañado',
+  in_repair: 'En reparación',
+  retired: 'Dado de baja',
+};
+const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
+  in_stock: 'bg-green-500/15 text-green-400',
+  assigned: 'bg-sky-500/15 text-sky-400',
+  damaged: 'bg-red-500/15 text-red-400',
+  in_repair: 'bg-amber-500/15 text-amber-400',
+  retired: 'bg-slate-500/15 text-slate-400',
+};
+
+const showReturnModal = ref(false);
+const returnUnitTarget = ref<InventoryUnit | null>(null);
+const returnForm = ref({ condition: 'in_stock' as 'in_stock' | 'damaged' | 'in_repair', reason: '' });
+const returnSaving = ref(false);
+const returnError = ref<string | null>(null);
+
+function openReturn(unit: InventoryUnit) {
+  returnUnitTarget.value = unit;
+  returnForm.value = { condition: 'in_stock', reason: '' };
+  returnError.value = null;
+  showReturnModal.value = true;
+}
+
+async function handleReturn() {
+  if (!returnUnitTarget.value) return;
+  returnSaving.value = true;
+  returnError.value = null;
+  try {
+    await inventoryUnitsStore.returnUnit(returnUnitTarget.value.id, returnForm.value.condition, returnForm.value.reason || undefined);
+    showReturnModal.value = false;
+    await loadUnits();
+  } catch (e) {
+    returnError.value = getErrorMessage(e, 'Error al registrar la devolución');
+  } finally {
+    returnSaving.value = false;
+  }
+}
 
 function openContractModal() {
   editingContract.value = null;
@@ -497,6 +555,38 @@ async function handleCreateContract() {
         </table>
       </div>
 
+      <h2 class="text-lg font-semibold mb-3">Equipos asignados</h2>
+      <p v-if="loadingUnits" class="text-slate-500 text-sm">Cargando...</p>
+      <p v-else-if="!assignedUnits.length" class="text-slate-500 text-sm mb-8">Este cliente no tiene equipos asignados.</p>
+      <div v-else class="table-shell mb-8">
+        <table class="w-full text-sm min-w-[560px]">
+          <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+            <tr>
+              <th class="text-left px-4 py-3">Equipo</th>
+              <th class="text-left px-4 py-3">Serie</th>
+              <th class="text-left px-4 py-3">MAC</th>
+              <th class="text-left px-4 py-3">Estado</th>
+              <th class="text-right px-4 py-3">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in assignedUnits" :key="u.id" class="border-t border-slate-800">
+              <td class="px-4 py-3">{{ u.product?.name ?? 'Equipo' }}</td>
+              <td class="px-4 py-3 font-mono text-xs">{{ u.serial_number || '—' }}</td>
+              <td class="px-4 py-3 font-mono text-xs">{{ u.mac_address || '—' }}</td>
+              <td class="px-4 py-3">
+                <span class="badge" :class="UNIT_STATUS_CLASS[u.status]">{{ UNIT_STATUS_LABEL[u.status] }}</span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <button v-if="u.status === 'assigned'" class="text-xs text-amber-400 hover:text-amber-300" @click="openReturn(u)">
+                  Registrar devolución
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold">Tickets de soporte</h2>
         <router-link v-if="canCreateTickets" to="/soporte" class="text-sm text-sky-400 hover:text-sky-300">+ Nuevo ticket</router-link>
@@ -669,6 +759,38 @@ async function handleCreateContract() {
             </button>
             <button type="submit" :disabled="savingContract" class="btn-primary">
               {{ savingContract ? 'Guardando...' : editingContract ? 'Guardar cambios' : 'Crear contrato' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showReturnModal" class="modal-overlay">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleReturn">
+          <h2 class="text-lg font-semibold mb-1">Registrar devolución</h2>
+          <p class="text-xs text-slate-500 mb-4 font-mono">{{ returnUnitTarget?.serial_number || returnUnitTarget?.mac_address }}</p>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-400 mb-1">Condición del equipo</label>
+            <select v-model="returnForm.condition" class="field-input">
+              <option value="in_stock">Buen estado — listo para reasignar</option>
+              <option value="damaged">Dañado</option>
+              <option value="in_repair">Enviar a reparación</option>
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-400 mb-1">Motivo</label>
+            <input v-model="returnForm.reason" class="field-input" placeholder="ej. Baja del servicio, cambio de equipo..." />
+          </div>
+
+          <p v-if="returnError" class="text-sm text-red-400 mb-3">{{ returnError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showReturnModal = false">Cancelar</button>
+            <button type="submit" :disabled="returnSaving" class="btn-primary">
+              {{ returnSaving ? 'Guardando...' : 'Registrar devolución' }}
             </button>
           </div>
         </form>

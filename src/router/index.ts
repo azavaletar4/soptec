@@ -67,6 +67,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/inventario/devoluciones',
+      name: 'inventario-devoluciones',
+      component: () => import('@/views/inventario/DevolucionesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/inventario/:id',
       name: 'inventario-detalle',
       component: () => import('@/views/inventario/InventarioProductoView.vue'),
