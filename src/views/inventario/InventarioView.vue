@@ -112,7 +112,7 @@ async function handleDelete(p: InventoryProduct) {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Inventario</h1>
-        <p class="text-slate-400 text-sm mt-1">{{ kpis.total }} productos · {{ kpis.lowStock }} con stock bajo</p>
+        <p class="text-slate-600 text-sm mt-1">{{ kpis.total }} productos · {{ kpis.lowStock }} con stock bajo</p>
       </div>
       <div class="flex gap-2">
         <button class="btn-secondary" @click="router.push('/inventario/devoluciones')">Devoluciones</button>
@@ -126,7 +126,7 @@ async function handleDelete(p: InventoryProduct) {
         <div class="text-xs text-slate-500 mt-1">Productos activos</div>
       </div>
       <div class="surface p-4">
-        <div class="text-2xl font-semibold" :class="kpis.lowStock ? 'text-amber-400' : ''">{{ kpis.lowStock }}</div>
+        <div class="text-2xl font-semibold" :class="kpis.lowStock ? 'text-amber-600' : ''">{{ kpis.lowStock }}</div>
         <div class="text-xs text-slate-500 mt-1">Con stock bajo el mínimo</div>
       </div>
       <div class="surface p-4">
@@ -143,18 +143,18 @@ async function handleDelete(p: InventoryProduct) {
       </select>
       <button
         class="px-3 py-1.5 rounded-lg text-xs font-medium"
-        :class="lowStockOnly ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+        :class="lowStockOnly ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
         @click="lowStockOnly = !lowStockOnly"
       >
         ⚠ Solo stock bajo
       </button>
     </div>
 
-    <p v-if="inventoryStore.error" class="mb-4 text-sm text-red-400">{{ inventoryStore.error }}</p>
+    <p v-if="inventoryStore.error" class="mb-4 text-sm text-red-600">{{ inventoryStore.error }}</p>
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[760px]">
-        <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Producto</th>
             <th class="text-left px-4 py-3">Categoría</th>
@@ -177,26 +177,26 @@ async function handleDelete(p: InventoryProduct) {
           <tr
             v-for="p in filteredProducts"
             :key="p.id"
-            class="border-t border-slate-800 hover:bg-slate-900/50 cursor-pointer"
+            class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
             @click="goToDetail(p)"
           >
-            <td class="px-4 py-3 text-slate-100">{{ p.name }}</td>
-            <td class="px-4 py-3 text-slate-400">{{ p.category ?? '—' }}</td>
+            <td class="px-4 py-3 text-slate-900">{{ p.name }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ p.category ?? '—' }}</td>
             <td class="px-4 py-3 text-right">
-              <span class="badge" :class="isLowStock(p) ? 'bg-amber-500/15 text-amber-400' : 'bg-green-500/15 text-green-400'">
+              <span class="badge" :class="isLowStock(p) ? 'bg-amber-500/15 text-amber-600' : 'bg-green-500/15 text-green-600'">
                 {{ p.current_stock }}
               </span>
             </td>
-            <td class="px-4 py-3 text-right text-slate-400">{{ p.min_stock }}</td>
-            <td class="px-4 py-3 text-slate-400">{{ p.unit }}</td>
-            <td class="px-4 py-3 text-right text-slate-400">S/ {{ Number(p.price).toFixed(2) }}</td>
-            <td class="px-4 py-3 text-slate-400 text-xs">{{ p.purchase_date ?? '—' }}</td>
+            <td class="px-4 py-3 text-right text-slate-600">{{ p.min_stock }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ p.unit }}</td>
+            <td class="px-4 py-3 text-right text-slate-600">S/ {{ Number(p.price).toFixed(2) }}</td>
+            <td class="px-4 py-3 text-slate-600 text-xs">{{ p.purchase_date ?? '—' }}</td>
             <td class="px-4 py-3">
-              <span v-if="p.is_serialized" class="badge bg-sky-500/15 text-sky-400">Por serie/MAC</span>
-              <span v-else class="text-slate-600 text-xs">Por cantidad</span>
+              <span v-if="p.is_serialized" class="badge bg-sky-500/15 text-sky-600">Por serie/MAC</span>
+              <span v-else class="text-slate-400 text-xs">Por cantidad</span>
             </td>
             <td class="px-4 py-3 text-right">
-              <button v-if="canDelete" class="text-xs text-red-400 hover:text-red-300" @click.stop="handleDelete(p)">Eliminar</button>
+              <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click.stop="handleDelete(p)">Eliminar</button>
             </td>
           </tr>
         </tbody>
@@ -209,38 +209,38 @@ async function handleDelete(p: InventoryProduct) {
           <h2 class="text-lg font-semibold mb-4">Nuevo producto</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Nombre</label>
+            <label class="block text-xs text-slate-600 mb-1">Nombre</label>
             <input v-model="form.name" required class="field-input" />
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Categoría</label>
+              <label class="block text-xs text-slate-600 mb-1">Categoría</label>
               <input v-model="form.category" placeholder="ej. Cables, Routers..." class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Unidad</label>
+              <label class="block text-xs text-slate-600 mb-1">Unidad</label>
               <input v-model="form.unit" placeholder="unidad, metro, caja..." class="field-input" />
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Precio</label>
+              <label class="block text-xs text-slate-600 mb-1">Precio</label>
               <input v-model.number="form.price" type="number" step="0.01" min="0" class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Stock mínimo</label>
+              <label class="block text-xs text-slate-600 mb-1">Stock mínimo</label>
               <input v-model.number="form.min_stock" type="number" step="1" min="0" class="field-input" />
             </div>
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Fecha de compra</label>
+            <label class="block text-xs text-slate-600 mb-1">Fecha de compra</label>
             <input v-model="form.purchase_date" type="date" class="field-input" />
           </div>
 
-          <label class="flex items-start gap-2 mb-4 text-sm text-slate-300">
+          <label class="flex items-start gap-2 mb-4 text-sm text-slate-700">
             <input v-model="form.is_serialized" type="checkbox" class="mt-0.5" />
             <span>
               Control por número de serie / MAC
@@ -248,7 +248,7 @@ async function handleDelete(p: InventoryProduct) {
             </span>
           </label>
 
-          <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>
+          <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showModal = false">Cancelar</button>

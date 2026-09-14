@@ -40,10 +40,10 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   closed: 'Cerrado',
 };
 const STATUS_CLASS: Record<TicketStatus, string> = {
-  open: 'bg-yellow-500/15 text-yellow-400',
-  in_progress: 'bg-sky-500/15 text-sky-400',
-  resolved: 'bg-green-500/15 text-green-400',
-  closed: 'bg-slate-500/15 text-slate-400',
+  open: 'bg-yellow-500/15 text-yellow-600',
+  in_progress: 'bg-sky-500/15 text-sky-600',
+  resolved: 'bg-green-500/15 text-green-600',
+  closed: 'bg-slate-500/15 text-slate-600',
 };
 const PRIORITY_LABEL: Record<TicketPriority, string> = {
   low: 'Baja',
@@ -52,10 +52,10 @@ const PRIORITY_LABEL: Record<TicketPriority, string> = {
   urgent: 'Urgente',
 };
 const PRIORITY_CLASS: Record<TicketPriority, string> = {
-  low: 'bg-slate-500/15 text-slate-400',
-  medium: 'bg-sky-500/15 text-sky-400',
-  high: 'bg-orange-500/15 text-orange-400',
-  urgent: 'bg-red-500/15 text-red-400',
+  low: 'bg-slate-500/15 text-slate-600',
+  medium: 'bg-sky-500/15 text-sky-600',
+  high: 'bg-orange-500/15 text-orange-600',
+  urgent: 'bg-red-500/15 text-red-600',
 };
 const CATEGORY_LABEL: Record<TicketCategory, string> = {
   no_service: 'Sin servicio',
@@ -146,7 +146,7 @@ function formatDate(value: string) {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Soporte</h1>
-        <p class="text-slate-400 text-sm mt-1">{{ ticketsStore.tickets.length }} tickets registrados</p>
+        <p class="text-slate-600 text-sm mt-1">{{ ticketsStore.tickets.length }} tickets registrados</p>
       </div>
       <button v-if="canCreateTickets" class="btn-primary" @click="openCreate">
         + Nuevo ticket
@@ -164,18 +164,18 @@ function formatDate(value: string) {
         v-for="tab in STATUS_TABS"
         :key="tab.value"
         class="px-3 py-1.5 rounded-lg text-xs font-medium"
-        :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+        :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
         @click="statusFilter = tab.value"
       >
         {{ tab.label }}
       </button>
     </div>
 
-    <p v-if="ticketsStore.error" class="mb-4 text-sm text-red-400">{{ ticketsStore.error }}</p>
+    <p v-if="ticketsStore.error" class="mb-4 text-sm text-red-600">{{ ticketsStore.error }}</p>
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[820px]">
-        <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Ticket</th>
             <th class="text-left px-4 py-3">Cliente</th>
@@ -197,17 +197,17 @@ function formatDate(value: string) {
           <tr
             v-for="t in filteredTickets"
             :key="t.id"
-            class="border-t border-slate-800 hover:bg-slate-900/50 cursor-pointer"
+            class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
             @click="goToDetail(t)"
           >
             <td class="px-4 py-3">
               <div class="font-mono text-xs text-slate-500">{{ t.ticket_number }}</div>
-              <div class="text-slate-100">{{ t.title }}</div>
+              <div class="text-slate-900">{{ t.title }}</div>
             </td>
-            <td class="px-4 py-3 text-slate-400">
+            <td class="px-4 py-3 text-slate-600">
               {{ t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : '—' }}
             </td>
-            <td class="px-4 py-3 text-slate-400">{{ CATEGORY_LABEL[t.category] }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ CATEGORY_LABEL[t.category] }}</td>
             <td class="px-4 py-3">
               <span class="badge" :class="PRIORITY_CLASS[t.priority]">
                 {{ PRIORITY_LABEL[t.priority] }}
@@ -218,8 +218,8 @@ function formatDate(value: string) {
                 {{ STATUS_LABEL[t.status] }}
               </span>
             </td>
-            <td class="px-4 py-3 text-slate-400">{{ t.assigned_profile?.full_name || t.assigned_profile?.email || 'Sin asignar' }}</td>
-            <td class="px-4 py-3 text-slate-400">{{ t.points != null ? t.points : '—' }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ t.assigned_profile?.full_name || t.assigned_profile?.email || 'Sin asignar' }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ t.points != null ? t.points : '—' }}</td>
             <td class="px-4 py-3 text-slate-500 text-xs">{{ formatDate(t.created_at) }}</td>
           </tr>
         </tbody>
@@ -235,7 +235,7 @@ function formatDate(value: string) {
           <h2 class="text-lg font-semibold mb-4">Nuevo ticket</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Cliente</label>
+            <label class="block text-xs text-slate-600 mb-1">Cliente</label>
             <input
               v-model="clientFilter"
               placeholder="Buscar por nombre o documento..."
@@ -254,12 +254,12 @@ function formatDate(value: string) {
           </div>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Título</label>
+            <label class="block text-xs text-slate-600 mb-1">Título</label>
             <input v-model="form.title" required class="field-input" />
           </div>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Descripción</label>
+            <label class="block text-xs text-slate-600 mb-1">Descripción</label>
             <textarea
               v-model="form.description"
               rows="3"
@@ -269,20 +269,20 @@ function formatDate(value: string) {
 
           <div class="grid grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Categoría</label>
+              <label class="block text-xs text-slate-600 mb-1">Categoría</label>
               <select v-model="form.category" class="field-input">
                 <option v-for="(label, value) in CATEGORY_LABEL" :key="value" :value="value">{{ label }}</option>
               </select>
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Prioridad</label>
+              <label class="block text-xs text-slate-600 mb-1">Prioridad</label>
               <select v-model="form.priority" class="field-input">
                 <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
               </select>
             </div>
           </div>
 
-          <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>
+          <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showModal = false">

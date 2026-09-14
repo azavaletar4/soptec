@@ -9,13 +9,13 @@ html {
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+  @apply bg-white text-slate-900 antialiased;
 }
 
-/* Scrollbar mas discreto, consistente con el tema oscuro. */
+/* Scrollbar mas discreto, consistente con el tema claro. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: theme(colors.slate.700) transparent;
+  scrollbar-color: theme(colors.slate.300) transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
@@ -25,13 +25,13 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: theme(colors.slate.700);
+  background-color: theme(colors.slate.300);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background-color: theme(colors.slate.600);
+  background-color: theme(colors.slate.400);
 }
 
 @layer base {
@@ -60,7 +60,7 @@ body {
   }
   input::placeholder,
   textarea::placeholder {
-    @apply text-slate-600;
+    @apply text-slate-400;
   }
 
   table {
@@ -82,51 +82,51 @@ body {
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
       transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
-      bg-slate-800 text-slate-100 border border-slate-700/60 hover:bg-slate-700 hover:border-slate-600;
+      bg-slate-100 text-slate-900 border border-slate-300 hover:bg-slate-200 hover:border-slate-400;
   }
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
       transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
-      bg-transparent text-slate-400 hover:text-slate-100 hover:bg-slate-800/60;
+      bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100;
   }
   .btn-danger {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
       transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
-      bg-transparent text-red-400 hover:bg-red-500/10 hover:text-red-300;
+      bg-transparent text-red-600 hover:bg-red-500/10 hover:text-red-700;
   }
 
   /* Tarjetas / superficies */
   .surface {
-    @apply rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm;
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
   }
   .surface-hover {
-    @apply rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm transition-colors duration-150 hover:border-slate-700;
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm transition-colors duration-150 hover:border-slate-300;
   }
 
   /* Campos de formulario */
   .field-label {
-    @apply block text-xs font-medium text-slate-400 mb-1.5;
+    @apply block text-xs font-medium text-slate-600 mb-1.5;
   }
   .field-input {
-    @apply w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950/80 text-sm text-slate-100
-      placeholder:text-slate-600;
+    @apply w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900
+      placeholder:text-slate-400;
   }
 
   /* Tablas */
   .table-shell {
-    @apply rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden overflow-x-auto;
+    @apply rounded-xl border border-slate-200 bg-white overflow-hidden overflow-x-auto;
   }
   .table-shell table {
     @apply w-full text-sm;
   }
   .table-shell thead {
-    @apply bg-slate-900/80 text-slate-500 text-[11px] uppercase tracking-wider;
+    @apply bg-slate-50 text-slate-600 text-[11px] uppercase tracking-wider;
   }
   .table-shell tbody tr {
-    @apply border-t border-slate-800/80 transition-colors duration-150;
+    @apply border-t border-slate-200 transition-colors duration-150;
   }
   .table-shell tbody tr:hover {
-    @apply bg-slate-800/40;
+    @apply bg-slate-50;
   }
 
   /* Insignias de estado */
@@ -136,10 +136,10 @@ body {
 
   /* Modales */
   .modal-overlay {
-    @apply fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4;
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-sm p-4;
   }
   .modal-panel {
-    @apply rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-black/40;
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/10;
   }
 
   /* Tarjeta de KPI a color (estilo SmartOLT) */

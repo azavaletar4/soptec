@@ -83,16 +83,16 @@ async function handleToggleSecret(secret: PppSecret) {
 
 <template>
   <AppLayout>
-    <button class="text-sm text-slate-400 hover:text-slate-100 mb-4" @click="router.push('/mikrotik')">
+    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push('/mikrotik')">
       ← Volver a MikroTik
     </button>
 
     <div v-if="!device" class="text-slate-500">Router no encontrado.</div>
     <template v-else>
       <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
-      <p class="text-slate-400 text-sm mb-6">{{ device.host }}:{{ device.port }}</p>
+      <p class="text-slate-600 text-sm mb-6">{{ device.host }}:{{ device.port }}</p>
 
-      <p v-if="loadError" class="mb-4 text-sm text-red-400">{{ loadError }}</p>
+      <p v-if="loadError" class="mb-4 text-sm text-red-600">{{ loadError }}</p>
       <p v-else-if="loading" class="text-slate-500 text-sm mb-6">Consultando el router...</p>
 
       <template v-else>
@@ -123,7 +123,7 @@ async function handleToggleSecret(secret: PppSecret) {
         />
         <div class="table-shell mb-8">
           <table class="w-full text-sm min-w-[640px]">
-            <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
               <tr>
                 <th class="text-left px-4 py-3">Usuario</th>
                 <th class="text-left px-4 py-3">Perfil</th>
@@ -138,13 +138,13 @@ async function handleToggleSecret(secret: PppSecret) {
                   {{ secretSearch ? 'Sin resultados para esa busqueda.' : 'Sin usuarios PPPoE.' }}
                 </td>
               </tr>
-              <tr v-for="s in filteredSecrets" :key="s['.id']" class="border-t border-slate-800">
+              <tr v-for="s in filteredSecrets" :key="s['.id']" class="border-t border-slate-200">
                 <td class="px-4 py-3 font-mono text-xs">{{ s.name }}</td>
-                <td class="px-4 py-3 text-slate-400">{{ s.profile }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ s.profile }}</td>
                 <td class="px-4 py-3">
                   <span
                     class="badge"
-                    :class="activeByName.has(s.name) ? 'bg-green-500/15 text-green-400' : 'bg-slate-500/15 text-slate-400'"
+                    :class="activeByName.has(s.name) ? 'bg-green-500/15 text-green-600' : 'bg-slate-500/15 text-slate-600'"
                   >
                     {{ activeByName.has(s.name) ? 'Si' : 'No' }}
                   </span>
@@ -152,13 +152,13 @@ async function handleToggleSecret(secret: PppSecret) {
                 <td class="px-4 py-3">
                   <span
                     class="badge"
-                    :class="s.disabled === 'true' ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400'"
+                    :class="s.disabled === 'true' ? 'bg-red-500/15 text-red-600' : 'bg-green-500/15 text-green-600'"
                   >
                     {{ s.disabled === 'true' ? 'Deshabilitado' : 'Habilitado' }}
                   </span>
                 </td>
                 <td class="px-4 py-3 text-right">
-                  <button class="text-sky-400 hover:underline text-xs" @click="handleToggleSecret(s)">
+                  <button class="text-sky-600 hover:underline text-xs" @click="handleToggleSecret(s)">
                     {{ s.disabled === 'true' ? 'Habilitar' : 'Deshabilitar' }}
                   </button>
                 </td>
@@ -175,7 +175,7 @@ async function handleToggleSecret(secret: PppSecret) {
         />
         <div class="table-shell">
           <table class="w-full text-sm min-w-[560px]">
-            <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
               <tr>
                 <th class="text-left px-4 py-3">IP</th>
                 <th class="text-left px-4 py-3">MAC</th>
@@ -189,11 +189,11 @@ async function handleToggleSecret(secret: PppSecret) {
                   {{ leaseSearch ? 'Sin resultados para esa busqueda.' : 'Sin leases DHCP.' }}
                 </td>
               </tr>
-              <tr v-for="l in filteredLeases" :key="l['.id']" class="border-t border-slate-800">
+              <tr v-for="l in filteredLeases" :key="l['.id']" class="border-t border-slate-200">
                 <td class="px-4 py-3 font-mono text-xs">{{ l.address }}</td>
-                <td class="px-4 py-3 font-mono text-xs text-slate-400">{{ l['mac-address'] }}</td>
-                <td class="px-4 py-3 text-slate-400">{{ l['host-name'] || '—' }}</td>
-                <td class="px-4 py-3 text-slate-400">{{ l.status }}</td>
+                <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ l['mac-address'] }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ l['host-name'] || '—' }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ l.status }}</td>
               </tr>
             </tbody>
           </table>

@@ -30,10 +30,10 @@ const dateTo = ref(isoDate(new Date()));
 
 const STATUS_LABEL: Record<TicketStatus, string> = { open: 'Abierto', in_progress: 'En progreso', resolved: 'Resuelto', closed: 'Cerrado' };
 const STATUS_CLASS: Record<TicketStatus, string> = {
-  open: 'bg-yellow-500/15 text-yellow-400',
-  in_progress: 'bg-sky-500/15 text-sky-400',
-  resolved: 'bg-green-500/15 text-green-400',
-  closed: 'bg-slate-500/15 text-slate-400',
+  open: 'bg-yellow-500/15 text-yellow-600',
+  in_progress: 'bg-sky-500/15 text-sky-600',
+  resolved: 'bg-green-500/15 text-green-600',
+  closed: 'bg-slate-500/15 text-slate-600',
 };
 const CATEGORY_LABEL: Record<TicketCategory, string> = {
   no_service: 'Sin servicio',
@@ -101,11 +101,11 @@ onMounted(loadReports);
       <h1 class="text-2xl font-semibold">Reportes y estadísticas</h1>
       <div class="flex flex-wrap items-end gap-2">
         <div>
-          <label class="block text-xs text-slate-400 mb-1">Desde</label>
+          <label class="block text-xs text-slate-600 mb-1">Desde</label>
           <input v-model="dateFrom" type="date" class="field-input py-1.5 text-xs" />
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">Hasta</label>
+          <label class="block text-xs text-slate-600 mb-1">Hasta</label>
           <input v-model="dateTo" type="date" class="field-input py-1.5 text-xs" />
         </div>
         <button class="btn-secondary text-xs" :disabled="loading" @click="loadReports">
@@ -117,7 +117,7 @@ onMounted(loadReports);
       </div>
     </div>
 
-    <p v-if="error" class="mb-4 text-sm text-red-400">{{ error }}</p>
+    <p v-if="error" class="mb-4 text-sm text-red-600">{{ error }}</p>
     <p v-if="loading && !clientReport" class="text-slate-500 text-sm">Cargando reportes...</p>
 
     <template v-if="!loading || clientReport">
@@ -156,12 +156,12 @@ onMounted(loadReports);
         </div>
       </div>
 
-      <div v-if="clientReport?.byZone.length" class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-8">
+      <div v-if="clientReport?.byZone.length" class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-8">
         <div class="text-xs text-slate-500 mb-3">Clientes activos por zona</div>
         <div class="space-y-2">
           <div v-for="z in clientReport.byZone" :key="z.zoneName" class="flex items-center gap-3 text-xs">
-            <span class="w-28 truncate text-slate-400">{{ z.zoneName }}</span>
-            <div class="flex-1 h-3 rounded-full bg-slate-800 overflow-hidden">
+            <span class="w-28 truncate text-slate-600">{{ z.zoneName }}</span>
+            <div class="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
               <div
                 class="h-full bg-sky-500"
                 :style="{ width: `${(z.count / Math.max(1, clientReport.byZone[0].count)) * 100}%` }"
@@ -206,11 +206,11 @@ onMounted(loadReports);
       <!-- ---- Soporte ---- -->
       <h2 class="text-lg font-semibold mb-3">Soporte técnico</h2>
       <div class="grid gap-4 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
-        <div v-for="(label, status) in STATUS_LABEL" :key="status" class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+        <div v-for="(label, status) in STATUS_LABEL" :key="status" class="rounded-xl border border-slate-200 bg-slate-100 p-4">
           <div class="text-2xl font-bold">{{ ticketReport?.byStatus[status] ?? 0 }}</div>
           <span class="badge mt-1" :class="STATUS_CLASS[status]">{{ label }}</span>
         </div>
-        <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+        <div class="rounded-xl border border-slate-200 bg-slate-100 p-4">
           <div class="text-2xl font-bold">
             {{ ticketReport?.avgResolutionHours != null ? ticketReport.avgResolutionHours.toFixed(1) + 'h' : '—' }}
           </div>
@@ -219,12 +219,12 @@ onMounted(loadReports);
       </div>
 
       <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))">
-        <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+        <div class="rounded-xl border border-slate-200 bg-slate-100 p-4">
           <div class="text-xs text-slate-500 mb-3">Por categoría</div>
           <div class="space-y-2">
             <div v-for="(label, cat) in CATEGORY_LABEL" :key="cat" class="flex items-center gap-3 text-xs">
-              <span class="w-24 truncate text-slate-400">{{ label }}</span>
-              <div class="flex-1 h-3 rounded-full bg-slate-800 overflow-hidden">
+              <span class="w-24 truncate text-slate-600">{{ label }}</span>
+              <div class="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
                 <div
                   class="h-full"
                   :style="{
@@ -238,12 +238,12 @@ onMounted(loadReports);
           </div>
         </div>
 
-        <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
+        <div class="rounded-xl border border-slate-200 bg-slate-100 p-4">
           <div class="text-xs text-slate-500 mb-3">Por prioridad</div>
           <div class="space-y-2">
             <div v-for="(label, pr) in PRIORITY_LABEL" :key="pr" class="flex items-center gap-3 text-xs">
-              <span class="w-16 truncate text-slate-400">{{ label }}</span>
-              <div class="flex-1 h-3 rounded-full bg-slate-800 overflow-hidden">
+              <span class="w-16 truncate text-slate-600">{{ label }}</span>
+              <div class="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
                 <div
                   class="h-full"
                   :style="{
@@ -261,7 +261,7 @@ onMounted(loadReports);
       <h3 class="text-sm font-semibold mb-3">Ranking de técnicos (por puntos en el periodo)</h3>
       <div class="table-shell mb-6">
         <table class="w-full text-sm">
-          <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+          <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
             <tr>
               <th class="text-left px-4 py-2">#</th>
               <th class="text-left px-4 py-2">Técnico</th>
@@ -273,10 +273,10 @@ onMounted(loadReports);
             <tr v-if="!ticketReport?.technicianRanking.length">
               <td colspan="4" class="px-4 py-6 text-center text-slate-500">Sin tickets asignados en este periodo.</td>
             </tr>
-            <tr v-for="(t, i) in ticketReport?.technicianRanking" :key="t.staffId" class="border-t border-slate-800">
+            <tr v-for="(t, i) in ticketReport?.technicianRanking" :key="t.staffId" class="border-t border-slate-200">
               <td class="px-4 py-2 text-slate-500">{{ i + 1 }}</td>
               <td class="px-4 py-2">{{ t.name }}</td>
-              <td class="px-4 py-2 text-right text-slate-400">{{ t.ticketCount }}</td>
+              <td class="px-4 py-2 text-right text-slate-600">{{ t.ticketCount }}</td>
               <td class="px-4 py-2 text-right font-semibold">{{ t.points }}</td>
             </tr>
           </tbody>

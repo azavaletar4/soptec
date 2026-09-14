@@ -110,14 +110,14 @@ async function handleTest(device: MikrotikDevice) {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">MikroTik</h1>
-        <p class="text-slate-400 text-sm mt-1">{{ mikrotikStore.devices.length }} router(s) registrados</p>
+        <p class="text-slate-600 text-sm mt-1">{{ mikrotikStore.devices.length }} router(s) registrados</p>
       </div>
       <button v-if="canManageDevices" class="btn-primary" @click="openCreate">
         + Nuevo router
       </button>
     </div>
 
-    <p v-if="mikrotikStore.error" class="mb-4 text-sm text-red-400">{{ mikrotikStore.error }}</p>
+    <p v-if="mikrotikStore.error" class="mb-4 text-sm text-red-600">{{ mikrotikStore.error }}</p>
 
     <input
       v-model="searchQuery"
@@ -127,7 +127,7 @@ async function handleTest(device: MikrotikDevice) {
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[720px]">
-        <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Nombre</th>
             <th class="text-left px-4 py-3">Host</th>
@@ -145,24 +145,24 @@ async function handleTest(device: MikrotikDevice) {
               {{ searchQuery ? 'Sin resultados para esa busqueda.' : 'No hay routers. Registra el primero.' }}
             </td>
           </tr>
-          <tr v-for="d in filteredDevices" :key="d.id" class="border-t border-slate-800 hover:bg-slate-900/50">
+          <tr v-for="d in filteredDevices" :key="d.id" class="border-t border-slate-200 hover:bg-slate-50">
             <td class="px-4 py-3">
-              <button class="text-slate-100 hover:text-sky-400 font-medium" @click="router.push(`/mikrotik/${d.id}`)">
+              <button class="text-slate-900 hover:text-sky-600 font-medium" @click="router.push(`/mikrotik/${d.id}`)">
                 {{ d.name }}
               </button>
             </td>
-            <td class="px-4 py-3 text-slate-400 font-mono text-xs">{{ d.host }}:{{ d.port }}</td>
-            <td class="px-4 py-3 text-slate-400">{{ d.use_tls ? 'Si' : 'No' }}</td>
+            <td class="px-4 py-3 text-slate-600 font-mono text-xs">{{ d.host }}:{{ d.port }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ d.use_tls ? 'Si' : 'No' }}</td>
             <td class="px-4 py-3 text-xs">
-              <button class="text-sky-400 hover:underline" @click="handleTest(d)">Probar conexion</button>
+              <button class="text-sky-600 hover:underline" @click="handleTest(d)">Probar conexion</button>
               <span v-if="testResults[d.id]" class="block text-slate-500 mt-1">{{ testResults[d.id] }}</span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
               <template v-if="canManageDevices">
-                <button class="text-slate-400 hover:text-slate-100 text-xs" @click="openEdit(d)">Editar</button>
-                <button class="text-red-500/80 hover:text-red-400 text-xs" @click="handleDelete(d)">Eliminar</button>
+                <button class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(d)">Editar</button>
+                <button class="text-red-500/80 hover:text-red-600 text-xs" @click="handleDelete(d)">Eliminar</button>
               </template>
-              <span v-else class="text-xs text-slate-600">—</span>
+              <span v-else class="text-xs text-slate-400">—</span>
             </td>
           </tr>
         </tbody>
@@ -178,7 +178,7 @@ async function handleTest(device: MikrotikDevice) {
           <h2 class="text-lg font-semibold mb-4">{{ editingId ? 'Editar router' : 'Nuevo router' }}</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Nombre</label>
+            <label class="block text-xs text-slate-600 mb-1">Nombre</label>
             <input
               v-model="form.name"
               required
@@ -189,26 +189,26 @@ async function handleTest(device: MikrotikDevice) {
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Host (IP)</label>
+              <label class="block text-xs text-slate-600 mb-1">Host (IP)</label>
               <input v-model="form.host" required class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Puerto REST</label>
+              <label class="block text-xs text-slate-600 mb-1">Puerto REST</label>
               <input v-model.number="form.port" type="number" class="field-input" />
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Zona</label>
+              <label class="block text-xs text-slate-600 mb-1">Zona</label>
               <select v-model="form.zone_id" class="field-input">
                 <option value="">Sin asignar</option>
                 <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
               </select>
             </div>
             <div class="flex items-end pb-2">
-              <label class="flex items-center gap-2 text-sm text-slate-300">
-                <input v-model="form.use_tls" type="checkbox" class="rounded border-slate-700 bg-slate-950" />
+              <label class="flex items-center gap-2 text-sm text-slate-700">
+                <input v-model="form.use_tls" type="checkbox" class="rounded border-slate-300 bg-white" />
                 Usar HTTPS (TLS)
               </label>
             </div>
@@ -216,11 +216,11 @@ async function handleTest(device: MikrotikDevice) {
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Usuario</label>
+              <label class="block text-xs text-slate-600 mb-1">Usuario</label>
               <input v-model="form.username" required class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Contrasena</label>
+              <label class="block text-xs text-slate-600 mb-1">Contrasena</label>
               <input
                 v-model="form.password"
                 type="password"
@@ -236,7 +236,7 @@ async function handleTest(device: MikrotikDevice) {
             solo la usa el backend; nunca se muestra de vuelta al frontend.
           </p>
 
-          <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>
+          <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showModal = false">

@@ -95,7 +95,7 @@ async function handleSave() {
               <input v-model="newZoneName" placeholder="Nueva zona..." class="field-input text-xs py-1.5" />
               <button
                 type="button"
-                class="text-xs text-sky-400 hover:underline whitespace-nowrap"
+                class="text-xs text-sky-600 hover:underline whitespace-nowrap"
                 :disabled="!newZoneName.trim() || creatingZone"
                 @click="handleCreateZone"
               >
@@ -141,12 +141,12 @@ async function handleSave() {
             </div>
           </div>
 
-          <a v-if="mapUrl" :href="mapUrl" target="_blank" rel="noopener" class="text-xs text-sky-400 hover:underline block text-right">
+          <a v-if="mapUrl" :href="mapUrl" target="_blank" rel="noopener" class="text-xs text-sky-600 hover:underline block text-right">
             Mapa »
           </a>
         </div>
 
-        <p v-if="error" class="text-sm text-red-400 mt-4">{{ error }}</p>
+        <p v-if="error" class="text-sm text-red-600 mt-4">{{ error }}</p>
 
         <div class="flex justify-end gap-2 mt-5">
           <button type="button" class="btn-ghost" @click="emit('close')">Cerrar</button>

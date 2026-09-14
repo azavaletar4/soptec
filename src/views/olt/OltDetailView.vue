@@ -101,9 +101,9 @@ const filteredOnts = computed(() => {
 });
 
 const STATUS_CLASS: Record<string, string> = {
-  online: 'bg-green-500/15 text-green-400',
-  offline: 'bg-red-500/15 text-red-400',
-  unknown: 'bg-slate-500/15 text-slate-400',
+  online: 'bg-green-500/15 text-green-600',
+  offline: 'bg-red-500/15 text-red-600',
+  unknown: 'bg-slate-500/15 text-slate-600',
 };
 
 interface OltSummary {
@@ -542,9 +542,9 @@ function needlePolygon(angleDeg: number): string {
 }
 
 function statusLabel(value: number, warn: number, danger: number) {
-  if (value >= danger) return { text: 'CRÍTICO', classes: 'bg-red-500/15 text-red-400' };
-  if (value >= warn) return { text: 'ALERTA', classes: 'bg-amber-500/15 text-amber-400' };
-  return { text: 'NORMAL', classes: 'bg-emerald-500/15 text-emerald-400' };
+  if (value >= danger) return { text: 'CRÍTICO', classes: 'bg-red-500/15 text-red-600' };
+  if (value >= warn) return { text: 'ALERTA', classes: 'bg-amber-500/15 text-amber-600' };
+  return { text: 'NORMAL', classes: 'bg-emerald-500/15 text-emerald-600' };
 }
 
 function buildGauge(g: GaugeSpec) {
@@ -583,14 +583,14 @@ const gauges = computed(() => {
 
 <template>
   <AppLayout>
-    <button class="text-sm text-slate-400 hover:text-slate-100 mb-4" @click="router.push('/olt')">← Volver a OLTs</button>
+    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push('/olt')">← Volver a OLTs</button>
 
     <div v-if="!device" class="text-slate-500">OLT no encontrada.</div>
     <template v-else>
       <div class="flex items-start justify-between gap-3 mb-6">
         <div>
           <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
-          <p class="text-slate-400 text-sm">{{ device.host }}:{{ device.telnet_port }} · {{ device.brand.toUpperCase() }}</p>
+          <p class="text-slate-600 text-sm">{{ device.host }}:{{ device.telnet_port }} · {{ device.brand.toUpperCase() }}</p>
         </div>
         <button class="btn-ghost text-xs" @click="openAcsProfileModal">ACS (GenieACS) por defecto</button>
       </div>
@@ -640,10 +640,10 @@ const gauges = computed(() => {
       </div>
       <p class="text-xs text-slate-500 text-right mb-1">
         {{ summaryLoading ? 'Consultando...' : `Informacion valida a las ${checkedAtLabel}` }}
-        <button class="ml-2 text-sky-400 hover:underline" @click="loadSummary">Actualizar</button>
+        <button class="ml-2 text-sky-600 hover:underline" @click="loadSummary">Actualizar</button>
       </p>
-      <p v-if="summaryError" class="text-xs text-red-400 mb-4">{{ summaryError }}</p>
-      <p v-if="summary && !summary.scanComplete" class="text-xs text-amber-400/80 mb-4">
+      <p v-if="summaryError" class="text-xs text-red-600 mb-4">{{ summaryError }}</p>
+      <p v-if="summary && !summary.scanComplete" class="text-xs text-amber-600/80 mb-4">
         ⚠ El escaneo completo de la OLT falló esta vez; "Online/Offline" se muestran con el último
         dato local disponible.
       </p>
@@ -661,11 +661,11 @@ const gauges = computed(() => {
           <div class="text-sm font-semibold flex items-center gap-2">🏁 Telemetría</div>
           <div class="text-xs text-slate-500">
             {{ healthLoading ? 'Consultando...' : '' }}
-            <button v-if="!healthLoading" class="text-sky-400 hover:underline" @click="loadHealth">Actualizar</button>
+            <button v-if="!healthLoading" class="text-sky-600 hover:underline" @click="loadHealth">Actualizar</button>
           </div>
         </div>
 
-        <p v-if="healthError" class="text-xs text-red-400 mb-4">{{ healthError }}</p>
+        <p v-if="healthError" class="text-xs text-red-600 mb-4">{{ healthError }}</p>
 
         <p
           v-else-if="!healthLoading && !health?.uptime && !health?.temperature.length && !health?.load.length"
@@ -731,7 +731,7 @@ const gauges = computed(() => {
 
             <!-- Actividad / uptime: estilo odometro de carreras -->
             <div class="flex flex-col items-center justify-center">
-              <div class="text-4xl font-black italic tracking-tight text-sky-400">
+              <div class="text-4xl font-black italic tracking-tight text-sky-600">
                 {{ health.uptime ? Math.round(health.uptime.totalHours) : '—' }}<span class="text-base align-top">h</span>
               </div>
               <div class="text-xs text-slate-500 mt-1">{{ health.uptime ? health.uptime.raw : 'sin datos' }}</div>
@@ -740,7 +740,7 @@ const gauges = computed(() => {
                   v-for="n in 16"
                   :key="n"
                   class="w-1.5 h-3 rounded-sm"
-                  :class="health.uptime ? 'bg-emerald-500' : 'bg-slate-800'"
+                  :class="health.uptime ? 'bg-emerald-500' : 'bg-slate-100'"
                 ></span>
               </div>
               <div class="text-[10px] text-slate-500 uppercase tracking-wider mt-2">Actividad</div>
@@ -748,7 +748,7 @@ const gauges = computed(() => {
           </div>
 
           <!-- Detalle por tarjeta -->
-          <div class="grid gap-6 pt-4 border-t border-slate-800" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))">
+          <div class="grid gap-6 pt-4 border-t border-slate-200" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))">
             <div>
               <div class="text-xs text-slate-500 mb-2">Temperatura por tarjeta (°C)</div>
               <svg v-if="health.temperature.length" viewBox="0 0 320 90" class="w-full h-24">
@@ -805,16 +805,16 @@ const gauges = computed(() => {
         <p v-else class="text-sm text-slate-500">Consultando telemetría...</p>
       </div>
 
-      <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">
+      <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-6">
         <h2 class="text-sm font-semibold mb-3">Consultar puerto GPON</h2>
         <div class="flex flex-wrap items-end gap-3">
           <div>
-            <label class="block text-xs text-slate-400 mb-1">Slot</label>
-            <input v-model.number="slot" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+            <label class="block text-xs text-slate-600 mb-1">Slot</label>
+            <input v-model.number="slot" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
           </div>
           <div>
-            <label class="block text-xs text-slate-400 mb-1">Puerto</label>
-            <input v-model.number="port" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm" />
+            <label class="block text-xs text-slate-600 mb-1">Puerto</label>
+            <input v-model.number="port" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
           </div>
           <button :disabled="syncing" class="btn-secondary" @click="handleSync">
             {{ syncing ? 'Sincronizando...' : 'Sincronizar desde la OLT' }}
@@ -823,27 +823,27 @@ const gauges = computed(() => {
             + Registrar ONT
           </button>
         </div>
-        <p v-if="syncMessage" class="text-xs text-slate-400 mt-3">{{ syncMessage }}</p>
+        <p v-if="syncMessage" class="text-xs text-slate-600 mt-3">{{ syncMessage }}</p>
         <p class="text-xs text-slate-500 mt-3">
           Registrar / activar / desactivar / eliminar ya validados contra tu OLT real (ver reporte de la Fase 4).
           Solo la lectura de señal óptica sigue sin probar.
         </p>
       </div>
 
-      <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-6">
+      <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-6">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-sm font-semibold">ONTs sin autorizar ({{ unconfiguredOnts.length }})</h2>
-          <button class="text-xs text-sky-400 hover:underline" :disabled="unconfiguredLoading" @click="loadUnconfigured">
+          <button class="text-xs text-sky-600 hover:underline" :disabled="unconfiguredLoading" @click="loadUnconfigured">
             {{ unconfiguredLoading ? 'Consultando...' : 'Actualizar' }}
           </button>
         </div>
-        <p v-if="unconfiguredError" class="text-xs text-red-400 mb-3">{{ unconfiguredError }}</p>
+        <p v-if="unconfiguredError" class="text-xs text-red-600 mb-3">{{ unconfiguredError }}</p>
         <p v-else-if="!unconfiguredLoading && !unconfiguredOnts.length" class="text-sm text-slate-500">
           No hay ONUs detectadas sin autorizar en este momento.
         </p>
         <div v-else class="table-shell">
           <table class="w-full text-sm min-w-[500px]">
-            <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
               <tr>
                 <th class="text-left px-4 py-2">Serial</th>
                 <th class="text-left px-4 py-2">Puerto detectado</th>
@@ -851,12 +851,12 @@ const gauges = computed(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="u in unconfiguredOnts" :key="u.interfaceRef" class="border-t border-slate-800">
+              <tr v-for="u in unconfiguredOnts" :key="u.interfaceRef" class="border-t border-slate-200">
                 <td class="px-4 py-2 font-mono text-xs">{{ u.serial }}</td>
-                <td class="px-4 py-2 font-mono text-xs text-slate-400">{{ u.frame }}/{{ u.slot }}/{{ u.port }}</td>
+                <td class="px-4 py-2 font-mono text-xs text-slate-600">{{ u.frame }}/{{ u.slot }}/{{ u.port }}</td>
                 <td class="px-4 py-2 text-right">
                   <button
-                    class="text-sky-400 hover:underline text-xs"
+                    class="text-sky-600 hover:underline text-xs"
                     :disabled="u.slot === null || u.port === null"
                     @click="openRegister({ serial: u.serial, slot: u.slot!, port: u.port! })"
                   >
@@ -867,7 +867,7 @@ const gauges = computed(() => {
             </tbody>
           </table>
         </div>
-        <p class="text-[11px] text-slate-600 mt-3">
+        <p class="text-[11px] text-slate-400 mt-3">
           El ID de ONU se calcula automáticamente al registrar (el número que muestra la OLT aquí no es
           confiable como ID libre).
         </p>
@@ -875,7 +875,7 @@ const gauges = computed(() => {
 
       <div class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4 mb-6">
         <h2 class="text-sm font-semibold mb-1">¿Ves menos ONTs de las que tienes, o sin nombre/señal?</h2>
-        <p class="text-xs text-slate-400 mb-3">
+        <p class="text-xs text-slate-600 mb-3">
           Si esta OLT ya tenia ONTs configuradas desde antes de usar SmartRayco (ej. desde SmartOLT), no
           apareceran aqui hasta importarlas. Trae serial, tipo, nombre (de la OLT), plan, VLAN y señal
           Rx/Tx de todas. Esto solo lee la OLT (sin cambiar nada) y puede tardar varios minutos con
@@ -884,14 +884,14 @@ const gauges = computed(() => {
         <button :disabled="importing" class="btn-secondary" @click="handleImportExisting">
           {{ importing ? 'Importando...' : 'Importar / actualizar ONTs desde la OLT' }}
         </button>
-        <p v-if="importMessage" class="text-xs text-slate-400 mt-3">{{ importMessage }}</p>
+        <p v-if="importMessage" class="text-xs text-slate-600 mt-3">{{ importMessage }}</p>
       </div>
 
       <div ref="ontsTableEl" class="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h2 class="text-lg font-semibold">ONTs registradas</h2>
         <div v-if="statusFilter !== 'all'" class="flex items-center gap-2 text-xs">
-          <span class="badge bg-sky-500/15 text-sky-400">Filtro: {{ STATUS_FILTER_LABEL[statusFilter] }} ({{ filteredOnts.length }})</span>
-          <button class="text-slate-400 hover:text-slate-100" @click="statusFilter = 'all'">Quitar filtro</button>
+          <span class="badge bg-sky-500/15 text-sky-600">Filtro: {{ STATUS_FILTER_LABEL[statusFilter] }} ({{ filteredOnts.length }})</span>
+          <button class="text-slate-600 hover:text-slate-900" @click="statusFilter = 'all'">Quitar filtro</button>
         </div>
       </div>
       <input
@@ -901,7 +901,7 @@ const gauges = computed(() => {
       />
       <div class="table-shell">
         <table class="w-full text-sm min-w-[900px]">
-          <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+          <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
             <tr>
               <th class="text-left px-4 py-3">Shelf/Slot/Port/ID</th>
               <th class="text-left px-4 py-3">Serial</th>
@@ -925,45 +925,45 @@ const gauges = computed(() => {
             <tr
               v-for="ont in filteredOnts"
               :key="ont.id"
-              class="border-t border-slate-800 cursor-pointer hover:bg-slate-900/40"
+              class="border-t border-slate-200 cursor-pointer hover:bg-slate-50"
               @click="openOntDetail(ont)"
             >
               <td class="px-4 py-3 font-mono text-xs">{{ ont.frame }}/{{ ont.slot }}/{{ ont.port }}:{{ ont.ont_id }}</td>
               <td class="px-4 py-3 font-mono text-xs">{{ ont.serial }}</td>
-              <td class="px-4 py-3 text-slate-400">
+              <td class="px-4 py-3 text-slate-600">
                 <template v-if="ont.clients">{{ ont.clients.first_name }} {{ ont.clients.last_name }}</template>
                 <template v-else-if="ont.description">
                   {{ ont.description }}
-                  <span class="block text-[10px] text-slate-600">de la OLT, sin vincular</span>
+                  <span class="block text-[10px] text-slate-400">de la OLT, sin vincular</span>
                 </template>
                 <template v-else>—</template>
               </td>
-              <td class="px-4 py-3 text-slate-400 text-xs">
+              <td class="px-4 py-3 text-slate-600 text-xs">
                 <span v-if="ont.zones">{{ ont.zones.name }}</span>
                 <span v-else-if="ont.splitter">{{ ont.splitter }}<span v-if="ont.splitter_port"> / {{ ont.splitter_port }}</span></span>
-                <span v-else class="text-slate-600">—</span>
+                <span v-else class="text-slate-400">—</span>
               </td>
               <td class="px-4 py-3">
                 <span class="badge" :class="STATUS_CLASS[ont.status]">{{ ont.status }}</span>
               </td>
-              <td class="px-4 py-3 text-slate-400 text-xs">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
-              <td class="px-4 py-3 text-slate-400 text-xs">{{ ont.vlan ?? '—' }}</td>
-              <td class="px-4 py-3 text-slate-400 text-xs">{{ ont.onu_type ?? '—' }}</td>
+              <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
+              <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.vlan ?? '—' }}</td>
+              <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.onu_type ?? '—' }}</td>
               <td class="px-4 py-3 text-slate-500 text-xs">{{ new Date(ont.created_at).toLocaleDateString('es-EC') }}</td>
               <td class="px-4 py-3">
-                <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-400">Activo</span>
+                <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-600">Activo</span>
                 <span v-else class="text-slate-500 text-xs">—</span>
               </td>
               <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs" @click.stop>
-                <button class="text-sky-400 hover:underline" :disabled="signalLoadingId === ont.id" @click="handleSignal(ont)">
+                <button class="text-sky-600 hover:underline" :disabled="signalLoadingId === ont.id" @click="handleSignal(ont)">
                   {{ signalLoadingId === ont.id ? 'Leyendo...' : 'Senal' }}
                 </button>
-                <button class="text-slate-400 hover:text-slate-100" @click="openZoneEdit(ont)">Zona</button>
-                <button class="text-slate-400 hover:text-slate-100" @click="openTr069Modal(ont)">TR-069</button>
-                <button class="text-slate-400 hover:text-slate-100" @click="handleToggle(ont)">
+                <button class="text-slate-600 hover:text-slate-900" @click="openZoneEdit(ont)">Zona</button>
+                <button class="text-slate-600 hover:text-slate-900" @click="openTr069Modal(ont)">TR-069</button>
+                <button class="text-slate-600 hover:text-slate-900" @click="handleToggle(ont)">
                   {{ ont.status === 'online' ? 'Desactivar' : 'Activar' }}
                 </button>
-                <button class="text-red-500/80 hover:text-red-400" @click="handleDelete(ont)">Eliminar</button>
+                <button class="text-red-500/80 hover:text-red-600" @click="handleDelete(ont)">Eliminar</button>
               </td>
             </tr>
           </tbody>
@@ -980,22 +980,22 @@ const gauges = computed(() => {
           </p>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">URL del ACS</label>
+            <label class="block text-xs text-slate-600 mb-1">URL del ACS</label>
             <input v-model="tr069AcsUrl" placeholder="http://192.168.100.136:7547" required class="field-input" />
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">VEIP</label>
+            <label class="block text-xs text-slate-600 mb-1">VEIP</label>
             <input v-model.number="tr069Veip" type="number" min="1" class="field-input" />
           </div>
 
-          <p v-if="tr069Error" class="text-sm text-red-400 mb-3">{{ tr069Error }}</p>
+          <p v-if="tr069Error" class="text-sm text-red-600 mb-3">{{ tr069Error }}</p>
 
           <div class="flex justify-between gap-2">
             <button
               v-if="tr069Modal.tr069_enabled"
               type="button"
-              class="text-red-400 hover:underline text-xs"
+              class="text-red-600 hover:underline text-xs"
               :disabled="tr069Saving"
               @click="handleTr069Remove"
             >
@@ -1023,27 +1023,27 @@ const gauges = computed(() => {
           <p v-if="acsProfileLoading" class="text-xs text-slate-500 mb-3">Cargando...</p>
           <template v-else>
             <div class="mb-3">
-              <label class="block text-xs text-slate-400 mb-1">URL del ACS</label>
+              <label class="block text-xs text-slate-600 mb-1">URL del ACS</label>
               <input v-model="acsProfileForm.acs_url" required placeholder="http://192.168.100.136:7547" class="field-input" />
             </div>
             <div class="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label class="block text-xs text-slate-400 mb-1">Usuario (opcional)</label>
+                <label class="block text-xs text-slate-600 mb-1">Usuario (opcional)</label>
                 <input v-model="acsProfileForm.acs_username" class="field-input" />
               </div>
               <div>
-                <label class="block text-xs text-slate-400 mb-1">Contraseña (opcional)</label>
+                <label class="block text-xs text-slate-600 mb-1">Contraseña (opcional)</label>
                 <input v-model="acsProfileForm.acs_password" type="password" class="field-input" />
               </div>
             </div>
             <div class="mb-4">
-              <label class="block text-xs text-slate-400 mb-1">Intervalo de Inform (segundos)</label>
+              <label class="block text-xs text-slate-600 mb-1">Intervalo de Inform (segundos)</label>
               <input v-model.number="acsProfileForm.inform_interval" type="number" min="30" class="field-input" />
             </div>
           </template>
 
-          <p v-if="acsProfileError" class="text-sm text-red-400 mb-3">{{ acsProfileError }}</p>
-          <p v-if="acsProfileSaved" class="text-sm text-emerald-400 mb-3">Guardado.</p>
+          <p v-if="acsProfileError" class="text-sm text-red-600 mb-3">{{ acsProfileError }}</p>
+          <p v-if="acsProfileSaved" class="text-sm text-emerald-600 mb-3">Guardado.</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showAcsProfileModal = false">Cerrar</button>
@@ -1065,7 +1065,7 @@ const gauges = computed(() => {
           <p class="text-xs text-slate-500 mb-4">Puerto GPON 1/{{ slot }}/{{ port }} (shelf/slot/port)</p>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Serial de la ONU</label>
+            <label class="block text-xs text-slate-600 mb-1">Serial de la ONU</label>
             <input
               v-model="registerForm.serial"
               required
@@ -1076,17 +1076,17 @@ const gauges = computed(() => {
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">ID de ONU (vacio = auto)</label>
+              <label class="block text-xs text-slate-600 mb-1">ID de ONU (vacio = auto)</label>
               <input v-model.number="registerForm.onuId" type="number" min="0" placeholder="auto" class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">VLAN</label>
+              <label class="block text-xs text-slate-600 mb-1">VLAN</label>
               <input v-model.number="registerForm.vlan" type="number" class="field-input" />
             </div>
           </div>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Tipo de ONU (perfil configurado en la OLT)</label>
+            <label class="block text-xs text-slate-600 mb-1">Tipo de ONU (perfil configurado en la OLT)</label>
             <input
               v-model="registerForm.onuType"
               required
@@ -1096,21 +1096,21 @@ const gauges = computed(() => {
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Descripcion</label>
+            <label class="block text-xs text-slate-600 mb-1">Descripcion</label>
             <input v-model="registerForm.description" placeholder="Nombre del cliente" class="field-input" />
           </div>
 
-          <p v-if="profilesError" class="text-xs text-red-400 mb-3">{{ profilesError }}</p>
+          <p v-if="profilesError" class="text-xs text-red-600 mb-3">{{ profilesError }}</p>
           <div class="grid grid-cols-2 gap-3 mb-4">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Perfil de subida (tcont)</label>
+              <label class="block text-xs text-slate-600 mb-1">Perfil de subida (tcont)</label>
               <select v-model="registerForm.tcontProfile" required class="field-input" :disabled="profilesLoading">
                 <option value="" disabled>{{ profilesLoading ? 'Cargando...' : 'Selecciona un plan' }}</option>
                 <option v-for="p in profiles.tcontProfiles" :key="p" :value="p">{{ p }}</option>
               </select>
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Perfil de bajada (traffic)</label>
+              <label class="block text-xs text-slate-600 mb-1">Perfil de bajada (traffic)</label>
               <select v-model="registerForm.trafficProfile" required class="field-input" :disabled="profilesLoading">
                 <option value="" disabled>{{ profilesLoading ? 'Cargando...' : 'Selecciona un plan' }}</option>
                 <option v-for="p in profiles.trafficProfiles" :key="p" :value="p">{{ p }}</option>
@@ -1118,8 +1118,8 @@ const gauges = computed(() => {
             </div>
           </div>
 
-          <p v-if="registerError" class="text-sm text-red-400 mb-3">{{ registerError }}</p>
-          <p class="text-[11px] text-slate-600 mb-3">
+          <p v-if="registerError" class="text-sm text-red-600 mb-3">{{ registerError }}</p>
+          <p class="text-[11px] text-slate-400 mb-3">
             Tras registrar, la app intenta asignar TR-069 automáticamente (si hay un ACS por defecto
             configurado) y leer la señal inicial — puede tardar ~10-15s extra.
           </p>

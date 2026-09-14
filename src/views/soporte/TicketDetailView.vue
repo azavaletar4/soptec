@@ -183,7 +183,7 @@ function formatDate(value: string) {
 
 <template>
   <AppLayout>
-    <button class="text-sm text-slate-400 hover:text-slate-100 mb-4" @click="router.push('/soporte')">
+    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push('/soporte')">
       ← Volver a soporte
     </button>
 
@@ -194,8 +194,8 @@ function formatDate(value: string) {
         <div>
           <div class="font-mono text-xs text-slate-500 mb-1">{{ ticket.ticket_number }}</div>
           <h1 class="text-2xl font-semibold">{{ ticket.title }}</h1>
-          <p class="text-slate-400 text-sm mt-1">
-            <router-link :to="`/clientes/${ticket.client_id}`" class="hover:text-sky-400">
+          <p class="text-slate-600 text-sm mt-1">
+            <router-link :to="`/clientes/${ticket.client_id}`" class="hover:text-sky-600">
               {{ ticket.clients ? `${ticket.clients.first_name} ${ticket.clients.last_name}` : 'Cliente' }}
             </router-link>
             · {{ ticket.clients?.phone || 'sin telefono' }} · {{ CATEGORY_LABEL[ticket.category] }}
@@ -203,7 +203,7 @@ function formatDate(value: string) {
         </div>
       </div>
 
-      <p v-if="actionError" class="mb-4 text-sm text-red-400">{{ actionError }}</p>
+      <p v-if="actionError" class="mb-4 text-sm text-red-600">{{ actionError }}</p>
 
       <div class="grid gap-4 mb-8 text-sm" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
         <div class="surface p-4">
@@ -231,7 +231,7 @@ function formatDate(value: string) {
         <div class="surface p-4">
           <div class="flex items-center justify-between mb-2">
             <div class="text-slate-500 text-xs">Técnico designado</div>
-            <button class="text-xs text-sky-400 hover:text-sky-300" @click="openAssignModal">
+            <button class="text-xs text-sky-600 hover:text-sky-700" @click="openAssignModal">
               {{ ticket.assigned_to ? 'Editar' : 'Asignar' }}
             </button>
           </div>
@@ -244,12 +244,12 @@ function formatDate(value: string) {
         </div>
       </div>
 
-      <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-8 text-sm">
+      <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-8 text-sm">
         <div class="text-slate-500 text-xs mb-2">Descripción</div>
         <p class="whitespace-pre-wrap">{{ ticket.description || 'Sin descripción.' }}</p>
       </div>
 
-      <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 mb-8 text-sm">
+      <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-8 text-sm">
         <h2 class="text-sm font-semibold mb-3">Materiales usados</h2>
         <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
         <template v-else>
@@ -257,14 +257,14 @@ function formatDate(value: string) {
           <ul v-else class="space-y-1.5 mb-3">
             <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
               <span>{{ m.product?.name ?? 'Producto' }}</span>
-              <span class="text-slate-400">{{ m.quantity }} {{ m.product?.unit }} · {{ formatDate(m.created_at) }}</span>
+              <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }} · {{ formatDate(m.created_at) }}</span>
             </li>
           </ul>
         </template>
 
         <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
           <div class="flex-1 min-w-[160px]">
-            <label class="block text-xs text-slate-400 mb-1">Producto</label>
+            <label class="block text-xs text-slate-600 mb-1">Producto</label>
             <select v-model="materialForm.productId" required class="field-input">
               <option value="" disabled>Selecciona...</option>
               <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">
@@ -273,26 +273,26 @@ function formatDate(value: string) {
             </select>
           </div>
           <div class="w-24">
-            <label class="block text-xs text-slate-400 mb-1">Cantidad</label>
+            <label class="block text-xs text-slate-600 mb-1">Cantidad</label>
             <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
           </div>
           <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
             {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
           </button>
         </form>
-        <p v-if="materialError" class="text-xs text-red-400 mt-2">{{ materialError }}</p>
+        <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
       </div>
 
       <h2 class="text-lg font-semibold mb-3">Seguimiento</h2>
       <p v-if="loadingComments" class="text-slate-500 text-sm">Cargando...</p>
       <div v-else class="space-y-3 mb-4">
         <p v-if="!comments.length" class="text-slate-500 text-sm">Sin comentarios todavía.</p>
-        <div v-for="c in comments" :key="c.id" class="rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm">
+        <div v-for="c in comments" :key="c.id" class="rounded-xl border border-slate-200 bg-slate-100 p-4 text-sm">
           <div class="flex items-center justify-between mb-1">
-            <span class="font-medium text-slate-200">{{ c.author?.full_name || c.author?.email || 'Usuario' }}</span>
+            <span class="font-medium text-slate-800">{{ c.author?.full_name || c.author?.email || 'Usuario' }}</span>
             <span class="text-xs text-slate-500">{{ formatDate(c.created_at) }}</span>
           </div>
-          <p class="text-slate-300 whitespace-pre-wrap">{{ c.body }}</p>
+          <p class="text-slate-700 whitespace-pre-wrap">{{ c.body }}</p>
         </div>
       </div>
 
@@ -300,7 +300,7 @@ function formatDate(value: string) {
         <input
           v-model="newComment"
           placeholder="Agregar una nota de seguimiento..."
-          class="flex-1 px-3 py-2 rounded-lg border border-slate-700 bg-slate-950 text-sm"
+          class="flex-1 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
         />
         <button
           type="submit"
@@ -318,7 +318,7 @@ function formatDate(value: string) {
           <h2 class="text-lg font-semibold mb-4">Asignar técnico</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Técnico</label>
+            <label class="block text-xs text-slate-600 mb-1">Técnico</label>
             <select
               v-model="assignForm.assignedTo"
               class="field-input"
@@ -329,7 +329,7 @@ function formatDate(value: string) {
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Puntos por este ticket</label>
+            <label class="block text-xs text-slate-600 mb-1">Puntos por este ticket</label>
             <input
               v-model.number="assignForm.points"
               type="number"
@@ -339,7 +339,7 @@ function formatDate(value: string) {
             />
           </div>
 
-          <p v-if="assignError" class="text-sm text-red-400 mb-3">{{ assignError }}</p>
+          <p v-if="assignError" class="text-sm text-red-600 mb-3">{{ assignError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showAssignModal = false">

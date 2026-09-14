@@ -45,10 +45,10 @@ const STATUS_LABEL: Record<InstallationStatus, string> = {
   cancelled: 'Cancelada',
 };
 const STATUS_CLASS: Record<InstallationStatus, string> = {
-  pending: 'bg-yellow-500/15 text-yellow-400',
-  scheduled: 'bg-sky-500/15 text-sky-400',
-  completed: 'bg-green-500/15 text-green-400',
-  cancelled: 'bg-slate-500/15 text-slate-400',
+  pending: 'bg-yellow-500/15 text-yellow-600',
+  scheduled: 'bg-sky-500/15 text-sky-600',
+  completed: 'bg-green-500/15 text-green-600',
+  cancelled: 'bg-slate-500/15 text-slate-600',
 };
 
 const STATUS_TABS: { value: InstallationStatus | 'all'; label: string }[] = [
@@ -273,7 +273,7 @@ function formatDate(value: string | null) {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Instalaciones</h1>
-        <p class="text-slate-400 text-sm mt-1">{{ installationsStore.installations.length }} órdenes registradas</p>
+        <p class="text-slate-600 text-sm mt-1">{{ installationsStore.installations.length }} órdenes registradas</p>
       </div>
       <button class="btn-primary" @click="openCreate">+ Nueva instalación</button>
     </div>
@@ -289,18 +289,18 @@ function formatDate(value: string | null) {
         v-for="tab in STATUS_TABS"
         :key="tab.value"
         class="px-3 py-1.5 rounded-lg text-xs font-medium"
-        :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+        :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
         @click="statusFilter = tab.value"
       >
         {{ tab.label }}
       </button>
     </div>
 
-    <p v-if="installationsStore.error" class="mb-4 text-sm text-red-400">{{ installationsStore.error }}</p>
+    <p v-if="installationsStore.error" class="mb-4 text-sm text-red-600">{{ installationsStore.error }}</p>
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[900px]">
-        <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Cliente</th>
             <th class="text-left px-4 py-3">Contrato</th>
@@ -317,13 +317,13 @@ function formatDate(value: string | null) {
           <tr v-else-if="!filteredInstallations.length">
             <td colspan="6" class="px-4 py-6 text-center text-slate-500">No hay instalaciones en este filtro.</td>
           </tr>
-          <tr v-for="inst in filteredInstallations" :key="inst.id" class="border-t border-slate-800">
-            <td class="px-4 py-3 cursor-pointer hover:text-sky-400" @click="goToClient(inst)">
+          <tr v-for="inst in filteredInstallations" :key="inst.id" class="border-t border-slate-200">
+            <td class="px-4 py-3 cursor-pointer hover:text-sky-600" @click="goToClient(inst)">
               {{ inst.clients ? `${inst.clients.first_name} ${inst.clients.last_name}` : '—' }}
-              <span v-if="!inst.clients?.latitude" class="block text-[10px] text-amber-400/80">Sin GPS registrado</span>
+              <span v-if="!inst.clients?.latitude" class="block text-[10px] text-amber-600/80">Sin GPS registrado</span>
             </td>
-            <td class="px-4 py-3 font-mono text-xs text-slate-400">{{ inst.contracts?.contract_number ?? '—' }}</td>
-            <td class="px-4 py-3 text-slate-400">
+            <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ inst.contracts?.contract_number ?? '—' }}</td>
+            <td class="px-4 py-3 text-slate-600">
               {{ formatDate(inst.scheduled_date) }}
               <span v-if="inst.scheduled_time" class="text-xs text-slate-500"> · {{ inst.scheduled_time.slice(0, 5) }}</span>
             </td>
@@ -341,17 +341,17 @@ function formatDate(value: string | null) {
               </select>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
-              <button class="text-sky-400 hover:underline" @click="openMaterialsModal(inst)">Materiales</button>
+              <button class="text-sky-600 hover:underline" @click="openMaterialsModal(inst)">Materiales</button>
               <button
                 v-if="inst.status !== 'completed' && inst.status !== 'cancelled'"
-                class="text-green-400 hover:underline"
+                class="text-green-600 hover:underline"
                 @click="handleComplete(inst)"
               >
                 Completar
               </button>
               <button
                 v-if="inst.status !== 'completed' && inst.status !== 'cancelled'"
-                class="text-red-500/80 hover:text-red-400"
+                class="text-red-500/80 hover:text-red-600"
                 @click="handleCancel(inst)"
               >
                 Cancelar
@@ -368,7 +368,7 @@ function formatDate(value: string | null) {
           <h2 class="text-lg font-semibold mb-4">Nueva instalación</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Cliente</label>
+            <label class="block text-xs text-slate-600 mb-1">Cliente</label>
             <input v-model="clientFilter" placeholder="Buscar por nombre o documento..." class="field-input mb-2" />
             <select v-model="form.client_id" required size="5" class="field-input" @change="onClientChange">
               <option v-for="c in filteredClients" :key="c.id" :value="c.id">
@@ -378,7 +378,7 @@ function formatDate(value: string | null) {
           </div>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Contrato (opcional)</label>
+            <label class="block text-xs text-slate-600 mb-1">Contrato (opcional)</label>
             <select v-model="form.contract_id" class="field-input" :disabled="!form.client_id || loadingContracts">
               <option value="">{{ loadingContracts ? 'Cargando...' : 'Sin contrato asociado' }}</option>
               <option v-for="c in clientContracts" :key="c.id" :value="c.id">{{ c.contract_number }}</option>
@@ -387,17 +387,17 @@ function formatDate(value: string | null) {
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Fecha programada</label>
+              <label class="block text-xs text-slate-600 mb-1">Fecha programada</label>
               <input v-model="form.scheduled_date" type="date" class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Hora</label>
+              <label class="block text-xs text-slate-600 mb-1">Hora</label>
               <input v-model="form.scheduled_time" type="time" class="field-input" />
             </div>
           </div>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Técnico asignado</label>
+            <label class="block text-xs text-slate-600 mb-1">Técnico asignado</label>
             <select v-model="form.assigned_to" class="field-input">
               <option value="">Sin asignar</option>
               <option v-for="t in technicians" :key="t.id" :value="t.id">{{ t.full_name || t.email }}</option>
@@ -405,11 +405,11 @@ function formatDate(value: string | null) {
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Notas</label>
+            <label class="block text-xs text-slate-600 mb-1">Notas</label>
             <textarea v-model="form.notes" rows="3" class="field-input"></textarea>
           </div>
 
-          <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>
+          <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showModal = false">Cancelar</button>
@@ -435,14 +435,14 @@ function formatDate(value: string | null) {
             <ul v-else class="space-y-1.5 mb-4">
               <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
                 <span>{{ m.product?.name ?? 'Producto' }}</span>
-                <span class="text-slate-400">{{ m.quantity }} {{ m.product?.unit }}</span>
+                <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }}</span>
               </li>
             </ul>
           </template>
 
           <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
             <div class="flex-1 min-w-[160px]">
-              <label class="block text-xs text-slate-400 mb-1">Producto</label>
+              <label class="block text-xs text-slate-600 mb-1">Producto</label>
               <select v-model="materialForm.productId" required class="field-input">
                 <option value="" disabled>Selecciona...</option>
                 <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">
@@ -451,16 +451,16 @@ function formatDate(value: string | null) {
               </select>
             </div>
             <div class="w-24">
-              <label class="block text-xs text-slate-400 mb-1">Cantidad</label>
+              <label class="block text-xs text-slate-600 mb-1">Cantidad</label>
               <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
             </div>
             <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
               {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
             </button>
           </form>
-          <p v-if="materialError" class="text-xs text-red-400 mt-2">{{ materialError }}</p>
+          <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
 
-          <div class="border-t border-slate-800 mt-4 pt-4">
+          <div class="border-t border-slate-200 mt-4 pt-4">
             <h3 class="text-sm font-semibold mb-1">Equipos asignados (serie/MAC)</h3>
             <p v-if="!serializedProducts.length" class="text-xs text-slate-500">No hay productos con control por serie/MAC configurados en Inventario.</p>
             <template v-else>
@@ -474,19 +474,19 @@ function formatDate(value: string | null) {
 
               <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAssignUnit">
                 <div class="flex-1 min-w-[160px]">
-                  <label class="block text-xs text-slate-400 mb-1">Producto</label>
+                  <label class="block text-xs text-slate-600 mb-1">Producto</label>
                   <select v-model="unitForm.productId" required class="field-input" @change="onUnitProductChange">
                     <option value="" disabled>Selecciona...</option>
                     <option v-for="p in serializedProducts" :key="p.id" :value="p.id">{{ p.name }}</option>
                   </select>
                 </div>
                 <div class="flex-1 min-w-[180px]">
-                  <label class="block text-xs text-slate-400 mb-1">Equipo disponible</label>
+                  <label class="block text-xs text-slate-600 mb-1">Equipo disponible</label>
                   <select v-model="unitForm.unitId" required class="field-input" :disabled="!unitForm.productId || loadingAvailableUnits">
                     <option value="" disabled>{{ loadingAvailableUnits ? 'Cargando...' : 'Selecciona...' }}</option>
                     <option v-for="u in availableUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
                   </select>
-                  <p v-if="unitForm.productId && !loadingAvailableUnits && !availableUnits.length" class="text-xs text-amber-400 mt-1">
+                  <p v-if="unitForm.productId && !loadingAvailableUnits && !availableUnits.length" class="text-xs text-amber-600 mt-1">
                     Sin unidades disponibles en bodega para este producto.
                   </p>
                 </div>
@@ -494,7 +494,7 @@ function formatDate(value: string | null) {
                   {{ savingUnit ? 'Asignando...' : '+ Asignar' }}
                 </button>
               </form>
-              <p v-if="unitError" class="text-xs text-red-400 mt-2">{{ unitError }}</p>
+              <p v-if="unitError" class="text-xs text-red-600 mt-2">{{ unitError }}</p>
             </template>
           </div>
 

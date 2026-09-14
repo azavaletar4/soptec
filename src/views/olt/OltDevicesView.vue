@@ -109,7 +109,7 @@ async function handleTest(device: OltDevice) {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Red & OLTs</h1>
-        <p class="text-slate-400 text-sm mt-1">{{ oltStore.devices.length }} OLT(s) registradas</p>
+        <p class="text-slate-600 text-sm mt-1">{{ oltStore.devices.length }} OLT(s) registradas</p>
       </div>
       <button
         v-if="canManageDevices"
@@ -120,7 +120,7 @@ async function handleTest(device: OltDevice) {
       </button>
     </div>
 
-    <p v-if="oltStore.error" class="mb-4 text-sm text-red-400">{{ oltStore.error }}</p>
+    <p v-if="oltStore.error" class="mb-4 text-sm text-red-600">{{ oltStore.error }}</p>
 
     <input
       v-model="searchQuery"
@@ -130,7 +130,7 @@ async function handleTest(device: OltDevice) {
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[720px]">
-        <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Nombre</th>
             <th class="text-left px-4 py-3">Host</th>
@@ -148,24 +148,24 @@ async function handleTest(device: OltDevice) {
               {{ searchQuery ? 'Sin resultados para esa busqueda.' : 'No hay OLTs. Registra la primera.' }}
             </td>
           </tr>
-          <tr v-for="d in filteredDevices" :key="d.id" class="border-t border-slate-800 hover:bg-slate-900/50">
+          <tr v-for="d in filteredDevices" :key="d.id" class="border-t border-slate-200 hover:bg-slate-50">
             <td class="px-4 py-3">
-              <button class="text-slate-100 hover:text-sky-400 font-medium" @click="router.push(`/olt/${d.id}`)">
+              <button class="text-slate-900 hover:text-sky-600 font-medium" @click="router.push(`/olt/${d.id}`)">
                 {{ d.name }}
               </button>
             </td>
-            <td class="px-4 py-3 text-slate-400 font-mono text-xs">{{ d.host }}:{{ d.telnet_port }}</td>
-            <td class="px-4 py-3 text-slate-400 uppercase">{{ d.brand }}</td>
+            <td class="px-4 py-3 text-slate-600 font-mono text-xs">{{ d.host }}:{{ d.telnet_port }}</td>
+            <td class="px-4 py-3 text-slate-600 uppercase">{{ d.brand }}</td>
             <td class="px-4 py-3 text-xs">
-              <button class="text-sky-400 hover:underline" @click="handleTest(d)">Probar conexion</button>
+              <button class="text-sky-600 hover:underline" @click="handleTest(d)">Probar conexion</button>
               <span v-if="testResults[d.id]" class="block text-slate-500 mt-1">{{ testResults[d.id] }}</span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
               <template v-if="canManageDevices">
-                <button class="text-slate-400 hover:text-slate-100 text-xs" @click="openEdit(d)">Editar</button>
-                <button class="text-red-500/80 hover:text-red-400 text-xs" @click="handleDelete(d)">Eliminar</button>
+                <button class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(d)">Editar</button>
+                <button class="text-red-500/80 hover:text-red-600 text-xs" @click="handleDelete(d)">Eliminar</button>
               </template>
-              <span v-else class="text-xs text-slate-600">—</span>
+              <span v-else class="text-xs text-slate-400">—</span>
             </td>
           </tr>
         </tbody>
@@ -181,7 +181,7 @@ async function handleTest(device: OltDevice) {
           <h2 class="text-lg font-semibold mb-4">{{ editingId ? 'Editar OLT' : 'Nueva OLT' }}</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Nombre</label>
+            <label class="block text-xs text-slate-600 mb-1">Nombre</label>
             <input
               v-model="form.name"
               required
@@ -192,18 +192,18 @@ async function handleTest(device: OltDevice) {
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Host (IP)</label>
+              <label class="block text-xs text-slate-600 mb-1">Host (IP)</label>
               <input v-model="form.host" required class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Puerto Telnet</label>
+              <label class="block text-xs text-slate-600 mb-1">Puerto Telnet</label>
               <input v-model.number="form.telnet_port" type="number" class="field-input" />
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Marca</label>
+              <label class="block text-xs text-slate-600 mb-1">Marca</label>
               <select v-model="form.brand" class="field-input">
                 <option value="zte">ZTE (C300)</option>
                 <option value="huawei" disabled>Huawei (no implementado)</option>
@@ -211,7 +211,7 @@ async function handleTest(device: OltDevice) {
               </select>
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Zona</label>
+              <label class="block text-xs text-slate-600 mb-1">Zona</label>
               <select v-model="form.zone_id" class="field-input">
                 <option value="">Sin asignar</option>
                 <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
@@ -221,11 +221,11 @@ async function handleTest(device: OltDevice) {
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Usuario Telnet</label>
+              <label class="block text-xs text-slate-600 mb-1">Usuario Telnet</label>
               <input v-model="form.username" required class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Contrasena Telnet</label>
+              <label class="block text-xs text-slate-600 mb-1">Contrasena Telnet</label>
               <input
                 v-model="form.password"
                 type="password"
@@ -240,7 +240,7 @@ async function handleTest(device: OltDevice) {
             La contrasena solo la usa el backend para conectarse por Telnet; nunca se muestra de vuelta al frontend.
           </p>
 
-          <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>
+          <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showModal = false">

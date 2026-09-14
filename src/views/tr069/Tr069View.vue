@@ -154,7 +154,7 @@ async function handleUnlink() {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">TR-069 / GenieACS</h1>
-        <p class="text-slate-400 text-sm mt-1">{{ tr069Store.devices.length }} CPEs reportados por GenieACS</p>
+        <p class="text-slate-600 text-sm mt-1">{{ tr069Store.devices.length }} CPEs reportados por GenieACS</p>
       </div>
       <div class="flex gap-2">
         <button class="btn-ghost" :disabled="collectingAll" @click="handleCollectAll">
@@ -166,12 +166,12 @@ async function handleUnlink() {
       </div>
     </div>
 
-    <p v-if="actionMessage" class="mb-4 text-sm text-emerald-400">{{ actionMessage }}</p>
-    <p v-if="actionError" class="mb-4 text-sm text-red-400">{{ actionError }}</p>
+    <p v-if="actionMessage" class="mb-4 text-sm text-emerald-600">{{ actionMessage }}</p>
+    <p v-if="actionError" class="mb-4 text-sm text-red-600">{{ actionError }}</p>
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[1000px]">
-        <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">CPE</th>
             <th class="text-left px-4 py-3">Modelo / Firmware</th>
@@ -193,7 +193,7 @@ async function handleUnlink() {
             </td>
           </tr>
           <template v-for="device in tr069Store.devices" :key="device.id">
-            <tr class="border-t border-slate-800 cursor-pointer hover:bg-slate-900/40" @click="toggleExpand(device)">
+            <tr class="border-t border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleExpand(device)">
               <td class="px-4 py-3">
                 <div class="font-mono text-xs">{{ device.cpe_serial }}</div>
                 <div class="text-[10px] text-slate-500">{{ device.cpe_oui }}</div>
@@ -205,23 +205,23 @@ async function handleUnlink() {
               <td class="px-4 py-3 font-mono text-xs">{{ device.wan_ip ?? '—' }}</td>
               <td class="px-4 py-3">{{ device.ssid ?? '—' }}</td>
               <td class="px-4 py-3">
-                <span v-if="device.contracts" class="badge bg-sky-500/15 text-sky-400">{{ device.contracts.contract_number }}</span>
+                <span v-if="device.contracts" class="badge bg-sky-500/15 text-sky-600">{{ device.contracts.contract_number }}</span>
                 <span v-else class="text-slate-500 text-xs">Sin vincular</span>
               </td>
-              <td class="px-4 py-3 text-slate-400">{{ formatDate(device.last_seen_at) }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ formatDate(device.last_seen_at) }}</td>
               <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs" @click.stop>
-                <button class="text-sky-400 hover:underline" @click="openLinkModal(device)">Vincular</button>
-                <button class="text-slate-400 hover:underline" @click="toggleExpand(device)">
+                <button class="text-sky-600 hover:underline" @click="openLinkModal(device)">Vincular</button>
+                <button class="text-slate-600 hover:underline" @click="toggleExpand(device)">
                   {{ expandedId === device.id ? 'Ocultar' : 'Métricas' }}
                 </button>
               </td>
             </tr>
-            <tr v-if="expandedId === device.id" class="border-t border-slate-800 bg-slate-900/40">
+            <tr v-if="expandedId === device.id" class="border-t border-slate-200 bg-slate-50">
               <td colspan="7" class="px-4 py-4">
                 <div v-if="metricsLoadingId === device.id" class="text-xs text-slate-500">Consultando...</div>
                 <div v-else-if="!metricsById[device.id]" class="flex items-center justify-between">
                   <span class="text-xs text-slate-500">Sin métricas registradas todavía.</span>
-                  <button class="text-sky-400 hover:underline text-xs" @click="refreshDeviceMetrics(device)">Recolectar ahora</button>
+                  <button class="text-sky-600 hover:underline text-xs" @click="refreshDeviceMetrics(device)">Recolectar ahora</button>
                 </div>
                 <div v-else class="flex flex-wrap items-center gap-6 text-xs">
                   <div><span class="text-slate-500">Rx:</span> {{ metricsById[device.id]?.rx_power ?? '—' }} dBm</div>
@@ -230,7 +230,7 @@ async function handleUnlink() {
                   <div><span class="text-slate-500">Uptime:</span> {{ metricsById[device.id]?.uptime ?? '—' }} s</div>
                   <div><span class="text-slate-500">Estado:</span> {{ metricsById[device.id]?.connection_status ?? '—' }}</div>
                   <div class="text-slate-500">{{ formatDate(metricsById[device.id]?.collected_at ?? null) }}</div>
-                  <button class="text-sky-400 hover:underline ml-auto" @click="refreshDeviceMetrics(device)">Actualizar</button>
+                  <button class="text-sky-600 hover:underline ml-auto" @click="refreshDeviceMetrics(device)">Actualizar</button>
                 </div>
               </td>
             </tr>
@@ -246,7 +246,7 @@ async function handleUnlink() {
           <p class="text-xs text-slate-500 mb-4 font-mono">{{ linkModalDevice.genieacs_id }}</p>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Cliente</label>
+            <label class="block text-xs text-slate-600 mb-1">Cliente</label>
             <input v-model="clientFilter" placeholder="Buscar por nombre o documento..." class="field-input mb-2" />
             <select v-model="linkingClientId" size="5" class="field-input" @change="onClientChange">
               <option
@@ -262,20 +262,20 @@ async function handleUnlink() {
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Contrato</label>
+            <label class="block text-xs text-slate-600 mb-1">Contrato</label>
             <select v-model="linkingContractId" class="field-input" :disabled="!linkingClientId || loadingContracts">
               <option value="">{{ loadingContracts ? 'Cargando...' : 'Selecciona un contrato' }}</option>
               <option v-for="c in clientContracts" :key="c.id" :value="c.id">{{ c.contract_number }}</option>
             </select>
           </div>
 
-          <p v-if="linkError" class="text-sm text-red-400 mb-3">{{ linkError }}</p>
+          <p v-if="linkError" class="text-sm text-red-600 mb-3">{{ linkError }}</p>
 
           <div class="flex justify-between gap-2">
             <button
               v-if="linkModalDevice.service_contract_id"
               type="button"
-              class="text-red-400 hover:underline text-xs"
+              class="text-red-600 hover:underline text-xs"
               :disabled="linkSaving"
               @click="handleUnlink"
             >

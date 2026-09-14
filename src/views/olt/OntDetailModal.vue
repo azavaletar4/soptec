@@ -163,7 +163,7 @@ async function toggleConfig() {
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-slate-500">Perfil TR-069</span>
-                <span class="badge" :class="ont.tr069_enabled ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-700/50 text-slate-400'">
+                <span class="badge" :class="ont.tr069_enabled ? 'bg-emerald-500/15 text-emerald-600' : 'bg-slate-200 text-slate-600'">
                   {{ ont.tr069_enabled ? 'Activo' : 'Inactivo' }}
                 </span>
               </div>
@@ -175,15 +175,15 @@ async function toggleConfig() {
                 <span class="text-slate-500">VLAN</span>
                 <span>{{ ont.vlan ?? '—' }}</span>
               </div>
-              <p v-if="signalError" class="text-xs text-red-400 pt-1">{{ signalError }}</p>
+              <p v-if="signalError" class="text-xs text-red-600 pt-1">{{ signalError }}</p>
             </div>
           </div>
         </div>
 
         <div v-if="configOpen" class="mt-4">
           <p v-if="configLoading" class="text-xs text-slate-500">Consultando...</p>
-          <p v-else-if="configError" class="text-xs text-red-400">{{ configError }}</p>
-          <pre v-else class="text-xs bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{{ configText }}</pre>
+          <p v-else-if="configError" class="text-xs text-red-600">{{ configError }}</p>
+          <pre v-else class="text-xs bg-white border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{{ configText }}</pre>
         </div>
 
         <div class="flex flex-wrap gap-2 mt-6">

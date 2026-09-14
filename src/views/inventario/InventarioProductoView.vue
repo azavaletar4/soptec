@@ -37,8 +37,8 @@ const movementError = ref<string | null>(null);
 
 const MOVEMENT_LABEL: Record<InventoryMovementType, string> = { ingreso: 'Ingreso', egreso: 'Egreso' };
 const MOVEMENT_CLASS: Record<InventoryMovementType, string> = {
-  ingreso: 'bg-green-500/15 text-green-400',
-  egreso: 'bg-red-500/15 text-red-400',
+  ingreso: 'bg-green-500/15 text-green-600',
+  egreso: 'bg-red-500/15 text-red-600',
 };
 
 const isLowStock = computed(() => !!product.value && product.value.current_stock <= product.value.min_stock);
@@ -64,11 +64,11 @@ const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   retired: 'Dado de baja',
 };
 const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
-  in_stock: 'bg-green-500/15 text-green-400',
-  assigned: 'bg-sky-500/15 text-sky-400',
-  damaged: 'bg-red-500/15 text-red-400',
-  in_repair: 'bg-amber-500/15 text-amber-400',
-  retired: 'bg-slate-500/15 text-slate-400',
+  in_stock: 'bg-green-500/15 text-green-600',
+  assigned: 'bg-sky-500/15 text-sky-600',
+  damaged: 'bg-red-500/15 text-red-600',
+  in_repair: 'bg-amber-500/15 text-amber-600',
+  retired: 'bg-slate-500/15 text-slate-600',
 };
 
 const unitKpis = computed(() => {
@@ -326,34 +326,34 @@ async function handleDeleteProduct() {
 
 <template>
   <AppLayout>
-    <button class="text-sm text-slate-400 hover:text-slate-100 mb-4" @click="router.push('/inventario')">← Volver a Inventario</button>
+    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push('/inventario')">← Volver a Inventario</button>
 
     <div v-if="!product" class="text-slate-500">Producto no encontrado.</div>
     <template v-else>
       <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 class="text-2xl font-semibold mb-1">{{ product.name }}</h1>
-          <p class="text-slate-400 text-sm">
+          <p class="text-slate-600 text-sm">
             {{ product.category ?? 'Sin categoría' }} · {{ product.unit }} · S/ {{ Number(product.price).toFixed(2) }}
             <span v-if="product.purchase_date"> · Compra: {{ product.purchase_date }}</span>
           </p>
         </div>
         <div class="flex gap-2">
           <button class="btn-secondary" @click="openEdit">Editar producto</button>
-          <button v-if="canDelete" class="px-3 py-1.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10" @click="handleDeleteProduct">Eliminar</button>
+          <button v-if="canDelete" class="px-3 py-1.5 rounded-lg text-sm text-red-600 hover:bg-red-500/10" @click="handleDeleteProduct">Eliminar</button>
         </div>
       </div>
 
-      <p v-if="inventoryStore.error" class="mb-4 text-sm text-red-400">{{ inventoryStore.error }}</p>
+      <p v-if="inventoryStore.error" class="mb-4 text-sm text-red-600">{{ inventoryStore.error }}</p>
 
       <template v-if="!product.is_serialized">
         <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))">
           <div class="surface p-4">
-            <div class="text-3xl font-bold" :class="isLowStock ? 'text-amber-400' : 'text-green-400'">{{ product.current_stock }}</div>
+            <div class="text-3xl font-bold" :class="isLowStock ? 'text-amber-600' : 'text-green-600'">{{ product.current_stock }}</div>
             <div class="text-xs text-slate-500 mt-1">Stock actual ({{ product.unit }})</div>
           </div>
           <div class="surface p-4">
-            <div class="text-3xl font-bold text-slate-300">{{ product.min_stock }}</div>
+            <div class="text-3xl font-bold text-slate-700">{{ product.min_stock }}</div>
             <div class="text-xs text-slate-500 mt-1">Stock mínimo</div>
           </div>
           <div class="surface p-4 flex items-center gap-2">
@@ -362,12 +362,12 @@ async function handleDeleteProduct() {
           </div>
         </div>
 
-        <p v-if="isLowStock" class="text-sm text-amber-400 mb-4">⚠ El stock está en o por debajo del mínimo configurado.</p>
+        <p v-if="isLowStock" class="text-sm text-amber-600 mb-4">⚠ El stock está en o por debajo del mínimo configurado.</p>
 
         <h2 class="text-lg font-semibold mb-3">Kardex</h2>
         <div class="table-shell">
           <table class="w-full text-sm min-w-[680px]">
-            <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
               <tr>
                 <th class="text-left px-4 py-3">Fecha</th>
                 <th class="text-left px-4 py-3">Tipo</th>
@@ -384,15 +384,15 @@ async function handleDeleteProduct() {
               <tr v-else-if="!movements.length">
                 <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin movimientos todavía.</td>
               </tr>
-              <tr v-for="m in movements" :key="m.id" class="border-t border-slate-800">
+              <tr v-for="m in movements" :key="m.id" class="border-t border-slate-200">
                 <td class="px-4 py-3 text-slate-500 text-xs">{{ formatDate(m.created_at) }}</td>
                 <td class="px-4 py-3">
                   <span class="badge" :class="MOVEMENT_CLASS[m.movement_type]">{{ MOVEMENT_LABEL[m.movement_type] }}</span>
                 </td>
                 <td class="px-4 py-3 text-right font-mono">{{ m.movement_type === 'ingreso' ? '+' : '−' }}{{ m.quantity }}</td>
-                <td class="px-4 py-3 text-right font-mono text-slate-100">{{ m.balance_after }}</td>
-                <td class="px-4 py-3 text-slate-400">{{ m.reason ?? '—' }}</td>
-                <td class="px-4 py-3 text-slate-400 text-xs">{{ m.author?.full_name || m.author?.email || '—' }}</td>
+                <td class="px-4 py-3 text-right font-mono text-slate-900">{{ m.balance_after }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ m.reason ?? '—' }}</td>
+                <td class="px-4 py-3 text-slate-600 text-xs">{{ m.author?.full_name || m.author?.email || '—' }}</td>
               </tr>
             </tbody>
           </table>
@@ -402,19 +402,19 @@ async function handleDeleteProduct() {
       <template v-else>
         <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))">
           <div class="surface p-4">
-            <div class="text-2xl font-bold text-slate-100">{{ unitKpis.total }}</div>
+            <div class="text-2xl font-bold text-slate-900">{{ unitKpis.total }}</div>
             <div class="text-xs text-slate-500 mt-1">Total equipos</div>
           </div>
           <div class="surface p-4">
-            <div class="text-2xl font-bold text-green-400">{{ unitKpis.in_stock }}</div>
+            <div class="text-2xl font-bold text-green-600">{{ unitKpis.in_stock }}</div>
             <div class="text-xs text-slate-500 mt-1">En bodega</div>
           </div>
           <div class="surface p-4">
-            <div class="text-2xl font-bold text-sky-400">{{ unitKpis.assigned }}</div>
+            <div class="text-2xl font-bold text-sky-600">{{ unitKpis.assigned }}</div>
             <div class="text-xs text-slate-500 mt-1">Asignados</div>
           </div>
           <div class="surface p-4">
-            <div class="text-2xl font-bold text-amber-400">{{ unitKpis.damaged + unitKpis.in_repair }}</div>
+            <div class="text-2xl font-bold text-amber-600">{{ unitKpis.damaged + unitKpis.in_repair }}</div>
             <div class="text-xs text-slate-500 mt-1">Dañados / en reparación</div>
           </div>
           <div class="surface p-4 flex items-center">
@@ -422,12 +422,12 @@ async function handleDeleteProduct() {
           </div>
         </div>
 
-        <p v-if="unitsError" class="text-sm text-red-400 mb-3">{{ unitsError }}</p>
+        <p v-if="unitsError" class="text-sm text-red-600 mb-3">{{ unitsError }}</p>
 
         <h2 class="text-lg font-semibold mb-3">Equipos (serie / MAC)</h2>
         <div class="table-shell">
           <table class="w-full text-sm min-w-[760px]">
-            <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
               <tr>
                 <th class="text-left px-4 py-3">Serie</th>
                 <th class="text-left px-4 py-3">MAC</th>
@@ -443,25 +443,25 @@ async function handleDeleteProduct() {
               <tr v-else-if="!units.length">
                 <td colspan="5" class="px-4 py-6 text-center text-slate-500">Sin equipos registrados todavía.</td>
               </tr>
-              <tr v-for="u in units" :key="u.id" class="border-t border-slate-800">
+              <tr v-for="u in units" :key="u.id" class="border-t border-slate-200">
                 <td class="px-4 py-3 font-mono text-xs">{{ u.serial_number || '—' }}</td>
                 <td class="px-4 py-3 font-mono text-xs">{{ u.mac_address || '—' }}</td>
                 <td class="px-4 py-3">
                   <span class="badge" :class="UNIT_STATUS_CLASS[u.status]">{{ UNIT_STATUS_LABEL[u.status] }}</span>
                 </td>
-                <td class="px-4 py-3 text-slate-400">
-                  <router-link v-if="u.clients" :to="`/clientes/${u.clients.id}`" class="text-sky-400 hover:underline">
+                <td class="px-4 py-3 text-slate-600">
+                  <router-link v-if="u.clients" :to="`/clientes/${u.clients.id}`" class="text-sky-600 hover:underline">
                     {{ u.clients.first_name }} {{ u.clients.last_name }}
                   </router-link>
                   <span v-else>—</span>
                 </td>
                 <td class="px-4 py-3 text-right">
                   <div class="flex justify-end gap-1.5 flex-wrap">
-                    <button class="text-xs text-slate-400 hover:text-slate-100" @click="openHistory(u)">Historial</button>
-                    <button v-if="u.status === 'in_stock'" class="text-xs text-sky-400 hover:text-sky-300" @click="openAssign(u)">Asignar</button>
-                    <button v-if="u.status === 'assigned'" class="text-xs text-amber-400 hover:text-amber-300" @click="openReturn(u)">Devolución</button>
-                    <button v-if="u.status === 'in_repair'" class="text-xs text-green-400 hover:text-green-300" @click="handleMarkRepaired(u)">Marcar reparado</button>
-                    <button v-if="u.status === 'damaged' || u.status === 'in_repair'" class="text-xs text-red-400 hover:text-red-300" @click="handleRetire(u)">Dar de baja</button>
+                    <button class="text-xs text-slate-600 hover:text-slate-900" @click="openHistory(u)">Historial</button>
+                    <button v-if="u.status === 'in_stock'" class="text-xs text-sky-600 hover:text-sky-700" @click="openAssign(u)">Asignar</button>
+                    <button v-if="u.status === 'assigned'" class="text-xs text-amber-600 hover:text-amber-700" @click="openReturn(u)">Devolución</button>
+                    <button v-if="u.status === 'in_repair'" class="text-xs text-green-600 hover:text-green-700" @click="handleMarkRepaired(u)">Marcar reparado</button>
+                    <button v-if="u.status === 'damaged' || u.status === 'in_repair'" class="text-xs text-red-600 hover:text-red-700" @click="handleRetire(u)">Dar de baja</button>
                   </div>
                 </td>
               </tr>
@@ -477,38 +477,38 @@ async function handleDeleteProduct() {
           <h2 class="text-lg font-semibold mb-4">Editar producto</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Nombre</label>
+            <label class="block text-xs text-slate-600 mb-1">Nombre</label>
             <input v-model="editForm.name" required class="field-input" />
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Categoría</label>
+              <label class="block text-xs text-slate-600 mb-1">Categoría</label>
               <input v-model="editForm.category" class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Unidad</label>
+              <label class="block text-xs text-slate-600 mb-1">Unidad</label>
               <input v-model="editForm.unit" class="field-input" />
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Precio</label>
+              <label class="block text-xs text-slate-600 mb-1">Precio</label>
               <input v-model.number="editForm.price" type="number" step="0.01" min="0" class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Stock mínimo</label>
+              <label class="block text-xs text-slate-600 mb-1">Stock mínimo</label>
               <input v-model.number="editForm.min_stock" type="number" step="1" min="0" class="field-input" />
             </div>
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Fecha de compra</label>
+            <label class="block text-xs text-slate-600 mb-1">Fecha de compra</label>
             <input v-model="editForm.purchase_date" type="date" class="field-input" />
           </div>
 
-          <p v-if="editError" class="text-sm text-red-400 mb-3">{{ editError }}</p>
+          <p v-if="editError" class="text-sm text-red-600 mb-3">{{ editError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showEditModal = false">Cancelar</button>
@@ -528,12 +528,12 @@ async function handleDeleteProduct() {
           </h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Cantidad ({{ product?.unit }})</label>
+            <label class="block text-xs text-slate-600 mb-1">Cantidad ({{ product?.unit }})</label>
             <input v-model.number="movementForm.quantity" type="number" step="0.01" min="0.01" required class="field-input" />
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Motivo</label>
+            <label class="block text-xs text-slate-600 mb-1">Motivo</label>
             <input
               v-model="movementForm.reason"
               :placeholder="movementType === 'ingreso' ? 'ej. Compra, devolución...' : 'ej. Instalación, reparación...'"
@@ -541,7 +541,7 @@ async function handleDeleteProduct() {
             />
           </div>
 
-          <p v-if="movementError" class="text-sm text-red-400 mb-3">{{ movementError }}</p>
+          <p v-if="movementError" class="text-sm text-red-600 mb-3">{{ movementError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showMovementModal = false">Cancelar</button>
@@ -559,21 +559,21 @@ async function handleDeleteProduct() {
           <h2 class="text-lg font-semibold mb-4">Registrar equipo</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Número de serie</label>
+            <label class="block text-xs text-slate-600 mb-1">Número de serie</label>
             <input v-model="unitForm.serial_number" class="field-input" placeholder="ej. ZTEGC1234567" />
           </div>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Dirección MAC</label>
+            <label class="block text-xs text-slate-600 mb-1">Dirección MAC</label>
             <input v-model="unitForm.mac_address" class="field-input" placeholder="ej. AA:BB:CC:DD:EE:FF" />
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Notas</label>
+            <label class="block text-xs text-slate-600 mb-1">Notas</label>
             <input v-model="unitForm.notes" class="field-input" placeholder="Opcional" />
           </div>
 
-          <p v-if="unitFormError" class="text-sm text-red-400 mb-3">{{ unitFormError }}</p>
+          <p v-if="unitFormError" class="text-sm text-red-600 mb-3">{{ unitFormError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showUnitModal = false">Cancelar</button>
@@ -592,7 +592,7 @@ async function handleDeleteProduct() {
           <p class="text-xs text-slate-500 mb-4 font-mono">{{ assignUnitTarget?.serial_number || assignUnitTarget?.mac_address }}</p>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Buscar cliente</label>
+            <label class="block text-xs text-slate-600 mb-1">Buscar cliente</label>
             <input v-model="assignClientFilter" class="field-input" placeholder="Nombre o documento..." />
           </div>
 
@@ -602,7 +602,7 @@ async function handleDeleteProduct() {
             </option>
           </select>
 
-          <p v-if="assignError" class="text-sm text-red-400 mb-3">{{ assignError }}</p>
+          <p v-if="assignError" class="text-sm text-red-600 mb-3">{{ assignError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showAssignModal = false">Cancelar</button>
@@ -621,7 +621,7 @@ async function handleDeleteProduct() {
           <p class="text-xs text-slate-500 mb-4 font-mono">{{ returnUnitTarget?.serial_number || returnUnitTarget?.mac_address }}</p>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Condición del equipo</label>
+            <label class="block text-xs text-slate-600 mb-1">Condición del equipo</label>
             <select v-model="returnForm.condition" class="field-input">
               <option value="in_stock">Buen estado — listo para reasignar</option>
               <option value="damaged">Dañado</option>
@@ -630,11 +630,11 @@ async function handleDeleteProduct() {
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Motivo</label>
+            <label class="block text-xs text-slate-600 mb-1">Motivo</label>
             <input v-model="returnForm.reason" class="field-input" placeholder="ej. Baja del servicio, cambio de equipo..." />
           </div>
 
-          <p v-if="returnError" class="text-sm text-red-400 mb-3">{{ returnError }}</p>
+          <p v-if="returnError" class="text-sm text-red-600 mb-3">{{ returnError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showReturnModal = false">Cancelar</button>
@@ -655,14 +655,14 @@ async function handleDeleteProduct() {
           <p v-if="historyLoading" class="text-slate-500 text-sm">Cargando...</p>
           <p v-else-if="!historyEvents.length" class="text-slate-500 text-sm">Sin eventos registrados.</p>
           <ul v-else class="space-y-3">
-            <li v-for="ev in historyEvents" :key="ev.id" class="text-xs border-l-2 border-slate-700 pl-3">
+            <li v-for="ev in historyEvents" :key="ev.id" class="text-xs border-l-2 border-slate-300 pl-3">
               <div class="flex items-center gap-2">
                 <span class="badge" :class="UNIT_STATUS_CLASS[ev.to_status]">{{ UNIT_STATUS_LABEL[ev.to_status] }}</span>
                 <span class="text-slate-500">{{ formatDate(ev.created_at) }}</span>
               </div>
-              <p v-if="ev.reason" class="text-slate-400 mt-1">{{ ev.reason }}</p>
+              <p v-if="ev.reason" class="text-slate-600 mt-1">{{ ev.reason }}</p>
               <p v-if="ev.clients" class="text-slate-500 mt-0.5">Cliente: {{ ev.clients.first_name }} {{ ev.clients.last_name }}</p>
-              <p class="text-slate-600 mt-0.5">{{ ev.author?.full_name || ev.author?.email || '—' }}</p>
+              <p class="text-slate-400 mt-0.5">{{ ev.author?.full_name || ev.author?.email || '—' }}</p>
             </li>
           </ul>
 

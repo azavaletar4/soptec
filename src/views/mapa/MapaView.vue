@@ -515,7 +515,7 @@ async function handleDeleteInfra() {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">Mapa de infraestructura</h1>
-        <p class="text-slate-400 text-sm mt-1">
+        <p class="text-slate-600 text-sm mt-1">
           {{ clientsWithGps.length }} clientes · {{ oltsWithGps.length }} OLTs · {{ mikrotiksWithGps.length }} MikroTiks ·
           {{ infraStore.elementos.length }} elementos pasivos
         </p>
@@ -523,35 +523,35 @@ async function handleDeleteInfra() {
       <div class="flex flex-wrap gap-2">
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
-          :class="showClients ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+          :class="showClients ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
           @click="showClients = !showClients"
         >
           <span class="w-2 h-2 rounded-full bg-green-500"></span> Clientes ({{ clientsWithGps.length }})
         </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
-          :class="showOlt ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+          :class="showOlt ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
           @click="showOlt = !showOlt"
         >
           <span class="w-2 h-2 rounded-full" style="background:#2563eb"></span> OLT ({{ oltsWithGps.length }})
         </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
-          :class="showMikrotik ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+          :class="showMikrotik ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
           @click="showMikrotik = !showMikrotik"
         >
           <span class="w-2 h-2 rounded-full" style="background:#7c3aed"></span> MikroTik ({{ mikrotiksWithGps.length }})
         </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
-          :class="showInfra ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+          :class="showInfra ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
           @click="showInfra = !showInfra"
         >
           <span class="w-2 h-2 rounded-full" style="background:#f97316"></span> Pasivos ({{ infraStore.elementos.length }})
         </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
-          :class="showInstallations ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+          :class="showInstallations ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
           @click="showInstallations = !showInstallations"
         >
           🔧 Instalaciones ({{ pendingInstallations.length }})
@@ -562,22 +562,22 @@ async function handleDeleteInfra() {
     </div>
 
     <div v-if="oltsWithoutGps.length || mikrotiksWithoutGps.length" class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-3 mb-3 text-xs">
-      <span class="text-slate-400">Sin ubicar en el mapa — clic para colocar en el centro actual, luego arrastra para ajustar:</span>
+      <span class="text-slate-600">Sin ubicar en el mapa — clic para colocar en el centro actual, luego arrastra para ajustar:</span>
       <div class="flex flex-wrap gap-2 mt-2">
-        <button v-for="d in oltsWithoutGps" :key="d.id" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-sky-400" @click="placeOlt(d.id)">
+        <button v-for="d in oltsWithoutGps" :key="d.id" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-100 text-sky-600" @click="placeOlt(d.id)">
           📍 {{ d.name }} (OLT)
         </button>
-        <button v-for="d in mikrotiksWithoutGps" :key="d.id" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-violet-400" @click="placeMikrotik(d.id)">
+        <button v-for="d in mikrotiksWithoutGps" :key="d.id" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-100 text-violet-600" @click="placeMikrotik(d.id)">
           📍 {{ d.name }} (MikroTik)
         </button>
       </div>
     </div>
 
     <div class="mb-3">
-      <button class="text-xs text-slate-400 hover:text-slate-100" @click="legendOpen = !legendOpen">
+      <button class="text-xs text-slate-600 hover:text-slate-900" @click="legendOpen = !legendOpen">
         {{ legendOpen ? '▾' : '▸' }} Leyenda
       </button>
-      <div v-if="legendOpen" class="flex flex-wrap gap-4 mt-2 text-xs text-slate-400 rounded-xl border border-slate-800 bg-slate-900 p-3">
+      <div v-if="legendOpen" class="flex flex-wrap gap-4 mt-2 text-xs text-slate-600 rounded-xl border border-slate-200 bg-slate-100 p-3">
         <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#22c55e"></span>Cliente activo</span>
         <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#f59e0b"></span>Prospecto</span>
         <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#ef4444"></span>Suspendido</span>
@@ -587,12 +587,12 @@ async function handleDeleteInfra() {
           <span class="w-2.5 h-2.5 inline-block" :style="{ background: INFRA_STYLE[tipo as InfraElementoTipo].color, borderRadius: INFRA_STYLE[tipo as InfraElementoTipo].shape === 'circle' ? '50%' : '2px' }"></span>
           {{ label }}
         </span>
-        <span class="text-slate-600">Arrastra cualquier marcador para reubicarlo — se guarda solo.</span>
+        <span class="text-slate-400">Arrastra cualquier marcador para reubicarlo — se guarda solo.</span>
       </div>
     </div>
 
-    <div class="relative rounded-xl overflow-hidden border border-slate-800" style="height: 70vh;">
-      <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/60 text-slate-400 text-sm">
+    <div class="relative rounded-xl overflow-hidden border border-slate-200" style="height: 70vh;">
+      <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/40 text-slate-600 text-sm">
         Cargando mapa...
       </div>
       <div ref="mapEl" class="w-full h-full"></div>
@@ -651,13 +651,13 @@ async function handleDeleteInfra() {
             <input type="file" accept="image/*" class="field-input" @change="onInfraPhotoChange" />
           </div>
 
-          <p v-if="infraError" class="text-sm text-red-400 mb-3">{{ infraError }}</p>
+          <p v-if="infraError" class="text-sm text-red-600 mb-3">{{ infraError }}</p>
 
           <div class="flex justify-between gap-2">
             <button
               v-if="editingInfraId"
               type="button"
-              class="text-red-400 hover:underline text-xs"
+              class="text-red-600 hover:underline text-xs"
               :disabled="infraSaving"
               @click="handleDeleteInfra"
             >

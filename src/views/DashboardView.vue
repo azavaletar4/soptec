@@ -134,7 +134,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
       </button>
     </div>
 
-    <p v-if="dashboard.error" class="mb-4 text-sm text-red-400">{{ dashboard.error }}</p>
+    <p v-if="dashboard.error" class="mb-4 text-sm text-red-600">{{ dashboard.error }}</p>
 
     <template v-if="dashboard.summary">
       <!-- Estado de la red: encabezado del dashboard -->
@@ -173,30 +173,30 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
         Total autorizado: {{ dashboard.summary.oltSummary.online + dashboard.summary.oltSummary.offline }}
         · {{ dashboard.summary.oltSummary.deviceCount }} OLT(s)
         · Información válida a las {{ oltCheckedAtLabel }}
-        <span v-if="!dashboard.summary.oltSummary.scanComplete" class="text-amber-400/80">(escaneo parcial)</span>
+        <span v-if="!dashboard.summary.oltSummary.scanComplete" class="text-amber-600/80">(escaneo parcial)</span>
       </p>
 
       <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
         <button class="text-left surface-hover p-5" @click="goTo('/olt')">
           <div class="text-sm font-semibold mb-3">OLTs (conexión)</div>
           <div class="flex gap-2 flex-wrap text-sm">
-            <span class="badge bg-green-500/15 text-green-400">{{ dashboard.summary.network.olt.ok }} ok</span>
-            <span class="badge bg-red-500/15 text-red-400">{{ dashboard.summary.network.olt.down }} caídas</span>
-            <span class="badge bg-slate-500/15 text-slate-400">{{ dashboard.summary.network.olt.untested }} sin probar</span>
+            <span class="badge bg-green-500/15 text-green-600">{{ dashboard.summary.network.olt.ok }} ok</span>
+            <span class="badge bg-red-500/15 text-red-600">{{ dashboard.summary.network.olt.down }} caídas</span>
+            <span class="badge bg-slate-500/15 text-slate-600">{{ dashboard.summary.network.olt.untested }} sin probar</span>
           </div>
         </button>
         <button class="text-left surface-hover p-5" @click="goTo('/mikrotik')">
           <div class="text-sm font-semibold mb-3">MikroTiks</div>
           <div class="flex gap-2 flex-wrap text-sm">
-            <span class="badge bg-green-500/15 text-green-400">{{ dashboard.summary.network.mikrotik.ok }} ok</span>
-            <span class="badge bg-red-500/15 text-red-400">{{ dashboard.summary.network.mikrotik.down }} caídos</span>
-            <span class="badge bg-slate-500/15 text-slate-400">{{ dashboard.summary.network.mikrotik.untested }} sin probar</span>
+            <span class="badge bg-green-500/15 text-green-600">{{ dashboard.summary.network.mikrotik.ok }} ok</span>
+            <span class="badge bg-red-500/15 text-red-600">{{ dashboard.summary.network.mikrotik.down }} caídos</span>
+            <span class="badge bg-slate-500/15 text-slate-600">{{ dashboard.summary.network.mikrotik.untested }} sin probar</span>
           </div>
         </button>
         <div class="surface p-5">
           <div class="text-sm font-semibold mb-2">Con problemas</div>
-          <p v-if="!dashboard.summary.network.problems.length" class="text-sm text-green-400">Todos los equipos responden</p>
-          <ul v-else class="text-sm text-red-400 space-y-1">
+          <p v-if="!dashboard.summary.network.problems.length" class="text-sm text-green-600">Todos los equipos responden</p>
+          <ul v-else class="text-sm text-red-600 space-y-1">
             <li v-for="p in dashboard.summary.network.problems" :key="p.kind + p.host">{{ p.kind }} — {{ p.name }} ({{ p.host }})</li>
           </ul>
         </div>
@@ -265,7 +265,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
       <div class="surface p-5 mb-8">
         <div class="flex items-center justify-between mb-4">
           <div class="text-sm font-semibold">Facturación del mes</div>
-          <button class="text-xs text-sky-400 hover:text-sky-300 font-medium" @click="goTo('/facturacion')">Ver todo →</button>
+          <button class="text-xs text-sky-600 hover:text-sky-700 font-medium" @click="goTo('/facturacion')">Ver todo →</button>
         </div>
         <div class="grid gap-4 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr))">
           <div>
@@ -273,15 +273,15 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
             <div class="text-xs text-slate-500 mt-1">Facturado</div>
           </div>
           <div>
-            <div class="text-xl font-semibold text-green-400">S/ {{ dashboard.summary.billing.collectedThisMonth.toFixed(2) }}</div>
+            <div class="text-xl font-semibold text-green-600">S/ {{ dashboard.summary.billing.collectedThisMonth.toFixed(2) }}</div>
             <div class="text-xs text-slate-500 mt-1">Cobrado del mes</div>
           </div>
           <div>
-            <div class="text-xl font-semibold text-sky-400">S/ {{ dashboard.summary.billing.collectedToday.toFixed(2) }}</div>
+            <div class="text-xl font-semibold text-sky-600">S/ {{ dashboard.summary.billing.collectedToday.toFixed(2) }}</div>
             <div class="text-xs text-slate-500 mt-1">Cobrado hoy</div>
           </div>
           <div>
-            <div class="text-xl font-semibold text-amber-400">S/ {{ dashboard.summary.billing.uncollectedThisMonth.toFixed(2) }}</div>
+            <div class="text-xl font-semibold text-amber-600">S/ {{ dashboard.summary.billing.uncollectedThisMonth.toFixed(2) }}</div>
             <div class="text-xs text-slate-500 mt-1">Sin cobrar del mes</div>
           </div>
         </div>
@@ -290,7 +290,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
             <span>Recaudo del mes</span>
             <span>{{ dashboard.summary.billing.collectionRate.toFixed(0) }}%</span>
           </div>
-          <div class="h-2 rounded-full bg-slate-800 overflow-hidden">
+          <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
             <div
               class="h-full rounded-full"
               :class="recaudoBarClass"
@@ -298,17 +298,17 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
             ></div>
           </div>
         </div>
-        <p v-if="dashboard.summary.billing.overdueCount" class="text-xs text-red-400">
+        <p v-if="dashboard.summary.billing.overdueCount" class="text-xs text-red-600">
           ⚠ {{ dashboard.summary.billing.overdueCount }} factura(s) vencida(s) sin cobrar (S/ {{ dashboard.summary.billing.pendingTotal.toFixed(2) }} pendiente en total).
         </p>
-        <p v-else class="text-xs text-green-400">Sin facturas vencidas.</p>
+        <p v-else class="text-xs text-green-600">Sin facturas vencidas.</p>
       </div>
 
       <!-- Ingresos 6 meses -->
       <div class="surface p-5 mb-8">
         <div class="flex items-center justify-between mb-3">
           <div class="text-sm font-semibold">Ingresos últimos 6 meses</div>
-          <div class="flex items-center gap-3 text-xs text-slate-400">
+          <div class="flex items-center gap-3 text-xs text-slate-600">
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#3987e5"></span>Facturado</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:#d95926"></span>Cobrado</span>
           </div>
@@ -337,7 +337,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
             <li
               v-for="c in dashboard.summary.recentClients"
               :key="c.id"
-              class="flex items-center justify-between text-sm cursor-pointer hover:text-sky-400 transition-colors"
+              class="flex items-center justify-between text-sm cursor-pointer hover:text-sky-600 transition-colors"
               @click="goTo(`/clientes/${c.id}`)"
             >
               <span>{{ c.first_name }} {{ c.last_name }}</span>
@@ -352,7 +352,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
             <li
               v-for="t in dashboard.summary.tickets.recent"
               :key="t.id"
-              class="flex items-center justify-between text-sm cursor-pointer hover:text-sky-400 transition-colors"
+              class="flex items-center justify-between text-sm cursor-pointer hover:text-sky-600 transition-colors"
               @click="goTo(`/soporte/${t.id}`)"
             >
               <span>{{ t.title }} — {{ t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : '—' }}</span>

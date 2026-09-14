@@ -56,9 +56,9 @@ const STATUS_LABEL: Record<InvoiceStatus, string> = {
   cancelled: 'Cancelada',
 };
 const STATUS_CLASS: Record<InvoiceStatus, string> = {
-  pending: 'bg-yellow-500/15 text-yellow-400',
-  paid: 'bg-green-500/15 text-green-400',
-  cancelled: 'bg-slate-500/15 text-slate-400',
+  pending: 'bg-yellow-500/15 text-yellow-600',
+  paid: 'bg-green-500/15 text-green-600',
+  cancelled: 'bg-slate-500/15 text-slate-600',
 };
 
 function isOverdue(inv: Invoice) {
@@ -190,7 +190,7 @@ async function handleCancel(inv: Invoice) {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Facturación</h1>
-        <p class="text-slate-400 text-sm mt-1">Control interno de cobros — {{ invoicesStore.invoices.length }} facturas</p>
+        <p class="text-slate-600 text-sm mt-1">Control interno de cobros — {{ invoicesStore.invoices.length }} facturas</p>
       </div>
       <button class="btn-primary" @click="openCreate">
         + Nueva factura
@@ -232,18 +232,18 @@ async function handleCancel(inv: Invoice) {
         v-for="tab in STATUS_TABS"
         :key="tab.value"
         class="px-3 py-1.5 rounded-lg text-xs font-medium"
-        :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-slate-100'"
+        :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
         @click="statusFilter = tab.value"
       >
         {{ tab.label }}
       </button>
     </div>
 
-    <p v-if="invoicesStore.error" class="mb-4 text-sm text-red-400">{{ invoicesStore.error }}</p>
+    <p v-if="invoicesStore.error" class="mb-4 text-sm text-red-600">{{ invoicesStore.error }}</p>
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[820px]">
-        <thead class="bg-slate-900 text-slate-400 text-xs uppercase">
+        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Factura</th>
             <th class="text-left px-4 py-3">Cliente</th>
@@ -261,36 +261,36 @@ async function handleCancel(inv: Invoice) {
           <tr v-else-if="!filteredInvoices.length">
             <td colspan="7" class="px-4 py-6 text-center text-slate-500">No hay facturas en este filtro.</td>
           </tr>
-          <tr v-for="inv in filteredInvoices" :key="inv.id" class="border-t border-slate-800 hover:bg-slate-900/50">
+          <tr v-for="inv in filteredInvoices" :key="inv.id" class="border-t border-slate-200 hover:bg-slate-50">
             <td class="px-4 py-3">
               <div class="font-mono text-xs text-slate-500">{{ inv.invoice_number }}</div>
-              <div class="text-xs text-slate-600">{{ inv.service_contracts?.contract_number }}</div>
+              <div class="text-xs text-slate-400">{{ inv.service_contracts?.contract_number }}</div>
             </td>
             <td class="px-4 py-3">
               <button
-                class="text-slate-100 hover:text-sky-400"
+                class="text-slate-900 hover:text-sky-600"
                 @click="router.push(`/clientes/${inv.client_id}`)"
               >
                 {{ inv.clients ? `${inv.clients.first_name} ${inv.clients.last_name}` : '—' }}
               </button>
             </td>
-            <td class="px-4 py-3 text-slate-400 text-xs">{{ inv.period_start }} → {{ inv.period_end }}</td>
+            <td class="px-4 py-3 text-slate-600 text-xs">{{ inv.period_start }} → {{ inv.period_end }}</td>
             <td class="px-4 py-3 font-medium">S/ {{ Number(inv.amount).toFixed(2) }}</td>
-            <td class="px-4 py-3 text-slate-400 text-xs">{{ inv.due_date }}</td>
+            <td class="px-4 py-3 text-slate-600 text-xs">{{ inv.due_date }}</td>
             <td class="px-4 py-3">
               <span
                 class="badge"
-                :class="isOverdue(inv) ? 'bg-red-500/15 text-red-400' : STATUS_CLASS[inv.status]"
+                :class="isOverdue(inv) ? 'bg-red-500/15 text-red-600' : STATUS_CLASS[inv.status]"
               >
                 {{ isOverdue(inv) ? 'Vencida' : STATUS_LABEL[inv.status] }}
               </span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
               <template v-if="inv.status === 'pending'">
-                <button class="text-green-400 hover:text-green-300 text-xs" @click="openPay(inv)">Marcar pagada</button>
-                <button class="text-red-500/80 hover:text-red-400 text-xs" @click="handleCancel(inv)">Cancelar</button>
+                <button class="text-green-600 hover:text-green-700 text-xs" @click="openPay(inv)">Marcar pagada</button>
+                <button class="text-red-500/80 hover:text-red-600 text-xs" @click="handleCancel(inv)">Cancelar</button>
               </template>
-              <span v-else class="text-xs text-slate-600">—</span>
+              <span v-else class="text-xs text-slate-400">—</span>
             </td>
           </tr>
         </tbody>
@@ -306,7 +306,7 @@ async function handleCancel(inv: Invoice) {
           <h2 class="text-lg font-semibold mb-4">Nueva factura</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-400 mb-1">Contrato / cliente</label>
+            <label class="block text-xs text-slate-600 mb-1">Contrato / cliente</label>
             <input
               v-model="contractFilter"
               placeholder="Buscar por nombre o numero de contrato..."
@@ -323,23 +323,23 @@ async function handleCancel(inv: Invoice) {
                 {{ c.contract_number }} — {{ c.clients?.first_name }} {{ c.clients?.last_name }} — S/ {{ Number(c.monthly_fee).toFixed(2) }}
               </option>
             </select>
-            <p v-if="!activeContracts.length" class="text-xs text-amber-400 mt-1">No hay contratos activos.</p>
+            <p v-if="!activeContracts.length" class="text-xs text-amber-600 mt-1">No hay contratos activos.</p>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Periodo desde</label>
+              <label class="block text-xs text-slate-600 mb-1">Periodo desde</label>
               <input v-model="form.period_start" type="date" required class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Periodo hasta</label>
+              <label class="block text-xs text-slate-600 mb-1">Periodo hasta</label>
               <input v-model="form.period_end" type="date" required class="field-input" />
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Monto (S/)</label>
+              <label class="block text-xs text-slate-600 mb-1">Monto (S/)</label>
               <input
                 v-model.number="form.amount"
                 type="number"
@@ -350,17 +350,17 @@ async function handleCancel(inv: Invoice) {
               />
             </div>
             <div>
-              <label class="block text-xs text-slate-400 mb-1">Fecha de vencimiento</label>
+              <label class="block text-xs text-slate-600 mb-1">Fecha de vencimiento</label>
               <input v-model="form.due_date" type="date" required class="field-input" />
             </div>
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Notas</label>
+            <label class="block text-xs text-slate-600 mb-1">Notas</label>
             <textarea v-model="form.notes" rows="2" class="field-input"></textarea>
           </div>
 
-          <p v-if="formError" class="text-sm text-red-400 mb-3">{{ formError }}</p>
+          <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showModal = false">
@@ -381,7 +381,7 @@ async function handleCancel(inv: Invoice) {
           <p class="text-xs text-slate-500 mb-4">{{ payModal.invoice_number }} — S/ {{ Number(payModal.amount).toFixed(2) }}</p>
 
           <div class="mb-4">
-            <label class="block text-xs text-slate-400 mb-1">Metodo de pago</label>
+            <label class="block text-xs text-slate-600 mb-1">Metodo de pago</label>
             <select v-model="payMethod" class="field-input">
               <option value="cash">Efectivo</option>
               <option value="transfer">Transferencia</option>
@@ -389,7 +389,7 @@ async function handleCancel(inv: Invoice) {
             </select>
           </div>
 
-          <p v-if="payError" class="text-sm text-red-400 mb-3">{{ payError }}</p>
+          <p v-if="payError" class="text-sm text-red-600 mb-3">{{ payError }}</p>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="payModal = null">

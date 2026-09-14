@@ -55,7 +55,7 @@ async function handleSubmit() {
       <label class="field-label">Contraseña</label>
       <input v-model="password" type="password" placeholder="••••••••" required class="field-input mb-5" />
 
-      <p v-if="error" class="text-sm text-red-400 mb-3 text-center">{{ error }}</p>
+      <p v-if="error" class="text-sm text-red-600 mb-3 text-center">{{ error }}</p>
 
       <button type="submit" :disabled="loading" class="btn-primary w-full">
         {{ loading ? 'Ingresando...' : 'Ingresar' }}
