@@ -3,9 +3,11 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useDashboardStore } from '@/stores/dashboard';
+import { useOltStore } from '@/stores/olt';
 
 const router = useRouter();
 const dashboard = useDashboardStore();
+const oltStore = useOltStore();
 
 const REFRESH_SECONDS = 60;
 const secondsLeft = ref(REFRESH_SECONDS);
@@ -46,6 +48,27 @@ const updatedLabel = computed(() => {
 
 function goTo(path: string) {
   router.push(path);
+}
+
+/**
+ * La lista real de "ONTs sin autorizar" vive en el detalle de cada OLT
+ * (/olt/:id), no en /olt (que solo lista las OLTs registradas) — si hay una
+ * sola OLT activa (caso normal), saltamos directo a su detalle en vez de
+ * dejar al usuario un paso antes de ver el listado.
+ */
+async function goToUnconfigured() {
+  if (!oltStore.devices.length) {
+    try {
+      await oltStore.fetchDevices();
+    } catch {
+      // si falla, cae al listado /olt de todas formas
+    }
+  }
+  if (oltStore.devices.length === 1) {
+    router.push(`/olt/${oltStore.devices[0].id}`);
+  } else {
+    router.push('/olt');
+  }
 }
 
 const oltCheckedAtLabel = computed(() => {
@@ -115,7 +138,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
       <!-- Estado de la red: encabezado del dashboard -->
       <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Estado de la red — OLTs</h2>
       <div class="grid gap-4 mb-1" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
-        <button class="kpi-tile bg-sky-600/80" @click="goTo('/olt')">
+        <button class="kpi-tile bg-sky-600/80" @click="goToUnconfigured">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.unconfigured }}</div>
             <div class="text-sm text-white/85 mt-1">Sin autorizar</div>
