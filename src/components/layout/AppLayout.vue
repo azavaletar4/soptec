@@ -99,7 +99,7 @@ async function handleLogout() {
     ></div>
 
     <aside
-      class="fixed inset-y-0 left-0 z-50 w-72 shrink-0 border-r border-slate-200 bg-slate-100 p-5 flex flex-col transition-transform duration-200 ease-out md:static md:z-auto md:w-64 md:translate-x-0"
+      class="fixed inset-y-0 left-0 z-50 w-72 shrink-0 border-r border-slate-200 bg-slate-100 p-5 flex flex-col overflow-y-auto transition-transform duration-200 ease-out md:sticky md:top-0 md:h-screen md:z-auto md:w-64 md:translate-x-0"
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex items-center justify-between mb-8">
