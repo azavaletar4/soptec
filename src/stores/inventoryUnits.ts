@@ -136,6 +136,17 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     return registerEvent({ unitId, toStatus: 'retired', reason: reason || 'Baja de equipo' });
   }
 
+  /**
+   * Borrado real (no "dar de baja"): saca la unidad y su historial de
+   * eventos por completo. Para limpiar equipos de prueba, no para bajas
+   * de equipos reales (ahi corresponde retireUnit). Solo SUPERADMIN/ADMIN
+   * (RLS lo exige, ver Fase 19).
+   */
+  async function deleteUnit(unitId: string) {
+    const { error: err } = await supabase.from('inventory_units').delete().eq('id', unitId);
+    if (err) throw err;
+  }
+
   return {
     loading,
     error,
@@ -150,5 +161,6 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     returnUnit,
     markRepaired,
     retireUnit,
+    deleteUnit,
   };
 });

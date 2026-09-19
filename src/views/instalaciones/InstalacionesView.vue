@@ -8,8 +8,17 @@ import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
+import { useClientPhotosStore } from '@/stores/clientPhotos';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
-import type { Installation, InstallationStatus, ServiceContract, InventoryMovement, InventoryUnit } from '@/types/domain';
+import type {
+  ClientPhotoCategory,
+  Installation,
+  InstallationStatus,
+  ServiceContract,
+  InventoryMovement,
+  InventoryUnit,
+} from '@/types/domain';
 
 const router = useRouter();
 const installationsStore = useInstallationsStore();
@@ -18,6 +27,24 @@ const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
 const inventoryStore = useInventoryStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
+const clientPhotosStore = useClientPhotosStore();
+const auth = useAuthStore();
+
+// Solo SUPERADMIN/ADMIN o el TECNICO_RED encargado (assigned_to) pueden
+// editar una instalacion — SOPORTE/FACTURACION siguen viendo la lista,
+// igual que cualquier otro tecnico, pero sin poder tocarla. Regla
+// equivalente en RLS (Fase 16); esto solo evita mostrar controles que la
+// BD va a rechazar.
+// Eliminar es aparte de "editar": solo instalaciones canceladas, y nunca
+// por TECNICO_RED (aunque sea la suya) — mismo criterio que clientes.
+function canDelete(inst: Installation) {
+  return inst.status === 'cancelled' && auth.role !== 'TECNICO_RED';
+}
+
+function canEdit(inst: Installation) {
+  if (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') return true;
+  return auth.role === 'TECNICO_RED' && inst.assigned_to === auth.user?.id;
+}
 
 const showModal = ref(false);
 const saving = ref(false);
@@ -238,13 +265,92 @@ async function handleAssign(inst: Installation, technicianId: string) {
   }
 }
 
-async function handleComplete(inst: Installation) {
-  const ok = confirm(`¿Marcar como completada la instalación de ${inst.clients?.first_name} ${inst.clients?.last_name}?`);
-  if (!ok) return;
+// Edicion directa del estado (correccion administrativa) — solo
+// SUPERADMIN/ADMIN. El tecnico sigue con los botones guiados
+// Completar (con GPS/fotos)/Cancelar, no este selector libre.
+const canEditStatus = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+
+async function handleStatusChange(inst: Installation, status: InstallationStatus) {
   try {
-    await installationsStore.updateStatus(inst.id, 'completed');
+    await installationsStore.updateStatus(inst.id, status);
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al completar la instalación'));
+    alert(getErrorMessage(e, 'Error al cambiar el estado'));
+  }
+}
+
+// ---- Completar instalación: GPS + fotos del cliente (fachada, caja NAP,
+// posición del módem) quedan registradas en el mismo momento, para que se
+// actualicen junto con el cliente en la sección Clientes. ----
+const showCompleteModal = ref(false);
+const completingInstallation = ref<Installation | null>(null);
+const completeSaving = ref(false);
+const completeError = ref<string | null>(null);
+const gettingLocation = ref(false);
+const completeGps = ref<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
+const completePhotos = ref<Partial<Record<ClientPhotoCategory, File>>>({});
+
+const COMPLETE_PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] = [
+  { value: 'facade', label: 'Fachada' },
+  { value: 'nap_box', label: 'Caja NAP' },
+  { value: 'modem_position', label: 'Posición del módem' },
+];
+
+function openCompleteModal(inst: Installation) {
+  completingInstallation.value = inst;
+  completeGps.value = { latitude: inst.clients?.latitude ?? null, longitude: inst.clients?.longitude ?? null };
+  completePhotos.value = {};
+  completeError.value = null;
+  showCompleteModal.value = true;
+}
+
+function useCurrentLocation() {
+  if (!navigator.geolocation) {
+    completeError.value = 'Este navegador no soporta geolocalización';
+    return;
+  }
+  gettingLocation.value = true;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      completeGps.value = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      gettingLocation.value = false;
+    },
+    (err) => {
+      completeError.value = `No se pudo obtener la ubicación: ${err.message}`;
+      gettingLocation.value = false;
+    },
+    { enableHighAccuracy: true, timeout: 10000 },
+  );
+}
+
+function onCompletePhotoChange(category: ClientPhotoCategory, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) completePhotos.value[category] = file;
+}
+
+async function handleCompleteSubmit() {
+  if (!completingInstallation.value) return;
+  completeSaving.value = true;
+  completeError.value = null;
+  try {
+    const clientId = completingInstallation.value.client_id;
+    if (completeGps.value.latitude != null && completeGps.value.longitude != null) {
+      await clientsStore.updateClient(clientId, {
+        latitude: completeGps.value.latitude,
+        longitude: completeGps.value.longitude,
+      });
+    }
+    for (const cat of COMPLETE_PHOTO_CATEGORIES.map((c) => c.value)) {
+      const file = completePhotos.value[cat];
+      if (file) await clientPhotosStore.uploadPhoto(clientId, cat, file);
+    }
+    await installationsStore.updateStatus(completingInstallation.value.id, 'completed');
+    showCompleteModal.value = false;
+    completingInstallation.value = null;
+  } catch (e) {
+    completeError.value = getErrorMessage(e, 'Error al completar la instalación');
+  } finally {
+    completeSaving.value = false;
   }
 }
 
@@ -255,6 +361,18 @@ async function handleCancel(inst: Installation) {
     await installationsStore.updateStatus(inst.id, 'cancelled');
   } catch (e) {
     alert(getErrorMessage(e, 'Error al cancelar la instalación'));
+  }
+}
+
+async function handleDelete(inst: Installation) {
+  const ok = confirm(
+    `¿Eliminar definitivamente la instalación de ${inst.clients?.first_name} ${inst.clients?.last_name}? Esta acción no se puede deshacer.`,
+  );
+  if (!ok) return;
+  try {
+    await installationsStore.deleteInstallation(inst.id);
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al eliminar la instalación'));
   }
 }
 
@@ -275,7 +393,7 @@ function formatDate(value: string | null) {
         <h1 class="text-2xl font-semibold">Instalaciones</h1>
         <p class="text-slate-600 text-sm mt-1">{{ installationsStore.installations.length }} órdenes registradas</p>
       </div>
-      <button class="btn-primary" @click="openCreate">+ Nueva instalación</button>
+      <button v-if="auth.role !== 'TECNICO_RED'" class="btn-primary" @click="openCreate">+ Nueva instalación</button>
     </div>
 
     <input
@@ -328,10 +446,19 @@ function formatDate(value: string | null) {
               <span v-if="inst.scheduled_time" class="text-xs text-slate-500"> · {{ inst.scheduled_time.slice(0, 5) }}</span>
             </td>
             <td class="px-4 py-3">
-              <span class="badge" :class="STATUS_CLASS[inst.status]">{{ STATUS_LABEL[inst.status] }}</span>
+              <select
+                v-if="canEditStatus"
+                class="field-input py-1.5 text-xs"
+                :value="inst.status"
+                @change="handleStatusChange(inst, ($event.target as HTMLSelectElement).value as InstallationStatus)"
+              >
+                <option v-for="(label, value) in STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
+              </select>
+              <span v-else class="badge" :class="STATUS_CLASS[inst.status]">{{ STATUS_LABEL[inst.status] }}</span>
             </td>
             <td class="px-4 py-3">
               <select
+                v-if="canEdit(inst)"
                 class="field-input py-1.5 text-xs"
                 :value="inst.assigned_to ?? ''"
                 @change="handleAssign(inst, ($event.target as HTMLSelectElement).value)"
@@ -339,22 +466,31 @@ function formatDate(value: string | null) {
                 <option value="">Sin asignar</option>
                 <option v-for="t in technicians" :key="t.id" :value="t.id">{{ t.full_name || t.email }}</option>
               </select>
+              <span v-else class="text-xs text-slate-600">
+                {{ technicians.find((t) => t.id === inst.assigned_to)?.full_name || (inst.assigned_to ? 'Técnico' : 'Sin asignar') }}
+              </span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
-              <button class="text-sky-600 hover:underline" @click="openMaterialsModal(inst)">Materiales</button>
-              <button
-                v-if="inst.status !== 'completed' && inst.status !== 'cancelled'"
-                class="text-green-600 hover:underline"
-                @click="handleComplete(inst)"
-              >
-                Completar
-              </button>
-              <button
-                v-if="inst.status !== 'completed' && inst.status !== 'cancelled'"
-                class="text-red-500/80 hover:text-red-600"
-                @click="handleCancel(inst)"
-              >
-                Cancelar
+              <template v-if="canEdit(inst)">
+                <button class="text-sky-600 hover:underline" @click="openMaterialsModal(inst)">Materiales</button>
+                <button
+                  v-if="inst.status !== 'completed' && inst.status !== 'cancelled'"
+                  class="text-green-600 hover:underline"
+                  @click="openCompleteModal(inst)"
+                >
+                  Completar
+                </button>
+                <button
+                  v-if="inst.status !== 'completed' && inst.status !== 'cancelled'"
+                  class="text-red-500/80 hover:text-red-600"
+                  @click="handleCancel(inst)"
+                >
+                  Cancelar
+                </button>
+              </template>
+              <span v-else-if="!canDelete(inst)" class="text-slate-400">Sin permiso</span>
+              <button v-if="canDelete(inst)" class="text-red-500/80 hover:text-red-600" @click="handleDelete(inst)">
+                Eliminar
               </button>
             </td>
           </tr>
@@ -502,6 +638,63 @@ function formatDate(value: string | null) {
             <button class="btn-ghost" @click="showMaterialsModal = false">Cerrar</button>
           </div>
         </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showCompleteModal" class="modal-overlay" @click.self="showCompleteModal = false">
+        <form class="w-full max-w-md modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleCompleteSubmit">
+          <h2 class="text-lg font-semibold mb-1">Completar instalación</h2>
+          <p class="text-xs text-slate-500 mb-4">
+            {{
+              completingInstallation?.clients
+                ? `${completingInstallation.clients.first_name} ${completingInstallation.clients.last_name}`
+                : ''
+            }}
+          </p>
+
+          <h3 class="text-sm font-semibold mb-2">Ubicación GPS</h3>
+          <div class="grid grid-cols-2 gap-3 mb-2">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Latitud</label>
+              <input v-model.number="completeGps.latitude" type="number" step="0.000001" class="field-input" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Longitud</label>
+              <input v-model.number="completeGps.longitude" type="number" step="0.000001" class="field-input" />
+            </div>
+          </div>
+          <button
+            type="button"
+            :disabled="gettingLocation"
+            class="text-xs text-sky-600 hover:text-sky-700 mb-4"
+            @click="useCurrentLocation"
+          >
+            {{ gettingLocation ? 'Obteniendo ubicación...' : '📍 Usar mi ubicación actual' }}
+          </button>
+
+          <h3 class="text-sm font-semibold mb-2">Fotos de instalación</h3>
+          <div class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))">
+            <div v-for="cat in COMPLETE_PHOTO_CATEGORIES" :key="cat.value">
+              <label class="block text-xs text-slate-600 mb-1">{{ cat.label }}</label>
+              <label
+                class="block text-center px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs cursor-pointer"
+              >
+                {{ completePhotos[cat.value] ? completePhotos[cat.value]!.name : 'Subir foto' }}
+                <input type="file" accept="image/*" class="hidden" @change="onCompletePhotoChange(cat.value, $event)" />
+              </label>
+            </div>
+          </div>
+
+          <p v-if="completeError" class="text-sm text-red-600 mb-3">{{ completeError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showCompleteModal = false">Cancelar</button>
+            <button type="submit" :disabled="completeSaving" class="btn-primary">
+              {{ completeSaving ? 'Guardando...' : 'Completar' }}
+            </button>
+          </div>
+        </form>
       </div>
     </Teleport>
   </AppLayout>

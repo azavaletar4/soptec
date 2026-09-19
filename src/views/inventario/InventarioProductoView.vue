@@ -216,6 +216,19 @@ async function handleRetire(unit: InventoryUnit) {
   }
 }
 
+// Borrado real (no "dar de baja"): para limpiar equipos de prueba, no
+// bajas reales — esas van por handleRetire, que conserva el historial.
+async function handleDeleteUnit(unit: InventoryUnit) {
+  const label = unit.serial_number || unit.mac_address || 'este equipo';
+  if (!confirm(`¿Eliminar definitivamente ${label}? Esta acción no se puede deshacer (borra su historial).`)) return;
+  try {
+    await inventoryUnitsStore.deleteUnit(unit.id);
+    await loadUnits();
+  } catch (e) {
+    unitsError.value = getErrorMessage(e, 'Error al eliminar el equipo');
+  }
+}
+
 // ---- Historial (kardex) por unidad ----
 const showHistoryModal = ref(false);
 const historyUnitTarget = ref<InventoryUnit | null>(null);
@@ -462,6 +475,7 @@ async function handleDeleteProduct() {
                     <button v-if="u.status === 'assigned'" class="text-xs text-amber-600 hover:text-amber-700" @click="openReturn(u)">Devolución</button>
                     <button v-if="u.status === 'in_repair'" class="text-xs text-green-600 hover:text-green-700" @click="handleMarkRepaired(u)">Marcar reparado</button>
                     <button v-if="u.status === 'damaged' || u.status === 'in_repair'" class="text-xs text-red-600 hover:text-red-700" @click="handleRetire(u)">Dar de baja</button>
+                    <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click="handleDeleteUnit(u)">Eliminar</button>
                   </div>
                 </td>
               </tr>
