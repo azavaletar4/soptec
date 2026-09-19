@@ -2,13 +2,14 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { supabase } from '@/lib/supabase';
 import { getErrorMessage } from '@/lib/errors';
 import logoIcon from '@/assets/logo-icon.png';
 
 const router = useRouter();
 const auth = useAuthStore();
 
-const email = ref('');
+const username = ref('');
 const password = ref('');
 const error = ref<string | null>(null);
 const loading = ref(false);
@@ -17,8 +18,15 @@ async function handleSubmit() {
   loading.value = true;
   error.value = null;
   try {
-    await auth.signIn(email.value, password.value);
-    router.push('/dashboard');
+    const { data: email, error: lookupErr } = await supabase.rpc('get_email_by_username', {
+      p_username: username.value.trim(),
+    });
+    if (lookupErr || !email) {
+      error.value = 'Usuario o contraseña incorrectos';
+      return;
+    }
+    await auth.signIn(email, password.value);
+    router.push(auth.role === 'TECNICO_RED' ? '/instalaciones' : '/dashboard');
   } catch (e) {
     error.value = getErrorMessage(e, 'Error al iniciar sesion');
   } finally {
@@ -43,13 +51,15 @@ async function handleSubmit() {
         <p class="text-sm text-slate-500 mt-1">Ingresa a tu panel de gestión</p>
       </div>
 
-      <label class="field-label">Correo</label>
+      <label class="field-label">Usuario</label>
       <input
-        v-model="email"
-        type="email"
-        placeholder="correo@empresa.com"
+        v-model="username"
+        type="text"
+        placeholder="usuario"
         required
         autofocus
+        autocapitalize="off"
+        autocorrect="off"
         class="field-input mb-3"
       />
       <label class="field-label">Contraseña</label>

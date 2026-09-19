@@ -97,6 +97,7 @@ export type StaffRole = 'SUPERADMIN' | 'ADMIN' | 'TECNICO_RED' | 'SOPORTE' | 'FA
 export interface UserAccount {
   id: string;
   email: string;
+  username: string;
   full_name: string | null;
   role: StaffRole;
   active: boolean;

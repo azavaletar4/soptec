@@ -22,7 +22,9 @@ const searchQuery = ref('');
 const filteredUsers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return usersStore.users;
-  return usersStore.users.filter((u) => `${u.full_name ?? ''} ${u.email} ${ROLE_LABEL[u.role]}`.toLowerCase().includes(q));
+  return usersStore.users.filter((u) =>
+    `${u.full_name ?? ''} ${u.username} ${u.email} ${ROLE_LABEL[u.role]}`.toLowerCase().includes(q),
+  );
 });
 
 onMounted(() => {
@@ -34,7 +36,7 @@ const editing = ref<UserAccount | null>(null);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 
-const emptyForm = () => ({ full_name: '', email: '', password: '', role: 'TECNICO_RED' as StaffRole });
+const emptyForm = () => ({ full_name: '', username: '', email: '', password: '', role: 'TECNICO_RED' as StaffRole });
 const form = ref(emptyForm());
 
 function generatePassword() {
@@ -53,7 +55,7 @@ function openCreate() {
 
 function openEdit(u: UserAccount) {
   editing.value = u;
-  form.value = { full_name: u.full_name ?? '', email: u.email, password: '', role: u.role };
+  form.value = { full_name: u.full_name ?? '', username: u.username, email: u.email, password: '', role: u.role };
   formError.value = null;
   showModal.value = true;
 }
@@ -63,7 +65,11 @@ async function handleSubmit() {
   formError.value = null;
   try {
     if (editing.value) {
-      const payload: Record<string, unknown> = { full_name: form.value.full_name, role: form.value.role };
+      const payload: Record<string, unknown> = {
+        full_name: form.value.full_name,
+        username: form.value.username,
+        role: form.value.role,
+      };
       if (form.value.password) payload.password = form.value.password;
       await usersStore.updateUser(editing.value.id, payload);
     } else {
@@ -122,6 +128,7 @@ async function handleDelete(u: UserAccount) {
         <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Nombre</th>
+            <th class="text-left px-4 py-3">Usuario</th>
             <th class="text-left px-4 py-3">Correo</th>
             <th class="text-left px-4 py-3">Rol</th>
             <th class="text-left px-4 py-3">Estado</th>
@@ -130,10 +137,10 @@ async function handleDelete(u: UserAccount) {
         </thead>
         <tbody>
           <tr v-if="usersStore.loading">
-            <td colspan="5" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+            <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!filteredUsers.length">
-            <td colspan="5" class="px-4 py-6 text-center text-slate-500">
+            <td colspan="6" class="px-4 py-6 text-center text-slate-500">
               {{ searchQuery ? 'Sin resultados para esa búsqueda.' : 'No hay usuarios de staff todavía.' }}
             </td>
           </tr>
@@ -142,6 +149,7 @@ async function handleDelete(u: UserAccount) {
               {{ u.full_name || '—' }}
               <span v-if="u.id === auth.user?.id" class="text-[10px] text-slate-400 ml-1">(tú)</span>
             </td>
+            <td class="px-4 py-3 text-slate-600 font-mono text-xs">{{ u.username }}</td>
             <td class="px-4 py-3 text-slate-600">{{ u.email }}</td>
             <td class="px-4 py-3">
               <span class="badge bg-sky-500/15 text-sky-600">{{ ROLE_LABEL[u.role] }}</span>
@@ -177,6 +185,18 @@ async function handleDelete(u: UserAccount) {
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Nombre completo</label>
             <input v-model="form.full_name" required class="field-input" />
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Usuario (para iniciar sesión)</label>
+            <input
+              v-model="form.username"
+              required
+              pattern="[a-zA-Z0-9._-]{3,32}"
+              placeholder="ej. jperez"
+              class="field-input font-mono"
+            />
+            <p class="text-[11px] text-slate-400 mt-1">3-32 caracteres: letras, números, punto, guion o guion bajo.</p>
           </div>
 
           <div class="mb-3">

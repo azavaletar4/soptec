@@ -10,6 +10,10 @@ const route = useRoute();
 
 const BILLING_ROLES = ['SUPERADMIN', 'ADMIN', 'FACTURACION'];
 const SUPERADMIN_ROLES = ['SUPERADMIN'];
+// Modulos administrativos que TECNICO_RED no necesita ver (mismo criterio
+// que NOT_TECNICO en el router) — solo le quedan Instalaciones, Mapa y
+// Soporte.
+const HIDDEN_FROM_TECNICO = ['dashboard', 'clientes', 'olt', 'mikrotik', 'tr069', 'inventario', 'reportes'];
 
 const ROLE_LABEL: Record<string, string> = {
   SUPERADMIN: 'Super admin',
@@ -55,7 +59,8 @@ const visibleModulos = computed(() =>
   MODULOS.filter(
     (mod) =>
       (!mod.requiresBilling || BILLING_ROLES.includes(auth.role ?? '')) &&
-      (!mod.requiresSuperadmin || SUPERADMIN_ROLES.includes(auth.role ?? '')),
+      (!mod.requiresSuperadmin || SUPERADMIN_ROLES.includes(auth.role ?? '')) &&
+      !(auth.role === 'TECNICO_RED' && HIDDEN_FROM_TECNICO.includes(mod.key)),
   ),
 );
 

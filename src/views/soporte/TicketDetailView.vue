@@ -5,6 +5,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type { Ticket, TicketComment, TicketPriority, TicketStatus, InventoryMovement } from '@/types/domain';
 
@@ -13,6 +14,17 @@ const router = useRouter();
 const ticketsStore = useTicketsStore();
 const catalogs = useCatalogsStore();
 const inventoryStore = useInventoryStore();
+const auth = useAuthStore();
+
+// TECNICO_RED ve todos los tickets pero solo puede editar (estado,
+// prioridad, comentar, materiales) los que tiene asignados — el resto de
+// roles de staff puede editar cualquiera. Reglas equivalentes viven en RLS
+// (Fase 15); esto solo evita mostrar controles que la BD va a rechazar.
+const canEdit = computed(() => {
+  if (!ticket.value) return false;
+  if (auth.role !== 'TECNICO_RED') return true;
+  return ticket.value.assigned_to === auth.user?.id;
+});
 
 const ticketId = computed(() => route.params.id as string);
 const ticket = ref<Ticket | null>(null);
@@ -210,7 +222,7 @@ function formatDate(value: string) {
           <div class="text-slate-500 text-xs mb-2">Estado</div>
           <select
             :value="ticket.status"
-            :disabled="updating"
+            :disabled="updating || !canEdit"
             class="field-input"
             @change="handleStatusChange(($event.target as HTMLSelectElement).value as TicketStatus)"
           >
@@ -221,7 +233,7 @@ function formatDate(value: string) {
           <div class="text-slate-500 text-xs mb-2">Prioridad</div>
           <select
             :value="ticket.priority"
-            :disabled="updating"
+            :disabled="updating || !canEdit"
             class="field-input"
             @change="handlePriorityChange(($event.target as HTMLSelectElement).value as TicketPriority)"
           >
@@ -231,7 +243,7 @@ function formatDate(value: string) {
         <div class="surface p-4">
           <div class="flex items-center justify-between mb-2">
             <div class="text-slate-500 text-xs">Técnico designado</div>
-            <button class="text-xs text-sky-600 hover:text-sky-700" @click="openAssignModal">
+            <button v-if="canEdit" class="text-xs text-sky-600 hover:text-sky-700" @click="openAssignModal">
               {{ ticket.assigned_to ? 'Editar' : 'Asignar' }}
             </button>
           </div>
@@ -262,7 +274,7 @@ function formatDate(value: string) {
           </ul>
         </template>
 
-        <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
+        <form v-if="canEdit" class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
           <div class="flex-1 min-w-[160px]">
             <label class="block text-xs text-slate-600 mb-1">Producto</label>
             <select v-model="materialForm.productId" required class="field-input">
@@ -296,7 +308,7 @@ function formatDate(value: string) {
         </div>
       </div>
 
-      <form class="flex gap-2" @submit.prevent="handleAddComment">
+      <form v-if="canEdit" class="flex gap-2" @submit.prevent="handleAddComment">
         <input
           v-model="newComment"
           placeholder="Agregar una nota de seguimiento..."
@@ -310,6 +322,7 @@ function formatDate(value: string) {
           {{ savingComment ? 'Enviando...' : 'Comentar' }}
         </button>
       </form>
+      <p v-else class="text-xs text-slate-400">Este ticket no está asignado a ti — solo puedes verlo.</p>
     </template>
 
     <Teleport to="body">

@@ -14,7 +14,8 @@ const MANAGE = ['SUPERADMIN'] as const;
 // administradores).
 const ASSIGNABLE_ROLES: Role[] = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE', 'FACTURACION'];
 
-const PROFILE_FIELDS = 'id, email, full_name, role, active, created_at';
+const PROFILE_FIELDS = 'id, email, username, full_name, role, active, created_at';
+const USERNAME_RE = /^[a-zA-Z0-9._-]{3,32}$/;
 
 usersRoutes.use('*', requireAuth);
 
@@ -33,9 +34,15 @@ usersRoutes.post('/', requireRole(...MANAGE), async (c) => {
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const password = typeof body.password === 'string' ? body.password : '';
   const fullName = typeof body.full_name === 'string' ? body.full_name.trim() : '';
+  const username = typeof body.username === 'string' ? body.username.trim() : '';
   const role = body.role as Role;
 
-  if (!email || !password || !role) return c.json({ error: 'email, password y role son requeridos' }, 400);
+  if (!email || !password || !role || !username) {
+    return c.json({ error: 'email, username, password y role son requeridos' }, 400);
+  }
+  if (!USERNAME_RE.test(username)) {
+    return c.json({ error: 'Usuario invalido: 3-32 caracteres, solo letras, numeros, punto, guion o guion bajo' }, 400);
+  }
   if (!ASSIGNABLE_ROLES.includes(role)) return c.json({ error: 'Rol invalido' }, 400);
   if (password.length < 8) return c.json({ error: 'La contraseña debe tener al menos 8 caracteres' }, 400);
 
@@ -48,19 +55,24 @@ usersRoutes.post('/', requireRole(...MANAGE), async (c) => {
     return c.json({ error: createErr?.message ?? 'Error al crear el usuario' }, 400);
   }
 
-  // El trigger handle_new_user ya inserto el profile (rol CLIENTE por
-  // defecto) — lo completamos con el nombre y rol reales.
+  // El trigger handle_new_user ya inserto el profile (rol CLIENTE y un
+  // username auto-generado del correo) — lo completamos con el nombre,
+  // rol y username reales.
   const { data: profile, error: profileErr } = await supabaseAdmin
     .from('profiles')
-    .update({ full_name: fullName || null, role })
+    .update({ full_name: fullName || null, role, username })
     .eq('id', created.user.id)
     .select(PROFILE_FIELDS)
     .single();
 
   if (profileErr) {
     // Revertir: no dejar un auth.users huerfano sin su profile correcto.
+    // Causa mas comun aqui: el username ya esta en uso (indice unico).
     await supabaseAdmin.auth.admin.deleteUser(created.user.id).catch(() => {});
-    return c.json({ error: profileErr.message }, 400);
+    const message = /duplicate key|unique/i.test(profileErr.message)
+      ? 'Ese nombre de usuario ya esta en uso'
+      : profileErr.message;
+    return c.json({ error: message }, 400);
   }
 
   return c.json(profile, 201);
@@ -75,6 +87,14 @@ usersRoutes.patch('/:id', requireRole(...MANAGE), async (c) => {
 
   if (body.full_name !== undefined) {
     updates.full_name = typeof body.full_name === 'string' ? body.full_name.trim() || null : null;
+  }
+
+  if (body.username !== undefined) {
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    if (!USERNAME_RE.test(username)) {
+      return c.json({ error: 'Usuario invalido: 3-32 caracteres, solo letras, numeros, punto, guion o guion bajo' }, 400);
+    }
+    updates.username = username;
   }
 
   if (body.role !== undefined) {
@@ -94,7 +114,10 @@ usersRoutes.patch('/:id', requireRole(...MANAGE), async (c) => {
 
   if (Object.keys(updates).length > 0) {
     const { error } = await supabaseAdmin.from('profiles').update(updates).eq('id', id);
-    if (error) return c.json({ error: error.message }, 400);
+    if (error) {
+      const message = /duplicate key|unique/i.test(error.message) ? 'Ese nombre de usuario ya esta en uso' : error.message;
+      return c.json({ error: message }, 400);
+    }
   }
 
   if (typeof body.password === 'string' && body.password.length > 0) {

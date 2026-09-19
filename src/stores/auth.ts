@@ -34,8 +34,16 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    // Se resuelve el rol aqui mismo (no solo via onAuthStateChange, que es
+    // async y podria no haber terminado cuando signIn() retorna) para que
+    // quien llama pueda decidir a donde redirigir sin una carrera.
+    if (data.user) {
+      user.value = data.user;
+      session.value = data.session;
+      await loadRole(data.user.id);
+    }
   }
 
   async function signOut() {

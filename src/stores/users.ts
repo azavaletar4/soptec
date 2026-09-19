@@ -21,7 +21,13 @@ export const useUsersStore = defineStore('users', () => {
     }
   }
 
-  async function createUser(payload: { email: string; password: string; full_name: string; role: StaffRole }) {
+  async function createUser(payload: {
+    email: string;
+    username: string;
+    password: string;
+    full_name: string;
+    role: StaffRole;
+  }) {
     const created = await apiFetch<UserAccount>('/api/users', { method: 'POST', body: JSON.stringify(payload) });
     users.value.unshift(created);
     return created;
@@ -29,7 +35,7 @@ export const useUsersStore = defineStore('users', () => {
 
   async function updateUser(
     id: string,
-    payload: Partial<{ full_name: string; role: StaffRole; active: boolean; password: string }>,
+    payload: Partial<{ full_name: string; username: string; role: StaffRole; active: boolean; password: string }>,
   ) {
     const updated = await apiFetch<UserAccount>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
     const idx = users.value.findIndex((u) => u.id === id);
