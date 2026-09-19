@@ -38,6 +38,7 @@ export interface Plan {
 export interface Client {
   id: string;
   zone_id: string | null;
+  client_code: string | null;
   document_type: DocumentType;
   document_number: string;
   first_name: string;

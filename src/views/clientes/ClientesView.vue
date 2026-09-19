@@ -35,7 +35,9 @@ const filteredClientsList = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return clientsStore.clients;
   return clientsStore.clients.filter((c) =>
-    `${c.first_name} ${c.last_name} ${c.document_number} ${c.phone ?? ''} ${c.email ?? ''}`.toLowerCase().includes(q),
+    `${c.first_name} ${c.last_name} ${c.client_code ?? ''} ${c.document_number} ${c.phone ?? ''} ${c.email ?? ''}`
+      .toLowerCase()
+      .includes(q),
   );
 });
 
@@ -67,6 +69,7 @@ async function loadUnlinked() {
 watch(unlinkedDeviceId, () => loadUnlinked());
 
 const emptyForm = () => ({
+  client_code: '',
   document_type: 'cedula' as DocumentType,
   document_number: '',
   first_name: '',
@@ -113,6 +116,7 @@ function openCreate(fromSecret?: PppSecret) {
 function openEdit(client: Client) {
   editing.value = client;
   form.value = {
+    client_code: client.client_code ?? '',
     document_type: client.document_type,
     document_number: client.document_number,
     first_name: client.first_name,
@@ -152,6 +156,7 @@ async function handleSubmit() {
   try {
     const payload = {
       ...form.value,
+      client_code: form.value.client_code.trim() || null,
       zone_id: form.value.zone_id || null,
       phone: form.value.phone || null,
       email: form.value.email || null,
@@ -221,6 +226,7 @@ function goToDetail(client: Client) {
       <table class="w-full text-sm min-w-[720px]">
         <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
+            <th class="text-left px-4 py-3">Código</th>
             <th class="text-left px-4 py-3">Nombre</th>
             <th class="text-left px-4 py-3">Documento</th>
             <th class="text-left px-4 py-3">Telefono</th>
@@ -231,14 +237,15 @@ function goToDetail(client: Client) {
         </thead>
         <tbody>
           <tr v-if="clientsStore.loading">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+            <td colspan="7" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!filteredClientsList.length">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">
+            <td colspan="7" class="px-4 py-6 text-center text-slate-500">
               {{ searchQuery ? 'Sin resultados para esa busqueda.' : 'No hay clientes. Crea el primero.' }}
             </td>
           </tr>
           <tr v-for="c in filteredClientsList" :key="c.id" class="border-t border-slate-200 hover:bg-slate-50">
+            <td class="px-4 py-3 text-slate-600 font-mono text-xs">{{ c.client_code || '—' }}</td>
             <td class="px-4 py-3">
               <button class="text-slate-900 hover:text-sky-600 font-medium" @click="goToDetail(c)">
                 {{ c.first_name }} {{ c.last_name }}
@@ -314,6 +321,11 @@ function goToDetail(client: Client) {
             Vinculado a partir del usuario PPPoE <span class="font-mono">{{ pendingPppoeHint }}</span> — el vinculo se completa al crear el contrato.
           </p>
           <div v-else class="mb-3"></div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Código de cliente</label>
+            <input v-model="form.client_code" placeholder="Ej. CL-0001" class="field-input" />
+          </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>

@@ -403,7 +403,10 @@ async function handleCreateContract() {
     <template v-else>
       <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <h1 class="text-2xl font-semibold">{{ client.first_name }} {{ client.last_name }}</h1>
+          <h1 class="text-2xl font-semibold">
+            {{ client.first_name }} {{ client.last_name }}
+            <span v-if="client.client_code" class="text-slate-400 font-normal text-lg">· {{ client.client_code }}</span>
+          </h1>
           <p class="text-slate-600 text-sm mt-1">
             {{ DOCUMENT_TYPE_LABEL[client.document_type] }} {{ client.document_number }} · {{ client.phone || 'sin telefono' }}
           </p>
