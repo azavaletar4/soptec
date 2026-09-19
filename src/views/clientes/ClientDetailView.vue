@@ -10,6 +10,7 @@ import { useInvoicesStore } from '@/stores/invoices';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
+import { useInventoryStore } from '@/stores/inventory';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type {
@@ -36,6 +37,7 @@ const invoicesStore = useInvoicesStore();
 const mikrotikStore = useMikrotikStore();
 const clientPhotosStore = useClientPhotosStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
+const inventoryStore = useInventoryStore();
 const auth = useAuthStore();
 
 const canCreateTickets = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
@@ -114,6 +116,7 @@ const PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] = [
   { value: 'facade', label: 'Fachada' },
   { value: 'service_sheet', label: 'Hoja de servicio' },
   { value: 'modem_position', label: 'Posicion del modem' },
+  { value: 'nap_box', label: 'Caja NAP' },
 ];
 const photos = ref<Partial<Record<ClientPhotoCategory, ClientPhotoWithUrl>>>({});
 const loadingPhotos = ref(true);
@@ -273,6 +276,7 @@ onMounted(async () => {
     loadPhotos(),
     loadUnits(),
     mikrotikStore.fetchDevices(),
+    inventoryStore.products.length ? Promise.resolve() : inventoryStore.fetchProducts(),
   ]);
 });
 
@@ -300,6 +304,44 @@ const returnUnitTarget = ref<InventoryUnit | null>(null);
 const returnForm = ref({ condition: 'in_stock' as 'in_stock' | 'damaged' | 'in_repair', reason: '' });
 const returnSaving = ref(false);
 const returnError = ref<string | null>(null);
+
+const showAddUnitModal = ref(false);
+const addUnitForm = ref({ product_id: '', serial_number: '', mac_address: '' });
+const addUnitSaving = ref(false);
+const addUnitError = ref<string | null>(null);
+
+function openAddUnit() {
+  addUnitForm.value = { product_id: inventoryStore.products[0]?.id ?? '', serial_number: '', mac_address: '' };
+  addUnitError.value = null;
+  showAddUnitModal.value = true;
+}
+
+async function handleAddUnit() {
+  if (!addUnitForm.value.product_id) {
+    addUnitError.value = 'Selecciona el modelo del equipo';
+    return;
+  }
+  if (!addUnitForm.value.serial_number.trim() && !addUnitForm.value.mac_address.trim()) {
+    addUnitError.value = 'Ingresa al menos el número de serie o la dirección MAC';
+    return;
+  }
+  addUnitSaving.value = true;
+  addUnitError.value = null;
+  try {
+    const unit = await inventoryUnitsStore.createUnit({
+      productId: addUnitForm.value.product_id,
+      serialNumber: addUnitForm.value.serial_number.trim(),
+      macAddress: addUnitForm.value.mac_address.trim(),
+    });
+    await inventoryUnitsStore.assignUnit(unit.id, clientId.value, undefined, 'Asignacion directa desde ficha de cliente');
+    showAddUnitModal.value = false;
+    await loadUnits();
+  } catch (e) {
+    addUnitError.value = getErrorMessage(e, 'Error al registrar el equipo (revisa que la serie/MAC no esté repetida)');
+  } finally {
+    addUnitSaving.value = false;
+  }
+}
 
 function openReturn(unit: InventoryUnit) {
   returnUnitTarget.value = unit;
@@ -558,7 +600,10 @@ async function handleCreateContract() {
         </table>
       </div>
 
-      <h2 class="text-lg font-semibold mb-3">Equipos asignados</h2>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Equipos asignados</h2>
+        <button class="text-sm text-sky-600 hover:text-sky-700" @click="openAddUnit">+ Agregar equipo</button>
+      </div>
       <p v-if="loadingUnits" class="text-slate-500 text-sm">Cargando...</p>
       <p v-else-if="!assignedUnits.length" class="text-slate-500 text-sm mb-8">Este cliente no tiene equipos asignados.</p>
       <div v-else class="table-shell mb-8">
@@ -794,6 +839,41 @@ async function handleCreateContract() {
             <button type="button" class="btn-ghost" @click="showReturnModal = false">Cancelar</button>
             <button type="submit" :disabled="returnSaving" class="btn-primary">
               {{ returnSaving ? 'Guardando...' : 'Registrar devolución' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showAddUnitModal" class="modal-overlay">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleAddUnit">
+          <h2 class="text-lg font-semibold mb-3">Agregar equipo</h2>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Modelo</label>
+            <select v-model="addUnitForm.product_id" class="field-input">
+              <option value="" disabled>Selecciona un modelo</option>
+              <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Número de serie</label>
+            <input v-model="addUnitForm.serial_number" class="field-input" placeholder="ej. ZTEGC1234567" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Dirección MAC</label>
+            <input v-model="addUnitForm.mac_address" class="field-input" placeholder="ej. AA:BB:CC:DD:EE:FF" />
+          </div>
+
+          <p v-if="addUnitError" class="text-sm text-red-600 mb-3">{{ addUnitError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showAddUnitModal = false">Cancelar</button>
+            <button type="submit" :disabled="addUnitSaving" class="btn-primary">
+              {{ addUnitSaving ? 'Guardando...' : 'Agregar y asignar' }}
             </button>
           </div>
         </form>

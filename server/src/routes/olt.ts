@@ -10,7 +10,6 @@ import {
   registerOntCommands,
   setAdminStateCommands,
   deleteOntCommands,
-  opticalInfoCommands,
   runningConfigCommands,
   fullRunningConfigCommand,
   bulkOnuRxCommands,
@@ -20,11 +19,11 @@ import {
   listTrafficProfilesCommands,
   setTr069AcsCommands,
   disableTr069Commands,
+  type ZteInterfaceRef,
 } from '../ssh/zteCommands';
 import {
   parseOntList,
   parseGlobalOntState,
-  parseOpticalInfo,
   parseBulkPower,
   parseFullRunningConfig,
   parseUnconfiguredOnts,
@@ -85,6 +84,22 @@ async function getDeviceOrNull(id: string | undefined): Promise<OltDeviceRow | n
 // confirmado manualmente). Ver server/src/telnet/client.ts.
 function telnetTargetFor(device: OltDeviceRow) {
   return { host: device.host, port: device.telnet_port, username: device.username, password: device.password };
+}
+
+/**
+ * Potencia optica de UNA ONU puntual. "show pon power attenuation
+ * gpon-onu_S/L/P:ID" (por ONU individual) NO existe en este firmware real
+ * — confirmado contra el equipo (10.15.15.2): "%Error 20202: Invalid input
+ * detected". Se usa en su lugar el comando bulk por puerto ya validado
+ * (bulkOnuRxCommands/bulkOnuTxCommands, el mismo que usa el escaneo
+ * global) y se extrae solo esta ONU del resultado.
+ */
+async function readOntSignal(device: OltDeviceRow, ref: ZteInterfaceRef, onuId: number) {
+  const rxOut = await runTelnetCommands(telnetTargetFor(device), bulkOnuRxCommands(ref), { timeoutMs: 30000 });
+  const txOut = await runTelnetCommands(telnetTargetFor(device), bulkOnuTxCommands(ref), { timeoutMs: 30000 });
+  const rxPower = parseBulkPower(rxOut[1] ?? '').get(onuId) ?? null;
+  const txPower = parseBulkPower(txOut[1] ?? '').get(onuId) ?? null;
+  return { rxPower, txPower };
 }
 
 export interface OltSummaryResult {
@@ -671,8 +686,7 @@ oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
   }
 
   try {
-    const sigOut = await runTelnetCommands(telnetTargetFor(device), opticalInfoCommands(ref, onuId), { timeoutMs: 15000 });
-    const signal = parseOpticalInfo(sigOut.join('\n'));
+    const signal = await readOntSignal(device, ref, onuId);
     autoUpdate.rx_power = signal.rxPower;
     autoUpdate.tx_power = signal.txPower;
   } catch (e) {
@@ -780,16 +794,7 @@ oltRoutes.get('/:id/onts/:ontDbId/signal', requireRole(...STAFF_READ), async (c)
   if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
 
   try {
-    const outputs = await runTelnetCommands(
-      telnetTargetFor(device),
-      opticalInfoCommands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id),
-    );
-    const raw = outputs.join('\n');
-    const info = parseOpticalInfo(raw);
-    if (info.rxPower == null && info.txPower == null) {
-      // eslint-disable-next-line no-console
-      console.error(`[olt/signal] Parser no encontro Rx/Tx en la salida real:\n---\n${raw}\n---`);
-    }
+    const info = await readOntSignal(device, { shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id);
     await supabaseAdmin.from('olt_onts').update({ rx_power: info.rxPower, tx_power: info.txPower }).eq('id', ont.id);
     return c.json(info);
   } catch (e) {

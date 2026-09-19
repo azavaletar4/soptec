@@ -162,10 +162,6 @@ export function deleteOntCommands(ref: ZteInterfaceRef, onuId: number): string[]
   ];
 }
 
-export function opticalInfoCommands(ref: ZteInterfaceRef, onuId: number): string[] {
-  return ['enable', `show pon power attenuation ${onuInterface(ref, onuId)}`];
-}
-
 /** Config aplicada en la OLT para una ONT puntual — solo lectura. */
 export function runningConfigCommands(ref: ZteInterfaceRef, onuId: number): string[] {
   return ['enable', `show running-config interface ${onuInterface(ref, onuId)}`];

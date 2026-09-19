@@ -9,6 +9,7 @@ const router = useRouter();
 const route = useRoute();
 
 const BILLING_ROLES = ['SUPERADMIN', 'ADMIN', 'FACTURACION'];
+const SUPERADMIN_ROLES = ['SUPERADMIN'];
 
 const ROLE_LABEL: Record<string, string> = {
   SUPERADMIN: 'Super admin',
@@ -32,6 +33,7 @@ const ICONS: Record<string, string> = {
   inventario: 'M3 7l9-4 9 4-9 4-9-4Zm0 0v10l9 4 9-4V7M12 11v10',
   tr069: 'M12 20v-6m0 0a4 4 0 0 0 4-4V7a4 4 0 0 0-8 0v3a4 4 0 0 0 4 4Zm-7 2h14M5 8H3m18 0h-2M5 4 3 2m16 2 2-2',
   reportes: 'M4 19V10m6 9V5m6 14v-8m-13 8h16',
+  usuarios: 'M17 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 5 18.5V20M9.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM21 8v6M18 11h6',
 };
 
 const MODULOS = [
@@ -46,10 +48,15 @@ const MODULOS = [
   { key: 'soporte', label: 'Soporte', to: '/soporte', disabled: false },
   { key: 'facturacion', label: 'Facturación', to: '/facturacion', disabled: false, requiresBilling: true },
   { key: 'reportes', label: 'Reportes', to: '/reportes', disabled: false },
+  { key: 'usuarios', label: 'Usuarios', to: '/usuarios', disabled: false, requiresSuperadmin: true },
 ];
 
 const visibleModulos = computed(() =>
-  MODULOS.filter((mod) => !mod.requiresBilling || BILLING_ROLES.includes(auth.role ?? '')),
+  MODULOS.filter(
+    (mod) =>
+      (!mod.requiresBilling || BILLING_ROLES.includes(auth.role ?? '')) &&
+      (!mod.requiresSuperadmin || SUPERADMIN_ROLES.includes(auth.role ?? '')),
+  ),
 );
 
 function isActive(to: string) {

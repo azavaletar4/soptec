@@ -55,7 +55,7 @@ export interface Client {
   zones?: Pick<Zone, 'id' | 'name'> | null;
 }
 
-export type ClientPhotoCategory = 'facade' | 'service_sheet' | 'modem_position';
+export type ClientPhotoCategory = 'facade' | 'service_sheet' | 'modem_position' | 'nap_box';
 
 export interface ClientPhoto {
   id: string;
@@ -90,6 +90,17 @@ export interface StaffProfile {
   email: string;
   full_name: string | null;
   role: string;
+}
+
+export type StaffRole = 'SUPERADMIN' | 'ADMIN' | 'TECNICO_RED' | 'SOPORTE' | 'FACTURACION';
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: StaffRole;
+  active: boolean;
+  created_at: string;
 }
 
 export interface Ticket {

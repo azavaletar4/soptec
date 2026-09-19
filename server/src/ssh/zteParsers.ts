@@ -97,53 +97,13 @@ export function parseUnconfiguredOnts(raw: string): UnconfiguredOnt[] {
   return results;
 }
 
-export interface OpticalInfo {
-  rxPower: number | null;
-  txPower: number | null;
-}
-
-/**
- * Parsea "show pon power attenuation" — VALIDADO contra el equipo real.
- * El formato real NO trae "Rx Power"/"Tx Power" como se asumia originalmente
- * (por eso nunca leia nada): son dos filas "up"/"down", cada una con la
- * lectura del lado OLT y del lado ONU:
- *   OLT                  ONU              Attenuation
- *   up      Rx :-25.087(dbm)      Tx:2.108(dbm)        27.195(dB)
- *   down    Tx :6.807(dbm)        Rx:-21.250(dbm)      28.057(dB)
- * La potencia de la ONT (lo que nos interesa) es siempre la 2da columna
- * ("ONU"): su Rx (fila "down") y su Tx (fila "up").
- */
-export function parseOpticalInfo(raw: string): OpticalInfo {
-  let rxPower: number | null = null;
-  let txPower: number | null = null;
-
-  const rowRe = /^\s*(up|down)\s+(Rx|Tx)\s*:\s*(-?\d+(?:\.\d+)?)\s*\(dbm\)\s+(Rx|Tx)\s*:\s*(-?\d+(?:\.\d+)?)\s*\(dbm\)/i;
-  for (const line of raw.split('\n')) {
-    const match = line.match(rowRe);
-    if (!match) continue;
-    const [, , , , onuLabel, onuValue] = match;
-    if (onuLabel.toLowerCase() === 'rx') rxPower = Number(onuValue);
-    else txPower = Number(onuValue);
-  }
-
-  // Respaldo: formato "Rx Power(dBm): -18.50" (visto en otros firmwares/documentacion).
-  if (rxPower == null) {
-    const rxMatch = raw.match(/Rx\s*Power.*?:\s*(-?\d+(\.\d+)?)/i);
-    if (rxMatch) rxPower = Number(rxMatch[1]);
-  }
-  if (txPower == null) {
-    const txMatch = raw.match(/Tx\s*Power.*?:\s*(-?\d+(\.\d+)?)/i);
-    if (txMatch) txPower = Number(txMatch[1]);
-  }
-
-  return { rxPower, txPower };
-}
-
 /**
  * Parsea "show pon power onu-rx/onu-tx gpon-olt_S/L/P" — VALIDADO contra el
  * equipo real: trae la potencia de TODAS las ONUs de un puerto en un solo
- * comando (mucho mas barato que consultar ONU por ONU con
- * parseOpticalInfo/opticalInfoCommands cuando se necesita masivo). Formato:
+ * comando. El comando por-ONU individual ("show pon power attenuation
+ * gpon-onu_S/L/P:ID") NO existe en este firmware (Error 20202, confirmado
+ * 2026-09-19) — hasta para una sola ONU se usa este comando bulk, filtrando
+ * el resultado (ver readOntSignal() en server/src/routes/olt.ts). Formato:
  *   Onu                 Rx power
  *   ------------------------------------
  *   gpon-onu_1/2/2:1    -21.368(dbm)

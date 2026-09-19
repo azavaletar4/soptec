@@ -58,9 +58,13 @@ export async function requireAuth(c: Context, next: Next) {
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('role')
+    .select('role, active')
     .eq('id', userId)
     .maybeSingle();
+
+  if (profile && profile.active === false) {
+    return c.json({ error: 'Esta cuenta esta desactivada' }, 401);
+  }
 
   c.set('user', {
     id: userId,
