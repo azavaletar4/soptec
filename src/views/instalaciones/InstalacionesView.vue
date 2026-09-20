@@ -601,9 +601,12 @@ function formatDate(value: string | null) {
             <p v-if="!serializedProducts.length" class="text-xs text-slate-500">No hay productos con control por serie/MAC configurados en Inventario.</p>
             <template v-else>
               <ul v-if="assignedUnits.length" class="space-y-1.5 mb-3">
-                <li v-for="u in assignedUnits" :key="u.id" class="flex justify-between text-xs">
-                  <span>{{ u.product?.name ?? 'Equipo' }} — {{ u.serial_number || u.mac_address }}</span>
-                  <span class="text-slate-500">{{ u.serial_number && u.mac_address ? u.mac_address : '' }}</span>
+                <li v-for="u in assignedUnits" :key="u.id" class="text-xs">
+                  <div class="flex justify-between">
+                    <span>{{ u.product?.name ?? 'Equipo' }} — {{ u.serial_number || u.mac_address }}</span>
+                    <span class="text-slate-500">{{ u.serial_number && u.mac_address ? u.mac_address : '' }}</span>
+                  </div>
+                  <p v-if="u.notes" class="text-slate-500 mt-0.5">Notas: {{ u.notes }}</p>
                 </li>
               </ul>
               <p v-else class="text-xs text-slate-500 mb-3">Sin equipos asignados a esta instalación todavía.</p>

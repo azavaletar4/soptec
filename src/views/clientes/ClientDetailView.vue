@@ -614,6 +614,7 @@ async function handleCreateContract() {
               <th class="text-left px-4 py-3">Serie</th>
               <th class="text-left px-4 py-3">MAC</th>
               <th class="text-left px-4 py-3">Estado</th>
+              <th class="text-left px-4 py-3">Notas</th>
               <th class="text-right px-4 py-3">Acciones</th>
             </tr>
           </thead>
@@ -625,6 +626,7 @@ async function handleCreateContract() {
               <td class="px-4 py-3">
                 <span class="badge" :class="UNIT_STATUS_CLASS[u.status]">{{ UNIT_STATUS_LABEL[u.status] }}</span>
               </td>
+              <td class="px-4 py-3 text-slate-600 text-xs max-w-[220px] truncate" :title="u.notes ?? ''">{{ u.notes || '—' }}</td>
               <td class="px-4 py-3 text-right">
                 <button v-if="u.status === 'assigned'" class="text-xs text-amber-600 hover:text-amber-700" @click="openReturn(u)">
                   Registrar devolución
