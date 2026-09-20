@@ -136,6 +136,22 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     return registerEvent({ unitId, toStatus: 'retired', reason: reason || 'Baja de equipo' });
   }
 
+  /** Corrige los datos identificativos del equipo (serie/MAC/notas), sin afectar su estado ni historial. */
+  async function updateUnit(unitId: string, payload: { serialNumber?: string; macAddress?: string; notes?: string }) {
+    const { data, error: err } = await supabase
+      .from('inventory_units')
+      .update({
+        serial_number: payload.serialNumber || null,
+        mac_address: payload.macAddress || null,
+        notes: payload.notes || null,
+      })
+      .eq('id', unitId)
+      .select(UNIT_SELECT)
+      .single();
+    if (err) throw err;
+    return data as unknown as InventoryUnit;
+  }
+
   /**
    * Borrado real (no "dar de baja"): saca la unidad y su historial de
    * eventos por completo. Para limpiar equipos de prueba, no para bajas
@@ -156,6 +172,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     fetchUnitsByStatus,
     fetchEvents,
     createUnit,
+    updateUnit,
     registerEvent,
     assignUnit,
     returnUnit,

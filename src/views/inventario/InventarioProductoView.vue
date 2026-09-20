@@ -129,6 +129,47 @@ async function handleCreateUnit() {
   }
 }
 
+// ---- Editar equipo (serie/MAC/notas) ----
+const showEditUnitModal = ref(false);
+const editUnitTarget = ref<InventoryUnit | null>(null);
+const editUnitForm = ref({ serial_number: '', mac_address: '', notes: '' });
+const editUnitSaving = ref(false);
+const editUnitError = ref<string | null>(null);
+
+function openEditUnit(unit: InventoryUnit) {
+  editUnitTarget.value = unit;
+  editUnitForm.value = {
+    serial_number: unit.serial_number ?? '',
+    mac_address: unit.mac_address ?? '',
+    notes: unit.notes ?? '',
+  };
+  editUnitError.value = null;
+  showEditUnitModal.value = true;
+}
+
+async function handleEditUnit() {
+  if (!editUnitTarget.value) return;
+  if (!editUnitForm.value.serial_number.trim() && !editUnitForm.value.mac_address.trim()) {
+    editUnitError.value = 'Ingresa al menos el número de serie o la dirección MAC';
+    return;
+  }
+  editUnitSaving.value = true;
+  editUnitError.value = null;
+  try {
+    await inventoryUnitsStore.updateUnit(editUnitTarget.value.id, {
+      serialNumber: editUnitForm.value.serial_number.trim(),
+      macAddress: editUnitForm.value.mac_address.trim(),
+      notes: editUnitForm.value.notes.trim(),
+    });
+    showEditUnitModal.value = false;
+    await loadUnits();
+  } catch (e) {
+    editUnitError.value = getErrorMessage(e, 'Error al actualizar el equipo (revisa que la serie/MAC no esté repetida)');
+  } finally {
+    editUnitSaving.value = false;
+  }
+}
+
 // ---- Asignar a cliente ----
 const showAssignModal = ref(false);
 const assignUnitTarget = ref<InventoryUnit | null>(null);
@@ -446,15 +487,16 @@ async function handleDeleteProduct() {
                 <th class="text-left px-4 py-3">MAC</th>
                 <th class="text-left px-4 py-3">Estado</th>
                 <th class="text-left px-4 py-3">Cliente</th>
+                <th class="text-left px-4 py-3">Notas</th>
                 <th class="text-right px-4 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="unitsLoading">
-                <td colspan="5" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+                <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
               </tr>
               <tr v-else-if="!units.length">
-                <td colspan="5" class="px-4 py-6 text-center text-slate-500">Sin equipos registrados todavía.</td>
+                <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin equipos registrados todavía.</td>
               </tr>
               <tr v-for="u in units" :key="u.id" class="border-t border-slate-200">
                 <td class="px-4 py-3 font-mono text-xs">{{ u.serial_number || '—' }}</td>
@@ -468,9 +510,11 @@ async function handleDeleteProduct() {
                   </router-link>
                   <span v-else>—</span>
                 </td>
+                <td class="px-4 py-3 text-slate-600 text-xs max-w-[220px] truncate" :title="u.notes ?? ''">{{ u.notes || '—' }}</td>
                 <td class="px-4 py-3 text-right">
                   <div class="flex justify-end gap-1.5 flex-wrap">
                     <button class="text-xs text-slate-600 hover:text-slate-900" @click="openHistory(u)">Historial</button>
+                    <button class="text-xs text-sky-600 hover:text-sky-700" @click="openEditUnit(u)">Editar</button>
                     <button v-if="u.status === 'in_stock'" class="text-xs text-sky-600 hover:text-sky-700" @click="openAssign(u)">Asignar</button>
                     <button v-if="u.status === 'assigned'" class="text-xs text-amber-600 hover:text-amber-700" @click="openReturn(u)">Devolución</button>
                     <button v-if="u.status === 'in_repair'" class="text-xs text-green-600 hover:text-green-700" @click="handleMarkRepaired(u)">Marcar reparado</button>
@@ -593,6 +637,38 @@ async function handleDeleteProduct() {
             <button type="button" class="btn-ghost" @click="showUnitModal = false">Cancelar</button>
             <button type="submit" :disabled="unitSaving" class="btn-primary">
               {{ unitSaving ? 'Guardando...' : 'Registrar' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showEditUnitModal" class="modal-overlay">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleEditUnit">
+          <h2 class="text-lg font-semibold mb-4">Editar equipo</h2>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Número de serie</label>
+            <input v-model="editUnitForm.serial_number" class="field-input" placeholder="ej. ZTEGC1234567" />
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Dirección MAC</label>
+            <input v-model="editUnitForm.mac_address" class="field-input" placeholder="ej. AA:BB:CC:DD:EE:FF" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Notas</label>
+            <input v-model="editUnitForm.notes" class="field-input" placeholder="Opcional" />
+          </div>
+
+          <p v-if="editUnitError" class="text-sm text-red-600 mb-3">{{ editUnitError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showEditUnitModal = false">Cancelar</button>
+            <button type="submit" :disabled="editUnitSaving" class="btn-primary">
+              {{ editUnitSaving ? 'Guardando...' : 'Guardar cambios' }}
             </button>
           </div>
         </form>

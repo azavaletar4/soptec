@@ -19,6 +19,7 @@ const formError = ref<string | null>(null);
 const searchQuery = ref('');
 const categoryFilter = ref('all');
 const lowStockOnly = ref(false);
+const editingProduct = ref<InventoryProduct | null>(null);
 
 const emptyForm = () => ({
   name: '',
@@ -61,7 +62,23 @@ onMounted(async () => {
 });
 
 function openCreate() {
+  editingProduct.value = null;
   form.value = emptyForm();
+  formError.value = null;
+  showModal.value = true;
+}
+
+function openEdit(p: InventoryProduct) {
+  editingProduct.value = p;
+  form.value = {
+    name: p.name,
+    category: p.category ?? '',
+    unit: p.unit,
+    price: Number(p.price),
+    min_stock: Number(p.min_stock),
+    purchase_date: p.purchase_date ?? '',
+    is_serialized: p.is_serialized,
+  };
   formError.value = null;
   showModal.value = true;
 }
@@ -74,18 +91,29 @@ async function handleSubmit() {
   saving.value = true;
   formError.value = null;
   try {
-    await inventoryStore.createProduct({
-      name: form.value.name,
-      category: form.value.category || null,
-      unit: form.value.unit || 'unidad',
-      price: form.value.price,
-      min_stock: form.value.min_stock,
-      purchase_date: form.value.purchase_date || null,
-      is_serialized: form.value.is_serialized,
-    });
+    if (editingProduct.value) {
+      await inventoryStore.updateProduct(editingProduct.value.id, {
+        name: form.value.name,
+        category: form.value.category || null,
+        unit: form.value.unit || 'unidad',
+        price: form.value.price,
+        min_stock: form.value.min_stock,
+        purchase_date: form.value.purchase_date || null,
+      });
+    } else {
+      await inventoryStore.createProduct({
+        name: form.value.name,
+        category: form.value.category || null,
+        unit: form.value.unit || 'unidad',
+        price: form.value.price,
+        min_stock: form.value.min_stock,
+        purchase_date: form.value.purchase_date || null,
+        is_serialized: form.value.is_serialized,
+      });
+    }
     showModal.value = false;
   } catch (e) {
-    formError.value = getErrorMessage(e, 'Error al crear el producto');
+    formError.value = getErrorMessage(e, editingProduct.value ? 'Error al actualizar el producto' : 'Error al crear el producto');
   } finally {
     saving.value = false;
   }
@@ -196,7 +224,10 @@ async function handleDelete(p: InventoryProduct) {
               <span v-else class="text-slate-400 text-xs">Por cantidad</span>
             </td>
             <td class="px-4 py-3 text-right">
-              <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click.stop="handleDelete(p)">Eliminar</button>
+              <div class="flex justify-end gap-2">
+                <button class="text-xs text-sky-600 hover:text-sky-700" @click.stop="openEdit(p)">Editar</button>
+                <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click.stop="handleDelete(p)">Eliminar</button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -206,7 +237,7 @@ async function handleDelete(p: InventoryProduct) {
     <Teleport to="body">
       <div v-if="showModal" class="modal-overlay">
         <form class="w-full max-w-md modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleSubmit">
-          <h2 class="text-lg font-semibold mb-4">Nuevo producto</h2>
+          <h2 class="text-lg font-semibold mb-4">{{ editingProduct ? 'Editar producto' : 'Nuevo producto' }}</h2>
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Nombre</label>
@@ -240,7 +271,7 @@ async function handleDelete(p: InventoryProduct) {
             <input v-model="form.purchase_date" type="date" class="field-input" />
           </div>
 
-          <label class="flex items-start gap-2 mb-4 text-sm text-slate-700">
+          <label v-if="!editingProduct" class="flex items-start gap-2 mb-4 text-sm text-slate-700">
             <input v-model="form.is_serialized" type="checkbox" class="mt-0.5" />
             <span>
               Control por número de serie / MAC
@@ -253,7 +284,7 @@ async function handleDelete(p: InventoryProduct) {
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showModal = false">Cancelar</button>
             <button type="submit" :disabled="saving" class="btn-primary">
-              {{ saving ? 'Creando...' : 'Crear producto' }}
+              {{ saving ? 'Guardando...' : editingProduct ? 'Guardar cambios' : 'Crear producto' }}
             </button>
           </div>
         </form>
