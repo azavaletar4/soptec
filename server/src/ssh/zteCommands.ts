@@ -208,6 +208,15 @@ export function fullRunningConfigCommand(): string[] {
  * VALIDADO contra el equipo real. "onu-rx" = lo que la ONU recibe (downstream,
  * usado como rx_power); "onu-tx" = lo que la ONU transmite (upstream, usado
  * como tx_power). Ver parseBulkPower() en zteParsers.ts.
+ *
+ * OJO — INTENTO FALLIDO (2026-09-22): se probo combinar "onu-rx" y "onu-tx"
+ * en una sola conexion/login Telnet (bulkOnuPowerCommands, ya eliminado)
+ * para ahorrar logins en el import masivo. Contra el equipo real, el
+ * comando "onu-tx" devuelve la tabla completa y correcta pero el equipo
+ * jamas regresa el prompt cuando se ejecuta justo despues de "onu-rx" en la
+ * misma sesion — causa timeouts reales (confirmado, puerto 1/2/3). Mantener
+ * SIEMPRE 2 conexiones Telnet separadas (una por direccion) para este par
+ * de comandos.
  */
 export function bulkOnuRxCommands(ref: ZteInterfaceRef): string[] {
   return ['enable', `show pon power onu-rx ${oltInterface(ref)}`];

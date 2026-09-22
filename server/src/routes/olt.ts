@@ -485,6 +485,9 @@ oltRoutes.get('/onts/search', requireRole(...STAFF_READ), async (c) => {
  *      anterior. Secuencial, NO en paralelo: 3 conexiones Telnet
  *      simultaneas al mismo equipo causaron timeouts reales en los puertos
  *      con mas ONUs (ver incidente 2026-09-11 — 8 de 19 puertos fallaron).
+ *      OJO: rx y tx tampoco se pueden combinar en una sola conexion — se
+ *      probo (2026-09-22) y el equipo real se cuelga sin dar el prompt al
+ *      encadenar "onu-tx" justo despues de "onu-rx" en la misma sesion.
  *   4. Upsert en bloque. Nunca pisa client_id (esa vinculacion es decision
  *      de esta app, no de la OLT) — todo lo demas se sincroniza desde la
  *      OLT en cada import, que es la fuente de verdad de su propia config.
