@@ -911,6 +911,23 @@ async function handleSaveOntPlan() {
     });
     const idx = clientOnts.value.findIndex((o) => o.id === updated.id);
     if (idx !== -1) clientOnts.value[idx] = updated;
+
+    // La ONT solo se vincula por client_id (no hay un contract_id directo en
+    // olt_onts) — se sincroniza el plan/mensualidad de TODOS los contratos
+    // activos de este cliente. Para el caso comun (1 cliente = 1 ONT = 1
+    // contrato) esto es correcto; con varios contratos activos simultaneos
+    // podria sincronizar de mas.
+    try {
+      await Promise.all(
+        contracts.value
+          .filter((ct) => ct.status === 'active' && ct.plan_id !== plan.id)
+          .map((ct) => contractsStore.updateContract(ct.id, { plan_id: plan.id, monthly_fee: Number(plan.price) })),
+      );
+      await loadContracts();
+    } catch (e) {
+      alert(getErrorMessage(e, 'El plan se aplico en la OLT, pero no se pudo actualizar el contrato'));
+    }
+
     showOntPlanModal.value = false;
   } catch (e) {
     ontPlanError.value = getErrorMessage(e, 'Error al cambiar el plan en la OLT');
@@ -918,6 +935,7 @@ async function handleSaveOntPlan() {
     savingOntPlan.value = false;
   }
 }
+
 </script>
 
 <template>

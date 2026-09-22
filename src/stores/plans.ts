@@ -24,7 +24,18 @@ export const usePlansStore = defineStore('plans', () => {
     plans.value = (data ?? []) as Plan[];
   }
 
+  // Solo un plan puede ser "el plan de corte por deuda" a la vez (indice
+  // unico parcial en la base) — si se marca este, se desmarca cualquier
+  // otro primero para no chocar con ese indice.
+  async function clearOtherDebtSuspensionPlans(exceptId?: string) {
+    let query = supabase.from('plans').update({ is_debt_suspension_plan: false }).eq('is_debt_suspension_plan', true);
+    if (exceptId) query = query.neq('id', exceptId);
+    const { error: err } = await query;
+    if (err) throw err;
+  }
+
   async function createPlan(payload: Partial<Plan>) {
+    if (payload.is_debt_suspension_plan) await clearOtherDebtSuspensionPlans();
     const { data, error: err } = await supabase.from('plans').insert(payload).select().single();
     if (err) throw err;
     plans.value.push(data as Plan);
@@ -33,10 +44,14 @@ export const usePlansStore = defineStore('plans', () => {
   }
 
   async function updatePlan(id: string, payload: Partial<Plan>) {
+    if (payload.is_debt_suspension_plan) await clearOtherDebtSuspensionPlans(id);
     const { data, error: err } = await supabase.from('plans').update(payload).eq('id', id).select().single();
     if (err) throw err;
     const idx = plans.value.findIndex((p) => p.id === id);
     if (idx !== -1) plans.value[idx] = data as Plan;
+    // Si se desmarco a otro plan por el lado, refresca la lista completa
+    // para que su badge tambien se actualice en la tabla.
+    if (payload.is_debt_suspension_plan) await fetchPlans();
     return data as Plan;
   }
 

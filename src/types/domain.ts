@@ -34,6 +34,7 @@ export interface Plan {
   mikrotik_profile: string | null;
   olt_tcont_profile: string | null;
   olt_traffic_profile: string | null;
+  is_debt_suspension_plan: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -88,10 +89,28 @@ export interface ServiceContract {
   mikrotik_profile: string | null;
   xui_line_id: number | null;
   xui_username: string | null;
+  debt_hold_status: DebtHoldStatus;
+  debt_hold_flagged_at: string | null;
+  debt_hold_applied_at: string | null;
+  debt_hold_invoice_id: string | null;
+  mikrotik_profile_before_hold: string | null;
   created_at: string;
   updated_at: string;
-  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number' | 'phone'> | null;
   plans?: Pick<Plan, 'id' | 'name' | 'download_speed' | 'upload_speed' | 'price'> | null;
+  invoices?: Pick<Invoice, 'id' | 'invoice_number' | 'due_date' | 'amount'> | null;
+}
+
+export type DebtHoldStatus = 'none' | 'pending' | 'suspended';
+
+export interface DebtHoldEvent {
+  id: string;
+  contract_id: string;
+  event_type: 'flagged' | 'applied' | 'reactivated' | 'error';
+  invoice_id: string | null;
+  detail: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface StaffProfile {

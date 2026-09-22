@@ -12,7 +12,10 @@ import { tr069SyncRoutes } from './routes/tr069sync';
 import { genieacsSyncRoutes } from './routes/genieacsSync';
 import { usersRoutes } from './routes/users';
 import { xuiRoutes } from './routes/xui';
+import { debtHoldRoutes } from './routes/debtHold';
+import { invoicesRoutes } from './routes/invoices';
 import { startTr069Scheduler } from './services/tr069Scheduler';
+import { startDebtHoldScheduler } from './services/debtHoldScheduler';
 
 const app = new Hono();
 
@@ -33,6 +36,8 @@ app.route('/api/tr069-sync', tr069SyncRoutes);
 app.route('/api/genieacs-sync', genieacsSyncRoutes);
 app.route('/api/users', usersRoutes);
 app.route('/api/xui', xuiRoutes);
+app.route('/api/debt-hold', debtHoldRoutes);
+app.route('/api/invoices', invoicesRoutes);
 
 // En produccion (Fase 14: PM2 + Cloudflare Tunnel) un solo proceso sirve
 // API + frontend compilado — no hace falta un servidor separado (Vite dev
@@ -51,3 +56,4 @@ serve({ fetch: app.fetch, port }, (info) => {
 });
 
 startTr069Scheduler();
+startDebtHoldScheduler();

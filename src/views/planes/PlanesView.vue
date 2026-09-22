@@ -72,6 +72,8 @@ const emptyForm = () => ({
   olt_tcont_profile: '',
   olt_traffic_profile: '',
   is_active: true,
+  is_debt_suspension_plan: false,
+  mikrotik_profile: '',
 });
 
 const form = ref(emptyForm());
@@ -112,6 +114,8 @@ function openEdit(plan: Plan) {
     olt_tcont_profile: plan.olt_tcont_profile ?? '',
     olt_traffic_profile: plan.olt_traffic_profile ?? '',
     is_active: plan.is_active,
+    is_debt_suspension_plan: plan.is_debt_suspension_plan,
+    mikrotik_profile: plan.mikrotik_profile ?? '',
   };
   formError.value = null;
   showModal.value = true;
@@ -130,6 +134,7 @@ async function handleSubmit() {
       description: form.value.description || null,
       olt_tcont_profile: form.value.olt_tcont_profile || null,
       olt_traffic_profile: form.value.olt_traffic_profile || null,
+      mikrotik_profile: form.value.mikrotik_profile || null,
     };
     if (editing.value) {
       await plansStore.updatePlan(editing.value.id, payload);
@@ -202,6 +207,7 @@ async function handleDelete(plan: Plan) {
               <span class="badge" :class="p.is_active ? 'bg-green-500/15 text-green-600' : 'bg-slate-500/15 text-slate-600'">
                 {{ p.is_active ? 'Activo' : 'Inactivo' }}
               </span>
+              <span v-if="p.is_debt_suspension_plan" class="badge bg-amber-500/15 text-amber-600 ml-1">Corte por deuda</span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
               <button v-if="canManagePlans" class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(p)">Editar</button>
@@ -299,10 +305,24 @@ async function handleDelete(plan: Plan) {
             <textarea v-model="form.description" rows="2" class="field-input" />
           </div>
 
-          <label class="flex items-center gap-2 text-sm mb-4">
+          <label class="flex items-center gap-2 text-sm mb-3">
             <input v-model="form.is_active" type="checkbox" class="rounded border-slate-300" />
             Plan activo (visible al crear contratos)
           </label>
+
+          <label class="flex items-center gap-2 text-sm mb-3">
+            <input v-model="form.is_debt_suspension_plan" type="checkbox" class="rounded border-slate-300" />
+            Es el plan de "corte por deuda"
+          </label>
+          <div v-if="form.is_debt_suspension_plan" class="mb-4 pl-6">
+            <p class="text-xs text-amber-600 mb-2">
+              Solo puede haber un plan asi a la vez — marcarlo aca desmarca automaticamente cualquier otro. Se usa para
+              el corte automatico por deuda (Cortes por deuda): los perfiles OLT de arriba deben apuntar a un plan
+              reducido/walled-garden real.
+            </p>
+            <label class="block text-xs text-slate-600 mb-1">Perfil PPPoE (MikroTik) para el corte</label>
+            <input v-model="form.mikrotik_profile" class="field-input" placeholder="Ej. Profile_Morosos" />
+          </div>
 
           <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
 

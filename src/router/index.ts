@@ -103,6 +103,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'FACTURACION'] },
     },
     {
+      path: '/cortes',
+      name: 'cortes',
+      component: () => import('@/views/facturacion/CortesView.vue'),
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'FACTURACION'] },
+    },
+    {
       path: '/usuarios',
       name: 'usuarios',
       component: () => import('@/views/usuarios/UsuariosView.vue'),

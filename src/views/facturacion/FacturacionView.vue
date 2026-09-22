@@ -4,14 +4,22 @@ import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useContractsStore } from '@/stores/contracts';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type { Invoice, InvoiceStatus } from '@/types/domain';
 
 const router = useRouter();
 const invoicesStore = useInvoicesStore();
 const contractsStore = useContractsStore();
+const auth = useAuthStore();
+
+// Edicion completa de una factura ya creada (corregir monto, fechas,
+// contrato, notas) es solo para SUPERADMIN — crear/marcar pagada/cancelar
+// sigue disponible para todo el staff de facturacion.
+const isSuperadmin = computed(() => auth.role === 'SUPERADMIN');
 
 const showModal = ref(false);
+const editingInvoice = ref<Invoice | null>(null);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const contractFilter = ref('');
@@ -47,6 +55,8 @@ const emptyForm = () => ({
   period_end: lastOfMonthIso(),
   due_date: addDaysIso(7),
   notes: '',
+  status: 'pending' as InvoiceStatus,
+  payment_method: 'cash',
 });
 const form = ref(emptyForm());
 
@@ -67,9 +77,19 @@ function isOverdue(inv: Invoice) {
 
 const activeContracts = computed(() => contractsStore.contracts.filter((c) => c.status === 'active'));
 
+// Al editar una factura de un contrato ya no activo (cancelado, etc.), el
+// select igual debe poder mostrarlo — si no, "Guardar" pareceria no tener
+// nada seleccionado aunque el form.contract_id siga siendo correcto.
+const selectableContracts = computed(() => {
+  if (!editingInvoice.value) return activeContracts.value;
+  if (activeContracts.value.some((c) => c.id === editingInvoice.value!.contract_id)) return activeContracts.value;
+  const current = contractsStore.contracts.find((c) => c.id === editingInvoice.value!.contract_id);
+  return current ? [current, ...activeContracts.value] : activeContracts.value;
+});
+
 const filteredContracts = computed(() => {
   const q = contractFilter.value.trim().toLowerCase();
-  const list = activeContracts.value;
+  const list = selectableContracts.value;
   if (!q) return list.slice(0, 30);
   return list
     .filter((c) =>
@@ -117,7 +137,28 @@ onMounted(async () => {
 });
 
 function openCreate() {
+  editingInvoice.value = null;
   form.value = emptyForm();
+  contractFilter.value = '';
+  formError.value = null;
+  showModal.value = true;
+}
+
+// Solo SUPERADMIN (ver isSuperadmin) — permite corregir una factura ya
+// creada, en cualquier estado (incluida pagada/cancelada, para arreglar
+// datos mal cargados despues).
+function openEdit(inv: Invoice) {
+  editingInvoice.value = inv;
+  form.value = {
+    contract_id: inv.contract_id,
+    amount: Number(inv.amount),
+    period_start: inv.period_start,
+    period_end: inv.period_end,
+    due_date: inv.due_date,
+    notes: inv.notes ?? '',
+    status: inv.status,
+    payment_method: inv.payment_method || 'cash',
+  };
   contractFilter.value = '';
   formError.value = null;
   showModal.value = true;
@@ -125,11 +166,11 @@ function openCreate() {
 
 function onContractChange() {
   const contract = activeContracts.value.find((c) => c.id === form.value.contract_id);
-  if (contract) form.value.amount = Number(contract.monthly_fee);
+  if (contract && !editingInvoice.value) form.value.amount = Number(contract.monthly_fee);
 }
 
 async function handleSubmit() {
-  const contract = activeContracts.value.find((c) => c.id === form.value.contract_id);
+  const contract = [...activeContracts.value, ...contractsStore.contracts].find((c) => c.id === form.value.contract_id);
   if (!contract) {
     formError.value = 'Selecciona un contrato';
     return;
@@ -137,18 +178,50 @@ async function handleSubmit() {
   saving.value = true;
   formError.value = null;
   try {
-    await invoicesStore.createInvoice({
-      contract_id: contract.id,
-      client_id: contract.client_id,
-      amount: form.value.amount,
-      period_start: form.value.period_start,
-      period_end: form.value.period_end,
-      due_date: form.value.due_date,
-      notes: form.value.notes || null,
-    });
+    if (editingInvoice.value) {
+      const becamePaid = form.value.status === 'paid' && editingInvoice.value.status !== 'paid';
+      // Si el nuevo estado es "pagada" y antes no lo era, pasa por markPaid
+      // (mismo camino que "Marcar pagada") para que tambien intente
+      // reactivar el servicio si el contrato estaba en corte por deuda —
+      // un update directo del status se saltearia esa logica.
+      if (becamePaid) {
+        const { reactivation } = await invoicesStore.markPaid(editingInvoice.value.id, form.value.payment_method);
+        if (reactivation.attempted && !reactivation.ok) {
+          alert(`La factura se marco pagada, pero no se pudo reactivar el servicio automaticamente: ${reactivation.error}. Reactivalo manualmente desde Cortes por deuda.`);
+        }
+      }
+      await invoicesStore.updateInvoice(editingInvoice.value.id, {
+        contract_id: contract.id,
+        client_id: contract.client_id,
+        amount: form.value.amount,
+        period_start: form.value.period_start,
+        period_end: form.value.period_end,
+        due_date: form.value.due_date,
+        notes: form.value.notes || null,
+        // Si ya paso por markPaid arriba, el status/paid_at/payment_method
+        // quedan tal cual quedaron ahi — no los pisa este update.
+        ...(becamePaid
+          ? {}
+          : {
+              status: form.value.status,
+              payment_method: form.value.status === 'paid' ? form.value.payment_method : null,
+              paid_at: form.value.status === 'paid' ? (editingInvoice.value.paid_at ?? new Date().toISOString()) : null,
+            }),
+      });
+    } else {
+      await invoicesStore.createInvoice({
+        contract_id: contract.id,
+        client_id: contract.client_id,
+        amount: form.value.amount,
+        period_start: form.value.period_start,
+        period_end: form.value.period_end,
+        due_date: form.value.due_date,
+        notes: form.value.notes || null,
+      });
+    }
     showModal.value = false;
   } catch (e) {
-    formError.value = getErrorMessage(e, 'Error al crear la factura');
+    formError.value = getErrorMessage(e, editingInvoice.value ? 'Error al guardar la factura' : 'Error al crear la factura');
   } finally {
     saving.value = false;
   }
@@ -165,8 +238,11 @@ async function handlePay() {
   paying.value = true;
   payError.value = null;
   try {
-    await invoicesStore.markPaid(payModal.value.id, payMethod.value);
+    const { reactivation } = await invoicesStore.markPaid(payModal.value.id, payMethod.value);
     payModal.value = null;
+    if (reactivation.attempted && !reactivation.ok) {
+      alert(`La factura se marco pagada, pero no se pudo reactivar el servicio automaticamente: ${reactivation.error}. Reactivalo manualmente desde Cortes por deuda.`);
+    }
   } catch (e) {
     payError.value = getErrorMessage(e, 'Error al registrar el pago');
   } finally {
@@ -290,7 +366,8 @@ async function handleCancel(inv: Invoice) {
                 <button class="text-green-600 hover:text-green-700 text-xs" @click="openPay(inv)">Marcar pagada</button>
                 <button class="text-red-500/80 hover:text-red-600 text-xs" @click="handleCancel(inv)">Cancelar</button>
               </template>
-              <span v-else class="text-xs text-slate-400">—</span>
+              <button v-if="isSuperadmin" class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(inv)">Editar</button>
+              <span v-if="inv.status !== 'pending' && !isSuperadmin" class="text-xs text-slate-400">—</span>
             </td>
           </tr>
         </tbody>
@@ -303,7 +380,7 @@ async function handleCancel(inv: Invoice) {
           class="w-full max-w-lg modal-panel max-h-[90vh] overflow-y-auto"
           @submit.prevent="handleSubmit"
         >
-          <h2 class="text-lg font-semibold mb-4">Nueva factura</h2>
+          <h2 class="text-lg font-semibold mb-4">{{ editingInvoice ? `Editar factura ${editingInvoice.invoice_number}` : 'Nueva factura' }}</h2>
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Contrato / cliente</label>
@@ -323,7 +400,7 @@ async function handleCancel(inv: Invoice) {
                 {{ c.contract_number }} — {{ c.clients?.first_name }} {{ c.clients?.last_name }} — S/ {{ Number(c.monthly_fee).toFixed(2) }}
               </option>
             </select>
-            <p v-if="!activeContracts.length" class="text-xs text-amber-600 mt-1">No hay contratos activos.</p>
+            <p v-if="!selectableContracts.length" class="text-xs text-amber-600 mt-1">No hay contratos activos.</p>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
@@ -355,6 +432,25 @@ async function handleCancel(inv: Invoice) {
             </div>
           </div>
 
+          <div v-if="editingInvoice" class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Estado</label>
+              <select v-model="form.status" class="field-input">
+                <option value="pending">Pendiente</option>
+                <option value="paid">Pagada</option>
+                <option value="cancelled">Cancelada</option>
+              </select>
+            </div>
+            <div v-if="form.status === 'paid'">
+              <label class="block text-xs text-slate-600 mb-1">Metodo de pago</label>
+              <select v-model="form.payment_method" class="field-input">
+                <option value="cash">Efectivo</option>
+                <option value="transfer">Transferencia</option>
+                <option value="card">Tarjeta</option>
+              </select>
+            </div>
+          </div>
+
           <div class="mb-4">
             <label class="block text-xs text-slate-600 mb-1">Notas</label>
             <textarea v-model="form.notes" rows="2" class="field-input"></textarea>
@@ -367,7 +463,7 @@ async function handleCancel(inv: Invoice) {
               Cancelar
             </button>
             <button type="submit" :disabled="saving" class="btn-primary">
-              {{ saving ? 'Creando...' : 'Crear factura' }}
+              {{ saving ? 'Guardando...' : editingInvoice ? 'Guardar cambios' : 'Crear factura' }}
             </button>
           </div>
         </form>
