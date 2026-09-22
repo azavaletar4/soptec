@@ -14,6 +14,7 @@ import { usersRoutes } from './routes/users';
 import { xuiRoutes } from './routes/xui';
 import { debtHoldRoutes } from './routes/debtHold';
 import { invoicesRoutes } from './routes/invoices';
+import { soporteRoutes } from './routes/soporte';
 import { startTr069Scheduler } from './services/tr069Scheduler';
 import { startDebtHoldScheduler } from './services/debtHoldScheduler';
 
@@ -38,6 +39,7 @@ app.route('/api/users', usersRoutes);
 app.route('/api/xui', xuiRoutes);
 app.route('/api/debt-hold', debtHoldRoutes);
 app.route('/api/invoices', invoicesRoutes);
+app.route('/api/soporte', soporteRoutes);
 
 // En produccion (Fase 14: PM2 + Cloudflare Tunnel) un solo proceso sirve
 // API + frontend compilado — no hace falta un servidor separado (Vite dev

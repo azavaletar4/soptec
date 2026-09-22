@@ -1,0 +1,119 @@
+-- Fase 27c: el ranking respeta el puntaje manual del ticket (tickets.points,
+-- Fase 6b, el que se asigna desde "Asignar tecnico") cuando existe — solo
+-- usa la regla automatica por categoria (+5 averia, +3 reconexion) si el
+-- ticket no tiene puntos asignados a mano. Instalaciones sigue siempre en
+-- +10 fijo (no tiene campo de puntos manual). La penalizacion por
+-- reincidencia sigue fija en -5 (no es un valor propio de un ticket, es un
+-- ajuste entre dos tickets distintos).
+
+create or replace function public.get_technician_ranking(p_month int, p_year int)
+returns table (
+  technician_id uuid,
+  technician_name text,
+  installations_count bigint,
+  averias_count bigint,
+  reconexiones_count bigint,
+  reincidencias_count bigint,
+  total_points bigint,
+  ranking int
+)
+language sql
+stable
+security definer set search_path = public
+as $$
+  with period as (
+    select
+      make_date(p_year, p_month, 1) as start_date,
+      (make_date(p_year, p_month, 1) + interval '1 month')::date as end_date
+  ),
+  -- Instalaciones nuevas completadas en el mes (modulo Instalaciones).
+  installs as (
+    select i.assigned_to as technician_id, count(*) as installations_count
+    from public.installations i, period p
+    where i.status = 'completed'
+      and i.assigned_to is not null
+      and i.completed_at >= p.start_date
+      and i.completed_at < p.end_date
+    group by i.assigned_to
+  ),
+  -- Averias/mantenimiento y reconexiones/traslados resueltos en el mes. El
+  -- puntaje por ticket usa tickets.points si esta asignado a mano; si no,
+  -- la regla automatica por categoria.
+  ticket_work as (
+    select
+      t.assigned_to as technician_id,
+      count(*) filter (where t.category in ('no_service', 'slow_speed', 'equipment')) as averias_count,
+      count(*) filter (where t.category = 'reconnection_relocation') as reconexiones_count,
+      sum(
+        case
+          when t.category in ('no_service', 'slow_speed', 'equipment') then coalesce(t.points, 5)
+          when t.category = 'reconnection_relocation' then coalesce(t.points, 3)
+          else 0
+        end
+      ) as ticket_points
+    from public.tickets t, period p
+    where t.status in ('resolved', 'closed')
+      and t.assigned_to is not null
+      and coalesce(t.resolved_at, t.closed_at) >= p.start_date
+      and coalesce(t.resolved_at, t.closed_at) < p.end_date
+    group by t.assigned_to
+  ),
+  -- Reincidencias: averia resuelta en el mes donde el mismo cliente abre
+  -- OTRA averia dentro de los 7 dias posteriores a esa resolucion.
+  reincidencias as (
+    select t1.assigned_to as technician_id, count(*) as reincidencias_count
+    from public.tickets t1, period p
+    where t1.status in ('resolved', 'closed')
+      and t1.assigned_to is not null
+      and t1.category in ('no_service', 'slow_speed', 'equipment')
+      and coalesce(t1.resolved_at, t1.closed_at) >= p.start_date
+      and coalesce(t1.resolved_at, t1.closed_at) < p.end_date
+      and exists (
+        select 1
+        from public.tickets t2
+        where t2.client_id = t1.client_id
+          and t2.id <> t1.id
+          and t2.category in ('no_service', 'slow_speed', 'equipment')
+          and t2.created_at > coalesce(t1.resolved_at, t1.closed_at)
+          and t2.created_at <= coalesce(t1.resolved_at, t1.closed_at) + interval '7 days'
+      )
+    group by t1.assigned_to
+  ),
+  combined as (
+    select
+      pr.id as technician_id,
+      coalesce(pr.full_name, pr.email) as technician_name,
+      coalesce(i.installations_count, 0) as installations_count,
+      coalesce(tw.averias_count, 0) as averias_count,
+      coalesce(tw.reconexiones_count, 0) as reconexiones_count,
+      coalesce(r.reincidencias_count, 0) as reincidencias_count,
+      (
+        coalesce(i.installations_count, 0) * 10
+        + coalesce(tw.ticket_points, 0)
+        - coalesce(r.reincidencias_count, 0) * 5
+      ) as total_points
+    from public.profiles pr
+    left join installs i on i.technician_id = pr.id
+    left join ticket_work tw on tw.technician_id = pr.id
+    left join reincidencias r on r.technician_id = pr.id
+    where pr.role = 'TECNICO_RED'
+      and (
+        coalesce(i.installations_count, 0) + coalesce(tw.averias_count, 0)
+        + coalesce(tw.reconexiones_count, 0) + coalesce(r.reincidencias_count, 0)
+      ) > 0
+  )
+  select
+    technician_id,
+    technician_name,
+    installations_count,
+    averias_count,
+    reconexiones_count,
+    reincidencias_count,
+    total_points,
+    rank() over (order by total_points desc)::int as ranking
+  from combined
+  order by total_points desc, technician_name;
+$$;
+
+revoke all on function public.get_technician_ranking(int, int) from public;
+grant execute on function public.get_technician_ranking(int, int) to authenticated;

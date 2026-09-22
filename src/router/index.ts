@@ -49,6 +49,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/soporte/ranking',
+      name: 'soporte-ranking',
+      component: () => import('@/views/soporte/RankingTecnicosView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/soporte/:id',
       name: 'soporte-detalle',
       component: () => import('@/views/soporte/TicketDetailView.vue'),

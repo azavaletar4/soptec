@@ -39,6 +39,7 @@ const EMPTY_TICKET_CATEGORY: Record<TicketCategory, number> = {
   billing: 0,
   installation: 0,
   equipment: 0,
+  reconnection_relocation: 0,
   other: 0,
 };
 const EMPTY_TICKET_PRIORITY: Record<TicketPriority, number> = { low: 0, medium: 0, high: 0, urgent: 0 };

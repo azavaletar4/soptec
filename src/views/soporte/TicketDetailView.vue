@@ -64,6 +64,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   billing: 'Facturación',
   installation: 'Instalación',
   equipment: 'Equipo',
+  reconnection_relocation: 'Reconexión / Traslado',
   other: 'Otro',
 };
 

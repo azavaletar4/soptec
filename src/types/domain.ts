@@ -4,7 +4,14 @@ export type ClientStatus = 'prospect' | 'active' | 'suspended' | 'retired';
 export type ContractStatus = 'active' | 'suspended' | 'cancelled';
 export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type TicketCategory = 'no_service' | 'slow_speed' | 'billing' | 'installation' | 'equipment' | 'other';
+export type TicketCategory =
+  | 'no_service'
+  | 'slow_speed'
+  | 'billing'
+  | 'installation'
+  | 'equipment'
+  | 'reconnection_relocation'
+  | 'other';
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled';
 export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
 export type InventoryMovementType = 'ingreso' | 'egreso';

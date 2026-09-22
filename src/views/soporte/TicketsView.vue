@@ -63,6 +63,7 @@ const CATEGORY_LABEL: Record<TicketCategory, string> = {
   billing: 'Facturación',
   installation: 'Instalación',
   equipment: 'Equipo',
+  reconnection_relocation: 'Reconexión / Traslado',
   other: 'Otro',
 };
 
@@ -166,9 +167,12 @@ function formatDate(value: string) {
         <h1 class="text-2xl font-semibold">Soporte</h1>
         <p class="text-slate-600 text-sm mt-1">{{ ticketsStore.tickets.length }} tickets registrados</p>
       </div>
-      <button v-if="canCreateTickets" class="btn-primary" @click="openCreate">
-        + Nuevo ticket
-      </button>
+      <div class="flex gap-2">
+        <button class="btn-ghost" @click="router.push('/soporte/ranking')">🏆 Ranking técnicos</button>
+        <button v-if="canCreateTickets" class="btn-primary" @click="openCreate">
+          + Nuevo ticket
+        </button>
+      </div>
     </div>
 
     <input

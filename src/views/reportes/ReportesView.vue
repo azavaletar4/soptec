@@ -41,6 +41,7 @@ const CATEGORY_LABEL: Record<TicketCategory, string> = {
   billing: 'Facturación',
   installation: 'Instalación',
   equipment: 'Equipo',
+  reconnection_relocation: 'Reconexión / Traslado',
   other: 'Otro',
 };
 const PRIORITY_LABEL: Record<TicketPriority, string> = { low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' };
@@ -51,6 +52,7 @@ const CATEGORY_COLOR: Record<TicketCategory, string> = {
   billing: '#8b5cf6',
   installation: '#0ea5e9',
   equipment: '#22c55e',
+  reconnection_relocation: '#a855f7',
   other: '#64748b',
 };
 
