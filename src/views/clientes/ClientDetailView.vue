@@ -8,6 +8,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useTicketsStore } from '@/stores/tickets';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
+import { useXuiStore, type XuiLineSummary, type XuiLineAction, type XuiBouquet } from '@/stores/xui';
 import { useOltStore, type OltOnt, type UnlinkedOnt } from '@/stores/olt';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
@@ -36,6 +37,7 @@ const catalogs = useCatalogsStore();
 const ticketsStore = useTicketsStore();
 const invoicesStore = useInvoicesStore();
 const mikrotikStore = useMikrotikStore();
+const xuiStore = useXuiStore();
 const oltStore = useOltStore();
 const clientPhotosStore = useClientPhotosStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
@@ -536,10 +538,26 @@ async function syncMikrotikProfile(contract: ServiceContract, previousProfile: s
   }
 }
 
+// Si el contrato tiene una linea IPTV vinculada, refleja en XUI el cambio de
+// estado: activo -> reactivar la linea, suspendido/cancelado -> suspenderla.
+// Asi no queda un cliente dado de baja/moroso con IPTV activo por olvido.
+async function syncXuiLineStatus(contract: ServiceContract, previousStatus: ContractStatus | null) {
+  if (!contract.xui_line_id || contract.status === previousStatus) return;
+  const action: XuiLineAction | null =
+    contract.status === 'active' ? 'enable' : contract.status === 'suspended' || contract.status === 'cancelled' ? 'disable' : null;
+  if (!action) return;
+  try {
+    await xuiStore.lineAction(contract.xui_line_id, action);
+  } catch (e) {
+    alert(getErrorMessage(e, 'El contrato se guardo, pero no se pudo sincronizar el estado de la linea IPTV en XUI'));
+  }
+}
+
 async function handleCreateContract() {
   savingContract.value = true;
   contractError.value = null;
   const previousProfile = editingContract.value?.mikrotik_profile ?? null;
+  const previousStatus = editingContract.value?.status ?? null;
   const payload = {
     plan_id: contractForm.value.plan_id || null,
     monthly_fee: contractForm.value.monthly_fee,
@@ -559,6 +577,7 @@ async function handleCreateContract() {
     showContractModal.value = false;
     await loadContracts();
     await syncMikrotikProfile(saved, previousProfile);
+    await syncXuiLineStatus(saved, previousStatus);
   } catch (e) {
     contractError.value = getErrorMessage(e, editingContract.value ? 'Error al actualizar el contrato' : 'Error al crear el contrato');
   } finally {
@@ -602,6 +621,259 @@ async function handleSaveProfile() {
     profileModalError.value = getErrorMessage(e, 'Error al actualizar el perfil PPPoE');
   } finally {
     savingProfile.value = false;
+  }
+}
+
+// ---- IPTV (linea en el panel XUI.one), Fase 23 ----
+const showIptvModal = ref(false);
+const iptvContract = ref<ServiceContract | null>(null);
+const iptvDetail = ref<XuiLineSummary | null>(null);
+const iptvLoadingDetail = ref(false);
+const iptvSaving = ref(false);
+const iptvError = ref<string | null>(null);
+
+const iptvSearchQuery = ref('');
+const iptvSearchResults = ref<XuiLineSummary[]>([]);
+const iptvSearching = ref(false);
+
+const iptvCreateForm = ref({ username: '', password: '', maxConnections: '2', noExpire: true, expDate: '' });
+const iptvEditForm = ref({ username: '', password: '', maxConnections: '1', noExpire: true, expDate: '', bouquetIds: [] as number[] });
+const iptvBouquets = ref<XuiBouquet[]>([]);
+const iptvBouquetsLoading = ref(false);
+const iptvSelectedBouquets = ref<number[]>([]);
+
+// bouquets_selected en XUI es un string JSON tipo "[1,2]" (o vacio).
+function parseBouquetIds(raw: string): number[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.map(Number).filter((n) => Number.isFinite(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Los bouquets no cambian seguido: se cargan una sola vez por sesion, no en
+// cada apertura del modal.
+async function loadIptvBouquets() {
+  if (iptvBouquets.value.length || iptvBouquetsLoading.value) return;
+  iptvBouquetsLoading.value = true;
+  try {
+    iptvBouquets.value = await xuiStore.listBouquets();
+  } catch (e) {
+    iptvError.value = getErrorMessage(e, 'Error al cargar los bouquets de XUI');
+  } finally {
+    iptvBouquetsLoading.value = false;
+  }
+}
+
+function toggleIptvBouquet(id: number) {
+  const idx = iptvSelectedBouquets.value.indexOf(id);
+  if (idx === -1) iptvSelectedBouquets.value.push(id);
+  else iptvSelectedBouquets.value.splice(idx, 1);
+}
+
+function toggleIptvEditBouquet(id: number) {
+  const idx = iptvEditForm.value.bouquetIds.indexOf(id);
+  if (idx === -1) iptvEditForm.value.bouquetIds.push(id);
+  else iptvEditForm.value.bouquetIds.splice(idx, 1);
+}
+
+// Si se abre otro modal (o se cierra) antes de que esta carga termine, el
+// resultado llega tarde y no debe pisar el contrato que esta visible en ese
+// momento (paso a paso de un bug real: abrir la linea A, abrir la B antes de
+// que A cargue, y la respuesta de A tardia sobreescribia el formulario de B
+// -> al guardar se renombraba la linea equivocada).
+let iptvLoadToken = 0;
+
+async function loadIptvDetail(contract: ServiceContract) {
+  if (!contract.xui_line_id) return;
+  const token = ++iptvLoadToken;
+  iptvLoadingDetail.value = true;
+  iptvError.value = null;
+  try {
+    const [form, matches] = await Promise.all([
+      xuiStore.getLine(contract.xui_line_id),
+      contract.xui_username ? xuiStore.searchLines(contract.xui_username) : Promise.resolve([]),
+      loadIptvBouquets(),
+    ]);
+    if (token !== iptvLoadToken || iptvContract.value?.id !== contract.id) return;
+    iptvDetail.value = matches.find((l) => l.id === contract.xui_line_id) ?? null;
+    iptvEditForm.value = {
+      username: form.username,
+      password: form.password,
+      maxConnections: form.max_connections,
+      noExpire: form.no_expire,
+      expDate: form.exp_date,
+      bouquetIds: parseBouquetIds(form.bouquets_selected),
+    };
+  } catch (e) {
+    if (token !== iptvLoadToken || iptvContract.value?.id !== contract.id) return;
+    iptvError.value = getErrorMessage(e, 'Error al consultar la linea en XUI');
+  } finally {
+    if (token === iptvLoadToken) iptvLoadingDetail.value = false;
+  }
+}
+
+function openIptvModal(contract: ServiceContract) {
+  iptvLoadToken++; // invalida cualquier carga en curso de un modal anterior
+  iptvContract.value = contract;
+  iptvError.value = null;
+  iptvDetail.value = null;
+  iptvSearchQuery.value = '';
+  iptvSearchResults.value = [];
+  iptvCreateForm.value = {
+    username: client.value?.client_code ?? '',
+    password: '',
+    maxConnections: '2',
+    noExpire: true,
+    expDate: '',
+  };
+  iptvSelectedBouquets.value = [];
+  showIptvModal.value = true;
+  loadIptvBouquets();
+  if (contract.xui_line_id) loadIptvDetail(contract);
+}
+
+async function handleIptvSearch() {
+  const q = iptvSearchQuery.value.trim();
+  if (q.length < 2) {
+    iptvError.value = 'Ingresa al menos 2 caracteres para buscar';
+    return;
+  }
+  iptvSearching.value = true;
+  iptvError.value = null;
+  try {
+    iptvSearchResults.value = await xuiStore.searchLines(q);
+  } catch (e) {
+    iptvError.value = getErrorMessage(e, 'Error al buscar en XUI');
+  } finally {
+    iptvSearching.value = false;
+  }
+}
+
+async function handleIptvLink(line: XuiLineSummary) {
+  if (!iptvContract.value) return;
+  iptvSaving.value = true;
+  iptvError.value = null;
+  try {
+    await contractsStore.updateContract(iptvContract.value.id, { xui_line_id: line.id, xui_username: line.username });
+    await loadContracts();
+    showIptvModal.value = false;
+  } catch (e) {
+    iptvError.value = getErrorMessage(e, 'Error al vincular la linea');
+  } finally {
+    iptvSaving.value = false;
+  }
+}
+
+async function handleIptvCreate() {
+  if (!iptvContract.value) return;
+  if (!iptvSelectedBouquets.value.length) {
+    iptvError.value = 'Elegi al menos un bouquet (si no, el cliente no tiene canales)';
+    return;
+  }
+  iptvSaving.value = true;
+  iptvError.value = null;
+  try {
+    const result = await xuiStore.createLine({
+      username: iptvCreateForm.value.username.trim() || undefined,
+      password: iptvCreateForm.value.password.trim() || undefined,
+      maxConnections: iptvCreateForm.value.maxConnections,
+      noExpire: iptvCreateForm.value.noExpire,
+      expDate: iptvCreateForm.value.noExpire ? undefined : iptvCreateForm.value.expDate,
+      contact: client.value ? `${client.value.first_name} ${client.value.last_name}`.trim() : undefined,
+      bouquetIds: iptvSelectedBouquets.value,
+    });
+    if (!result.id) throw new Error('XUI no devolvio el id de la nueva linea');
+    const created = await xuiStore.getLine(result.id);
+    await contractsStore.updateContract(iptvContract.value.id, { xui_line_id: result.id, xui_username: created.username });
+    await loadContracts();
+    showIptvModal.value = false;
+  } catch (e) {
+    iptvError.value = getErrorMessage(e, 'Error al crear la linea en XUI');
+  } finally {
+    iptvSaving.value = false;
+  }
+}
+
+async function handleIptvSave() {
+  if (!iptvContract.value?.xui_line_id) return;
+  if (!iptvEditForm.value.bouquetIds.length) {
+    iptvError.value = 'Elegi al menos un bouquet (si no, el cliente se queda sin canales)';
+    return;
+  }
+  const lineId = iptvContract.value.xui_line_id;
+  const requestedUsername = iptvEditForm.value.username.trim();
+  iptvSaving.value = true;
+  iptvError.value = null;
+  try {
+    await xuiStore.updateLine(lineId, {
+      username: requestedUsername || undefined,
+      password: iptvEditForm.value.password.trim() || undefined,
+      maxConnections: iptvEditForm.value.maxConnections,
+      noExpire: iptvEditForm.value.noExpire,
+      expDate: iptvEditForm.value.noExpire ? undefined : iptvEditForm.value.expDate,
+      bouquetIds: iptvEditForm.value.bouquetIds,
+    });
+
+    // No confiar en lo tipeado: releer lo que realmente quedo guardado en
+    // XUI antes de cachear el username en el contrato. Ojo: XUI a veces
+    // reporta exito pero no aplica algunos campos (bug confirmado de su
+    // lado, ej. max_connections) — por eso se compara contra lo pedido en
+    // vez de asumir que todo se guardo.
+    const actual = await xuiStore.getLine(lineId);
+    if (actual.username !== iptvContract.value.xui_username) {
+      await contractsStore.updateContract(iptvContract.value.id, { xui_username: actual.username });
+      await loadContracts();
+      const refreshed = contracts.value.find((c) => c.id === iptvContract.value?.id);
+      if (refreshed) iptvContract.value = refreshed;
+    }
+    await loadIptvDetail(iptvContract.value);
+
+    const notApplied: string[] = [];
+    if (requestedUsername && actual.username !== requestedUsername) notApplied.push(`usuario (pediste "${requestedUsername}")`);
+    if (actual.max_connections !== iptvEditForm.value.maxConnections) notApplied.push('conexiones simultaneas');
+    if (!iptvEditForm.value.noExpire && actual.exp_date !== iptvEditForm.value.expDate) notApplied.push('vencimiento');
+    // loadIptvDetail limpia iptvError al empezar, asi que el aviso recien se
+    // setea despues de que termine.
+    if (notApplied.length) {
+      iptvError.value = `XUI dijo que guardo, pero no aplico: ${notApplied.join(', ')}. No es un bug de SmartRayco, es un comportamiento de XUI que estamos investigando — probalo de nuevo en un rato.`;
+    }
+  } catch (e) {
+    iptvError.value = getErrorMessage(e, 'Error al guardar los cambios de la linea');
+  } finally {
+    iptvSaving.value = false;
+  }
+}
+
+async function handleIptvAction(action: XuiLineAction) {
+  if (!iptvContract.value?.xui_line_id) return;
+  iptvSaving.value = true;
+  iptvError.value = null;
+  try {
+    await xuiStore.lineAction(iptvContract.value.xui_line_id, action);
+    await loadIptvDetail(iptvContract.value);
+  } catch (e) {
+    iptvError.value = getErrorMessage(e, `Error al ejecutar la accion sobre la linea`);
+  } finally {
+    iptvSaving.value = false;
+  }
+}
+
+async function handleIptvUnlink() {
+  if (!iptvContract.value) return;
+  if (!confirm('¿Desvincular esta linea IPTV del contrato? La linea sigue existiendo en XUI, solo se quita la referencia aqui.')) return;
+  iptvSaving.value = true;
+  iptvError.value = null;
+  try {
+    await contractsStore.updateContract(iptvContract.value.id, { xui_line_id: null, xui_username: null });
+    await loadContracts();
+    showIptvModal.value = false;
+  } catch (e) {
+    iptvError.value = getErrorMessage(e, 'Error al desvincular');
+  } finally {
+    iptvSaving.value = false;
   }
 }
 
@@ -863,6 +1135,7 @@ async function handleSaveOntPlan() {
               <th class="text-left px-4 py-3">Inicio</th>
               <th class="text-left px-4 py-3">PPPoE</th>
               <th class="text-left px-4 py-3">Perfil PPPoE</th>
+              <th class="text-left px-4 py-3">IPTV</th>
               <th class="text-left px-4 py-3">Estado</th>
             </tr>
           </thead>
@@ -888,6 +1161,14 @@ async function handleSaveOntPlan() {
                     @click.stop="openProfileModal(ct)"
                   >
                     Cambiar
+                  </button>
+                </div>
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono text-xs text-slate-600">{{ ct.xui_username || 'Sin vincular' }}</span>
+                  <button type="button" class="text-xs text-sky-600 hover:underline whitespace-nowrap" @click.stop="openIptvModal(ct)">
+                    {{ ct.xui_line_id ? 'Gestionar' : 'Vincular' }}
                   </button>
                 </div>
               </td>
@@ -1191,6 +1472,163 @@ async function handleSaveOntPlan() {
             </button>
           </div>
         </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showIptvModal" class="modal-overlay">
+        <div class="w-full max-w-md modal-panel">
+          <h2 class="text-lg font-semibold mb-1">IPTV (XUI)</h2>
+          <p class="text-xs text-slate-500 mb-4 font-mono">{{ iptvContract?.contract_number }}</p>
+
+          <p v-if="iptvError" class="text-sm text-red-600 mb-3">{{ iptvError }}</p>
+
+          <template v-if="iptvContract?.xui_line_id">
+            <p v-if="iptvLoadingDetail" class="text-sm text-slate-500 mb-3">Consultando XUI...</p>
+            <div v-else-if="iptvDetail" class="mb-4 text-sm space-y-1">
+              <p><span class="text-slate-500">Usuario:</span> <span class="font-mono">{{ iptvDetail.username }}</span></p>
+              <p><span class="text-slate-500">Password:</span> <span class="font-mono">{{ iptvDetail.password }}</span></p>
+              <p><span class="text-slate-500">Estado:</span> {{ iptvDetail.status || '—' }}</p>
+              <p><span class="text-slate-500">Conexiones max:</span> {{ iptvDetail.maxConnections || '—' }}</p>
+              <p><span class="text-slate-500">Vencimiento:</span> {{ iptvDetail.expiration || 'Sin vencimiento' }}</p>
+              <p><span class="text-slate-500">Ultima conexion:</span> {{ iptvDetail.lastConnection || '—' }}</p>
+            </div>
+            <p v-else class="text-sm text-amber-600 mb-3">No se pudo cargar el detalle de la linea.</p>
+
+            <div class="flex flex-wrap gap-2 mb-4">
+              <button type="button" class="btn-ghost text-xs" :disabled="iptvSaving" @click="handleIptvAction('disable')">
+                Suspender
+              </button>
+              <button type="button" class="btn-ghost text-xs" :disabled="iptvSaving" @click="handleIptvAction('enable')">Reactivar</button>
+              <button type="button" class="btn-ghost text-xs" :disabled="iptvSaving" @click="handleIptvAction('kill')">
+                Matar conexiones
+              </button>
+            </div>
+
+            <form class="mb-4 border-t border-slate-200 pt-3 space-y-2" @submit.prevent="handleIptvSave">
+              <label class="block text-xs text-slate-600 mb-1">Editar linea</label>
+
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Usuario</label>
+                <input v-model="iptvEditForm.username" class="field-input" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Password</label>
+                <input v-model="iptvEditForm.password" class="field-input" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Conexiones simultaneas</label>
+                <input v-model="iptvEditForm.maxConnections" type="number" min="1" class="field-input" />
+              </div>
+
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Bouquets (canales)</label>
+                <p v-if="iptvBouquetsLoading" class="text-xs text-slate-500">Cargando bouquets...</p>
+                <p v-else-if="!iptvBouquets.length" class="text-xs text-amber-600">No hay bouquets configurados en XUI.</p>
+                <div v-else class="space-y-1 border border-slate-200 rounded p-2">
+                  <label v-for="bq in iptvBouquets" :key="bq.id" class="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      :checked="iptvEditForm.bouquetIds.includes(bq.id)"
+                      @change="toggleIptvEditBouquet(bq.id)"
+                    />
+                    {{ bq.name }} <span class="text-slate-400">({{ bq.streamCount }} canales)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <input id="iptv-no-expire" v-model="iptvEditForm.noExpire" type="checkbox" />
+                <label for="iptv-no-expire" class="text-xs text-slate-600">Sin vencimiento</label>
+              </div>
+              <input
+                v-if="!iptvEditForm.noExpire"
+                v-model="iptvEditForm.expDate"
+                type="text"
+                placeholder="YYYY-MM-DD HH:MM:SS"
+                class="field-input"
+              />
+
+              <button type="submit" :disabled="iptvSaving" class="btn-primary text-xs w-full">
+                {{ iptvSaving ? 'Guardando...' : 'Guardar cambios' }}
+              </button>
+            </form>
+
+            <button type="button" class="text-xs text-red-600 hover:underline" @click="handleIptvUnlink">
+              Desvincular del contrato
+            </button>
+          </template>
+
+          <template v-else>
+            <div class="mb-4">
+              <label class="block text-xs text-slate-600 mb-1">Buscar linea existente por usuario</label>
+              <div class="flex gap-2">
+                <input v-model="iptvSearchQuery" class="field-input" placeholder="usuario XUI" @keyup.enter="handleIptvSearch" />
+                <button type="button" class="btn-ghost text-xs whitespace-nowrap" :disabled="iptvSearching" @click="handleIptvSearch">
+                  {{ iptvSearching ? 'Buscando...' : 'Buscar' }}
+                </button>
+              </div>
+              <ul v-if="iptvSearchResults.length" class="mt-2 divide-y divide-slate-200 border border-slate-200 rounded">
+                <li v-for="line in iptvSearchResults" :key="line.id" class="flex items-center justify-between px-2 py-1.5 text-xs">
+                  <span class="font-mono">{{ line.username }} <span class="text-slate-400">({{ line.owner }})</span></span>
+                  <button type="button" class="text-sky-600 hover:underline" :disabled="iptvSaving" @click="handleIptvLink(line)">
+                    Vincular
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            <div class="border-t border-slate-200 pt-3">
+              <p class="text-xs text-slate-600 mb-2">O crear una linea nueva</p>
+              <form class="space-y-2" @submit.prevent="handleIptvCreate">
+                <input v-model="iptvCreateForm.username" class="field-input" placeholder="Usuario (vacio = autogenerar)" />
+                <input v-model="iptvCreateForm.password" class="field-input" placeholder="Password (vacio = autogenerar)" />
+                <input
+                  v-model="iptvCreateForm.maxConnections"
+                  type="number"
+                  min="1"
+                  class="field-input"
+                  placeholder="Conexiones simultaneas"
+                />
+                <div class="flex items-center gap-2">
+                  <input id="iptv-create-no-expire" v-model="iptvCreateForm.noExpire" type="checkbox" />
+                  <label for="iptv-create-no-expire" class="text-xs text-slate-600">Sin vencimiento</label>
+                </div>
+                <input
+                  v-if="!iptvCreateForm.noExpire"
+                  v-model="iptvCreateForm.expDate"
+                  type="text"
+                  placeholder="YYYY-MM-DD HH:MM:SS"
+                  class="field-input"
+                />
+
+                <div>
+                  <label class="block text-xs text-slate-600 mb-1">Bouquets (canales a asignar)</label>
+                  <p v-if="iptvBouquetsLoading" class="text-xs text-slate-500">Cargando bouquets...</p>
+                  <p v-else-if="!iptvBouquets.length" class="text-xs text-amber-600">No hay bouquets configurados en XUI.</p>
+                  <div v-else class="space-y-1 border border-slate-200 rounded p-2">
+                    <label v-for="bq in iptvBouquets" :key="bq.id" class="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        :checked="iptvSelectedBouquets.includes(bq.id)"
+                        @change="toggleIptvBouquet(bq.id)"
+                      />
+                      {{ bq.name }} <span class="text-slate-400">({{ bq.streamCount }} canales)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button type="submit" :disabled="iptvSaving" class="btn-primary text-xs w-full">
+                  {{ iptvSaving ? 'Creando...' : 'Crear linea' }}
+                </button>
+              </form>
+            </div>
+          </template>
+
+          <div class="flex justify-end mt-4">
+            <button type="button" class="btn-ghost" @click="showIptvModal = false">Cerrar</button>
+          </div>
+        </div>
       </div>
     </Teleport>
 

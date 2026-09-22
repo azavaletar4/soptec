@@ -86,6 +86,8 @@ export interface ServiceContract {
   mikrotik_device_id: string | null;
   pppoe_username: string | null;
   mikrotik_profile: string | null;
+  xui_line_id: number | null;
+  xui_username: string | null;
   created_at: string;
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
