@@ -26,6 +26,10 @@ const canEdit = computed(() => {
   return ticket.value.assigned_to === auth.user?.id;
 });
 
+// Eliminar es solo para limpiar tickets de prueba — mismo rol que crear.
+const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+const deleting = ref(false);
+
 const ticketId = computed(() => route.params.id as string);
 const ticket = ref<Ticket | null>(null);
 const loading = ref(true);
@@ -191,6 +195,25 @@ async function handleAddComment() {
 function formatDate(value: string) {
   return new Date(value).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' });
 }
+
+async function handleDelete() {
+  if (!ticket.value) return;
+  const ok = confirm(
+    `¿Eliminar el ticket ${ticket.value.ticket_number}? Esta accion no se puede deshacer. Si tiene materiales asignados, se devuelven a bodega.`,
+  );
+  if (!ok) return;
+  deleting.value = true;
+  actionError.value = null;
+  try {
+    const { materialsReturned } = await ticketsStore.deleteTicket(ticket.value.id);
+    if (materialsReturned) alert(`Ticket eliminado. Se devolvieron ${materialsReturned} material(es) a bodega.`);
+    router.push('/soporte');
+  } catch (e) {
+    actionError.value = getErrorMessage(e, 'Error al eliminar el ticket');
+  } finally {
+    deleting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -213,6 +236,9 @@ function formatDate(value: string) {
             · {{ ticket.clients?.phone || 'sin telefono' }} · {{ CATEGORY_LABEL[ticket.category] }}
           </p>
         </div>
+        <button v-if="canDelete" class="btn-ghost text-red-500/80 hover:text-red-600 text-sm" :disabled="deleting" @click="handleDelete">
+          {{ deleting ? 'Eliminando...' : 'Eliminar ticket' }}
+        </button>
       </div>
 
       <p v-if="actionError" class="mb-4 text-sm text-red-600">{{ actionError }}</p>

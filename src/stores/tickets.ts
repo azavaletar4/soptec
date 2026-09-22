@@ -74,6 +74,40 @@ export const useTicketsStore = defineStore('tickets', () => {
     return updateTicket(id, { assigned_to: assignedTo, points });
   }
 
+  /**
+   * Borra un ticket (limpieza de tickets de prueba). Si tenia materiales
+   * (egresos de inventory_movements) registrados, primero los devuelve a
+   * bodega con un ingreso compensatorio — el Kardex original se conserva
+   * (ticket_id queda en null solo, via ON DELETE SET NULL) y el stock no
+   * se pierde. Solo SUPERADMIN/ADMIN (RLS lo exige, ver Fase 26).
+   */
+  async function deleteTicket(id: string) {
+    const ticket = tickets.value.find((t) => t.id === id);
+
+    const { data: movements, error: movErr } = await supabase
+      .from('inventory_movements')
+      .select('product_id, quantity')
+      .eq('ticket_id', id)
+      .eq('movement_type', 'egreso');
+    if (movErr) throw movErr;
+
+    for (const m of movements ?? []) {
+      const { error: retErr } = await supabase.from('inventory_movements').insert({
+        product_id: m.product_id,
+        movement_type: 'ingreso',
+        quantity: m.quantity,
+        reason: `Devolucion por eliminacion del ticket ${ticket?.ticket_number ?? id}`,
+      });
+      if (retErr) throw retErr;
+    }
+
+    const { error: delErr } = await supabase.from('tickets').delete().eq('id', id);
+    if (delErr) throw delErr;
+
+    tickets.value = tickets.value.filter((t) => t.id !== id);
+    return { materialsReturned: movements?.length ?? 0 };
+  }
+
   async function fetchComments(ticketId: string) {
     const { data, error: err } = await supabase
       .from('ticket_comments')
@@ -102,6 +136,7 @@ export const useTicketsStore = defineStore('tickets', () => {
     fetchTicketsByClient,
     createTicket,
     updateTicket,
+    deleteTicket,
     updateTicketStatus,
     updateTicketPriority,
     assignTicket,

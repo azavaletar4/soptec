@@ -136,6 +136,24 @@ function goToDetail(ticket: Ticket) {
   router.push(`/soporte/${ticket.id}`);
 }
 
+const deletingId = ref<string | null>(null);
+
+async function handleDelete(ticket: Ticket) {
+  const ok = confirm(
+    `¿Eliminar el ticket ${ticket.ticket_number}? Esta accion no se puede deshacer. Si tiene materiales asignados, se devuelven a bodega.`,
+  );
+  if (!ok) return;
+  deletingId.value = ticket.id;
+  try {
+    const { materialsReturned } = await ticketsStore.deleteTicket(ticket.id);
+    if (materialsReturned) alert(`Ticket eliminado. Se devolvieron ${materialsReturned} material(es) a bodega.`);
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al eliminar el ticket'));
+  } finally {
+    deletingId.value = null;
+  }
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' });
 }
@@ -185,14 +203,15 @@ function formatDate(value: string) {
             <th class="text-left px-4 py-3">Asignado</th>
             <th class="text-left px-4 py-3">Puntos</th>
             <th class="text-left px-4 py-3">Creado</th>
+            <th v-if="canCreateTickets" class="text-right px-4 py-3">Acciones</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="ticketsStore.loading">
-            <td colspan="8" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+            <td :colspan="canCreateTickets ? 9 : 8" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!filteredTickets.length">
-            <td colspan="8" class="px-4 py-6 text-center text-slate-500">No hay tickets en este filtro.</td>
+            <td :colspan="canCreateTickets ? 9 : 8" class="px-4 py-6 text-center text-slate-500">No hay tickets en este filtro.</td>
           </tr>
           <tr
             v-for="t in filteredTickets"
@@ -221,6 +240,15 @@ function formatDate(value: string) {
             <td class="px-4 py-3 text-slate-600">{{ t.assigned_profile?.full_name || t.assigned_profile?.email || 'Sin asignar' }}</td>
             <td class="px-4 py-3 text-slate-600">{{ t.points != null ? t.points : '—' }}</td>
             <td class="px-4 py-3 text-slate-500 text-xs">{{ formatDate(t.created_at) }}</td>
+            <td v-if="canCreateTickets" class="px-4 py-3 text-right" @click.stop>
+              <button
+                class="text-xs text-red-500/80 hover:text-red-600"
+                :disabled="deletingId === t.id"
+                @click="handleDelete(t)"
+              >
+                {{ deletingId === t.id ? 'Eliminando...' : 'Eliminar' }}
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
