@@ -267,6 +267,15 @@ export const useOltStore = defineStore('olt', () => {
     return apiFetch<UnlinkedOnt[]>(`/api/olt-devices/onts/search?serial=${encodeURIComponent(serial)}`);
   }
 
+  // Estado online/offline por numero de serie, sin filtrar por cliente
+  // vinculado (a diferencia de searchUnlinkedOnts) — usado desde /tr069.
+  function fetchOntStatusBySerials(serials: string[]) {
+    if (!serials.length) return Promise.resolve({} as Record<string, { status: OltOnt['status']; description: string | null }>);
+    return apiFetch<Record<string, { status: OltOnt['status']; description: string | null }>>(
+      `/api/olt-devices/onts/status?serials=${encodeURIComponent(serials.join(','))}`,
+    );
+  }
+
   function linkOntToClient(deviceId: string, ontDbId: string, clientId: string) {
     return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/meta`, {
       method: 'PUT',
@@ -334,6 +343,7 @@ export const useOltStore = defineStore('olt', () => {
     fetchOntsByClient,
     changeOntPlan,
     searchUnlinkedOnts,
+    fetchOntStatusBySerials,
     linkOntToClient,
   };
 });

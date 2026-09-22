@@ -151,6 +151,7 @@ mikrotikRoutes.put('/:id/ppp-secrets/:secretId', requireRole(...PPP_WRITE), asyn
   const patch: Record<string, string> = {};
   if ('disabled' in body) patch.disabled = body.disabled ? 'true' : 'false';
   if ('profile' in body && body.profile) patch.profile = String(body.profile);
+  if ('password' in body && body.password) patch.password = String(body.password);
   try {
     const data = await mikrotikRequest(
       targetFor(device),

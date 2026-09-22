@@ -27,7 +27,7 @@ const CONNECTION_STATUS_PATHS = [
 // Telecom (unidades crudas SFF-8472, hay que convertir).
 const HUAWEI_PATH_INDEX = 0;
 
-function getPath(dev: unknown, path: string): { _value?: unknown } | undefined {
+export function getPath(dev: unknown, path: string): { _value?: unknown } | undefined {
   return path.split('.').reduce<unknown>((obj, key) => {
     if (obj && typeof obj === 'object') return (obj as Record<string, unknown>)[key];
     return undefined;

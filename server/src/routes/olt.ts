@@ -469,6 +469,26 @@ oltRoutes.get('/onts/search', requireRole(...STAFF_READ), async (c) => {
 });
 
 /**
+ * Estado online/offline (segun olt_onts.status, cacheado del ultimo escaneo
+ * de la OLT) para un lote de numeros de serie, sin filtrar por client_id
+ * (a diferencia de onts/search) — usado desde /tr069 para mostrar el estado
+ * real de la ONU al lado de cada dispositivo TR-069.
+ */
+oltRoutes.get('/onts/status', requireRole(...STAFF_READ), async (c) => {
+  const raw = c.req.query('serials')?.trim();
+  if (!raw) return c.json({ error: 'Falta el parametro serials (separados por coma)' }, 400);
+  const serials = raw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 200);
+  if (!serials.length) return c.json({});
+
+  const { data, error } = await supabaseAdmin.from('olt_onts').select('serial, status, description').in('serial', serials);
+  if (error) return c.json({ error: error.message }, 500);
+
+  const byserial: Record<string, { status: string; description: string | null }> = {};
+  for (const row of data ?? []) byserial[row.serial] = { status: row.status, description: row.description };
+  return c.json(byserial);
+});
+
+/**
  * Importa TODAS las ONTs ya configuradas en la OLT (heredadas de SmartOLT u
  * otra herramienta, nunca registradas via esta app) hacia olt_onts, con su
  * nombre/plan/VLAN/senal. Solo lectura contra la OLT (no toca la config

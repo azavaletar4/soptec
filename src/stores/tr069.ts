@@ -4,6 +4,19 @@ import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import type { OltTr069AcsProfile, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 
+export interface DeviceChangeResult {
+  ok: boolean;
+  queued: boolean;
+  discovering: boolean;
+  taskId?: string;
+  error?: string;
+}
+
+export interface WifiNetwork {
+  path: string;
+  ssid: string | null;
+}
+
 // tr069_devices, tr069_performance_metrics y olt_tr069_acs_profiles tienen
 // policies RLS para staff (ver migraciones fase6d/e/f) — a diferencia de
 // olt_devices/olt_onts, se consultan directo via supabase-js igual que
@@ -80,6 +93,48 @@ export const useTr069Store = defineStore('tr069', () => {
     );
   }
 
+  // ---- Acciones directas sobre la ONT via TR-069 (seccion /tr069, uso exclusivo) ----
+
+  function fetchPppoeInfo(serial: string) {
+    return apiFetch<{ found: boolean; username: string | null }>(`/api/genieacs-sync/pppoe/${encodeURIComponent(serial)}`);
+  }
+
+  function setPppoe(serial: string, payload: { username?: string; password?: string }) {
+    return apiFetch<DeviceChangeResult>(`/api/genieacs-sync/pppoe/${encodeURIComponent(serial)}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  function fetchWifiNetworks(serial: string) {
+    return apiFetch<{ found: boolean; networks: WifiNetwork[] }>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}`);
+  }
+
+  function setWifi(serial: string, payload: { path: string; ssid?: string; password?: string }) {
+    return apiFetch<DeviceChangeResult>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  function rebootDevice(serial: string) {
+    return apiFetch<DeviceChangeResult>(`/api/genieacs-sync/reboot/${encodeURIComponent(serial)}`, { method: 'POST' });
+  }
+
+  function refreshDevice(serial: string) {
+    return apiFetch<DeviceChangeResult>(`/api/genieacs-sync/refresh/${encodeURIComponent(serial)}`, { method: 'POST' });
+  }
+
+  function provisionDevice(
+    serial: string,
+    payload: { pppoeUsername?: string; pppoePassword?: string; wifiSsid?: string; wifiPassword?: string; wlanPath?: string },
+  ) {
+    return apiFetch<{ ok: boolean; pppoe?: DeviceChangeResult; wifi?: DeviceChangeResult; error?: string }>(
+      `/api/genieacs-sync/provision/${encodeURIComponent(serial)}`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  }
+
   // ---- Perfil ACS por defecto de una OLT (olt_tr069_acs_profiles) ----
 
   async function fetchAcsProfile(oltDeviceId: string) {
@@ -124,5 +179,12 @@ export const useTr069Store = defineStore('tr069', () => {
     collectDeviceMetrics,
     fetchAcsProfile,
     saveAcsProfile,
+    fetchPppoeInfo,
+    setPppoe,
+    fetchWifiNetworks,
+    setWifi,
+    rebootDevice,
+    refreshDevice,
+    provisionDevice,
   };
 });
