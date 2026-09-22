@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "start:api": "tsx server/src/index.ts",
     "tr069:fix-acs": "tsx server/scripts/fix-acs-url.ts",
+    "tr069:set-pppoe": "tsx server/scripts/set-tr069-pppoe.ts",
     "lint": "eslint ."
   },
   "dependencies": {
