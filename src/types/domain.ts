@@ -11,6 +11,9 @@ export type InventoryMovementType = 'ingreso' | 'egreso';
 export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired';
 export type InfraElementoTipo = 'caja_nap' | 'splitter' | 'manga' | 'armario' | 'poste' | 'camara' | 'otro';
 
+/** Tope de clientes por zona de cobertura (regla de negocio, no de esquema). */
+export const ZONE_CLIENT_LIMIT = 128;
+
 export interface Zone {
   id: string;
   name: string;
@@ -44,6 +47,7 @@ export interface Client {
   first_name: string;
   last_name: string;
   phone: string | null;
+  phone_2: string | null;
   email: string | null;
   address: string | null;
   birthdate: string | null;
@@ -79,6 +83,7 @@ export interface ServiceContract {
   payment_method: string | null;
   mikrotik_device_id: string | null;
   pppoe_username: string | null;
+  mikrotik_profile: string | null;
   created_at: string;
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;

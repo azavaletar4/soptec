@@ -8,7 +8,7 @@ import { useContractsStore } from '@/stores/contracts';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
-import type { Client, ClientStatus, DocumentType } from '@/types/domain';
+import { ZONE_CLIENT_LIMIT, type Client, type ClientStatus, type DocumentType } from '@/types/domain';
 
 const router = useRouter();
 const clientsStore = useClientsStore();
@@ -35,11 +35,19 @@ const filteredClientsList = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return clientsStore.clients;
   return clientsStore.clients.filter((c) =>
-    `${c.first_name} ${c.last_name} ${c.client_code ?? ''} ${c.document_number} ${c.phone ?? ''} ${c.email ?? ''}`
+    `${c.first_name} ${c.last_name} ${c.client_code ?? ''} ${c.document_number} ${c.phone ?? ''} ${c.phone_2 ?? ''} ${c.email ?? ''}`
       .toLowerCase()
       .includes(q),
   );
 });
+
+function zoneClientCount(zoneId: string, excludeClientId?: string | null) {
+  return clientsStore.clients.filter((c) => c.zone_id === zoneId && c.id !== excludeClientId).length;
+}
+
+const selectedZoneCount = computed(() =>
+  form.value.zone_id ? zoneClientCount(form.value.zone_id, editing.value?.id) : null,
+);
 
 // Usuarios PPPoE (del router elegido) que no tienen NINGUN contrato en
 // SmartRayco todavia, leido en vivo de la tabla service_contracts.
@@ -75,6 +83,7 @@ const emptyForm = () => ({
   first_name: '',
   last_name: '',
   phone: '',
+  phone_2: '',
   email: '',
   address: '',
   zone_id: '',
@@ -122,6 +131,7 @@ function openEdit(client: Client) {
     first_name: client.first_name,
     last_name: client.last_name,
     phone: client.phone ?? '',
+    phone_2: client.phone_2 ?? '',
     email: client.email ?? '',
     address: client.address ?? '',
     zone_id: client.zone_id ?? '',
@@ -151,6 +161,13 @@ async function handleCreateZone() {
 }
 
 async function handleSubmit() {
+  if (form.value.zone_id) {
+    const count = zoneClientCount(form.value.zone_id, editing.value?.id);
+    if (count >= ZONE_CLIENT_LIMIT) {
+      formError.value = `Esa zona ya tiene ${count}/${ZONE_CLIENT_LIMIT} clientes (límite alcanzado). Elige otra zona o libera cupo primero.`;
+      return;
+    }
+  }
   saving.value = true;
   formError.value = null;
   try {
@@ -159,6 +176,7 @@ async function handleSubmit() {
       client_code: form.value.client_code.trim() || null,
       zone_id: form.value.zone_id || null,
       phone: form.value.phone || null,
+      phone_2: form.value.phone_2 || null,
       email: form.value.email || null,
       address: form.value.address || null,
     };
@@ -359,14 +377,20 @@ function goToDetail(client: Client) {
               <input v-model="form.phone" class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-600 mb-1">Correo</label>
-              <input v-model="form.email" type="email" class="field-input" />
+              <label class="block text-xs text-slate-600 mb-1">Telefono alterno</label>
+              <input v-model="form.phone_2" class="field-input" />
             </div>
           </div>
 
-          <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Direccion</label>
-            <input v-model="form.address" class="field-input" />
+          <div class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Correo</label>
+              <input v-model="form.email" type="email" class="field-input" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Direccion</label>
+              <input v-model="form.address" class="field-input" />
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-4">
@@ -381,7 +405,15 @@ function goToDetail(client: Client) {
                 <option value="">Sin asignar</option>
                 <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
               </select>
-              <div v-else class="flex gap-2">
+              <p
+                v-if="!showNewZone && selectedZoneCount !== null"
+                class="text-xs mt-1"
+                :class="selectedZoneCount >= ZONE_CLIENT_LIMIT ? 'text-red-600' : selectedZoneCount >= ZONE_CLIENT_LIMIT * 0.9 ? 'text-amber-600' : 'text-slate-400'"
+              >
+                {{ selectedZoneCount }} / {{ ZONE_CLIENT_LIMIT }} clientes en esa zona
+                <span v-if="selectedZoneCount >= ZONE_CLIENT_LIMIT">— límite alcanzado</span>
+              </p>
+              <div v-if="showNewZone" class="flex gap-2">
                 <input
                   v-model="newZoneName"
                   placeholder="Nombre de la zona"

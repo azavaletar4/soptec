@@ -109,6 +109,18 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['SUPERADMIN'] },
     },
     {
+      path: '/zonas',
+      name: 'zonas',
+      component: () => import('@/views/zonas/ZonasView.vue'),
+      meta: { requiresAuth: true, roles: NOT_TECNICO },
+    },
+    {
+      path: '/planes',
+      name: 'planes',
+      component: () => import('@/views/planes/PlanesView.vue'),
+      meta: { requiresAuth: true, roles: NOT_TECNICO },
+    },
+    {
       path: '/mikrotik',
       name: 'mikrotik',
       component: () => import('@/views/mikrotik/MikrotikDevicesView.vue'),

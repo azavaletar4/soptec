@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia';
+import { acceptHMRUpdate, defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/lib/api';
 
@@ -23,6 +23,14 @@ export interface PppSecret {
   profile: string;
   disabled: string; // "true" | "false", tal cual lo devuelve RouterOS
   comment?: string;
+}
+
+export interface PppProfile {
+  '.id': string;
+  name: string;
+  'local-address'?: string;
+  'remote-address'?: string;
+  'rate-limit'?: string;
 }
 
 export interface PppActive {
@@ -113,8 +121,27 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     });
   }
 
+  // El ancho de banda se maneja en la OLT; esto solo cambia el profile del
+  // secreto PPPoE (usado, por ejemplo, para reflejar el plan del contrato).
+  function setPppSecretProfile(id: string, secretId: string, profile: string) {
+    return apiFetch<PppSecret>(`/api/mikrotik-devices/${id}/ppp-secrets/${secretId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ profile }),
+    });
+  }
+
+  function fetchPppProfiles(id: string) {
+    return apiFetch<PppProfile[]>(`/api/mikrotik-devices/${id}/ppp-profiles`);
+  }
+
   function fetchPppActive(id: string) {
     return apiFetch<PppActive[]>(`/api/mikrotik-devices/${id}/ppp-active`);
+  }
+
+  // Fuerza la reconexion de una sesion PPPoE activa (RouterOS no aplica un
+  // cambio de profile del secreto a una sesion ya conectada).
+  function disconnectPppActive(id: string, activeId: string) {
+    return apiFetch<{ ok: true }>(`/api/mikrotik-devices/${id}/ppp-active/${activeId}`, { method: 'DELETE' });
   }
 
   function fetchDhcpLeases(id: string) {
@@ -133,7 +160,17 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     fetchResource,
     fetchPppSecrets,
     togglePppSecret,
+    setPppSecretProfile,
+    fetchPppProfiles,
     fetchPppActive,
+    disconnectPppActive,
     fetchDhcpLeases,
   };
 });
+
+// Sin esto, Vite recarga el modulo del store en caliente pero Pinia sigue
+// devolviendo la instancia vieja ya creada (acciones nuevas quedan como
+// "is not a function" hasta un refresh completo del navegador).
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useMikrotikStore, import.meta.hot));
+}

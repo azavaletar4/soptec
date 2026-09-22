@@ -146,15 +146,31 @@ mikrotikRoutes.put('/:id/ppp-secrets/:secretId', requireRole(...PPP_WRITE), asyn
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
   const body = await c.req.json();
+  // El ancho de banda se controla en la OLT; aqui solo se habilita/deshabilita
+  // el secreto PPPoE y/o se le asigna el profile (usado para el plan contratado).
+  const patch: Record<string, string> = {};
+  if ('disabled' in body) patch.disabled = body.disabled ? 'true' : 'false';
+  if ('profile' in body && body.profile) patch.profile = String(body.profile);
   try {
     const data = await mikrotikRequest(
       targetFor(device),
       `/ppp/secret/${c.req.param('secretId')}`,
-      { method: 'PATCH', body: { disabled: body.disabled ? 'true' : 'false' } },
+      { method: 'PATCH', body: patch },
     );
     return c.json(data);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al actualizar en el router' }, 502);
+  }
+});
+
+mikrotikRoutes.get('/:id/ppp-profiles', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  try {
+    const data = await mikrotikRequest(targetFor(device), '/ppp/profile');
+    return c.json(data);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar el router' }, 502);
   }
 });
 
@@ -166,6 +182,21 @@ mikrotikRoutes.get('/:id/ppp-active', requireRole(...STAFF_READ), async (c) => {
     return c.json(data);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar el router' }, 502);
+  }
+});
+
+// RouterOS no re-negocia una sesion PPPoE ya conectada cuando cambia el
+// profile del secreto: hay que forzar la desconexion (igual que "Remove" en
+// Winbox > PPP > Active Connections) para que el cliente reconecte con el
+// profile nuevo.
+mikrotikRoutes.delete('/:id/ppp-active/:activeId', requireRole(...PPP_WRITE), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  try {
+    await mikrotikRequest(targetFor(device), `/ppp/active/${c.req.param('activeId')}`, { method: 'DELETE' });
+    return c.json({ ok: true });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al desconectar en el router' }, 502);
   }
 });
 

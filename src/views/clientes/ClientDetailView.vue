@@ -202,9 +202,13 @@ const contractForm = ref({
   status: 'active' as ContractStatus,
   mikrotik_device_id: '',
   pppoe_username: '',
+  mikrotik_profile: '',
 });
 const modalSecrets = ref<PppSecret[]>([]);
 const loadingSecrets = ref(false);
+const profileNames = ref<string[]>([]);
+const loadingProfiles = ref(false);
+const profilesError = ref<string | null>(null);
 
 const availableSecrets = computed(() => {
   const linked = new Set(
@@ -227,6 +231,27 @@ async function loadSecretsForModal(deviceId: string) {
     contractError.value = getErrorMessage(e, 'Error al leer usuarios PPPoE del router');
   } finally {
     loadingSecrets.value = false;
+  }
+}
+
+// El ancho de banda se controla en la OLT; esto solo sincroniza los nombres
+// de profile PPPoE existentes en el router elegido, como sugerencia al
+// escribir el profile de este contrato (no obliga a elegir de la lista).
+async function loadPppProfilesForModal(deviceId: string) {
+  if (!deviceId) {
+    profileNames.value = [];
+    return;
+  }
+  loadingProfiles.value = true;
+  profilesError.value = null;
+  try {
+    const profiles = await mikrotikStore.fetchPppProfiles(deviceId);
+    profileNames.value = profiles.map((p) => p.name);
+  } catch (e) {
+    profilesError.value = getErrorMessage(e, 'No se pudo leer los perfiles del router');
+    profileNames.value = [];
+  } finally {
+    loadingProfiles.value = false;
   }
 }
 
@@ -376,8 +401,10 @@ function openContractModal() {
     status: 'active',
     mikrotik_device_id: '',
     pppoe_username: '',
+    mikrotik_profile: '',
   };
   modalSecrets.value = [];
+  profileNames.value = [];
   contractError.value = null;
   showContractModal.value = true;
 }
@@ -392,15 +419,18 @@ function openEditContract(contract: ServiceContract) {
     status: contract.status,
     mikrotik_device_id: contract.mikrotik_device_id ?? '',
     pppoe_username: contract.pppoe_username ?? '',
+    mikrotik_profile: contract.mikrotik_profile ?? '',
   };
   contractError.value = null;
   loadSecretsForModal(contractForm.value.mikrotik_device_id);
+  loadPppProfilesForModal(contractForm.value.mikrotik_device_id);
   showContractModal.value = true;
 }
 
 function onMikrotikDeviceChange() {
   contractForm.value.pppoe_username = '';
   loadSecretsForModal(contractForm.value.mikrotik_device_id);
+  loadPppProfilesForModal(contractForm.value.mikrotik_device_id);
 }
 
 function onPlanChange() {
@@ -408,9 +438,45 @@ function onPlanChange() {
   if (plan) contractForm.value.monthly_fee = Number(plan.price);
 }
 
+// Al activar (o mantener activo) un contrato con router/usuario PPPoE
+// vinculados, refleja en MikroTik el profile PPPoE elegido para este
+// cliente. El ancho de banda real lo controla la OLT: aqui solo se cambia
+// de profile PPPoE (antes era fijo por plan; ahora se elige por contrato).
+//
+// RouterOS no re-negocia una sesion PPPoE ya conectada cuando cambia el
+// profile del secreto (queda con el profile viejo hasta que reconecta), asi
+// que si el profile cambio se fuerza la desconexion de la sesion activa.
+async function syncMikrotikProfile(contract: ServiceContract, previousProfile: string | null) {
+  if (contract.status !== 'active') return;
+  if (!contract.mikrotik_device_id || !contract.pppoe_username || !contract.mikrotik_profile) return;
+  const secret = modalSecrets.value.find((s) => s.name === contract.pppoe_username);
+  if (!secret) return;
+  try {
+    await mikrotikStore.setPppSecretProfile(contract.mikrotik_device_id, secret['.id'], contract.mikrotik_profile);
+  } catch (e) {
+    alert(getErrorMessage(e, 'El contrato se guardo, pero no se pudo sincronizar el profile PPPoE en el MikroTik'));
+    return;
+  }
+
+  if (contract.mikrotik_profile === previousProfile) return;
+  try {
+    const active = await mikrotikStore.fetchPppActive(contract.mikrotik_device_id);
+    const session = active.find((a) => a.name === contract.pppoe_username);
+    if (session) await mikrotikStore.disconnectPppActive(contract.mikrotik_device_id, session['.id']);
+  } catch (e) {
+    alert(
+      getErrorMessage(
+        e,
+        'El profile se actualizo, pero no se pudo forzar la reconexion PPPoE (el cliente tomara el nuevo profile en su proxima reconexion)',
+      ),
+    );
+  }
+}
+
 async function handleCreateContract() {
   savingContract.value = true;
   contractError.value = null;
+  const previousProfile = editingContract.value?.mikrotik_profile ?? null;
   const payload = {
     plan_id: contractForm.value.plan_id || null,
     monthly_fee: contractForm.value.monthly_fee,
@@ -418,19 +484,61 @@ async function handleCreateContract() {
     payment_method: contractForm.value.payment_method,
     mikrotik_device_id: contractForm.value.mikrotik_device_id || null,
     pppoe_username: contractForm.value.pppoe_username || null,
+    mikrotik_profile: contractForm.value.mikrotik_profile || null,
   };
   try {
+    let saved: ServiceContract;
     if (editingContract.value) {
-      await contractsStore.updateContract(editingContract.value.id, { ...payload, status: contractForm.value.status });
+      saved = await contractsStore.updateContract(editingContract.value.id, { ...payload, status: contractForm.value.status });
     } else {
-      await contractsStore.createContract({ ...payload, client_id: clientId.value });
+      saved = await contractsStore.createContract({ ...payload, client_id: clientId.value });
     }
     showContractModal.value = false;
     await loadContracts();
+    await syncMikrotikProfile(saved, previousProfile);
   } catch (e) {
     contractError.value = getErrorMessage(e, editingContract.value ? 'Error al actualizar el contrato' : 'Error al crear el contrato');
   } finally {
     savingContract.value = false;
+  }
+}
+
+// ---- Cambio rapido de perfil PPPoE (sin abrir el modal completo del contrato) ----
+const showProfileModal = ref(false);
+const profileModalContract = ref<ServiceContract | null>(null);
+const profileModalValue = ref('');
+const savingProfile = ref(false);
+const profileModalError = ref<string | null>(null);
+
+function openProfileModal(contract: ServiceContract) {
+  profileModalContract.value = contract;
+  profileModalValue.value = contract.mikrotik_profile ?? '';
+  profileModalError.value = null;
+  modalSecrets.value = [];
+  profileNames.value = [];
+  showProfileModal.value = true;
+  if (contract.mikrotik_device_id) {
+    loadSecretsForModal(contract.mikrotik_device_id);
+    loadPppProfilesForModal(contract.mikrotik_device_id);
+  }
+}
+
+async function handleSaveProfile() {
+  if (!profileModalContract.value) return;
+  savingProfile.value = true;
+  profileModalError.value = null;
+  const previousProfile = profileModalContract.value.mikrotik_profile ?? null;
+  try {
+    const saved = await contractsStore.updateContract(profileModalContract.value.id, {
+      mikrotik_profile: profileModalValue.value || null,
+    });
+    showProfileModal.value = false;
+    await loadContracts();
+    await syncMikrotikProfile(saved, previousProfile);
+  } catch (e) {
+    profileModalError.value = getErrorMessage(e, 'Error al actualizar el perfil PPPoE');
+  } finally {
+    savingProfile.value = false;
   }
 }
 </script>
@@ -450,7 +558,7 @@ async function handleCreateContract() {
             <span v-if="client.client_code" class="text-slate-400 font-normal text-lg">· {{ client.client_code }}</span>
           </h1>
           <p class="text-slate-600 text-sm mt-1">
-            {{ DOCUMENT_TYPE_LABEL[client.document_type] }} {{ client.document_number }} · {{ client.phone || 'sin telefono' }}
+            {{ DOCUMENT_TYPE_LABEL[client.document_type] }} {{ client.document_number }} · {{ client.phone || 'sin telefono' }}<span v-if="client.phone_2"> · {{ client.phone_2 }}</span>
           </p>
         </div>
         <button class="btn-primary" @click="openContractModal">
@@ -575,6 +683,7 @@ async function handleCreateContract() {
               <th class="text-left px-4 py-3">Mensualidad</th>
               <th class="text-left px-4 py-3">Inicio</th>
               <th class="text-left px-4 py-3">PPPoE</th>
+              <th class="text-left px-4 py-3">Perfil PPPoE</th>
               <th class="text-left px-4 py-3">Estado</th>
             </tr>
           </thead>
@@ -590,6 +699,19 @@ async function handleCreateContract() {
               <td class="px-4 py-3">S/ {{ Number(ct.monthly_fee).toFixed(2) }}</td>
               <td class="px-4 py-3 text-slate-600">{{ ct.start_date }}</td>
               <td class="px-4 py-3 font-mono text-xs text-sky-600/80">{{ ct.pppoe_username || '—' }}</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono text-xs text-slate-600">{{ ct.mikrotik_profile || '—' }}</span>
+                  <button
+                    v-if="ct.mikrotik_device_id && ct.pppoe_username"
+                    type="button"
+                    class="text-xs text-sky-600 hover:underline whitespace-nowrap"
+                    @click.stop="openProfileModal(ct)"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+              </td>
               <td class="px-4 py-3">
                 <span class="badge" :class="STATUS_CLASS[ct.status]">
                   {{ STATUS_LABEL[ct.status] }}
@@ -801,6 +923,36 @@ async function handleCreateContract() {
             </div>
           </div>
 
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs text-slate-600">Perfil PPPoE (MikroTik)</label>
+              <button
+                v-if="contractForm.mikrotik_device_id"
+                type="button"
+                class="text-xs text-sky-600 hover:underline whitespace-nowrap"
+                :disabled="loadingProfiles"
+                @click="loadPppProfilesForModal(contractForm.mikrotik_device_id)"
+              >
+                {{ loadingProfiles ? 'Sincronizando...' : 'Sincronizar perfiles' }}
+              </button>
+            </div>
+            <input
+              v-model="contractForm.mikrotik_profile"
+              list="contract-mikrotik-profile-options"
+              :disabled="!contractForm.mikrotik_device_id"
+              class="field-input disabled:opacity-60"
+              placeholder="Nombre del profile en RouterOS"
+            />
+            <datalist id="contract-mikrotik-profile-options">
+              <option v-for="name in profileNames" :key="name" :value="name" />
+            </datalist>
+            <p class="text-xs text-slate-500 mt-1">
+              Solo cambia el profile PPPoE en MikroTik (el ancho de banda del cliente se controla desde la OLT).
+              {{ profileNames.length ? `${profileNames.length} perfiles sincronizados.` : '' }}
+            </p>
+            <p v-if="profilesError" class="text-xs text-amber-600 mt-1">{{ profilesError }} — puedes escribir el nombre manualmente.</p>
+          </div>
+
           <p v-if="contractError" class="text-sm text-red-600 mb-3">{{ contractError }}</p>
 
           <div class="flex justify-end gap-2">
@@ -809,6 +961,54 @@ async function handleCreateContract() {
             </button>
             <button type="submit" :disabled="savingContract" class="btn-primary">
               {{ savingContract ? 'Guardando...' : editingContract ? 'Guardar cambios' : 'Crear contrato' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showProfileModal" class="modal-overlay">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleSaveProfile">
+          <h2 class="text-lg font-semibold mb-1">Cambiar perfil PPPoE</h2>
+          <p class="text-xs text-slate-500 mb-4 font-mono">
+            {{ profileModalContract?.contract_number }} · {{ profileModalContract?.pppoe_username }}
+          </p>
+
+          <div class="mb-3">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs text-slate-600">Perfil PPPoE (MikroTik)</label>
+              <button
+                type="button"
+                class="text-xs text-sky-600 hover:underline whitespace-nowrap"
+                :disabled="loadingProfiles"
+                @click="profileModalContract?.mikrotik_device_id && loadPppProfilesForModal(profileModalContract.mikrotik_device_id)"
+              >
+                {{ loadingProfiles ? 'Sincronizando...' : 'Sincronizar perfiles' }}
+              </button>
+            </div>
+            <input
+              v-model="profileModalValue"
+              list="quick-mikrotik-profile-options"
+              class="field-input"
+              placeholder="Nombre del profile en RouterOS"
+            />
+            <datalist id="quick-mikrotik-profile-options">
+              <option v-for="name in profileNames" :key="name" :value="name" />
+            </datalist>
+            <p class="text-xs text-slate-500 mt-1">
+              El ancho de banda se controla desde la OLT; esto solo cambia el profile PPPoE. Si el contrato esta activo,
+              se fuerza la reconexion del usuario para que tome el nuevo profile de inmediato.
+            </p>
+            <p v-if="profilesError" class="text-xs text-amber-600 mt-1">{{ profilesError }} — puedes escribir el nombre manualmente.</p>
+          </div>
+
+          <p v-if="profileModalError" class="text-sm text-red-600 mb-3">{{ profileModalError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showProfileModal = false">Cancelar</button>
+            <button type="submit" :disabled="savingProfile" class="btn-primary">
+              {{ savingProfile ? 'Guardando...' : 'Guardar' }}
             </button>
           </div>
         </form>

@@ -13,7 +13,7 @@ const SUPERADMIN_ROLES = ['SUPERADMIN'];
 // Modulos administrativos que TECNICO_RED no necesita ver (mismo criterio
 // que NOT_TECNICO en el router) — solo le quedan Instalaciones, Mapa y
 // Soporte.
-const HIDDEN_FROM_TECNICO = ['dashboard', 'clientes', 'olt', 'mikrotik', 'tr069', 'inventario', 'reportes'];
+const HIDDEN_FROM_TECNICO = ['dashboard', 'clientes', 'zonas', 'planes', 'olt', 'mikrotik', 'tr069', 'inventario', 'reportes'];
 
 const ROLE_LABEL: Record<string, string> = {
   SUPERADMIN: 'Super admin',
@@ -28,6 +28,8 @@ const ROLE_LABEL: Record<string, string> = {
 const ICONS: Record<string, string> = {
   dashboard: 'M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z',
   clientes: 'M17 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 5 18.5V20M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM21 20v-1.5a3 3 0 0 0-2.4-2.94M16.5 4.06a3 3 0 0 1 0 5.88',
+  planes: 'M4 6h16M4 6l2 14h12l2-14M9 10v6m6-6v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2',
+  zonas: 'M12 3 3 7.5 12 12l9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5',
   olt: 'M4 5.5h16M4 5.5v3h16v-3M4 12.5h16M4 12.5v3h16v-3M4 19.5h16M8 7v0M8 14v0',
   mikrotik: 'M2 9.5a15 15 0 0 1 20 0M5.5 13a10 10 0 0 1 13 0M9 16.5a5 5 0 0 1 6 0M12 20v0',
   soporte: 'M12 15a3 3 0 0 0 3-3M12 15a3 3 0 0 1-3-3m3 3v4m-8-7a8 8 0 1 1 16 0v3a2 2 0 0 1-2 2h-1v-5a1 1 0 0 1 1-1h2M4 11h2a1 1 0 0 1 1 1v5H5a2 2 0 0 1-2-2v-3Z',
@@ -43,6 +45,8 @@ const ICONS: Record<string, string> = {
 const MODULOS = [
   { key: 'dashboard', label: 'Dashboard', to: '/dashboard', disabled: false },
   { key: 'clientes', label: 'Clientes', to: '/clientes', disabled: false },
+  { key: 'zonas', label: 'Zonas', to: '/zonas', disabled: false },
+  { key: 'planes', label: 'Planes', to: '/planes', disabled: false },
   { key: 'instalaciones', label: 'Instalaciones', to: '/instalaciones', disabled: false },
   { key: 'mapa', label: 'Mapa', to: '/mapa', disabled: false },
   { key: 'olt', label: 'Red & OLTs', to: '/olt', disabled: false },
