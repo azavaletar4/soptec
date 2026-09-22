@@ -32,6 +32,8 @@ export interface Plan {
   burst_download: number | null;
   burst_upload: number | null;
   mikrotik_profile: string | null;
+  olt_tcont_profile: string | null;
+  olt_traffic_profile: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

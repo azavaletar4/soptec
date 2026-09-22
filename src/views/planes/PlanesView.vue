@@ -3,15 +3,50 @@ import { computed, onMounted, ref } from 'vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { usePlansStore } from '@/stores/plans';
 import { useAuthStore } from '@/stores/auth';
+import { useOltStore } from '@/stores/olt';
 import { getErrorMessage } from '@/lib/errors';
 import type { ConnectionTechnology, Plan } from '@/types/domain';
 
 const plansStore = usePlansStore();
 const auth = useAuthStore();
+const oltStore = useOltStore();
 
 // La escritura ya esta restringida por RLS a ADMIN/SUPERADMIN/FACTURACION;
 // ocultamos los controles de edicion al resto para no mostrar acciones que fallarian.
 const canManagePlans = computed(() => ['SUPERADMIN', 'ADMIN', 'FACTURACION'].includes(auth.role ?? ''));
+
+// El ancho de banda real lo aplica la OLT (tcont = subida, traffic =
+// bajada); se leen los perfiles ya existentes en el equipo elegido para que
+// el plan quede vinculado a un perfil real (evita typos que fallarian
+// silenciosamente al aplicar el plan en una ONT).
+const oltDeviceId = ref('');
+const oltProfiles = ref<{ tcontProfiles: string[]; trafficProfiles: string[] }>({ tcontProfiles: [], trafficProfiles: [] });
+const loadingOltProfiles = ref(false);
+const oltProfilesError = ref<string | null>(null);
+
+async function loadOltProfiles() {
+  if (!oltDeviceId.value) {
+    oltProfiles.value = { tcontProfiles: [], trafficProfiles: [] };
+    return;
+  }
+  loadingOltProfiles.value = true;
+  oltProfilesError.value = null;
+  try {
+    oltProfiles.value = await oltStore.fetchProfiles(oltDeviceId.value);
+  } catch (e) {
+    oltProfilesError.value = getErrorMessage(e, 'No se pudo leer los perfiles de la OLT');
+    oltProfiles.value = { tcontProfiles: [], trafficProfiles: [] };
+  } finally {
+    loadingOltProfiles.value = false;
+  }
+}
+
+// Asegura que el perfil ya guardado en el plan siga apareciendo en el
+// select aunque no venga en el ultimo listado leido de la OLT (equipo
+// distinto, offline al sincronizar, etc.).
+function withCurrent(list: string[], current: string | null) {
+  return current && !list.includes(current) ? [...list, current] : list;
+}
 
 const TECH_LABEL: Record<ConnectionTechnology, string> = {
   fiber: 'Fibra',
@@ -34,12 +69,27 @@ const emptyForm = () => ({
   technology: 'fiber' as ConnectionTechnology,
   burst_download: null as number | null,
   burst_upload: null as number | null,
+  olt_tcont_profile: '',
+  olt_traffic_profile: '',
   is_active: true,
 });
 
 const form = ref(emptyForm());
 
-onMounted(() => plansStore.fetchPlans());
+const tcontOptions = computed(() => withCurrent(oltProfiles.value.tcontProfiles, form.value.olt_tcont_profile || null));
+const trafficOptions = computed(() => withCurrent(oltProfiles.value.trafficProfiles, form.value.olt_traffic_profile || null));
+
+onMounted(async () => {
+  await plansStore.fetchPlans();
+  try {
+    await oltStore.fetchDevices();
+    oltDeviceId.value = oltStore.devices[0]?.id ?? '';
+    await loadOltProfiles();
+  } catch {
+    // Sin acceso a la OLT desde este rol o sin equipos configurados: los
+    // selects de perfil quedan vacios (o solo con el valor ya guardado).
+  }
+});
 
 function openCreate() {
   editing.value = null;
@@ -59,6 +109,8 @@ function openEdit(plan: Plan) {
     technology: plan.technology,
     burst_download: plan.burst_download,
     burst_upload: plan.burst_upload,
+    olt_tcont_profile: plan.olt_tcont_profile ?? '',
+    olt_traffic_profile: plan.olt_traffic_profile ?? '',
     is_active: plan.is_active,
   };
   formError.value = null;
@@ -76,6 +128,8 @@ async function handleSubmit() {
     const payload = {
       ...form.value,
       description: form.value.description || null,
+      olt_tcont_profile: form.value.olt_tcont_profile || null,
+      olt_traffic_profile: form.value.olt_traffic_profile || null,
     };
     if (editing.value) {
       await plansStore.updatePlan(editing.value.id, payload);
@@ -122,16 +176,17 @@ async function handleDelete(plan: Plan) {
             <th class="text-left px-4 py-3">Subida (Mbps)</th>
             <th class="text-left px-4 py-3">Precio</th>
             <th class="text-left px-4 py-3">Tecnología</th>
+            <th class="text-left px-4 py-3">Perfil OLT</th>
             <th class="text-left px-4 py-3">Estado</th>
             <th class="text-right px-4 py-3">Acciones</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="plansStore.loading">
-            <td colspan="7" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+            <td colspan="8" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!plansStore.plans.length">
-            <td colspan="7" class="px-4 py-6 text-center text-slate-500">No hay planes. Crea el primero.</td>
+            <td colspan="8" class="px-4 py-6 text-center text-slate-500">No hay planes. Crea el primero.</td>
           </tr>
           <tr v-for="p in plansStore.plans" :key="p.id" class="border-t border-slate-200 hover:bg-slate-50">
             <td class="px-4 py-3 font-medium text-slate-900">{{ p.name }}</td>
@@ -139,6 +194,10 @@ async function handleDelete(plan: Plan) {
             <td class="px-4 py-3 text-slate-600">{{ p.upload_speed }}</td>
             <td class="px-4 py-3 text-slate-600">S/ {{ p.price.toFixed(2) }}</td>
             <td class="px-4 py-3 text-slate-600">{{ TECH_LABEL[p.technology] }}</td>
+            <td class="px-4 py-3 text-slate-600 font-mono text-xs">
+              <span v-if="p.olt_tcont_profile || p.olt_traffic_profile">↑{{ p.olt_tcont_profile || '—' }} / ↓{{ p.olt_traffic_profile || '—' }}</span>
+              <span v-else>—</span>
+            </td>
             <td class="px-4 py-3">
               <span class="badge" :class="p.is_active ? 'bg-green-500/15 text-green-600' : 'bg-slate-500/15 text-slate-600'">
                 {{ p.is_active ? 'Activo' : 'Inactivo' }}
@@ -199,6 +258,40 @@ async function handleDelete(plan: Plan) {
               <label class="block text-xs text-slate-600 mb-1">Burst subida (opcional)</label>
               <input v-model.number="form.burst_upload" type="number" min="0" class="field-input" />
             </div>
+          </div>
+
+          <div class="mb-3">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs text-slate-600">Perfiles de ancho de banda (OLT)</label>
+              <div v-if="oltStore.devices.length" class="flex items-center gap-2">
+                <select v-model="oltDeviceId" class="field-input !py-1 !text-xs w-auto" @change="loadOltProfiles">
+                  <option v-for="d in oltStore.devices" :key="d.id" :value="d.id">{{ d.name }}</option>
+                </select>
+                <button type="button" class="text-xs text-sky-600 hover:underline whitespace-nowrap" :disabled="loadingOltProfiles" @click="loadOltProfiles">
+                  {{ loadingOltProfiles ? 'Sincronizando...' : 'Sincronizar' }}
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Subida (tcont)</label>
+                <select v-model="form.olt_tcont_profile" class="field-input">
+                  <option value="">Sin perfil</option>
+                  <option v-for="name in tcontOptions" :key="name" :value="name">{{ name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Bajada (traffic)</label>
+                <select v-model="form.olt_traffic_profile" class="field-input">
+                  <option value="">Sin perfil</option>
+                  <option v-for="name in trafficOptions" :key="name" :value="name">{{ name }}</option>
+                </select>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+              El ancho de banda real lo aplica la OLT con estos perfiles al elegir este plan en un cliente.
+            </p>
+            <p v-if="oltProfilesError" class="text-xs text-amber-600 mt-1">{{ oltProfilesError }}</p>
           </div>
 
           <div class="mb-3">

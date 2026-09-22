@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia';
+import { acceptHMRUpdate, defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/lib/api';
 
@@ -30,6 +30,7 @@ export interface OltOnt {
   vlan: number | null;
   tcont_profile: string | null;
   traffic_profile: string | null;
+  plan_id: string | null;
   tr069_enabled: boolean;
   tr069_acs_url: string | null;
   status: 'online' | 'offline' | 'unknown';
@@ -46,6 +47,20 @@ export interface OltOnt {
   longitude: number | null;
   clients?: { id: string; first_name: string; last_name: string; phone: string | null; address: string | null } | null;
   zones?: { id: string; name: string } | null;
+  plans?: {
+    id: string;
+    name: string;
+    download_speed: number;
+    upload_speed: number;
+    olt_tcont_profile?: string | null;
+    olt_traffic_profile?: string | null;
+  } | null;
+}
+
+export interface OntPlanChange {
+  tcontProfile: string;
+  trafficProfile: string;
+  planId?: string | null;
 }
 
 export interface OntMetaUpdate {
@@ -57,6 +72,19 @@ export interface OntMetaUpdate {
   contact?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  client_id?: string | null;
+}
+
+export interface UnlinkedOnt {
+  id: string;
+  olt_device_id: string;
+  serial: string;
+  description: string | null;
+  ont_id: number;
+  slot: number;
+  port: number;
+  status: 'online' | 'offline' | 'unknown';
+  olt_devices?: { id: string; name: string } | null;
 }
 
 export interface OltUptime {
@@ -227,6 +255,37 @@ export const useOltStore = defineStore('olt', () => {
     return apiFetch<{ raw: string }>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/running-config`);
   }
 
+  // Ubica la(s) ONT de un cliente sin conocer de antemano a que OLT
+  // pertenece — usado por la ficha de Cliente para el cambio rapido de plan.
+  function fetchOntsByClient(clientId: string) {
+    return apiFetch<OltOnt[]>(`/api/olt-devices/onts/by-client/${clientId}`);
+  }
+
+  // Busca ONTs sin cliente vinculado por numero de serie (parcial) — la
+  // mayoria de las ONTs vienen de un import masivo que nunca asigna cliente.
+  function searchUnlinkedOnts(serial: string) {
+    return apiFetch<UnlinkedOnt[]>(`/api/olt-devices/onts/search?serial=${encodeURIComponent(serial)}`);
+  }
+
+  function linkOntToClient(deviceId: string, ontDbId: string, clientId: string) {
+    return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/meta`, {
+      method: 'PUT',
+      body: JSON.stringify({ client_id: clientId }),
+    });
+  }
+
+  // El ancho de banda real del cliente lo aplica la OLT (tcont/traffic); esto
+  // reconfigura una ONT ya registrada, sin recrearla.
+  async function changeOntPlan(deviceId: string, ontDbId: string, payload: OntPlanChange) {
+    const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/plan`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    const idx = onts.value.findIndex((o) => o.id === ontDbId);
+    if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...updated };
+    return updated;
+  }
+
   async function updateOntMeta(deviceId: string, ontDbId: string, payload: OntMetaUpdate) {
     const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/meta`, {
       method: 'PUT',
@@ -272,5 +331,13 @@ export const useOltStore = defineStore('olt', () => {
     removeTr069,
     fetchRunningConfig,
     updateOntMeta,
+    fetchOntsByClient,
+    changeOntPlan,
+    searchUnlinkedOnts,
+    linkOntToClient,
   };
 });
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useOltStore, import.meta.hot));
+}

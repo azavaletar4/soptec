@@ -8,6 +8,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useTicketsStore } from '@/stores/tickets';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
+import { useOltStore, type OltOnt, type UnlinkedOnt } from '@/stores/olt';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useInventoryStore } from '@/stores/inventory';
@@ -35,6 +36,7 @@ const catalogs = useCatalogsStore();
 const ticketsStore = useTicketsStore();
 const invoicesStore = useInvoicesStore();
 const mikrotikStore = useMikrotikStore();
+const oltStore = useOltStore();
 const clientPhotosStore = useClientPhotosStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
 const inventoryStore = useInventoryStore();
@@ -290,6 +292,65 @@ async function loadUnits() {
   loadingUnits.value = false;
 }
 
+// ---- ONT / plan de ancho de banda real (OLT), Fase 22 ----
+const clientOnts = ref<OltOnt[]>([]);
+const loadingOnts = ref(true);
+
+async function loadOnts() {
+  loadingOnts.value = true;
+  try {
+    clientOnts.value = await oltStore.fetchOntsByClient(clientId.value);
+  } catch {
+    // Sin acceso a la OLT desde este rol: la seccion simplemente no se muestra.
+    clientOnts.value = [];
+  } finally {
+    loadingOnts.value = false;
+  }
+}
+
+// La inmensa mayoria de las ONTs vienen de un import masivo que nunca
+// asigna cliente (ver import-existing en el backend); esto permite
+// encontrar la ONT real ya registrada en la OLT y vincularla aqui, sin ir a
+// la seccion OLT a buscarla puerto por puerto.
+const ontSearchQuery = ref('');
+const ontSearchResults = ref<UnlinkedOnt[]>([]);
+const searchingOnt = ref(false);
+const linkingOntId = ref<string | null>(null);
+const ontLinkError = ref<string | null>(null);
+
+async function handleSearchOnt() {
+  const q = ontSearchQuery.value.trim();
+  if (q.length < 3) {
+    ontLinkError.value = 'Ingresa al menos 3 caracteres del numero de serie';
+    return;
+  }
+  searchingOnt.value = true;
+  ontLinkError.value = null;
+  try {
+    ontSearchResults.value = await oltStore.searchUnlinkedOnts(q);
+    if (!ontSearchResults.value.length) ontLinkError.value = 'Sin resultados (o ya esta vinculada a otro cliente)';
+  } catch (e) {
+    ontLinkError.value = getErrorMessage(e, 'Error al buscar en la OLT');
+  } finally {
+    searchingOnt.value = false;
+  }
+}
+
+async function handleLinkOnt(unlinked: UnlinkedOnt) {
+  linkingOntId.value = unlinked.id;
+  ontLinkError.value = null;
+  try {
+    await oltStore.linkOntToClient(unlinked.olt_device_id, unlinked.id, clientId.value);
+    ontSearchQuery.value = '';
+    ontSearchResults.value = [];
+    await loadOnts();
+  } catch (e) {
+    ontLinkError.value = getErrorMessage(e, 'Error al vincular la ONT');
+  } finally {
+    linkingOntId.value = null;
+  }
+}
+
 onMounted(async () => {
   if (!clientsStore.clients.length) await clientsStore.fetchClients();
   gpsForm.value = { latitude: client.value?.latitude ?? null, longitude: client.value?.longitude ?? null };
@@ -300,7 +361,9 @@ onMounted(async () => {
     loadInvoices(),
     loadPhotos(),
     loadUnits(),
+    loadOnts(),
     mikrotikStore.fetchDevices(),
+    oltStore.fetchDevices().catch(() => {}),
     inventoryStore.products.length ? Promise.resolve() : inventoryStore.fetchProducts(),
   ]);
 });
@@ -541,6 +604,48 @@ async function handleSaveProfile() {
     savingProfile.value = false;
   }
 }
+
+// ---- Cambio de plan (ancho de banda real, aplicado en la OLT) ----
+const canChangeOntPlan = computed(() => ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'].includes(auth.role ?? ''));
+const plansWithOltProfile = computed(() => catalogs.plans.filter((p) => p.olt_tcont_profile && p.olt_traffic_profile));
+
+const showOntPlanModal = ref(false);
+const ontPlanTarget = ref<OltOnt | null>(null);
+const ontPlanValue = ref('');
+const savingOntPlan = ref(false);
+const ontPlanError = ref<string | null>(null);
+
+function openOntPlanModal(ont: OltOnt) {
+  ontPlanTarget.value = ont;
+  ontPlanValue.value = ont.plan_id ?? '';
+  ontPlanError.value = null;
+  showOntPlanModal.value = true;
+}
+
+async function handleSaveOntPlan() {
+  if (!ontPlanTarget.value) return;
+  const plan = catalogs.plans.find((p) => p.id === ontPlanValue.value);
+  if (!plan?.olt_tcont_profile || !plan?.olt_traffic_profile) {
+    ontPlanError.value = 'Selecciona un plan con perfiles OLT configurados (ver seccion Planes)';
+    return;
+  }
+  savingOntPlan.value = true;
+  ontPlanError.value = null;
+  try {
+    const updated = await oltStore.changeOntPlan(ontPlanTarget.value.olt_device_id, ontPlanTarget.value.id, {
+      tcontProfile: plan.olt_tcont_profile,
+      trafficProfile: plan.olt_traffic_profile,
+      planId: plan.id,
+    });
+    const idx = clientOnts.value.findIndex((o) => o.id === updated.id);
+    if (idx !== -1) clientOnts.value[idx] = updated;
+    showOntPlanModal.value = false;
+  } catch (e) {
+    ontPlanError.value = getErrorMessage(e, 'Error al cambiar el plan en la OLT');
+  } finally {
+    savingOntPlan.value = false;
+  }
+}
 </script>
 
 <template>
@@ -669,6 +774,80 @@ async function handleSaveProfile() {
             </button>
           </div>
         </div>
+      </div>
+
+      <h2 class="text-lg font-semibold mb-3">ONT y plan (ancho de banda real, OLT)</h2>
+      <p v-if="loadingOnts" class="text-slate-500 text-sm mb-8">Cargando...</p>
+      <div v-else-if="!clientOnts.length" class="mb-8">
+        <p class="text-slate-500 text-sm mb-3">
+          Este cliente no tiene una ONT vinculada. La mayoria de las ONTs ya estan registradas en la OLT pero sin
+          cliente asignado (importadas en bloque) — buscala por numero de serie y vinculala aqui.
+        </p>
+        <div v-if="canChangeOntPlan" class="flex gap-2 mb-2 max-w-md">
+          <input
+            v-model="ontSearchQuery"
+            placeholder="Numero de serie (min. 3 caracteres)"
+            class="field-input"
+            @keyup.enter="handleSearchOnt"
+          />
+          <button type="button" class="btn-secondary whitespace-nowrap" :disabled="searchingOnt" @click="handleSearchOnt">
+            {{ searchingOnt ? 'Buscando...' : 'Buscar' }}
+          </button>
+        </div>
+        <p v-if="ontLinkError" class="text-xs text-amber-600 mb-2">{{ ontLinkError }}</p>
+        <div v-if="ontSearchResults.length" class="table-shell max-w-lg">
+          <table class="w-full text-sm">
+            <tbody>
+              <tr v-for="r in ontSearchResults" :key="r.id" class="border-t border-slate-200">
+                <td class="px-3 py-2 font-mono text-xs">{{ r.serial }}</td>
+                <td class="px-3 py-2 text-xs text-slate-600">{{ r.olt_devices?.name }} · {{ r.slot }}/{{ r.port }}</td>
+                <td class="px-3 py-2 text-right">
+                  <button
+                    type="button"
+                    class="text-xs text-sky-600 hover:underline"
+                    :disabled="linkingOntId === r.id"
+                    @click="handleLinkOnt(r)"
+                  >
+                    {{ linkingOntId === r.id ? 'Vinculando...' : 'Vincular' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div v-else class="table-shell mb-8">
+        <table class="w-full text-sm min-w-[560px]">
+          <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+            <tr>
+              <th class="text-left px-4 py-3">Serie ONT</th>
+              <th class="text-left px-4 py-3">Plan actual</th>
+              <th class="text-left px-4 py-3">Perfiles OLT (subida/bajada)</th>
+              <th class="text-left px-4 py-3">Estado</th>
+              <th class="text-right px-4 py-3">Accion</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="ont in clientOnts" :key="ont.id" class="border-t border-slate-200">
+              <td class="px-4 py-3 font-mono text-xs">{{ ont.serial }}</td>
+              <td class="px-4 py-3">{{ ont.plans?.name || 'Sin plan asignado' }}</td>
+              <td class="px-4 py-3 font-mono text-xs text-slate-600">↑{{ ont.tcont_profile || '—' }} / ↓{{ ont.traffic_profile || '—' }}</td>
+              <td class="px-4 py-3">
+                <span
+                  class="badge"
+                  :class="ont.status === 'online' ? 'bg-green-500/15 text-green-600' : ont.status === 'offline' ? 'bg-red-500/15 text-red-600' : 'bg-slate-500/15 text-slate-600'"
+                >
+                  {{ ont.status === 'online' ? 'En linea' : ont.status === 'offline' ? 'Desconectada' : 'Desconocido' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <button v-if="canChangeOntPlan" type="button" class="text-xs text-sky-600 hover:underline" @click="openOntPlanModal(ont)">
+                  Cambiar plan
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <h2 class="text-lg font-semibold mb-3">Contratos e historial</h2>
@@ -1009,6 +1188,40 @@ async function handleSaveProfile() {
             <button type="button" class="btn-ghost" @click="showProfileModal = false">Cancelar</button>
             <button type="submit" :disabled="savingProfile" class="btn-primary">
               {{ savingProfile ? 'Guardando...' : 'Guardar' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showOntPlanModal" class="modal-overlay">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleSaveOntPlan">
+          <h2 class="text-lg font-semibold mb-1">Cambiar plan</h2>
+          <p class="text-xs text-slate-500 mb-4 font-mono">ONT {{ ontPlanTarget?.serial }}</p>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Plan</label>
+            <select v-model="ontPlanValue" required class="field-input">
+              <option value="" disabled>Selecciona un plan</option>
+              <option v-for="p in plansWithOltProfile" :key="p.id" :value="p.id">
+                {{ p.name }} — ↓{{ p.download_speed }}/↑{{ p.upload_speed }} Mbps
+              </option>
+            </select>
+            <p v-if="!plansWithOltProfile.length" class="text-xs text-amber-600 mt-1">
+              Ningun plan tiene perfiles OLT configurados todavia (ver seccion Planes → Perfiles de ancho de banda).
+            </p>
+            <p class="text-xs text-slate-500 mt-1">
+              Aplica de inmediato el ancho de banda real en la OLT (perfiles tcont/traffic del plan elegido).
+            </p>
+          </div>
+
+          <p v-if="ontPlanError" class="text-sm text-red-600 mb-3">{{ ontPlanError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showOntPlanModal = false">Cancelar</button>
+            <button type="submit" :disabled="savingOntPlan || !plansWithOltProfile.length" class="btn-primary">
+              {{ savingOntPlan ? 'Aplicando...' : 'Aplicar plan' }}
             </button>
           </div>
         </form>

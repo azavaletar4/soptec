@@ -8,6 +8,7 @@ import {
   listAllOntsCommands,
   listUnconfiguredOntsCommands,
   registerOntCommands,
+  changeOntProfileCommands,
   setAdminStateCommands,
   deleteOntCommands,
   runningConfigCommands,
@@ -432,6 +433,42 @@ oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
 });
 
 /**
+ * ONT(s) de un cliente puntual, sin conocer de antemano a que OLT
+ * pertenece — usado por la ficha de Cliente para ofrecer el cambio rapido
+ * de plan sin pasar por la seccion OLT.
+ */
+oltRoutes.get('/onts/by-client/:clientId', requireRole(...STAFF_READ), async (c) => {
+  const { data, error } = await supabaseAdmin
+    .from('olt_onts')
+    .select('*, plans(id, name, download_speed, upload_speed, olt_tcont_profile, olt_traffic_profile)')
+    .eq('client_id', c.req.param('clientId'))
+    .order('created_at', { ascending: false });
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json(data);
+});
+
+/**
+ * Busca ONTs SIN cliente vinculado por numero de serie (parcial) — la
+ * inmensa mayoria de las ONTs vienen de "import-existing" (Fase 4b), que
+ * nunca asigna client_id a proposito (esa vinculacion es decision de esta
+ * app). Usado desde la ficha de Cliente para vincular una ONT ya
+ * registrada en la OLT sin tener que ir a la seccion OLT a buscarla.
+ */
+oltRoutes.get('/onts/search', requireRole(...STAFF_READ), async (c) => {
+  const serial = c.req.query('serial')?.trim();
+  if (!serial || serial.length < 3) return c.json({ error: 'Ingresa al menos 3 caracteres del numero de serie' }, 400);
+
+  const { data, error } = await supabaseAdmin
+    .from('olt_onts')
+    .select('id, olt_device_id, serial, description, ont_id, slot, port, status, olt_devices(id, name)')
+    .is('client_id', null)
+    .ilike('serial', `%${serial}%`)
+    .limit(20);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json(data);
+});
+
+/**
  * Importa TODAS las ONTs ya configuradas en la OLT (heredadas de SmartOLT u
  * otra herramienta, nunca registradas via esta app) hacia olt_onts, con su
  * nombre/plan/VLAN/senal. Solo lectura contra la OLT (no toca la config
@@ -741,11 +778,51 @@ async function toggleActivation(c: Context, activate: boolean) {
 }
 
 /**
- * Metadata de topologia/contacto de una ONT (zona, splitter, direccion,
- * contacto, coordenadas) — estilo SmartOLT. Solo escribe en Supabase, NO
- * toca la OLT (a diferencia de activate/deactivate/delete de arriba).
+ * Cambia el plan (ancho de banda real) de una ONT ya registrada: aplica el
+ * par tcont/traffic en la OLT via Telnet y lo deja guardado en olt_onts
+ * junto con el plan_id (catalogo de negocio), si se envio uno. Ver
+ * advertencia en changeOntProfileCommands() — comando de escritura nuevo,
+ * probar primero con una ONT de baja criticidad.
  */
-const ONT_META_FIELDS = ['zone_id', 'splitter', 'splitter_port', 'description', 'address_comment', 'contact', 'latitude', 'longitude'] as const;
+oltRoutes.put('/:id/onts/:ontDbId/plan', requireRole(...ONT_WRITE), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
+
+  const body = await c.req.json();
+  const { tcontProfile, trafficProfile, planId } = body;
+  if (!tcontProfile || !trafficProfile) {
+    return c.json({ error: 'tcontProfile y trafficProfile son requeridos (ver "show gpon profile tcont/traffic" en la OLT)' }, 400);
+  }
+
+  try {
+    await runTelnetCommands(
+      telnetTargetFor(device),
+      changeOntProfileCommands({ shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id, tcontProfile, trafficProfile),
+    );
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al cambiar el plan en la OLT' }, 502);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('olt_onts')
+    .update({ tcont_profile: tcontProfile, traffic_profile: trafficProfile, plan_id: planId ?? null })
+    .eq('id', ont.id)
+    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name), plans(id, name, download_speed, upload_speed)')
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  return c.json(data);
+});
+
+/**
+ * Metadata de topologia/contacto de una ONT (zona, splitter, direccion,
+ * contacto, coordenadas, cliente vinculado) — estilo SmartOLT. Solo escribe
+ * en Supabase, NO toca la OLT (a diferencia de activate/deactivate/delete
+ * de arriba). "client_id" vive aqui porque es la misma naturaleza: una
+ * decision de esta app, nunca sincronizada desde la OLT (ver import-existing).
+ */
+const ONT_META_FIELDS = ['zone_id', 'splitter', 'splitter_port', 'description', 'address_comment', 'contact', 'latitude', 'longitude', 'client_id'] as const;
 
 oltRoutes.put('/:id/onts/:ontDbId/meta', requireRole(...ONT_WRITE), async (c) => {
   const ont = await getOntOrNull(c.req.param('ontDbId'));

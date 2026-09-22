@@ -142,6 +142,32 @@ export function registerOntCommands(params: {
   ];
 }
 
+/**
+ * Cambia el plan (perfiles tcont/traffic) de una ONT YA REGISTRADA, sin
+ * recrearla (no toca serial/tipo/VLAN/service-port). Redeclarar "tcont 1
+ * profile" y el traffic-limit del gemport sobre una interfaz ya existente
+ * deberia sobreescribir el valor anterior (mismo mecanismo de
+ * registerOntCommands, que si esta validado contra el equipo real) — pero
+ * a diferencia de ese, ESTE COMANDO especifico (reconfigurar una ONU YA
+ * activa con clientes) TODAVIA NO se probo contra el equipo real. Probar
+ * primero con una ONU de baja criticidad antes de usarlo en masa.
+ */
+export function changeOntProfileCommands(
+  ref: ZteInterfaceRef,
+  onuId: number,
+  tcontProfile: string,
+  trafficProfile: string,
+): string[] {
+  return [
+    'enable',
+    'configure terminal',
+    `interface ${onuInterface(ref, onuId)}`,
+    `tcont 1 profile ${tcontProfile}`,
+    `gemport 1 traffic-limit downstream ${trafficProfile}`,
+    'exit',
+  ];
+}
+
 export function setAdminStateCommands(ref: ZteInterfaceRef, onuId: number, enable: boolean): string[] {
   return [
     'enable',
