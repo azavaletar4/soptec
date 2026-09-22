@@ -14,7 +14,7 @@ const MANAGE = ['SUPERADMIN'] as const;
 // administradores).
 const ASSIGNABLE_ROLES: Role[] = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE', 'FACTURACION'];
 
-const PROFILE_FIELDS = 'id, email, username, full_name, role, active, created_at';
+const PROFILE_FIELDS = 'id, email, username, full_name, phone, role, active, created_at';
 const USERNAME_RE = /^[a-zA-Z0-9._-]{3,32}$/;
 
 usersRoutes.use('*', requireAuth);
@@ -35,6 +35,7 @@ usersRoutes.post('/', requireRole(...MANAGE), async (c) => {
   const password = typeof body.password === 'string' ? body.password : '';
   const fullName = typeof body.full_name === 'string' ? body.full_name.trim() : '';
   const username = typeof body.username === 'string' ? body.username.trim() : '';
+  const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
   const role = body.role as Role;
 
   if (!email || !password || !role || !username) {
@@ -60,7 +61,7 @@ usersRoutes.post('/', requireRole(...MANAGE), async (c) => {
   // rol y username reales.
   const { data: profile, error: profileErr } = await supabaseAdmin
     .from('profiles')
-    .update({ full_name: fullName || null, role, username })
+    .update({ full_name: fullName || null, role, username, phone: phone || null })
     .eq('id', created.user.id)
     .select(PROFILE_FIELDS)
     .single();
@@ -87,6 +88,10 @@ usersRoutes.patch('/:id', requireRole(...MANAGE), async (c) => {
 
   if (body.full_name !== undefined) {
     updates.full_name = typeof body.full_name === 'string' ? body.full_name.trim() || null : null;
+  }
+
+  if (body.phone !== undefined) {
+    updates.phone = typeof body.phone === 'string' ? body.phone.trim() || null : null;
   }
 
   if (body.username !== undefined) {

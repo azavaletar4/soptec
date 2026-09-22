@@ -36,7 +36,7 @@ const editing = ref<UserAccount | null>(null);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 
-const emptyForm = () => ({ full_name: '', username: '', email: '', password: '', role: 'TECNICO_RED' as StaffRole });
+const emptyForm = () => ({ full_name: '', username: '', email: '', phone: '', password: '', role: 'TECNICO_RED' as StaffRole });
 const form = ref(emptyForm());
 
 function generatePassword() {
@@ -55,7 +55,7 @@ function openCreate() {
 
 function openEdit(u: UserAccount) {
   editing.value = u;
-  form.value = { full_name: u.full_name ?? '', username: u.username, email: u.email, password: '', role: u.role };
+  form.value = { full_name: u.full_name ?? '', username: u.username, email: u.email, phone: u.phone ?? '', password: '', role: u.role };
   formError.value = null;
   showModal.value = true;
 }
@@ -68,6 +68,7 @@ async function handleSubmit() {
       const payload: Record<string, unknown> = {
         full_name: form.value.full_name,
         username: form.value.username,
+        phone: form.value.phone,
         role: form.value.role,
       };
       if (form.value.password) payload.password = form.value.password;
@@ -130,6 +131,7 @@ async function handleDelete(u: UserAccount) {
             <th class="text-left px-4 py-3">Nombre</th>
             <th class="text-left px-4 py-3">Usuario</th>
             <th class="text-left px-4 py-3">Correo</th>
+            <th class="text-left px-4 py-3">Celular</th>
             <th class="text-left px-4 py-3">Rol</th>
             <th class="text-left px-4 py-3">Estado</th>
             <th class="text-right px-4 py-3">Acciones</th>
@@ -137,10 +139,10 @@ async function handleDelete(u: UserAccount) {
         </thead>
         <tbody>
           <tr v-if="usersStore.loading">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+            <td colspan="7" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!filteredUsers.length">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">
+            <td colspan="7" class="px-4 py-6 text-center text-slate-500">
               {{ searchQuery ? 'Sin resultados para esa búsqueda.' : 'No hay usuarios de staff todavía.' }}
             </td>
           </tr>
@@ -151,6 +153,7 @@ async function handleDelete(u: UserAccount) {
             </td>
             <td class="px-4 py-3 text-slate-600 font-mono text-xs">{{ u.username }}</td>
             <td class="px-4 py-3 text-slate-600">{{ u.email }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ u.phone || '—' }}</td>
             <td class="px-4 py-3">
               <span class="badge bg-sky-500/15 text-sky-600">{{ ROLE_LABEL[u.role] }}</span>
             </td>
@@ -203,6 +206,11 @@ async function handleDelete(u: UserAccount) {
             <label class="block text-xs text-slate-600 mb-1">Correo</label>
             <input v-model="form.email" type="email" required :disabled="!!editing" class="field-input disabled:opacity-60" />
             <p v-if="editing" class="text-[11px] text-slate-400 mt-1">El correo no se puede cambiar desde aquí.</p>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Celular</label>
+            <input v-model="form.phone" class="field-input" placeholder="Opcional" />
           </div>
 
           <div class="mb-3">

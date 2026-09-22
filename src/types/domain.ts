@@ -108,6 +108,7 @@ export interface UserAccount {
   email: string;
   username: string;
   full_name: string | null;
+  phone: string | null;
   role: StaffRole;
   active: boolean;
   created_at: string;
