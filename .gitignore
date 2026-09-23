@@ -14,3 +14,4 @@ Thumbs.db
 *.key
 supabase/.branches/
 supabase/.temp/
+smartrayco_installer_*.tar.gz
