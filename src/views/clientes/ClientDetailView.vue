@@ -45,6 +45,9 @@ const inventoryStore = useInventoryStore();
 const auth = useAuthStore();
 
 const canCreateTickets = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+// Borrar un contrato elimina en cascada sus facturas/instalacion (ver migraciones
+// fase7b/fase9): se deja solo para SUPERADMIN, para limpiar contratos de prueba.
+const canDeleteContracts = computed(() => auth.role === 'SUPERADMIN');
 
 const clientId = computed(() => route.params.id as string);
 const client = computed(() => clientsStore.clients.find((c) => c.id === clientId.value));
@@ -490,6 +493,24 @@ function openEditContract(contract: ServiceContract) {
   loadSecretsForModal(contractForm.value.mikrotik_device_id);
   loadPppProfilesForModal(contractForm.value.mikrotik_device_id);
   showContractModal.value = true;
+}
+
+const deletingContractId = ref<string | null>(null);
+
+async function handleDeleteContract(contract: ServiceContract) {
+  const ok = confirm(
+    `¿Eliminar el contrato ${contract.contract_number}? Esta acción no se puede deshacer y también elimina sus facturas e instalación asociadas en el sistema (no afecta nada en la OLT ni en el router).`,
+  );
+  if (!ok) return;
+  deletingContractId.value = contract.id;
+  try {
+    await contractsStore.deleteContract(contract.id);
+    await loadContracts();
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al eliminar el contrato'));
+  } finally {
+    deletingContractId.value = null;
+  }
 }
 
 function onMikrotikDeviceChange() {
@@ -1155,6 +1176,7 @@ async function handleSaveOntPlan() {
               <th class="text-left px-4 py-3">Perfil PPPoE</th>
               <th class="text-left px-4 py-3">IPTV</th>
               <th class="text-left px-4 py-3">Estado</th>
+              <th v-if="canDeleteContracts" class="text-right px-4 py-3">Acción</th>
             </tr>
           </thead>
           <tbody>
@@ -1194,6 +1216,15 @@ async function handleSaveOntPlan() {
                 <span class="badge" :class="STATUS_CLASS[ct.status]">
                   {{ STATUS_LABEL[ct.status] }}
                 </span>
+              </td>
+              <td v-if="canDeleteContracts" class="px-4 py-3 text-right" @click.stop>
+                <button
+                  class="text-xs text-red-500/80 hover:text-red-600"
+                  :disabled="deletingContractId === ct.id"
+                  @click="handleDeleteContract(ct)"
+                >
+                  {{ deletingContractId === ct.id ? 'Eliminando...' : 'Eliminar' }}
+                </button>
               </td>
             </tr>
           </tbody>

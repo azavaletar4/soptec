@@ -64,6 +64,12 @@ export const useContractsStore = defineStore('contracts', () => {
     return data as unknown as ServiceContract;
   }
 
+  async function deleteContract(id: string) {
+    const { error: err } = await supabase.from('service_contracts').delete().eq('id', id);
+    if (err) throw err;
+    contracts.value = contracts.value.filter((c) => c.id !== id);
+  }
+
   return {
     contracts,
     loading,
@@ -73,5 +79,6 @@ export const useContractsStore = defineStore('contracts', () => {
     createContract,
     updateContract,
     updateContractStatus,
+    deleteContract,
   };
 });
