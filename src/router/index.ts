@@ -66,10 +66,17 @@ const router = createRouter({
       component: () => import('@/views/instalaciones/InstalacionesView.vue'),
       meta: { requiresAuth: true },
     },
+    { path: '/mapa', redirect: '/mapa/red' },
     {
-      path: '/mapa',
-      name: 'mapa',
-      component: () => import('@/views/mapa/MapaView.vue'),
+      path: '/mapa/red',
+      name: 'mapa-red',
+      component: () => import('@/views/mapa/RedMapView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/mapa/clientes',
+      name: 'mapa-clientes',
+      component: () => import('@/views/mapa/ClientesMapView.vue'),
       meta: { requiresAuth: true },
     },
     {

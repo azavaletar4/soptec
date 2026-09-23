@@ -5,218 +5,50 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useClientsStore } from '@/stores/clients';
-import { useInstallationsStore } from '@/stores/installations';
 import { useOltStore } from '@/stores/olt';
 import { useMikrotikStore } from '@/stores/mikrotik';
 import { useInfraElementosStore, type InfraElementoWithUrl } from '@/stores/infraElementos';
+import { useFoFibraStore, type TraceResult } from '@/stores/foFibra';
+import CableFormModal from './CableFormModal.vue';
+import CableHilosModal from './CableHilosModal.vue';
+import SpliceDiagramModal from './SpliceDiagramModal.vue';
+import { INFRA_STYLE, INFRA_LABEL, INACTIVE_COLOR, OLT_GLYPH, MIKROTIK_GLYPH, teardropIcon, infraIcon, permanentLabel } from './mapIcons';
 import { getErrorMessage } from '@/lib/errors';
-import type { ClientStatus, InfraElementoTipo } from '@/types/domain';
+import type { FoCable, FoCableTipo, InfraElementoTipo, LatLngPoint } from '@/types/domain';
 
 const router = useRouter();
 const clientsStore = useClientsStore();
-const installationsStore = useInstallationsStore();
 const oltStore = useOltStore();
 const mikrotikStore = useMikrotikStore();
 const infraStore = useInfraElementosStore();
+const fibra = useFoFibraStore();
 
 const loading = ref(true);
-const showClients = ref(true);
-const showInstallations = ref(true);
 const showOlt = ref(true);
 const showMikrotik = ref(true);
 const showInfra = ref(true);
+const showCables = ref(true);
 const legendOpen = ref(false);
 const mapEl = ref<HTMLDivElement | null>(null);
 let map: L.Map | null = null;
-let clientLayer: L.LayerGroup | null = null;
-let installationLayer: L.LayerGroup | null = null;
 let oltLayer: L.LayerGroup | null = null;
 let mikrotikLayer: L.LayerGroup | null = null;
 let infraLayer: L.LayerGroup | null = null;
+let cableLayer: L.LayerGroup | null = null;
+let drawLayer: L.LayerGroup | null = null;
+let traceLayer: L.LayerGroup | null = null;
 
-const CLIENT_COLOR: Record<ClientStatus, string> = {
-  active: '#22c55e',
-  suspended: '#ef4444',
-  prospect: '#f59e0b',
-  retired: '#64748b',
-};
-
-const INFRA_STYLE: Record<InfraElementoTipo, { color: string; shape: 'square' | 'diamond' | 'mufa' | 'nap' | 'circle' | 'pentagon' }> = {
-  caja_nap: { color: '#e2e8f0', shape: 'nap' },
-  splitter: { color: '#8b5cf6', shape: 'diamond' },
-  manga: { color: '#1e293b', shape: 'mufa' },
-  armario: { color: '#64748b', shape: 'square' },
-  poste: { color: '#92400e', shape: 'circle' },
-  camara: { color: '#dc2626', shape: 'circle' },
-  otro: { color: '#6366f1', shape: 'pentagon' },
-};
-const INFRA_LABEL: Record<InfraElementoTipo, string> = {
-  caja_nap: 'Caja NAP',
-  splitter: 'Splitter',
-  manga: 'Mufa',
-  armario: 'Armario',
-  poste: 'Poste',
-  camara: 'Cámara',
-  otro: 'Otro',
-};
-const INACTIVE_COLOR = '#9ca3af';
-
-const clientsWithGps = computed(() => clientsStore.clients.filter((c) => c.latitude != null && c.longitude != null));
-const pendingInstallations = computed(() =>
-  installationsStore.installations.filter(
-    (i) => (i.status === 'pending' || i.status === 'scheduled') && i.clients?.latitude != null && i.clients?.longitude != null,
-  ),
-);
 const oltsWithGps = computed(() => oltStore.devices.filter((d) => d.lat != null && d.lng != null));
 const oltsWithoutGps = computed(() => oltStore.devices.filter((d) => d.lat == null || d.lng == null));
 const mikrotiksWithGps = computed(() => mikrotikStore.devices.filter((d) => d.latitude != null && d.longitude != null));
 const mikrotiksWithoutGps = computed(() => mikrotikStore.devices.filter((d) => d.latitude == null || d.longitude == null));
-
-// ---- Icono "gota" (teardrop) para equipos activos, estilo SmartOLT ----
-function teardropIcon(color: string, glyphPath: string) {
-  return L.divIcon({
-    className: '',
-    html: `<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;background:${color};border:2px solid #0f172a;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.4)">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" style="transform:rotate(45deg)">${glyphPath}</svg>
-    </div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 30],
-    popupAnchor: [0, -30],
-  });
-}
-const OLT_GLYPH = '<rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><circle cx="7" cy="7" r="0.5" fill="white"/><circle cx="7" cy="17" r="0.5" fill="white"/>';
-const MIKROTIK_GLYPH = '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>';
-
-// Icono de la mufa: domo con nervaduras y puertos de cable abajo, calcado
-// de la foto de referencia (cierre de empalme tipo domo negro/anillado).
-function mufaIconHtml(color: string) {
-  return `<svg width="16" height="22" viewBox="0 0 16 22">
-    <path d="M4 2 Q4 0 8 0 Q12 0 12 2 L12 15 Q12 16.5 8 16.5 Q4 16.5 4 15 Z" fill="${color}" stroke="#0f172a" stroke-width="1"/>
-    <line x1="4" y1="4.5" x2="12" y2="4.5" stroke="#0f172a" stroke-width="0.6" opacity="0.6"/>
-    <line x1="4" y1="7.5" x2="12" y2="7.5" stroke="#0f172a" stroke-width="0.6" opacity="0.6"/>
-    <line x1="4" y1="10.5" x2="12" y2="10.5" stroke="#0f172a" stroke-width="0.6" opacity="0.6"/>
-    <line x1="4" y1="13.5" x2="12" y2="13.5" stroke="#0f172a" stroke-width="0.6" opacity="0.6"/>
-    <ellipse cx="8" cy="16.5" rx="4" ry="1.5" fill="${color}" stroke="#0f172a" stroke-width="1"/>
-    <rect x="5.5" y="17" width="1.8" height="4" rx="0.8" fill="${color}" stroke="#0f172a" stroke-width="0.8"/>
-    <rect x="8.7" y="17" width="1.8" height="4" rx="0.8" fill="${color}" stroke="#0f172a" stroke-width="0.8"/>
-  </svg>`;
-}
-
-// Icono de la caja NAP: caja rectangular clara con pestillo y una fila de
-// puertos de cable negros en el borde inferior, calcado de la foto de
-// referencia (caja de distribucion de fibra tipo NAP-16).
-function napIconHtml(color: string) {
-  return `<svg width="20" height="20" viewBox="0 0 20 20">
-    <rect x="2" y="1.5" width="16" height="13" rx="2" fill="${color}" stroke="#0f172a" stroke-width="1"/>
-    <circle cx="10" cy="8" r="1" fill="#0f172a" opacity="0.7"/>
-    <rect x="0.5" y="6" width="1.5" height="3" rx="0.5" fill="#0f172a" opacity="0.8"/>
-    <rect x="18" y="6" width="1.5" height="3" rx="0.5" fill="#0f172a" opacity="0.8"/>
-    ${[3, 5.5, 8, 10.5, 13, 15.5]
-      .map((x) => `<rect x="${x}" y="13.5" width="1.6" height="4.5" rx="0.7" fill="#0f172a"/>`)
-      .join('')}
-  </svg>`;
-}
-
-function infraIcon(el: InfraElementoWithUrl) {
-  const color = el.is_active ? INFRA_STYLE[el.tipo].color : INACTIVE_COLOR;
-  const shape = INFRA_STYLE[el.tipo].shape;
-
-  if (shape === 'nap') {
-    return L.divIcon({
-      className: '',
-      html: `<div style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5))">${napIconHtml(color)}</div>`,
-      iconSize: [20, 20],
-      iconAnchor: [10, 18],
-    });
-  }
-
-  if (shape === 'mufa') {
-    return L.divIcon({
-      className: '',
-      html: `<div style="filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5))">${mufaIconHtml(color)}</div>`,
-      iconSize: [16, 22],
-      iconAnchor: [8, 21],
-    });
-  }
-
-  const base = 'width:18px;height:18px;border:2px solid #0f172a;box-shadow:0 1px 4px rgba(0,0,0,0.4);';
-  const shapeCss: Record<Exclude<typeof shape, 'mufa' | 'nap'>, string> = {
-    square: `${base}background:${color};border-radius:3px;`,
-    diamond: `${base}background:${color};transform:rotate(45deg);`,
-    circle: `${base}background:${color};border-radius:50%;`,
-    pentagon: `${base}background:${color};clip-path:polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);`,
-  };
-  return L.divIcon({
-    className: '',
-    html: `<div style="${shapeCss[shape as Exclude<typeof shape, 'mufa' | 'nap'>]}"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-  });
-}
-
-function permanentLabel(text: string, sub: string) {
-  return `<div style="font-size:11px"><b>${text}</b><br/><span style="color:#64748b">${sub}</span></div>`;
-}
-
-function renderClientMarkers() {
-  if (!clientLayer) return;
-  clientLayer.clearLayers();
-  if (!showClients.value) return;
-  for (const c of clientsWithGps.value) {
-    const marker = L.circleMarker([c.latitude as number, c.longitude as number], {
-      radius: 7,
-      color: '#0f172a',
-      weight: 1.5,
-      fillColor: CLIENT_COLOR[c.status],
-      fillOpacity: 0.9,
-    });
-    marker.bindPopup(
-      `<div style="font-size:13px">
-        <b>${c.first_name} ${c.last_name}</b><br/>
-        ${c.address ?? 'Sin dirección'}<br/>
-        <span style="color:${CLIENT_COLOR[c.status]}">● ${c.status}</span><br/>
-        <a href="/clientes/${c.id}" style="color:#38bdf8">Ver cliente →</a>
-      </div>`,
-    );
-    marker.addTo(clientLayer);
-  }
-}
-
-function renderInstallationMarkers() {
-  if (!installationLayer) return;
-  installationLayer.clearLayers();
-  if (!showInstallations.value) return;
-  for (const inst of pendingInstallations.value) {
-    const lat = inst.clients!.latitude as number;
-    const lng = inst.clients!.longitude as number;
-    const icon = L.divIcon({
-      html: `<div style="width:22px;height:22px;border-radius:50%;background:#0ea5e9;border:2px solid #0f172a;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 0 0 3px rgba(14,165,233,0.35)">🔧</div>`,
-      className: '',
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
-    });
-    const marker = L.marker([lat, lng], { icon });
-    marker.bindPopup(
-      `<div style="font-size:13px">
-        <b>${inst.clients?.first_name} ${inst.clients?.last_name}</b><br/>
-        Instalación: <b>${inst.status === 'scheduled' ? 'Programada' : 'Pendiente'}</b><br/>
-        ${inst.scheduled_date ? `Fecha: ${inst.scheduled_date}` : 'Sin fecha programada'}<br/>
-        <a href="/instalaciones" style="color:#38bdf8">Ver instalaciones →</a>
-      </div>`,
-    );
-    marker.addTo(installationLayer);
-  }
-}
 
 function renderOltMarkers() {
   if (!oltLayer) return;
   oltLayer.clearLayers();
   if (!showOlt.value) return;
   for (const d of oltsWithGps.value) {
-    const marker = L.marker([d.lat as number, d.lng as number], {
-      icon: teardropIcon('#2563eb', OLT_GLYPH),
-      draggable: true,
-    });
+    const marker = L.marker([d.lat as number, d.lng as number], { icon: teardropIcon('#2563eb', OLT_GLYPH), draggable: true });
     marker.bindTooltip(permanentLabel(d.name, 'OLT'), { permanent: true, direction: 'top', offset: [0, -30], className: 'leaflet-label-custom' });
     marker.bindPopup(
       `<div style="font-size:13px"><b>${d.name}</b><br/>${d.host}:${d.telnet_port}<br/><a href="/olt/${d.id}" style="color:#38bdf8">Ver OLT →</a></div>`,
@@ -238,10 +70,7 @@ function renderMikrotikMarkers() {
   mikrotikLayer.clearLayers();
   if (!showMikrotik.value) return;
   for (const d of mikrotiksWithGps.value) {
-    const marker = L.marker([d.latitude as number, d.longitude as number], {
-      icon: teardropIcon('#7c3aed', MIKROTIK_GLYPH),
-      draggable: true,
-    });
+    const marker = L.marker([d.latitude as number, d.longitude as number], { icon: teardropIcon('#7c3aed', MIKROTIK_GLYPH), draggable: true });
     marker.bindTooltip(permanentLabel(d.name, 'MikroTik'), { permanent: true, direction: 'top', offset: [0, -30], className: 'leaflet-label-custom' });
     marker.bindPopup(
       `<div style="font-size:13px"><b>${d.name}</b><br/>${d.host}<br/><a href="/mikrotik/${d.id}" style="color:#38bdf8">Ver router →</a></div>`,
@@ -304,21 +133,27 @@ function infraPopupHtml(el: InfraElementoWithUrl) {
     ${el.spliteo ? `⇉ ${el.spliteo}<br/>` : ''}
     ${el.notes ? `${el.notes}<br/>` : ''}
     <span style="color:${el.is_active ? '#22c55e' : '#9ca3af'}">● ${el.is_active ? 'Activo' : 'Inactivo'}</span>
-    <div style="margin-top:6px"><button id="infra-edit-${el.id}" style="color:#38bdf8;background:none;border:none;padding:0;cursor:pointer;font-size:12px">Editar →</button></div>
+    <div style="margin-top:6px;display:flex;gap:10px">
+      <button id="infra-edit-${el.id}" style="color:#38bdf8;background:none;border:none;padding:0;cursor:pointer;font-size:12px">Editar →</button>
+      ${
+        el.tipo === 'manga' || el.tipo === 'caja_nap'
+          ? `<button id="infra-splice-${el.id}" style="color:#22c55e;background:none;border:none;padding:0;cursor:pointer;font-size:12px">Empalmes →</button>`
+          : ''
+      }
+    </div>
   </div>`;
 }
 
 function wireInfraPopup(el: InfraElementoWithUrl) {
   setTimeout(() => {
     document.getElementById(`infra-edit-${el.id}`)?.addEventListener('click', () => openInfraModal(el));
+    document.getElementById(`infra-splice-${el.id}`)?.addEventListener('click', () => openSpliceModal(el.id));
   }, 0);
 }
 
 function fitToMarkers() {
   if (!map) return;
   const points: L.LatLngExpression[] = [
-    ...clientsWithGps.value.map((c) => [c.latitude as number, c.longitude as number] as L.LatLngExpression),
-    ...pendingInstallations.value.map((i) => [i.clients!.latitude as number, i.clients!.longitude as number] as L.LatLngExpression),
     ...oltsWithGps.value.map((d) => [d.lat as number, d.lng as number] as L.LatLngExpression),
     ...mikrotiksWithGps.value.map((d) => [d.latitude as number, d.longitude as number] as L.LatLngExpression),
     ...infraStore.elementos.filter((e) => e.latitude != null).map((e) => [e.latitude as number, e.longitude as number] as L.LatLngExpression),
@@ -332,33 +167,32 @@ function fitToMarkers() {
 
 onMounted(async () => {
   map = L.map(mapEl.value as HTMLDivElement, { zoomControl: true }).setView([-1.83, -78.18], 6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    maxZoom: 19,
-  }).addTo(map);
-  clientLayer = L.layerGroup().addTo(map);
-  installationLayer = L.layerGroup().addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(map);
   oltLayer = L.layerGroup().addTo(map);
   mikrotikLayer = L.layerGroup().addTo(map);
   infraLayer = L.layerGroup().addTo(map);
+  cableLayer = L.layerGroup().addTo(map);
+  drawLayer = L.layerGroup().addTo(map);
+  traceLayer = L.layerGroup().addTo(map);
+  map.on('click', onMapClick);
 
   loading.value = true;
   try {
     await Promise.all([
-      clientsStore.fetchClients(),
-      installationsStore.fetchInstallations(),
       oltStore.fetchDevices(),
       mikrotikStore.fetchDevices(),
       infraStore.fetchElementos(),
+      fibra.fetchCables(),
+      fibra.fetchFusiones(),
+      clientsStore.fetchClients(),
     ]);
   } finally {
     loading.value = false;
   }
-  renderClientMarkers();
-  renderInstallationMarkers();
   renderOltMarkers();
   renderMikrotikMarkers();
   renderInfraMarkers();
+  renderCables();
   fitToMarkers();
 });
 
@@ -367,17 +201,15 @@ onBeforeUnmount(() => {
   map = null;
 });
 
-watch(showClients, renderClientMarkers);
-watch(showInstallations, renderInstallationMarkers);
 watch(showOlt, renderOltMarkers);
 watch(showMikrotik, renderMikrotikMarkers);
 watch(showInfra, renderInfraMarkers);
+watch(showCables, renderCables);
 
 function goTo(path: string) {
   router.push(path);
 }
 
-// ---- Colocar equipos sin ubicar (centro del mapa actual) ----
 async function placeOlt(id: string) {
   if (!map) return;
   const center = map.getCenter();
@@ -409,6 +241,7 @@ const infraForm = ref({
   tipo: 'caja_nap' as InfraElementoTipo,
   potencia: '',
   spliteo: '',
+  puertos_total: null as number | null,
   is_active: true,
   notes: '',
   latitude: 0,
@@ -427,6 +260,7 @@ function openInfraModal(el?: InfraElementoWithUrl) {
       tipo: el.tipo,
       potencia: el.potencia ?? '',
       spliteo: el.spliteo ?? '',
+      puertos_total: el.puertos_total ?? null,
       is_active: el.is_active,
       notes: el.notes ?? '',
       latitude: el.latitude ?? 0,
@@ -441,6 +275,7 @@ function openInfraModal(el?: InfraElementoWithUrl) {
       tipo: 'caja_nap',
       potencia: '',
       spliteo: '',
+      puertos_total: null,
       is_active: true,
       notes: '',
       latitude: center ? Number(center.lat.toFixed(7)) : -1.83,
@@ -466,6 +301,7 @@ async function handleSaveInfra() {
         tipo: infraForm.value.tipo,
         potencia: infraForm.value.potencia || null,
         spliteo: infraForm.value.spliteo || null,
+        puertos_total: infraForm.value.puertos_total || null,
         is_active: infraForm.value.is_active,
         notes: infraForm.value.notes || null,
       });
@@ -475,6 +311,7 @@ async function handleSaveInfra() {
         tipo: infraForm.value.tipo,
         potencia: infraForm.value.potencia || null,
         spliteo: infraForm.value.spliteo || null,
+        puertos_total: infraForm.value.puertos_total || null,
         is_active: infraForm.value.is_active,
         notes: infraForm.value.notes || null,
         latitude: infraForm.value.latitude,
@@ -508,26 +345,194 @@ async function handleDeleteInfra() {
     infraSaving.value = false;
   }
 }
+
+// ---- Capa de cables de fibra (troncal/ramal) ----
+const CABLE_STYLE: Record<FoCableTipo, { color: string; weight: number; dashArray?: string }> = {
+  troncal: { color: '#0ea5e9', weight: 5 },
+  ramal: { color: '#f97316', weight: 3, dashArray: '7 5' },
+};
+
+function elementoNombre(oltId: string | null, infraId: string | null): string {
+  if (oltId) return oltStore.devices.find((d) => d.id === oltId)?.name ?? 'OLT';
+  if (infraId) return infraStore.elementos.find((e) => e.id === infraId)?.name ?? 'Elemento';
+  return 'Sin definir';
+}
+
+function renderCables() {
+  if (!cableLayer) return;
+  cableLayer.clearLayers();
+  if (!showCables.value) return;
+  for (const cable of fibra.cables) {
+    if (!cable.path?.length) continue;
+    const style = CABLE_STYLE[cable.tipo];
+    const line = L.polyline(cable.path as L.LatLngExpression[], {
+      color: cable.is_active ? style.color : INACTIVE_COLOR,
+      weight: style.weight,
+      dashArray: style.dashArray,
+      opacity: 0.9,
+    });
+    line.bindTooltip(
+      `<b>${cable.codigo}</b><br/>${cable.tipo === 'troncal' ? 'Troncal' : 'Ramal'} · ${cable.hilos_total} FO${cable.metraje ? ` · ${cable.metraje} m` : ''}<br/>${elementoNombre(cable.origen_olt_id, cable.origen_infra_id)} → ${elementoNombre(cable.destino_olt_id, cable.destino_infra_id)}`,
+      { sticky: true, className: 'leaflet-hover-potencia' },
+    );
+    line.on('click', () => openCableHilos(cable));
+    line.addTo(cableLayer);
+  }
+}
+
+// ---- Modo de trazado de cables ----
+const drawMode = ref<FoCableTipo | null>(null);
+const drawPoints = ref<LatLngPoint[]>([]);
+
+function startDrawMode(tipo: FoCableTipo) {
+  cancelDrawing();
+  drawMode.value = tipo;
+  drawPoints.value = [];
+}
+
+function onMapClick(e: L.LeafletMouseEvent) {
+  if (!drawMode.value || !drawLayer) return;
+  drawPoints.value.push([Number(e.latlng.lat.toFixed(7)), Number(e.latlng.lng.toFixed(7))]);
+  drawLayer.clearLayers();
+  L.polyline(drawPoints.value as L.LatLngExpression[], {
+    color: CABLE_STYLE[drawMode.value].color,
+    weight: CABLE_STYLE[drawMode.value].weight,
+    dashArray: '4 4',
+  }).addTo(drawLayer);
+  for (const pt of drawPoints.value) {
+    L.circleMarker(pt as L.LatLngExpression, { radius: 4, color: '#0f172a', fillColor: '#fff', fillOpacity: 1 }).addTo(drawLayer!);
+  }
+}
+
+function undoLastPoint() {
+  drawPoints.value.pop();
+  if (drawLayer) drawLayer.clearLayers();
+  if (drawPoints.value.length && drawLayer && drawMode.value) {
+    L.polyline(drawPoints.value as L.LatLngExpression[], { color: CABLE_STYLE[drawMode.value].color }).addTo(drawLayer);
+  }
+}
+
+function cancelDrawing() {
+  drawMode.value = null;
+  drawPoints.value = [];
+  drawLayer?.clearLayers();
+}
+
+function metrajeCalculado(path: LatLngPoint[]): number {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) {
+    total += L.latLng(path[i - 1][0], path[i - 1][1]).distanceTo(L.latLng(path[i][0], path[i][1]));
+  }
+  return Math.round(total);
+}
+
+const showCableForm = ref(false);
+const editingCable = ref<FoCable | null>(null);
+const pendingPath = ref<LatLngPoint[] | null>(null);
+
+function finishDrawing() {
+  if (drawPoints.value.length < 2) {
+    alert('Traza al menos dos puntos para definir el cable.');
+    return;
+  }
+  pendingPath.value = [...drawPoints.value];
+  editingCable.value = null;
+  showCableForm.value = true;
+}
+
+async function handleSaveCable(payload: Record<string, unknown>) {
+  try {
+    if (editingCable.value) {
+      await fibra.updateCable(editingCable.value.id, payload as Partial<FoCable>);
+    } else {
+      await fibra.createCable(payload as Parameters<typeof fibra.createCable>[0]);
+    }
+    showCableForm.value = false;
+    cancelDrawing();
+    pendingPath.value = null;
+    renderCables();
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al guardar el cable'));
+  }
+}
+
+async function handleDeleteCable(cableOverride?: FoCable) {
+  const cable = cableOverride ?? editingCable.value;
+  if (!cable) return;
+  if (!confirm(`¿Eliminar el cable "${cable.codigo}"? Se borrará también su traza, hilos y fusiones asociadas.`)) return;
+  try {
+    await fibra.deleteCable(cable.id);
+    showCableForm.value = false;
+    showCableHilos.value = false;
+    renderCables();
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al eliminar el cable'));
+  }
+}
+
+// ---- Inspección de hilos de un cable ----
+const showCableHilos = ref(false);
+const inspectingCable = ref<FoCable | null>(null);
+
+function openCableHilos(cable: FoCable) {
+  inspectingCable.value = cable;
+  showCableHilos.value = true;
+}
+
+function openCableEditFromHilos() {
+  editingCable.value = inspectingCable.value;
+  pendingPath.value = null;
+  showCableHilos.value = false;
+  showCableForm.value = true;
+}
+
+// ---- Diagrama de fusión / puertos NAP ----
+const showSpliceModal = ref(false);
+const spliceElementoId = ref<string | null>(null);
+const spliceElemento = computed(() => infraStore.elementos.find((e) => e.id === spliceElementoId.value) ?? null);
+
+function openSpliceModal(infraElementoId: string) {
+  spliceElementoId.value = infraElementoId;
+  showSpliceModal.value = true;
+  showCableHilos.value = false;
+}
+
+const activeTrace = ref<TraceResult | null>(null);
+
+function handleTraceResult(result: TraceResult | null) {
+  activeTrace.value = result;
+  if (!traceLayer) return;
+  traceLayer.clearLayers();
+  if (!result) return;
+  for (const hop of result.hops) {
+    L.polyline(hop.cable.path as L.LatLngExpression[], { color: '#22c55e', weight: 7, opacity: 0.85 }).addTo(traceLayer);
+  }
+  if (result.hops.length && map) {
+    const bounds = L.latLngBounds(result.hops.flatMap((h) => h.cable.path as L.LatLngExpression[]));
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }
+}
+
+function clearTrace() {
+  handleTraceResult(null);
+}
 </script>
 
 <template>
   <AppLayout>
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <div>
-        <h1 class="text-2xl font-semibold">Mapa de infraestructura</h1>
+        <div class="flex items-center gap-2">
+          <h1 class="text-2xl font-semibold">Mapa de Red</h1>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 font-medium">Diseño de planta externa</span>
+        </div>
         <p class="text-slate-600 text-sm mt-1">
-          {{ clientsWithGps.length }} clientes · {{ oltsWithGps.length }} OLTs · {{ mikrotiksWithGps.length }} MikroTiks ·
-          {{ infraStore.elementos.length }} elementos pasivos
+          {{ oltsWithGps.length }} OLTs · {{ mikrotiksWithGps.length }} MikroTiks · {{ infraStore.elementos.length }} elementos pasivos ·
+          {{ fibra.cables.length }} cables
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button
-          class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
-          :class="showClients ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
-          @click="showClients = !showClients"
-        >
-          <span class="w-2 h-2 rounded-full bg-green-500"></span> Clientes ({{ clientsWithGps.length }})
-        </button>
+        <button class="btn-secondary text-xs" @click="goTo('/mapa/clientes')">👤 Ver mapa de clientes →</button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
           :class="showOlt ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
@@ -551,14 +556,43 @@ async function handleDeleteInfra() {
         </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
-          :class="showInstallations ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
-          @click="showInstallations = !showInstallations"
+          :class="showCables ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+          @click="showCables = !showCables"
         >
-          🔧 Instalaciones ({{ pendingInstallations.length }})
+          <span class="w-3 h-0.5 rounded-full inline-block" style="background:#0ea5e9"></span> Cables ({{ fibra.cables.length }})
         </button>
-        <button class="btn-secondary text-xs" @click="goTo('/instalaciones')">Ver lista →</button>
         <button class="btn-primary text-xs" @click="openInfraModal()">+ Elemento pasivo</button>
+        <button
+          class="px-3 py-1.5 rounded-lg text-xs font-medium"
+          :class="drawMode === 'troncal' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+          @click="drawMode === 'troncal' ? cancelDrawing() : startDrawMode('troncal')"
+        >
+          ✏️ Trazar troncal
+        </button>
+        <button
+          class="px-3 py-1.5 rounded-lg text-xs font-medium"
+          :class="drawMode === 'ramal' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+          @click="drawMode === 'ramal' ? cancelDrawing() : startDrawMode('ramal')"
+        >
+          ✏️ Trazar ramal
+        </button>
       </div>
+    </div>
+
+    <div v-if="drawMode" class="rounded-xl border border-sky-500/40 bg-sky-500/10 p-3 mb-3 text-xs flex flex-wrap items-center gap-3">
+      <span>
+        Trazando <b>{{ drawMode === 'troncal' ? 'cable troncal' : 'cable ramal' }}</b> — haz clic en el mapa para agregar vértices
+        ({{ drawPoints.length }} punto(s){{ drawPoints.length >= 2 ? `, ~${metrajeCalculado(drawPoints)} m` : '' }}).
+      </span>
+      <button class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" :disabled="!drawPoints.length" @click="undoLastPoint">Deshacer punto</button>
+      <button class="btn-primary text-xs" :disabled="drawPoints.length < 2" @click="finishDrawing">Finalizar trazado</button>
+      <button class="btn-ghost text-xs" @click="cancelDrawing">Cancelar</button>
+    </div>
+
+    <div v-if="activeTrace" class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 mb-3 text-xs flex items-center gap-3">
+      <span v-if="activeTrace.reachedOlt" class="text-emerald-700">✓ Ruta óptica resaltada en el mapa hasta la OLT ({{ activeTrace.hops.length }} tramo(s)).</span>
+      <span v-else class="text-amber-700">⚠ Ruta parcial resaltada: {{ activeTrace.error }}</span>
+      <button class="btn-ghost text-xs ml-auto" @click="clearTrace">Limpiar ruta</button>
     </div>
 
     <div v-if="oltsWithoutGps.length || mikrotiksWithoutGps.length" class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-3 mb-3 text-xs">
@@ -578,29 +612,22 @@ async function handleDeleteInfra() {
         {{ legendOpen ? '▾' : '▸' }} Leyenda
       </button>
       <div v-if="legendOpen" class="flex flex-wrap gap-4 mt-2 text-xs text-slate-600 rounded-xl border border-slate-200 bg-slate-100 p-3">
-        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#22c55e"></span>Cliente activo</span>
-        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#f59e0b"></span>Prospecto</span>
-        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#ef4444"></span>Suspendido</span>
-        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#64748b"></span>Retirado</span>
-        <span class="flex items-center gap-1.5">🔧 Instalación pendiente</span>
         <span v-for="(label, tipo) in INFRA_LABEL" :key="tipo" class="flex items-center gap-1.5">
           <span class="w-2.5 h-2.5 inline-block" :style="{ background: INFRA_STYLE[tipo as InfraElementoTipo].color, borderRadius: INFRA_STYLE[tipo as InfraElementoTipo].shape === 'circle' ? '50%' : '2px' }"></span>
           {{ label }}
         </span>
+        <span class="flex items-center gap-1.5"><span class="w-4 h-1 rounded-full inline-block" style="background:#0ea5e9"></span>Cable troncal</span>
+        <span class="flex items-center gap-1.5"><span class="w-4 h-1 rounded-full inline-block" style="background:#f97316;border-top:2px dashed #f97316"></span>Cable ramal</span>
         <span class="text-slate-400">Arrastra cualquier marcador para reubicarlo — se guarda solo.</span>
       </div>
     </div>
 
-    <div class="relative rounded-xl overflow-hidden border border-slate-200" style="height: 70vh;">
+    <div class="relative rounded-xl overflow-hidden border border-slate-200" style="height: 75vh;">
       <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/40 text-slate-600 text-sm">
         Cargando mapa...
       </div>
       <div ref="mapEl" class="w-full h-full"></div>
     </div>
-
-    <p class="text-xs text-slate-500 mt-3">
-      Los clientes sin coordenadas GPS registradas (ver ficha del cliente) no aparecen en el mapa.
-    </p>
 
     <Teleport to="body">
       <div v-if="showInfraModal" class="modal-overlay" style="z-index: 2000" @click.self="showInfraModal = false">
@@ -633,12 +660,20 @@ async function handleDeleteInfra() {
               <label class="field-label">Potencia óptica</label>
               <input v-model="infraForm.potencia" placeholder="ej. -15 dBm" class="field-input" />
             </div>
-            <div class="flex items-end pb-2">
-              <label class="flex items-center gap-2 text-sm">
-                <input v-model="infraForm.is_active" type="checkbox" />
-                Activo
-              </label>
+            <div v-if="infraForm.tipo === 'caja_nap'">
+              <label class="field-label">Capacidad de puertos</label>
+              <select v-model.number="infraForm.puertos_total" class="field-input">
+                <option :value="null">—</option>
+                <option v-for="n in [4, 8, 16, 24]" :key="n" :value="n">{{ n }} puertos</option>
+              </select>
             </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="flex items-center gap-2 text-sm">
+              <input v-model="infraForm.is_active" type="checkbox" />
+              Activo
+            </label>
           </div>
 
           <div class="mb-3">
@@ -673,30 +708,38 @@ async function handleDeleteInfra() {
         </form>
       </div>
     </Teleport>
+
+    <CableFormModal
+      v-if="showCableForm"
+      :cable="editingCable"
+      :path="pendingPath ?? undefined"
+      :default-tipo="drawMode ?? undefined"
+      :metraje-sugerido="pendingPath ? metrajeCalculado(pendingPath) : null"
+      :infra-elementos="infraStore.elementos"
+      :olt-devices="oltStore.devices"
+      @save="handleSaveCable"
+      @cancel="showCableForm = false"
+      @delete="handleDeleteCable"
+    />
+
+    <CableHilosModal
+      v-if="showCableHilos && inspectingCable"
+      :cable="inspectingCable"
+      :infra-elementos="infraStore.elementos"
+      :olt-devices="oltStore.devices"
+      @close="showCableHilos = false"
+      @edit="openCableEditFromHilos"
+      @delete="handleDeleteCable(inspectingCable!)"
+      @open-splice="openSpliceModal"
+    />
+
+    <SpliceDiagramModal
+      v-if="showSpliceModal && spliceElemento"
+      :elemento="spliceElemento"
+      :cables="fibra.cables"
+      :clients="clientsStore.clients"
+      @close="showSpliceModal = false"
+      @trace-result="handleTraceResult"
+    />
   </AppLayout>
 </template>
-
-<style>
-.leaflet-label-custom {
-  background: rgba(15, 23, 42, 0.85) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 6px !important;
-  padding: 2px 6px !important;
-  color: #e2e8f0 !important;
-  backdrop-filter: blur(4px);
-}
-.leaflet-label-custom::before {
-  display: none;
-}
-.leaflet-hover-potencia {
-  background: rgba(15, 23, 42, 0.95) !important;
-  color: #e2e8f0 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 6px !important;
-  padding: 6px 10px !important;
-  font-size: 11px !important;
-}
-.leaflet-hover-potencia::before {
-  display: none;
-}
-</style>

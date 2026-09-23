@@ -38,6 +38,7 @@ export const useInfraElementosStore = defineStore('infraElementos', () => {
     tipo: InfraElementoTipo;
     potencia?: string | null;
     spliteo?: string | null;
+    puertos_total?: number | null;
     is_active?: boolean;
     latitude: number;
     longitude: number;

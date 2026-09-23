@@ -11,8 +11,8 @@ const route = useRoute();
 const BILLING_ROLES = ['SUPERADMIN', 'ADMIN', 'FACTURACION'];
 const SUPERADMIN_ROLES = ['SUPERADMIN'];
 // Modulos administrativos que TECNICO_RED no necesita ver (mismo criterio
-// que NOT_TECNICO en el router) — solo le quedan Instalaciones, Mapa y
-// Soporte.
+// que NOT_TECNICO en el router) — solo le quedan Instalaciones, los dos
+// Mapas (Red y Clientes) y Soporte.
 const HIDDEN_FROM_TECNICO = ['dashboard', 'clientes', 'zonas', 'planes', 'olt', 'mikrotik', 'tr069', 'inventario', 'reportes', 'cortes'];
 
 const ROLE_LABEL: Record<string, string> = {
@@ -36,7 +36,8 @@ const ICONS: Record<string, string> = {
   facturacion: 'M7 4h10a1 1 0 0 1 1 1v15l-3-2-2 2-2-2-2 2-3-2V5a1 1 0 0 1 1-1Zm2 5h6M9 12h6M9 15h3',
   cortes: 'M12 2v6M12 2 8 6m4-4 4 4M5.6 8.6a8 8 0 1 0 12.8 0',
   instalaciones: 'M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21ZM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
-  mapa: 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14M15 6v14',
+  'mapa-red': 'M4 17 9 7l5 7 3-4 3 6M4 20h16M9 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM17 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z',
+  'mapa-clientes': 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14M15 6v14',
   inventario: 'M3 7l9-4 9 4-9 4-9-4Zm0 0v10l9 4 9-4V7M12 11v10',
   tr069: 'M12 20v-6m0 0a4 4 0 0 0 4-4V7a4 4 0 0 0-8 0v3a4 4 0 0 0 4 4Zm-7 2h14M5 8H3m18 0h-2M5 4 3 2m16 2 2-2',
   reportes: 'M4 19V10m6 9V5m6 14v-8m-13 8h16',
@@ -49,7 +50,8 @@ const MODULOS = [
   { key: 'zonas', label: 'Zonas', to: '/zonas', disabled: false },
   { key: 'planes', label: 'Planes', to: '/planes', disabled: false },
   { key: 'instalaciones', label: 'Instalaciones', to: '/instalaciones', disabled: false },
-  { key: 'mapa', label: 'Mapa', to: '/mapa', disabled: false },
+  { key: 'mapa-red', label: 'Mapa de Red', to: '/mapa/red', disabled: false },
+  { key: 'mapa-clientes', label: 'Mapa de Clientes', to: '/mapa/clientes', disabled: false },
   { key: 'olt', label: 'Red & OLTs', to: '/olt', disabled: false },
   { key: 'mikrotik', label: 'MikroTik', to: '/mikrotik', disabled: false },
   { key: 'tr069', label: 'TR-069', to: '/tr069', disabled: false },

@@ -246,6 +246,7 @@ export interface InfraElemento {
   tipo: InfraElementoTipo;
   potencia: string | null;
   spliteo: string | null;
+  puertos_total: number | null;
   is_active: boolean;
   photo_path: string | null;
   latitude: number | null;
@@ -253,6 +254,69 @@ export interface InfraElemento {
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ---- Fase 8: fibra optica (cables, hilos, fusiones, puertos NAP) ----
+
+export type FoCableTipo = 'troncal' | 'ramal';
+export const FO_HILOS_TOTAL_OPCIONES = [6, 12, 24, 48, 72, 96, 144] as const;
+export type FoHilosTotal = (typeof FO_HILOS_TOTAL_OPCIONES)[number];
+export type FoHiloEstadoTipo = 'libre' | 'usado' | 'reservado' | 'dañado';
+export type FoFusionDestinoTipo = 'cable' | 'splitter_out' | 'terminado';
+export type FoNapPuertoEstado = 'libre' | 'ocupado' | 'reservado' | 'dañado';
+
+/** Punto GPS [lat, lng]. */
+export type LatLngPoint = [number, number];
+
+export interface FoCable {
+  id: string;
+  codigo: string;
+  tipo: FoCableTipo;
+  hilos_total: FoHilosTotal;
+  metraje: number | null;
+  path: LatLngPoint[];
+  origen_olt_id: string | null;
+  origen_infra_id: string | null;
+  destino_olt_id: string | null;
+  destino_infra_id: string | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FoHiloEstado {
+  id: string;
+  cable_id: string;
+  hilo_index: number;
+  estado: FoHiloEstadoTipo;
+  notes: string | null;
+  updated_at: string;
+}
+
+export interface FoFusion {
+  id: string;
+  infra_elemento_id: string;
+  cable_a_id: string;
+  hilo_a_index: number;
+  destino_tipo: FoFusionDestinoTipo;
+  cable_b_id: string | null;
+  hilo_b_index: number | null;
+  puerto_nap: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface FoNapPuerto {
+  id: string;
+  infra_elemento_id: string;
+  puerto_numero: number;
+  estado: FoNapPuertoEstado;
+  client_id: string | null;
+  fusion_id: string | null;
+  notes: string | null;
+  updated_at: string;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name'> | null;
 }
 
 export interface Tr069Device {
