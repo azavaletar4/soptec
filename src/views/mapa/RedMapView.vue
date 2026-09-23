@@ -9,6 +9,7 @@ import { useOltStore } from '@/stores/olt';
 import { useMikrotikStore } from '@/stores/mikrotik';
 import { useInfraElementosStore, type InfraElementoWithUrl } from '@/stores/infraElementos';
 import { useFoFibraStore, type TraceResult } from '@/stores/foFibra';
+import { useCatalogsStore } from '@/stores/catalogs';
 import CableFormModal from './CableFormModal.vue';
 import CableHilosModal from './CableHilosModal.vue';
 import SpliceDiagramModal from './SpliceDiagramModal.vue';
@@ -22,6 +23,7 @@ const oltStore = useOltStore();
 const mikrotikStore = useMikrotikStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
+const catalogs = useCatalogsStore();
 
 const loading = ref(true);
 const showOlt = ref(true);
@@ -185,6 +187,7 @@ onMounted(async () => {
       fibra.fetchCables(),
       fibra.fetchFusiones(),
       clientsStore.fetchClients(),
+      catalogs.fetchZones(),
     ]);
   } finally {
     loading.value = false;
@@ -246,6 +249,7 @@ const infraForm = ref({
   notes: '',
   latitude: 0,
   longitude: 0,
+  zone_id: null as string | null,
 });
 const infraPhotoFile = ref<File | null>(null);
 const infraPhotoPath = ref<string | null>(null);
@@ -265,6 +269,7 @@ function openInfraModal(el?: InfraElementoWithUrl) {
       notes: el.notes ?? '',
       latitude: el.latitude ?? 0,
       longitude: el.longitude ?? 0,
+      zone_id: el.zone_id ?? null,
     };
     infraPhotoPath.value = el.photo_path;
   } else {
@@ -280,6 +285,7 @@ function openInfraModal(el?: InfraElementoWithUrl) {
       notes: '',
       latitude: center ? Number(center.lat.toFixed(7)) : -1.83,
       longitude: center ? Number(center.lng.toFixed(7)) : -78.18,
+      zone_id: null,
     };
     infraPhotoPath.value = null;
   }
@@ -304,6 +310,7 @@ async function handleSaveInfra() {
         puertos_total: infraForm.value.puertos_total || null,
         is_active: infraForm.value.is_active,
         notes: infraForm.value.notes || null,
+        zone_id: infraForm.value.tipo === 'caja_nap' ? infraForm.value.zone_id : null,
       });
     } else {
       saved = await infraStore.createElemento({
@@ -316,6 +323,7 @@ async function handleSaveInfra() {
         notes: infraForm.value.notes || null,
         latitude: infraForm.value.latitude,
         longitude: infraForm.value.longitude,
+        zone_id: infraForm.value.tipo === 'caja_nap' ? infraForm.value.zone_id : null,
       });
     }
     if (infraPhotoFile.value) {
@@ -667,6 +675,14 @@ function clearTrace() {
                 <option v-for="n in [4, 8, 16, 24]" :key="n" :value="n">{{ n }} puertos</option>
               </select>
             </div>
+          </div>
+
+          <div v-if="infraForm.tipo === 'caja_nap'" class="mb-3">
+            <label class="field-label">Zona</label>
+            <select v-model="infraForm.zone_id" class="field-input">
+              <option :value="null">Sin zona asignada</option>
+              <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+            </select>
           </div>
 
           <div class="mb-3">

@@ -7,8 +7,10 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useContractsStore } from '@/stores/contracts';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
 import { useAuthStore } from '@/stores/auth';
+import { useInfraElementosStore } from '@/stores/infraElementos';
+import { useFoFibraStore } from '@/stores/foFibra';
 import { getErrorMessage } from '@/lib/errors';
-import { ZONE_CLIENT_LIMIT, type Client, type ClientStatus, type DocumentType } from '@/types/domain';
+import { NAP_CLIENT_LIMIT, ZONE_CLIENT_LIMIT, type Client, type ClientStatus, type DocumentType } from '@/types/domain';
 
 const router = useRouter();
 const clientsStore = useClientsStore();
@@ -16,6 +18,8 @@ const catalogs = useCatalogsStore();
 const contractsStore = useContractsStore();
 const mikrotikStore = useMikrotikStore();
 const auth = useAuthStore();
+const infraStore = useInfraElementosStore();
+const fibra = useFoFibraStore();
 
 // TECNICO_RED puede ver/editar clientes (GPS, fotos), pero no crearlos ni
 // eliminarlos — eso queda para SOPORTE/ADMIN/FACTURACION.
@@ -48,6 +52,35 @@ function zoneClientCount(zoneId: string, excludeClientId?: string | null) {
 const selectedZoneCount = computed(() =>
   form.value.zone_id ? zoneClientCount(form.value.zone_id, editing.value?.id) : null,
 );
+
+// Cajas NAP disponibles para asignar al cliente, con su ocupacion actual y
+// la zona a la que pertenecen (la NAP define la zona, ver onNapChange).
+const napOptions = computed(() =>
+  infraStore.elementos
+    .filter((e) => e.tipo === 'caja_nap')
+    .map((e) => {
+      const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
+      const used = puertos.filter((p) => p.estado === 'ocupado').length;
+      const capacity = e.puertos_total ?? NAP_CLIENT_LIMIT;
+      const zoneName = catalogs.zones.find((z) => z.id === e.zone_id)?.name ?? null;
+      return { id: e.id, name: e.name, used, capacity, zoneId: e.zone_id, zoneName };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)),
+);
+
+function findClientNapId(clientId: string): string {
+  for (const puertos of Object.values(fibra.napPuertosPorElemento)) {
+    const found = puertos.find((p) => p.client_id === clientId && p.estado === 'ocupado');
+    if (found) return found.infra_elemento_id;
+  }
+  return '';
+}
+
+function onNapChange() {
+  if (!form.value.nap_id) return;
+  const nap = napOptions.value.find((n) => n.id === form.value.nap_id);
+  form.value.zone_id = nap?.zoneId ?? '';
+}
 
 // Usuarios PPPoE (del router elegido) que no tienen NINGUN contrato en
 // SmartRayco todavia, leido en vivo de la tabla service_contracts.
@@ -87,6 +120,7 @@ const emptyForm = () => ({
   email: '',
   address: '',
   zone_id: '',
+  nap_id: '',
   status: 'prospect' as ClientStatus,
 });
 
@@ -106,7 +140,14 @@ const STATUS_CLASS: Record<ClientStatus, string> = {
 };
 
 onMounted(async () => {
-  await Promise.all([clientsStore.fetchClients(), catalogs.fetchZones(), contractsStore.fetchContracts(), mikrotikStore.fetchDevices()]);
+  await Promise.all([
+    clientsStore.fetchClients(),
+    catalogs.fetchZones(),
+    contractsStore.fetchContracts(),
+    mikrotikStore.fetchDevices(),
+    infraStore.fetchElementos(),
+    fibra.fetchTodosNapPuertos(),
+  ]);
   if (mikrotikStore.devices.length === 1) {
     unlinkedDeviceId.value = mikrotikStore.devices[0].id;
   }
@@ -135,6 +176,7 @@ function openEdit(client: Client) {
     email: client.email ?? '',
     address: client.address ?? '',
     zone_id: client.zone_id ?? '',
+    nap_id: findClientNapId(client.id),
     status: client.status,
   };
   formError.value = null;
@@ -171,8 +213,9 @@ async function handleSubmit() {
   saving.value = true;
   formError.value = null;
   try {
+    const { nap_id, ...rest } = form.value;
     const payload = {
-      ...form.value,
+      ...rest,
       client_code: form.value.client_code.trim() || null,
       zone_id: form.value.zone_id || null,
       phone: form.value.phone || null,
@@ -180,17 +223,34 @@ async function handleSubmit() {
       email: form.value.email || null,
       address: form.value.address || null,
     };
+    let savedId: string;
     if (editing.value) {
-      await clientsStore.updateClient(editing.value.id, payload);
-      showModal.value = false;
+      const saved = await clientsStore.updateClient(editing.value.id, payload);
+      savedId = saved.id;
     } else {
       const created = await clientsStore.createClient(payload);
-      showModal.value = false;
-      if (pendingPppoeHint.value) {
-        // El cliente viene de un usuario PPPoE sin contrato: seguimos directo
-        // a su ficha para crear el contrato y terminar de vincularlo ahi.
-        router.push(`/clientes/${created.id}`);
+      savedId = created.id;
+    }
+
+    // Sincroniza la caja NAP (fo_nap_puertos, ver stores/foFibra.ts): el
+    // cliente ya se guardo, asi que un fallo aca no debe perder los demas
+    // datos — solo se avisa para que se ajuste manualmente si hace falta.
+    try {
+      if (nap_id) {
+        const nap = napOptions.value.find((n) => n.id === nap_id);
+        await fibra.assignClientToNap(nap_id, savedId, nap?.capacity ?? NAP_CLIENT_LIMIT);
+      } else {
+        await fibra.unassignClient(savedId);
       }
+    } catch (e) {
+      alert(getErrorMessage(e, 'El cliente se guardo, pero no se pudo asignar la caja NAP'));
+    }
+
+    showModal.value = false;
+    if (!editing.value && pendingPppoeHint.value) {
+      // El cliente viene de un usuario PPPoE sin contrato: seguimos directo
+      // a su ficha para crear el contrato y terminar de vincularlo ahi.
+      router.push(`/clientes/${savedId}`);
     }
   } catch (e) {
     formError.value = getErrorMessage(e, 'Error al guardar el cliente');
@@ -393,20 +453,37 @@ function goToDetail(client: Client) {
             </div>
           </div>
 
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Caja NAP</label>
+            <select v-model="form.nap_id" class="field-input" @change="onNapChange">
+              <option value="">Sin asignar</option>
+              <option v-for="n in napOptions" :key="n.id" :value="n.id">
+                {{ n.name }}{{ n.zoneName ? ` · ${n.zoneName}` : ' · sin zona' }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity ? ' (LLENA)' : '' }}
+              </option>
+            </select>
+            <p class="text-xs text-slate-400 mt-1">Al elegir la caja NAP, la zona del cliente se toma automaticamente de esa NAP.</p>
+          </div>
+
           <div class="grid grid-cols-2 gap-3 mb-4">
             <div>
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs text-slate-600">Zona</label>
-                <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="showNewZone = !showNewZone">
+                <button
+                  v-if="!form.nap_id"
+                  type="button"
+                  class="text-xs text-sky-600 hover:text-sky-700"
+                  @click="showNewZone = !showNewZone"
+                >
                   {{ showNewZone ? 'Cancelar' : '+ Nueva zona' }}
                 </button>
               </div>
-              <select v-if="!showNewZone" v-model="form.zone_id" class="field-input">
+              <select v-if="!showNewZone" v-model="form.zone_id" class="field-input" :disabled="!!form.nap_id">
                 <option value="">Sin asignar</option>
                 <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
               </select>
+              <p v-if="form.nap_id" class="text-xs text-slate-400 mt-1">Definida por la caja NAP elegida arriba.</p>
               <p
-                v-if="!showNewZone && selectedZoneCount !== null"
+                v-else-if="selectedZoneCount !== null"
                 class="text-xs mt-1"
                 :class="selectedZoneCount >= ZONE_CLIENT_LIMIT ? 'text-red-600' : selectedZoneCount >= ZONE_CLIENT_LIMIT * 0.9 ? 'text-amber-600' : 'text-slate-400'"
               >

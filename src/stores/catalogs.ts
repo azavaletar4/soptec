@@ -37,6 +37,21 @@ export const useCatalogsStore = defineStore('catalogs', () => {
     return data as Zone;
   }
 
+  async function deleteZone(id: string) {
+    const [{ count: clientCount, error: clientErr }, { count: napCount, error: napErr }] = await Promise.all([
+      supabase.from('clients').select('id', { count: 'exact', head: true }).eq('zone_id', id),
+      supabase.from('infra_elementos').select('id', { count: 'exact', head: true }).eq('zone_id', id),
+    ]);
+    if (clientErr) throw clientErr;
+    if (napErr) throw napErr;
+    if (clientCount) throw new Error(`No se puede eliminar: tiene ${clientCount} cliente(s) asignado(s). Reasignalos primero.`);
+    if (napCount) throw new Error(`No se puede eliminar: tiene ${napCount} caja(s) NAP asignada(s). Reasignalas primero.`);
+
+    const { error } = await supabase.from('zones').delete().eq('id', id);
+    if (error) throw error;
+    zones.value = zones.value.filter((z) => z.id !== id);
+  }
+
   async function fetchPlans() {
     if (plans.value.length) return;
     const { data, error } = await supabase
@@ -69,5 +84,17 @@ export const useCatalogsStore = defineStore('catalogs', () => {
     plans.value = [];
   }
 
-  return { zones, plans, staff, fetchZones, createZone, updateZone, fetchPlans, fetchStaff, resetZones, resetPlans };
+  return {
+    zones,
+    plans,
+    staff,
+    fetchZones,
+    createZone,
+    updateZone,
+    deleteZone,
+    fetchPlans,
+    fetchStaff,
+    resetZones,
+    resetPlans,
+  };
 });

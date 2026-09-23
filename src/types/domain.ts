@@ -21,6 +21,10 @@ export type InfraElementoTipo = 'caja_nap' | 'splitter' | 'manga' | 'armario' | 
 /** Tope de clientes por zona de cobertura (regla de negocio, no de esquema). */
 export const ZONE_CLIENT_LIMIT = 128;
 
+/** Tope de clientes por caja NAP y de cajas NAP por zona (regla de negocio, no de esquema). */
+export const NAP_CLIENT_LIMIT = 16;
+export const ZONE_NAP_LIMIT = 16;
+
 export interface Zone {
   id: string;
   name: string;
@@ -252,6 +256,7 @@ export interface InfraElemento {
   latitude: number | null;
   longitude: number | null;
   notes: string | null;
+  zone_id: string | null;
   created_at: string;
   updated_at: string;
 }

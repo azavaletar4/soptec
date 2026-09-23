@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import type { InfraElemento, InfraElementoTipo } from '@/types/domain';
+import { ZONE_NAP_LIMIT, type InfraElemento, type InfraElementoTipo } from '@/types/domain';
 
 const BUCKET = 'infra-photos';
 const SIGNED_URL_TTL = 3600;
@@ -20,6 +20,18 @@ export const useInfraElementosStore = defineStore('infraElementos', () => {
   const elementos = ref<InfraElementoWithUrl[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+
+  /** Cuenta cuantas cajas NAP ya tiene una zona (para el tope de negocio de ZONE_NAP_LIMIT). */
+  function countNapsInZone(zoneId: string, excludeId?: string) {
+    return elementos.value.filter((e) => e.tipo === 'caja_nap' && e.zone_id === zoneId && e.id !== excludeId).length;
+  }
+
+  function assertNapZoneCapacity(tipo: InfraElementoTipo, zoneId: string | null | undefined, excludeId?: string) {
+    if (tipo !== 'caja_nap' || !zoneId) return;
+    if (countNapsInZone(zoneId, excludeId) >= ZONE_NAP_LIMIT) {
+      throw new Error(`No se puede asignar: la zona ya tiene ${ZONE_NAP_LIMIT} cajas NAP (limite maximo).`);
+    }
+  }
 
   async function fetchElementos() {
     loading.value = true;
@@ -43,7 +55,9 @@ export const useInfraElementosStore = defineStore('infraElementos', () => {
     latitude: number;
     longitude: number;
     notes?: string | null;
+    zone_id?: string | null;
   }) {
+    assertNapZoneCapacity(payload.tipo, payload.zone_id);
     const { data, error: err } = await supabase.from('infra_elementos').insert(payload).select().single();
     if (err) throw err;
     const withUrl = await withPhotoUrl(data as InfraElemento);
@@ -52,6 +66,11 @@ export const useInfraElementosStore = defineStore('infraElementos', () => {
   }
 
   async function updateElemento(id: string, payload: Partial<InfraElemento>) {
+    const existing = elementos.value.find((e) => e.id === id);
+    const effectiveTipo = payload.tipo ?? existing?.tipo;
+    const effectiveZoneId = payload.zone_id !== undefined ? payload.zone_id : existing?.zone_id;
+    if (effectiveTipo) assertNapZoneCapacity(effectiveTipo, effectiveZoneId, id);
+
     const { data, error: err } = await supabase.from('infra_elementos').update(payload).eq('id', id).select().single();
     if (err) throw err;
     const withUrl = await withPhotoUrl(data as InfraElemento);

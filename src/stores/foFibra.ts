@@ -198,6 +198,43 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     return data as FoNapPuerto;
   }
 
+  /** Libera cualquier puerto NAP que tenga asignado este cliente (lo deja 'libre'). */
+  async function unassignClient(clientId: string) {
+    const { data, error } = await supabase
+      .from('fo_nap_puertos')
+      .update({ estado: 'libre', client_id: null })
+      .eq('client_id', clientId)
+      .select('*, clients(id, first_name, last_name)');
+    if (error) throw error;
+    for (const row of (data ?? []) as FoNapPuerto[]) {
+      const list = napPuertosPorElemento.value[row.infra_elemento_id] ?? [];
+      const idx = list.findIndex((p) => p.id === row.id);
+      if (idx !== -1) list[idx] = row;
+    }
+  }
+
+  /**
+   * Asigna un cliente a una caja NAP desde la ficha de cliente (fuera del
+   * diagrama de empalmes): libera cualquier puerto que ya tuviera en otra
+   * NAP, reutiliza el primer puerto 'libre' de la NAP destino, o crea uno
+   * nuevo si hay cupo (bajo `capacity`, ver NAP_CLIENT_LIMIT).
+   */
+  async function assignClientToNap(infraElementoId: string, clientId: string, capacity: number) {
+    await unassignClient(clientId);
+
+    const puertos = napPuertosPorElemento.value[infraElementoId] ?? (await fetchNapPuertos(infraElementoId));
+    const libre = puertos.find((p) => p.estado === 'libre');
+    if (libre) {
+      return upsertNapPuerto({ infra_elemento_id: infraElementoId, puerto_numero: libre.puerto_numero, estado: 'ocupado', client_id: clientId });
+    }
+
+    if (puertos.length >= capacity) {
+      throw new Error(`La caja NAP ya alcanzó su capacidad máxima (${capacity} clientes). Libera un puerto antes de asignar este cliente.`);
+    }
+    const nextPuerto = puertos.reduce((max, p) => Math.max(max, p.puerto_numero), 0) + 1;
+    return upsertNapPuerto({ infra_elemento_id: infraElementoId, puerto_numero: nextPuerto, estado: 'ocupado', client_id: clientId });
+  }
+
   /**
    * Trazabilidad óptica: partiendo de un puerto de cliente en una caja NAP,
    * recorre fusión por fusión hacia atrás (aguas arriba) hasta llegar a una
@@ -271,6 +308,8 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     fetchTodosNapPuertos,
     fetchNapPuertos,
     upsertNapPuerto,
+    unassignClient,
+    assignClientToNap,
     traceFromNapPuerto,
   };
 });
