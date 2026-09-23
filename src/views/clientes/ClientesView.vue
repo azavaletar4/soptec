@@ -53,20 +53,32 @@ const selectedZoneCount = computed(() =>
   form.value.zone_id ? zoneClientCount(form.value.zone_id, editing.value?.id) : null,
 );
 
-// Cajas NAP disponibles para asignar al cliente, con su ocupacion actual y
-// la zona a la que pertenecen (la NAP define la zona, ver onNapChange).
-const napOptions = computed(() =>
+// Cajas NAP disponibles para asignar al cliente, con su ocupacion actual.
+// Se filtran por la zona ya elegida (primero zona, luego NAP) para no
+// mostrar cajas de otras zonas.
+const napOptionsAll = computed(() =>
   infraStore.elementos
     .filter((e) => e.tipo === 'caja_nap')
     .map((e) => {
       const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
       const used = puertos.filter((p) => p.estado === 'ocupado').length;
       const capacity = e.puertos_total ?? NAP_CLIENT_LIMIT;
-      const zoneName = catalogs.zones.find((z) => z.id === e.zone_id)?.name ?? null;
-      return { id: e.id, name: e.name, used, capacity, zoneId: e.zone_id, zoneName };
+      return { id: e.id, name: e.name, used, capacity, zoneId: e.zone_id };
     })
     .sort((a, b) => a.name.localeCompare(b.name)),
 );
+
+const napOptions = computed(() => napOptionsAll.value.filter((n) => n.zoneId === form.value.zone_id));
+
+// Caso raro: la NAP ya asignada al cliente cambio de zona en el mapa (ver
+// /mapa/red) despues de asignarla aqui, y ya no coincide con la zona actual
+// del cliente. No se limpia sola (evita desasignar sin querer al guardar) —
+// solo se avisa.
+const currentNapMismatch = computed(() => {
+  if (!form.value.nap_id) return null;
+  const nap = napOptionsAll.value.find((n) => n.id === form.value.nap_id);
+  return nap && nap.zoneId !== form.value.zone_id ? nap : null;
+});
 
 function findClientNapId(clientId: string): string {
   for (const puertos of Object.values(fibra.napPuertosPorElemento)) {
@@ -76,10 +88,12 @@ function findClientNapId(clientId: string): string {
   return '';
 }
 
-function onNapChange() {
-  if (!form.value.nap_id) return;
-  const nap = napOptions.value.find((n) => n.id === form.value.nap_id);
-  form.value.zone_id = nap?.zoneId ?? '';
+// Si cambia la zona y la NAP elegida ya no pertenece a ella, se limpia (la
+// zona manda sobre la NAP: primero se elige zona, luego se filtra la NAP).
+function onZoneChange() {
+  if (form.value.nap_id && !napOptions.value.some((n) => n.id === form.value.nap_id)) {
+    form.value.nap_id = '';
+  }
 }
 
 // Usuarios PPPoE (del router elegido) que no tienen NINGUN contrato en
@@ -453,37 +467,20 @@ function goToDetail(client: Client) {
             </div>
           </div>
 
-          <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Caja NAP</label>
-            <select v-model="form.nap_id" class="field-input" @change="onNapChange">
-              <option value="">Sin asignar</option>
-              <option v-for="n in napOptions" :key="n.id" :value="n.id">
-                {{ n.name }}{{ n.zoneName ? ` · ${n.zoneName}` : ' · sin zona' }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity ? ' (LLENA)' : '' }}
-              </option>
-            </select>
-            <p class="text-xs text-slate-400 mt-1">Al elegir la caja NAP, la zona del cliente se toma automaticamente de esa NAP.</p>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs text-slate-600">Zona</label>
-                <button
-                  v-if="!form.nap_id"
-                  type="button"
-                  class="text-xs text-sky-600 hover:text-sky-700"
-                  @click="showNewZone = !showNewZone"
-                >
+                <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="showNewZone = !showNewZone">
                   {{ showNewZone ? 'Cancelar' : '+ Nueva zona' }}
                 </button>
               </div>
-              <select v-if="!showNewZone" v-model="form.zone_id" class="field-input" :disabled="!!form.nap_id">
+              <select v-if="!showNewZone" v-model="form.zone_id" class="field-input" @change="onZoneChange">
                 <option value="">Sin asignar</option>
                 <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
               </select>
-              <p v-if="form.nap_id" class="text-xs text-slate-400 mt-1">Definida por la caja NAP elegida arriba.</p>
               <p
-                v-else-if="selectedZoneCount !== null"
+                v-if="selectedZoneCount !== null"
                 class="text-xs mt-1"
                 :class="selectedZoneCount >= ZONE_CLIENT_LIMIT ? 'text-red-600' : selectedZoneCount >= ZONE_CLIENT_LIMIT * 0.9 ? 'text-amber-600' : 'text-slate-400'"
               >
@@ -516,6 +513,22 @@ function goToDetail(client: Client) {
                 <option value="retired">Baja</option>
               </select>
             </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Caja NAP</label>
+            <select v-model="form.nap_id" class="field-input" :disabled="!form.zone_id">
+              <option value="">Sin asignar</option>
+              <option v-for="n in napOptions" :key="n.id" :value="n.id">
+                {{ n.name }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity ? ' (LLENA)' : '' }}
+              </option>
+            </select>
+            <p v-if="!form.zone_id" class="text-xs text-slate-400 mt-1">Elige primero una zona para ver sus cajas NAP.</p>
+            <p v-else-if="!napOptions.length" class="text-xs text-slate-400 mt-1">Esa zona no tiene cajas NAP asignadas (ver /mapa/red).</p>
+            <p v-if="currentNapMismatch" class="text-xs text-amber-600 mt-1">
+              ⚠ El cliente sigue asignado a "{{ currentNapMismatch.name }}", que ya no pertenece a esta zona (cambió en el mapa). Se
+              mantiene igual a menos que elijas otra NAP aquí.
+            </p>
           </div>
 
           <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
