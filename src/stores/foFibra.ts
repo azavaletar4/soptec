@@ -91,6 +91,19 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     return cable;
   }
 
+  /**
+   * Sincroniza el estado local tras borrar un elemento pasivo que era
+   * origen/destino de algun cable: en la BD ese extremo ya quedo en null
+   * (on delete set null, ver fase30) — esto solo refleja lo mismo aca sin
+   * otro viaje a la red.
+   */
+  function clearInfraLinks(infraElementoId: string) {
+    for (const c of cables.value) {
+      if (c.origen_infra_id === infraElementoId) c.origen_infra_id = null;
+      if (c.destino_infra_id === infraElementoId) c.destino_infra_id = null;
+    }
+  }
+
   async function updateCable(id: string, payload: Partial<FoCable>) {
     const { data, error } = await supabase.from('fo_cables').update(payload).eq('id', id).select().single();
     if (error) throw error;
@@ -340,6 +353,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     createCable,
     updateCable,
     deleteCable,
+    clearInfraLinks,
     fetchHiloEstados,
     setHiloEstado,
     fetchFusionesDeElemento,

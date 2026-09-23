@@ -62,6 +62,8 @@ interface DeleteInfraAction {
   snapshot: InfraElemento;
   puertos: FoNapPuerto[];
   fusiones: FoFusion[];
+  /** Cables que tenian esta caja como origen/destino (ver fase30: al borrar la caja, el cable no se borra, solo pierde ese extremo). */
+  cableLinks: { cableId: string; field: 'origen_infra_id' | 'destino_infra_id' }[];
 }
 type HistoryAction = MoveAction | DeleteInfraAction;
 
@@ -104,13 +106,19 @@ async function undoDeleteInfra(action: DeleteInfraAction) {
   });
   const fusionIdMap = await fibra.restoreFusiones(created.id, action.fusiones);
   await fibra.restoreNapPuertos(created.id, action.puertos, fusionIdMap);
+  for (const link of action.cableLinks) {
+    await fibra.updateCable(link.cableId, { [link.field]: created.id });
+  }
   action.snapshot = { ...action.snapshot, id: created.id };
   renderInfraMarkers();
+  renderCables();
 }
 
 async function redoDeleteInfra(action: DeleteInfraAction) {
   await infraStore.deleteElemento(action.snapshot.id);
+  fibra.clearInfraLinks(action.snapshot.id);
   renderInfraMarkers();
+  renderCables();
 }
 
 const undoing = ref(false);
@@ -466,18 +474,29 @@ async function handleSaveInfra() {
 
 async function handleDeleteInfra() {
   if (!editingInfraId.value) return;
-  const ok = confirm(`¿Eliminar "${infraForm.value.name}"? Puedes deshacerlo con el botón "Deshacer" o Ctrl+Z.`);
+  const id = editingInfraId.value;
+  const cableLinks: DeleteInfraAction['cableLinks'] = [];
+  for (const c of fibra.cables) {
+    if (c.origen_infra_id === id) cableLinks.push({ cableId: c.id, field: 'origen_infra_id' });
+    if (c.destino_infra_id === id) cableLinks.push({ cableId: c.id, field: 'destino_infra_id' });
+  }
+  const cableWarning = cableLinks.length
+    ? ` Tiene ${cableLinks.length} cable(s) conectados: quedarán sin ese extremo (podrás reconectarlos después desde el editor de cables).`
+    : '';
+  const ok = confirm(`¿Eliminar "${infraForm.value.name}"?${cableWarning} Puedes deshacerlo con el botón "Deshacer" o Ctrl+Z.`);
   if (!ok) return;
   infraSaving.value = true;
   try {
-    const snapshot = infraStore.elementos.find((e) => e.id === editingInfraId.value);
+    const snapshot = infraStore.elementos.find((e) => e.id === id);
     if (!snapshot) throw new Error('Elemento no encontrado');
-    const puertos = await fibra.fetchNapPuertos(editingInfraId.value);
-    const fusiones = fibra.fusiones.filter((f) => f.infra_elemento_id === editingInfraId.value);
-    await infraStore.deleteElemento(editingInfraId.value);
-    pushHistory({ kind: 'delete-infra', snapshot: { ...snapshot }, puertos, fusiones });
+    const puertos = await fibra.fetchNapPuertos(id);
+    const fusiones = fibra.fusiones.filter((f) => f.infra_elemento_id === id);
+    await infraStore.deleteElemento(id);
+    fibra.clearInfraLinks(id);
+    pushHistory({ kind: 'delete-infra', snapshot: { ...snapshot }, puertos, fusiones, cableLinks });
     showInfraModal.value = false;
     renderInfraMarkers();
+    renderCables();
   } catch (e) {
     infraError.value = getErrorMessage(e, 'Error al eliminar');
   } finally {
