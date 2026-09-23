@@ -57,6 +57,24 @@ export interface RouterResource {
   'board-name'?: string;
 }
 
+export interface ReconcileMismatch {
+  contractId: string;
+  contractNumber: string;
+  deviceName: string;
+  pppoeUsername: string;
+  kind: 'profile_actualizado' | 'secreto_no_encontrado' | 'estado_inconsistente';
+  detail: string;
+}
+
+export interface ReconcileReport {
+  ranAt: string;
+  devicesChecked: number;
+  contractsChecked: number;
+  profilesUpdated: number;
+  mismatches: ReconcileMismatch[];
+  errors: { deviceName: string; message: string }[];
+}
+
 export const useMikrotikStore = defineStore('mikrotik', () => {
   const devices = ref<MikrotikDevice[]>([]);
   const loading = ref(false);
@@ -148,6 +166,14 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<DhcpLease[]>(`/api/mikrotik-devices/${id}/dhcp-leases`);
   }
 
+  function fetchReconcileReport() {
+    return apiFetch<ReconcileReport | null>('/api/mikrotik-devices/reconcile/report');
+  }
+
+  function runReconcileNow() {
+    return apiFetch<ReconcileReport>('/api/mikrotik-devices/reconcile/run', { method: 'POST' });
+  }
+
   return {
     devices,
     loading,
@@ -165,6 +191,8 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     fetchPppActive,
     disconnectPppActive,
     fetchDhcpLeases,
+    fetchReconcileReport,
+    runReconcileNow,
   };
 });
 

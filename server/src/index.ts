@@ -15,8 +15,10 @@ import { xuiRoutes } from './routes/xui';
 import { debtHoldRoutes } from './routes/debtHold';
 import { invoicesRoutes } from './routes/invoices';
 import { soporteRoutes } from './routes/soporte';
+import { alertsRoutes } from './routes/alerts';
 import { startTr069Scheduler } from './services/tr069Scheduler';
 import { startDebtHoldScheduler } from './services/debtHoldScheduler';
+import { startMikrotikReconcileScheduler } from './services/mikrotikReconcileScheduler';
 
 const app = new Hono();
 
@@ -40,6 +42,9 @@ app.route('/api/xui', xuiRoutes);
 app.route('/api/debt-hold', debtHoldRoutes);
 app.route('/api/invoices', invoicesRoutes);
 app.route('/api/soporte', soporteRoutes);
+// Sin requireAuth: la llama LibreNMS (un sistema externo), no un usuario
+// logueado — se protege con ALERTS_WEBHOOK_SECRET en su lugar (ver alerts.ts).
+app.route('/api/alerts', alertsRoutes);
 
 // En produccion (Fase 14: PM2 + Cloudflare Tunnel) un solo proceso sirve
 // API + frontend compilado — no hace falta un servidor separado (Vite dev
@@ -59,3 +64,4 @@ serve({ fetch: app.fetch, port }, (info) => {
 
 startTr069Scheduler();
 startDebtHoldScheduler();
+startMikrotikReconcileScheduler();

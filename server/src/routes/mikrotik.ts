@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
+import { getLastReconcileReport, reconcileMikrotik } from '../services/mikrotikReconcileService';
 
 export const mikrotikRoutes = new Hono();
 
@@ -41,6 +42,22 @@ function targetFor(device: MikrotikDeviceRow): MikrotikTarget {
     password: device.password,
   };
 }
+
+// ---- Reconciliacion MikroTik -> Panel (Fase 31, ver mikrotikReconcileService.ts) ----
+// Registradas antes de "/:id/..." para que "reconcile" nunca se confunda con un id de router.
+
+mikrotikRoutes.get('/reconcile/report', requireRole(...STAFF_READ), async (c) => {
+  return c.json(getLastReconcileReport());
+});
+
+mikrotikRoutes.post('/reconcile/run', requireRole(...PPP_WRITE), async (c) => {
+  try {
+    const report = await reconcileMikrotik();
+    return c.json(report);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al reconciliar' }, 500);
+  }
+});
 
 // ---- CRUD mikrotik_devices ----
 
