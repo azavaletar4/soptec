@@ -154,6 +154,44 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     fusiones.value = fusiones.value.filter((f) => f.id !== id);
   }
 
+  /**
+   * Recrea fusiones (ids nuevos: las originales ya se perdieron en cascada
+   * al borrar el elemento) en un elemento pasivo restaurado. Usado por el
+   * deshacer del mapa (ver RedMapView.vue). Devuelve el mapeo id-viejo →
+   * id-nuevo para poder re-enlazar los puertos NAP que las referenciaban.
+   */
+  async function restoreFusiones(infraElementoId: string, snapshot: FoFusion[]) {
+    const idMap: Record<string, string> = {};
+    for (const f of snapshot) {
+      const created = await createFusion({
+        infra_elemento_id: infraElementoId,
+        cable_a_id: f.cable_a_id,
+        hilo_a_index: f.hilo_a_index,
+        destino_tipo: f.destino_tipo,
+        cable_b_id: f.cable_b_id,
+        hilo_b_index: f.hilo_b_index,
+        puerto_nap: f.puerto_nap,
+        notes: f.notes,
+      });
+      idMap[f.id] = created.id;
+    }
+    return idMap;
+  }
+
+  /** Recrea puertos NAP (ver restoreFusiones) reenlazando cada fusion_id a su id nuevo. */
+  async function restoreNapPuertos(infraElementoId: string, snapshot: FoNapPuerto[], fusionIdMap: Record<string, string>) {
+    for (const p of snapshot) {
+      await upsertNapPuerto({
+        infra_elemento_id: infraElementoId,
+        puerto_numero: p.puerto_numero,
+        estado: p.estado,
+        client_id: p.client_id,
+        fusion_id: p.fusion_id ? (fusionIdMap[p.fusion_id] ?? null) : null,
+        notes: p.notes,
+      });
+    }
+  }
+
   /** Carga la ocupación de puertos de TODAS las cajas NAP de una vez (resumen para el mapa de clientes). */
   async function fetchTodosNapPuertos() {
     const { data, error } = await supabase.from('fo_nap_puertos').select('*, clients(id, first_name, last_name)').order('puerto_numero');
@@ -305,6 +343,8 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     fetchFusionesDeElemento,
     createFusion,
     deleteFusion,
+    restoreFusiones,
+    restoreNapPuertos,
     fetchTodosNapPuertos,
     fetchNapPuertos,
     upsertNapPuerto,

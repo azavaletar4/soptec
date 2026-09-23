@@ -15,7 +15,7 @@ import CableHilosModal from './CableHilosModal.vue';
 import SpliceDiagramModal from './SpliceDiagramModal.vue';
 import { INFRA_STYLE, INFRA_LABEL, INACTIVE_COLOR, OLT_GLYPH, MIKROTIK_GLYPH, teardropIcon, infraIcon, permanentLabel } from './mapIcons';
 import { getErrorMessage } from '@/lib/errors';
-import type { FoCable, FoCableTipo, InfraElementoTipo, LatLngPoint } from '@/types/domain';
+import type { FoCable, FoCableTipo, FoFusion, FoNapPuerto, InfraElemento, InfraElementoTipo, LatLngPoint } from '@/types/domain';
 
 const router = useRouter();
 const clientsStore = useClientsStore();
@@ -45,6 +45,121 @@ const oltsWithoutGps = computed(() => oltStore.devices.filter((d) => d.lat == nu
 const mikrotiksWithGps = computed(() => mikrotikStore.devices.filter((d) => d.latitude != null && d.longitude != null));
 const mikrotiksWithoutGps = computed(() => mikrotikStore.devices.filter((d) => d.latitude == null || d.longitude == null));
 
+// ---- Historial de deshacer/rehacer (mover u eliminar un elemento por error) ----
+interface LatLng {
+  lat: number;
+  lng: number;
+}
+interface MoveAction {
+  kind: 'move';
+  target: 'olt' | 'mikrotik' | 'infra';
+  id: string;
+  before: LatLng;
+  after: LatLng;
+}
+interface DeleteInfraAction {
+  kind: 'delete-infra';
+  snapshot: InfraElemento;
+  puertos: FoNapPuerto[];
+  fusiones: FoFusion[];
+}
+type HistoryAction = MoveAction | DeleteInfraAction;
+
+const MAX_HISTORY = 50;
+const undoStack = ref<HistoryAction[]>([]);
+const redoStack = ref<HistoryAction[]>([]);
+
+function pushHistory(action: HistoryAction) {
+  undoStack.value.push(action);
+  if (undoStack.value.length > MAX_HISTORY) undoStack.value.shift();
+  redoStack.value = [];
+}
+
+async function applyMove(action: MoveAction, coords: LatLng) {
+  if (action.target === 'olt') {
+    await oltStore.updateCoords(action.id, coords.lat, coords.lng);
+    renderOltMarkers();
+  } else if (action.target === 'mikrotik') {
+    await mikrotikStore.updateDevice(action.id, { latitude: coords.lat, longitude: coords.lng });
+    renderMikrotikMarkers();
+  } else {
+    await infraStore.updateCoords(action.id, coords.lat, coords.lng);
+    renderInfraMarkers();
+  }
+}
+
+/** Recrea el elemento pasivo borrado (nuevo id: los originales ya se perdieron en cascada) junto con sus fusiones y puertos NAP. */
+async function undoDeleteInfra(action: DeleteInfraAction) {
+  const created = await infraStore.createElemento({
+    name: action.snapshot.name,
+    tipo: action.snapshot.tipo,
+    potencia: action.snapshot.potencia,
+    spliteo: action.snapshot.spliteo,
+    puertos_total: action.snapshot.puertos_total,
+    is_active: action.snapshot.is_active,
+    latitude: action.snapshot.latitude ?? 0,
+    longitude: action.snapshot.longitude ?? 0,
+    notes: action.snapshot.notes,
+    zone_id: action.snapshot.zone_id,
+  });
+  const fusionIdMap = await fibra.restoreFusiones(created.id, action.fusiones);
+  await fibra.restoreNapPuertos(created.id, action.puertos, fusionIdMap);
+  action.snapshot = { ...action.snapshot, id: created.id };
+  renderInfraMarkers();
+}
+
+async function redoDeleteInfra(action: DeleteInfraAction) {
+  await infraStore.deleteElemento(action.snapshot.id);
+  renderInfraMarkers();
+}
+
+const undoing = ref(false);
+
+async function undo() {
+  const action = undoStack.value.pop();
+  if (!action) return;
+  undoing.value = true;
+  try {
+    if (action.kind === 'move') await applyMove(action, action.before);
+    else await undoDeleteInfra(action);
+    redoStack.value.push(action);
+  } catch (e) {
+    undoStack.value.push(action);
+    alert(getErrorMessage(e, 'No se pudo deshacer la acción'));
+  } finally {
+    undoing.value = false;
+  }
+}
+
+async function redo() {
+  const action = redoStack.value.pop();
+  if (!action) return;
+  undoing.value = true;
+  try {
+    if (action.kind === 'move') await applyMove(action, action.after);
+    else await redoDeleteInfra(action);
+    undoStack.value.push(action);
+  } catch (e) {
+    redoStack.value.push(action);
+    alert(getErrorMessage(e, 'No se pudo rehacer la acción'));
+  } finally {
+    undoing.value = false;
+  }
+}
+
+function onHistoryKeydown(e: KeyboardEvent) {
+  const tag = (e.target as HTMLElement)?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (!(e.ctrlKey || e.metaKey) || undoing.value) return;
+  if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  } else if (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) {
+    e.preventDefault();
+    redo();
+  }
+}
+
 function renderOltMarkers() {
   if (!oltLayer) return;
   oltLayer.clearLayers();
@@ -57,8 +172,11 @@ function renderOltMarkers() {
     );
     marker.on('dragend', async () => {
       const pos = marker.getLatLng();
+      const before = { lat: d.lat as number, lng: d.lng as number };
+      const after = { lat: Number(pos.lat.toFixed(7)), lng: Number(pos.lng.toFixed(7)) };
       try {
-        await oltStore.updateCoords(d.id, Number(pos.lat.toFixed(7)), Number(pos.lng.toFixed(7)));
+        await oltStore.updateCoords(d.id, after.lat, after.lng);
+        pushHistory({ kind: 'move', target: 'olt', id: d.id, before, after });
       } catch (e) {
         alert(getErrorMessage(e, 'Error al guardar la posición de la OLT'));
       }
@@ -79,8 +197,11 @@ function renderMikrotikMarkers() {
     );
     marker.on('dragend', async () => {
       const pos = marker.getLatLng();
+      const before = { lat: d.latitude as number, lng: d.longitude as number };
+      const after = { lat: Number(pos.lat.toFixed(7)), lng: Number(pos.lng.toFixed(7)) };
       try {
-        await mikrotikStore.updateDevice(d.id, { latitude: Number(pos.lat.toFixed(7)), longitude: Number(pos.lng.toFixed(7)) });
+        await mikrotikStore.updateDevice(d.id, { latitude: after.lat, longitude: after.lng });
+        pushHistory({ kind: 'move', target: 'mikrotik', id: d.id, before, after });
       } catch (e) {
         alert(getErrorMessage(e, 'Error al guardar la posición del router'));
       }
@@ -116,8 +237,11 @@ function renderInfraMarkers() {
 
     marker.on('dragend', async () => {
       const pos = marker.getLatLng();
+      const before = { lat: el.latitude as number, lng: el.longitude as number };
+      const after = { lat: Number(pos.lat.toFixed(7)), lng: Number(pos.lng.toFixed(7)) };
       try {
-        await infraStore.updateCoords(el.id, Number(pos.lat.toFixed(7)), Number(pos.lng.toFixed(7)));
+        await infraStore.updateCoords(el.id, after.lat, after.lng);
+        pushHistory({ kind: 'move', target: 'infra', id: el.id, before, after });
       } catch (e) {
         alert(getErrorMessage(e, 'Error al guardar la posición'));
       }
@@ -177,6 +301,7 @@ onMounted(async () => {
   drawLayer = L.layerGroup().addTo(map);
   traceLayer = L.layerGroup().addTo(map);
   map.on('click', onMapClick);
+  window.addEventListener('keydown', onHistoryKeydown);
 
   loading.value = true;
   try {
@@ -200,6 +325,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onHistoryKeydown);
   map?.remove();
   map = null;
 });
@@ -340,11 +466,16 @@ async function handleSaveInfra() {
 
 async function handleDeleteInfra() {
   if (!editingInfraId.value) return;
-  const ok = confirm(`¿Eliminar "${infraForm.value.name}"?`);
+  const ok = confirm(`¿Eliminar "${infraForm.value.name}"? Puedes deshacerlo con el botón "Deshacer" o Ctrl+Z.`);
   if (!ok) return;
   infraSaving.value = true;
   try {
+    const snapshot = infraStore.elementos.find((e) => e.id === editingInfraId.value);
+    if (!snapshot) throw new Error('Elemento no encontrado');
+    const puertos = await fibra.fetchNapPuertos(editingInfraId.value);
+    const fusiones = fibra.fusiones.filter((f) => f.infra_elemento_id === editingInfraId.value);
     await infraStore.deleteElemento(editingInfraId.value);
+    pushHistory({ kind: 'delete-infra', snapshot: { ...snapshot }, puertos, fusiones });
     showInfraModal.value = false;
     renderInfraMarkers();
   } catch (e) {
@@ -570,6 +701,22 @@ function clearTrace() {
           <span class="w-3 h-0.5 rounded-full inline-block" style="background:#0ea5e9"></span> Cables ({{ fibra.cables.length }})
         </button>
         <button class="btn-primary text-xs" @click="openInfraModal()">+ Elemento pasivo</button>
+        <button
+          class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
+          :disabled="!undoStack.length"
+          title="Deshacer (Ctrl+Z)"
+          @click="undo"
+        >
+          ↶ Deshacer{{ undoStack.length ? ` (${undoStack.length})` : '' }}
+        </button>
+        <button
+          class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
+          :disabled="!redoStack.length"
+          title="Rehacer (Ctrl+Y)"
+          @click="redo"
+        >
+          ↷ Rehacer{{ redoStack.length ? ` (${redoStack.length})` : '' }}
+        </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium"
           :class="drawMode === 'troncal' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
