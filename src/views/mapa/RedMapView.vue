@@ -672,6 +672,7 @@ function clearTrace() {
       </div>
       <div class="flex flex-wrap gap-2">
         <button class="btn-secondary text-xs" @click="goTo('/mapa/clientes')">👤 Ver mapa de clientes →</button>
+        <button class="btn-secondary text-xs" @click="goTo('/mapa/importar')">⬆ Importar KML/KMZ</button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
           :class="showOlt ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"

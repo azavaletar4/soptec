@@ -81,6 +81,8 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     destino_olt_id?: string | null;
     destino_infra_id?: string | null;
     notes?: string | null;
+    kml_ref?: string | null;
+    import_batch_id?: string | null;
   }) {
     const { data, error } = await supabase.from('fo_cables').insert(payload).select().single();
     if (error) throw error;

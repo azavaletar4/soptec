@@ -257,6 +257,8 @@ export interface InfraElemento {
   longitude: number | null;
   notes: string | null;
   zone_id: string | null;
+  kml_ref: string | null;
+  import_batch_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -286,8 +288,19 @@ export interface FoCable {
   destino_infra_id: string | null;
   is_active: boolean;
   notes: string | null;
+  kml_ref: string | null;
+  import_batch_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Fase 29: registro de una importacion de mapa desde KML/KMZ. */
+export interface MapImport {
+  id: string;
+  source_filename: string;
+  summary: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface FoHiloEstado {

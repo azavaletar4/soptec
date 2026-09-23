@@ -56,6 +56,8 @@ export const useInfraElementosStore = defineStore('infraElementos', () => {
     longitude: number;
     notes?: string | null;
     zone_id?: string | null;
+    kml_ref?: string | null;
+    import_batch_id?: string | null;
   }) {
     assertNapZoneCapacity(payload.tipo, payload.zone_id);
     const { data, error: err } = await supabase.from('infra_elementos').insert(payload).select().single();

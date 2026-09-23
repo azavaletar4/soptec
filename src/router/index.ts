@@ -80,6 +80,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/mapa/importar',
+      name: 'mapa-importar',
+      component: () => import('@/views/mapa/ImportMapView.vue'),
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] },
+    },
+    {
       path: '/inventario',
       name: 'inventario',
       component: () => import('@/views/inventario/InventarioView.vue'),
