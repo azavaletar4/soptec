@@ -13,6 +13,8 @@
     "start:api": "tsx server/src/index.ts",
     "tr069:fix-acs": "tsx server/scripts/fix-acs-url.ts",
     "tr069:set-pppoe": "tsx server/scripts/set-tr069-pppoe.ts",
+    "audit:smartolt": "tsx server/scripts/audit-smartolt.ts",
+    "backfill:smartolt": "tsx server/scripts/backfill-smartolt.ts",
     "lint": "eslint ."
   },
   "dependencies": {
