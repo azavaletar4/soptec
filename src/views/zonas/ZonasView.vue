@@ -219,7 +219,13 @@ async function handleDelete(zone: Zone) {
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   <div v-for="n in z.naps" :key="n.id" class="rounded-lg border border-slate-200 bg-white px-3 py-2">
                     <div class="flex items-center justify-between gap-2 mb-1.5">
-                      <span class="text-xs font-medium text-slate-700 truncate" :title="n.name">{{ n.name }}</span>
+                      <router-link
+                        :to="`/mapa/red?nap=${n.id}`"
+                        class="text-xs font-medium text-slate-700 hover:text-sky-600 hover:underline truncate"
+                        :title="`Ver ${n.name} en el mapa`"
+                      >
+                        {{ n.name }}
+                      </router-link>
                       <span class="badge shrink-0" :class="fillClass(n.used, n.capacity)">{{ n.used }} / {{ n.capacity }}</span>
                     </div>
                     <ul v-if="n.clients.length" class="space-y-0.5 max-h-28 overflow-y-auto">

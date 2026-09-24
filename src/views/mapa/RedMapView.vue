@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -17,6 +17,7 @@ import { INFRA_STYLE, INFRA_LABEL, INACTIVE_COLOR, OLT_GLYPH, MIKROTIK_GLYPH, te
 import { getErrorMessage } from '@/lib/errors';
 import type { FoCable, FoCableTipo, FoFusion, FoNapPuerto, InfraElemento, InfraElementoTipo, LatLngPoint } from '@/types/domain';
 
+const route = useRoute();
 const router = useRouter();
 const clientsStore = useClientsStore();
 const oltStore = useOltStore();
@@ -39,6 +40,7 @@ let infraLayer: L.LayerGroup | null = null;
 let cableLayer: L.LayerGroup | null = null;
 let drawLayer: L.LayerGroup | null = null;
 let traceLayer: L.LayerGroup | null = null;
+const infraMarkers = new Map<string, L.Marker>();
 
 const oltsWithGps = computed(() => oltStore.devices.filter((d) => d.lat != null && d.lng != null));
 const oltsWithoutGps = computed(() => oltStore.devices.filter((d) => d.lat == null || d.lng == null));
@@ -223,6 +225,7 @@ const hoverTip = L.tooltip({ direction: 'top', offset: [0, -10], className: 'lea
 function renderInfraMarkers() {
   if (!infraLayer) return;
   infraLayer.clearLayers();
+  infraMarkers.clear();
   if (!showInfra.value) return;
   for (const el of infraStore.elementos) {
     if (el.latitude == null || el.longitude == null) continue;
@@ -255,7 +258,17 @@ function renderInfraMarkers() {
       }
     });
     marker.addTo(infraLayer);
+    infraMarkers.set(el.id, marker);
   }
+}
+
+function focusInfraFromQuery() {
+  const napId = route.query.nap;
+  if (typeof napId !== 'string' || !map) return;
+  const marker = infraMarkers.get(napId);
+  if (!marker) return;
+  map.setView(marker.getLatLng(), 18);
+  marker.openPopup();
 }
 
 function infraPopupHtml(el: InfraElementoWithUrl) {
@@ -329,7 +342,11 @@ onMounted(async () => {
   renderMikrotikMarkers();
   renderInfraMarkers();
   renderCables();
-  fitToMarkers();
+  if (route.query.nap) {
+    focusInfraFromQuery();
+  } else {
+    fitToMarkers();
+  }
 });
 
 onBeforeUnmount(() => {

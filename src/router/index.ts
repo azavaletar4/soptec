@@ -146,6 +146,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: NOT_TECNICO },
     },
     {
+      path: '/flota',
+      name: 'flota',
+      component: () => import('@/views/flota/FlotaView.vue'),
+      meta: { requiresAuth: true, roles: NOT_TECNICO },
+    },
+    {
       path: '/mikrotik',
       name: 'mikrotik',
       component: () => import('@/views/mikrotik/MikrotikDevicesView.vue'),

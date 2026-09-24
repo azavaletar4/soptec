@@ -17,6 +17,10 @@ export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancel
 export type InventoryMovementType = 'ingreso' | 'egreso';
 export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired';
 export type InfraElementoTipo = 'caja_nap' | 'splitter' | 'manga' | 'armario' | 'poste' | 'camara' | 'otro';
+export type VehiculoTipo = 'auto' | 'moto';
+export type VehiculoEstado = 'activo' | 'mantenimiento' | 'inactivo';
+export type MantenimientoTipo = 'preventivo' | 'correctivo';
+export type AlertaNivel = 'rojo' | 'amarillo' | 'verde' | 'sin_datos';
 
 /** Tope de clientes por zona de cobertura (regla de negocio, no de esquema). */
 export const ZONE_CLIENT_LIMIT = 128;
@@ -24,6 +28,11 @@ export const ZONE_CLIENT_LIMIT = 128;
 /** Tope de clientes por caja NAP y de cajas NAP por zona (regla de negocio, no de esquema). */
 export const NAP_CLIENT_LIMIT = 16;
 export const ZONE_NAP_LIMIT = 16;
+
+/** Umbrales del semaforo de SOAT/mantenimiento de la flota vehicular (regla de negocio, no de esquema). */
+export const VEHICULO_DIAS_CRITICO = 7;
+export const VEHICULO_DIAS_ADVERTENCIA = 30;
+export const VEHICULO_KM_ADVERTENCIA = 500;
 
 export interface Zone {
   id: string;
@@ -407,4 +416,44 @@ export interface Invoice {
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
   service_contracts?: Pick<ServiceContract, 'id' | 'contract_number'> | null;
+}
+
+export interface Vehiculo {
+  id: string;
+  tipo: VehiculoTipo;
+  placa: string;
+  marca: string;
+  modelo: string | null;
+  tecnico_id: string | null;
+  area: string | null;
+  estado: VehiculoEstado;
+  soat_fecha_emision: string | null;
+  soat_fecha_vencimiento: string | null;
+  soat_aseguradora: string | null;
+  /** Ruta del archivo dentro del bucket privado 'vehiculo-soat' (no una URL publica) — ver soatUrl en VehiculoWithUrl. */
+  soat_archivo_path: string | null;
+  kilometraje_actual: number;
+  fecha_ultimo_mantenimiento: string | null;
+  tipo_ultimo_mantenimiento: MantenimientoTipo | null;
+  proximo_mantenimiento_fecha: string | null;
+  proximo_mantenimiento_km: number | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  tecnico?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+export interface MantenimientoHistorial {
+  id: string;
+  vehiculo_id: string;
+  fecha: string;
+  tipo: MantenimientoTipo;
+  descripcion: string | null;
+  costo: number | null;
+  taller: string | null;
+  kilometraje: number | null;
+  created_by: string | null;
+  created_at: string;
+  author?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
