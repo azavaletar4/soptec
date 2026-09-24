@@ -13,6 +13,8 @@ import { useOltStore, type OltOnt, type UnlinkedOnt } from '@/stores/olt';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useInventoryStore } from '@/stores/inventory';
+import { usePagosAdelantadosStore } from '@/stores/pagosAdelantados';
+import { useDescuentosCompensacionStore } from '@/stores/descuentosCompensacion';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type {
@@ -42,12 +44,17 @@ const oltStore = useOltStore();
 const clientPhotosStore = useClientPhotosStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
 const inventoryStore = useInventoryStore();
+const pagosAdelantadosStore = usePagosAdelantadosStore();
+const descuentosStore = useDescuentosCompensacionStore();
 const auth = useAuthStore();
 
 const canCreateTickets = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 // Borrar un contrato elimina en cascada sus facturas/instalacion (ver migraciones
 // fase7b/fase9): se deja solo para SUPERADMIN, para limpiar contratos de prueba.
 const canDeleteContracts = computed(() => auth.role === 'SUPERADMIN');
+const canRegisterAdvancePayment = computed(() => ['SUPERADMIN', 'ADMIN', 'FACTURACION'].includes(auth.role ?? ''));
+// Descuento por averia (Fase 34) — pedido explicito: solo ADMIN/SUPERADMIN.
+const canApplyAveria = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
 const clientId = computed(() => route.params.id as string);
 const client = computed(() => clientsStore.clients.find((c) => c.id === clientId.value));
@@ -289,6 +296,78 @@ async function loadInvoices() {
   loadingInvoices.value = true;
   invoices.value = await invoicesStore.fetchInvoicesByClient(clientId.value);
   loadingInvoices.value = false;
+}
+
+// ---- Descuento por averia/compensacion de servicio (Fase 34) ----
+const showAveriaModal = ref(false);
+const averiaForm = ref({ monto: 0, motivo: '' });
+const averiaSaving = ref(false);
+const averiaError = ref<string | null>(null);
+const averiaOk = ref(false);
+
+function openAveriaModal() {
+  averiaForm.value = { monto: 0, motivo: '' };
+  averiaError.value = null;
+  averiaOk.value = false;
+  showAveriaModal.value = true;
+}
+
+async function handleAveriaSubmit() {
+  if (averiaForm.value.monto <= 0 || !averiaForm.value.motivo.trim()) return;
+  averiaSaving.value = true;
+  averiaError.value = null;
+  try {
+    await descuentosStore.createIndividual(clientId.value, averiaForm.value.monto, averiaForm.value.motivo.trim());
+    averiaOk.value = true;
+  } catch (e) {
+    averiaError.value = getErrorMessage(e, 'Error al registrar el descuento');
+  } finally {
+    averiaSaving.value = false;
+  }
+}
+
+// ---- Promocion 3+1: paga 3 meses, el 4to es gratis (Fase 33) ----
+const showAdvanceModal = ref(false);
+const advanceForm = ref({ contractId: '', montoTotal: 0, paymentMethod: '' });
+const advanceSaving = ref(false);
+const advanceError = ref<string | null>(null);
+const advanceResult = ref<number | null>(null);
+
+function openAdvanceModal() {
+  const activeContract = contracts.value.find((c) => c.status === 'active') ?? contracts.value[0];
+  advanceForm.value = {
+    contractId: activeContract?.id ?? '',
+    montoTotal: activeContract ? Number(activeContract.monthly_fee) * 3 : 0,
+    paymentMethod: '',
+  };
+  advanceError.value = null;
+  advanceResult.value = null;
+  showAdvanceModal.value = true;
+}
+
+function onAdvanceContractChange() {
+  const contract = contracts.value.find((c) => c.id === advanceForm.value.contractId);
+  advanceForm.value.montoTotal = contract ? Number(contract.monthly_fee) * 3 : 0;
+}
+
+async function handleAdvanceSubmit() {
+  if (!advanceForm.value.contractId) return;
+  advanceSaving.value = true;
+  advanceError.value = null;
+  try {
+    const pago = await pagosAdelantadosStore.create({
+      contractId: advanceForm.value.contractId,
+      clientId: clientId.value,
+      montoTotal: advanceForm.value.montoTotal,
+      paymentMethod: advanceForm.value.paymentMethod || undefined,
+    });
+    advanceResult.value = pago.invoice_ids?.length ?? 0;
+    await loadInvoices();
+  } catch (e) {
+    advanceError.value = getErrorMessage(e, 'Error al registrar el pago adelantado');
+  } finally {
+    advanceSaving.value = false;
+  }
 }
 
 async function loadUnits() {
@@ -1007,6 +1086,16 @@ async function handleSaveOntPlan() {
           </select>
           <p v-if="clientStatusError" class="text-xs text-red-600 mt-1">{{ clientStatusError }}</p>
         </div>
+        <div class="surface p-4">
+          <div class="text-slate-500 text-xs mb-1">Saldo a favor</div>
+          <div class="font-semibold" :class="client.saldo_a_favor > 0 ? 'text-green-600' : ''">
+            S/ {{ client.saldo_a_favor.toFixed(2) }}
+          </div>
+          <p v-if="client.saldo_a_favor > 0" class="text-[11px] text-slate-400 mt-0.5">Se aplica solo en la siguiente factura.</p>
+          <button v-if="canApplyAveria" type="button" class="text-[11px] text-sky-600 hover:text-sky-700 mt-1" @click="openAveriaModal">
+            + Descuento por avería
+          </button>
+        </div>
       </div>
 
       <h2 class="text-lg font-semibold mb-3">Ubicacion GPS</h2>
@@ -1306,7 +1395,12 @@ async function handleSaveOntPlan() {
 
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold">Facturas</h2>
-        <router-link to="/facturacion" class="text-sm text-sky-600 hover:text-sky-700">+ Nueva factura</router-link>
+        <div class="flex items-center gap-3">
+          <button v-if="canRegisterAdvancePayment && contracts.length" type="button" class="text-sm text-sky-600 hover:text-sky-700" @click="openAdvanceModal">
+            Pago adelantado (3+1)
+          </button>
+          <router-link to="/facturacion" class="text-sm text-sky-600 hover:text-sky-700">+ Nueva factura</router-link>
+        </div>
       </div>
       <p v-if="loadingInvoices" class="text-slate-500 text-sm">Cargando...</p>
       <p v-else-if="!invoices.length" class="text-slate-500 text-sm">Este cliente aun no tiene facturas.</p>
@@ -1776,6 +1870,83 @@ async function handleSaveOntPlan() {
             <button type="button" class="btn-ghost" @click="showAddUnitModal = false">Cancelar</button>
             <button type="submit" :disabled="addUnitSaving" class="btn-primary">
               {{ addUnitSaving ? 'Guardando...' : 'Agregar y asignar' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showAdvanceModal" class="modal-overlay" @click.self="showAdvanceModal = false">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleAdvanceSubmit">
+          <h2 class="text-lg font-semibold mb-1">Pago adelantado (3+1)</h2>
+          <p class="text-xs text-slate-500 mb-4">Paga 3 mensualidades y la 4ta se genera gratis.</p>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Contrato</label>
+            <select v-model="advanceForm.contractId" required class="field-input" @change="onAdvanceContractChange">
+              <option v-for="c in contracts" :key="c.id" :value="c.id">{{ c.contract_number }} — {{ c.plans?.name || 'Sin plan' }}</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Monto total recibido (S/)</label>
+            <input v-model.number="advanceForm.montoTotal" type="number" step="0.01" min="0" required class="field-input" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Método de pago</label>
+            <input v-model="advanceForm.paymentMethod" placeholder="ej. Efectivo, transferencia..." class="field-input" />
+          </div>
+
+          <p v-if="advanceError" class="text-sm text-red-600 mb-3">{{ advanceError }}</p>
+          <p v-if="advanceResult !== null" class="text-sm text-green-600 mb-3">
+            Listo: se generaron {{ advanceResult }} facturas (3 pagadas + el 4to mes gratis).
+          </p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showAdvanceModal = false">
+              {{ advanceResult !== null ? 'Cerrar' : 'Cancelar' }}
+            </button>
+            <button v-if="advanceResult === null" type="submit" :disabled="advanceSaving" class="btn-primary">
+              {{ advanceSaving ? 'Registrando...' : 'Registrar pago' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showAveriaModal" class="modal-overlay" @click.self="showAveriaModal = false">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleAveriaSubmit">
+          <h2 class="text-lg font-semibold mb-1">Descuento por avería</h2>
+          <p class="text-xs text-slate-500 mb-4">Se aplicará automáticamente en la siguiente factura de este cliente.</p>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Monto (S/)</label>
+            <input v-model.number="averiaForm.monto" type="number" step="0.01" min="0.01" required class="field-input" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Motivo / Justificación</label>
+            <textarea
+              v-model="averiaForm.motivo"
+              required
+              rows="2"
+              placeholder="ej. Compensación por avería masiva en sector Alto Trujillo del 12/10 - 18 hrs sin servicio"
+              class="field-input"
+            ></textarea>
+          </div>
+
+          <p v-if="averiaError" class="text-sm text-red-600 mb-3">{{ averiaError }}</p>
+          <p v-if="averiaOk" class="text-sm text-green-600 mb-3">Listo: se aplicará en la siguiente factura.</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showAveriaModal = false">
+              {{ averiaOk ? 'Cerrar' : 'Cancelar' }}
+            </button>
+            <button v-if="!averiaOk" type="submit" :disabled="averiaSaving" class="btn-primary">
+              {{ averiaSaving ? 'Guardando...' : 'Aplicar descuento' }}
             </button>
           </div>
         </form>

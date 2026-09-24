@@ -5,18 +5,29 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useContractsStore } from '@/stores/contracts';
 import { useAuthStore } from '@/stores/auth';
+import { useCatalogsStore } from '@/stores/catalogs';
+import { useOltStore } from '@/stores/olt';
+import { useInfraElementosStore } from '@/stores/infraElementos';
+import { useDescuentosCompensacionStore } from '@/stores/descuentosCompensacion';
 import { getErrorMessage } from '@/lib/errors';
-import type { Invoice, InvoiceStatus } from '@/types/domain';
+import type { DescuentoCompensacionCriterio, Invoice, InvoiceAdjustment, InvoiceStatus } from '@/types/domain';
 
 const router = useRouter();
 const invoicesStore = useInvoicesStore();
 const contractsStore = useContractsStore();
 const auth = useAuthStore();
+const catalogs = useCatalogsStore();
+const oltStore = useOltStore();
+const infraStore = useInfraElementosStore();
+const descuentosStore = useDescuentosCompensacionStore();
 
 // Edicion completa de una factura ya creada (corregir monto, fechas,
 // contrato, notas) es solo para SUPERADMIN — crear/marcar pagada/cancelar
 // sigue disponible para todo el staff de facturacion.
 const isSuperadmin = computed(() => auth.role === 'SUPERADMIN');
+// Descuento por averia (Fase 34) — pedido explicito: solo ADMIN/SUPERADMIN.
+const canApplyAveria = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+const napBoxes = computed(() => infraStore.elementos.filter((e) => e.tipo === 'caja_nap'));
 
 const showModal = ref(false);
 const editingInvoice = ref<Invoice | null>(null);
@@ -28,8 +39,17 @@ const searchQuery = ref('');
 
 const payModal = ref<Invoice | null>(null);
 const payMethod = ref('cash');
+const payAmount = ref(0);
+const payAdjustments = ref<InvoiceAdjustment[]>([]);
+const loadingPayAdjustments = ref(false);
 const paying = ref(false);
 const payError = ref<string | null>(null);
+
+// amount_due ya viene neto de descuentos de referido/saldo a favor (lo
+// mantiene un trigger, Fase 33b) — payAdjustments solo es para mostrar el
+// desglose, no para recalcular el monto.
+const payDueAmount = computed(() => (payModal.value ? Number(payModal.value.amount_due) : 0));
+const payExcedente = computed(() => Math.max(0, payAmount.value - payDueAmount.value));
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -119,8 +139,12 @@ const kpis = computed(() => {
   const now = new Date();
   const collectedThisMonth = invoicesStore.invoices
     .filter((i) => i.status === 'paid' && i.paid_at && new Date(i.paid_at).getMonth() === now.getMonth() && new Date(i.paid_at).getFullYear() === now.getFullYear())
-    .reduce((sum, i) => sum + Number(i.amount), 0);
-  const pendingTotal = pending.reduce((sum, i) => sum + Number(i.amount), 0);
+    // amount_paid es lo que realmente entro (ya neto de descuentos de
+    // referido/saldo a favor, Fase 33) — amount es el bruto y solo se usa
+    // como respaldo en facturas de antes de esa fase (amount_paid nulo).
+    .reduce((sum, i) => sum + Number(i.amount_paid ?? i.amount), 0);
+  // amount_due tambien ya viene neto de descuentos (Fase 33b).
+  const pendingTotal = pending.reduce((sum, i) => sum + Number(i.amount_due), 0);
   return { pendingTotal, pendingCount: pending.length, overdueCount: overdue.length, collectedThisMonth };
 });
 
@@ -134,6 +158,11 @@ const STATUS_TABS: { value: InvoiceStatus | 'overdue' | 'all'; label: string }[]
 
 onMounted(async () => {
   await Promise.all([invoicesStore.fetchInvoices(), contractsStore.fetchContracts()]);
+  if (canApplyAveria.value) {
+    catalogs.fetchZones().catch(() => {});
+    oltStore.fetchDevices().catch(() => {});
+    infraStore.fetchElementos().catch(() => {});
+  }
 });
 
 function openCreate() {
@@ -190,6 +219,16 @@ async function handleSubmit() {
           alert(`La factura se marco pagada, pero no se pudo reactivar el servicio automaticamente: ${reactivation.error}. Reactivalo manualmente desde Cortes por deuda.`);
         }
       }
+      // Revertir una factura de 'paid' a otro estado (correccion manual) deja
+      // amount_paid/amount_due desactualizados si no se recalculan aqui —
+      // amount_due debe volver a reflejar lo que falta por cobrar (bruto
+      // menos los ajustes de referido/saldo a favor ya aplicados, que NO se
+      // deshacen al revertir el estado).
+      const revertingFromPaid = !becamePaid && editingInvoice.value.status === 'paid' && form.value.status !== 'paid';
+      const adjustmentsTotal = revertingFromPaid
+        ? (await invoicesStore.fetchAdjustments(editingInvoice.value.id)).reduce((sum, a) => sum + Number(a.monto), 0)
+        : 0;
+
       await invoicesStore.updateInvoice(editingInvoice.value.id, {
         contract_id: contract.id,
         client_id: contract.client_id,
@@ -206,6 +245,9 @@ async function handleSubmit() {
               status: form.value.status,
               payment_method: form.value.status === 'paid' ? form.value.payment_method : null,
               paid_at: form.value.status === 'paid' ? (editingInvoice.value.paid_at ?? new Date().toISOString()) : null,
+              ...(revertingFromPaid
+                ? { amount_paid: null, amount_due: Math.max(0, form.value.amount - adjustmentsTotal) }
+                : {}),
             }),
       });
     } else {
@@ -227,10 +269,21 @@ async function handleSubmit() {
   }
 }
 
-function openPay(inv: Invoice) {
+async function openPay(inv: Invoice) {
   payModal.value = inv;
   payMethod.value = 'cash';
   payError.value = null;
+  // Precargado con lo realmente adeudado (amount_due ya viene neto de
+  // descuentos, Fase 33b) — el cajero puede subirlo si el cliente paga de
+  // mas (sobrepago -> saldo a favor).
+  payAmount.value = Number(inv.amount_due);
+  payAdjustments.value = [];
+  loadingPayAdjustments.value = true;
+  try {
+    payAdjustments.value = await invoicesStore.fetchAdjustments(inv.id);
+  } finally {
+    loadingPayAdjustments.value = false;
+  }
 }
 
 async function handlePay() {
@@ -238,7 +291,7 @@ async function handlePay() {
   paying.value = true;
   payError.value = null;
   try {
-    const { reactivation } = await invoicesStore.markPaid(payModal.value.id, payMethod.value);
+    const { reactivation } = await invoicesStore.markPaid(payModal.value.id, payMethod.value, payAmount.value);
     payModal.value = null;
     if (reactivation.attempted && !reactivation.ok) {
       alert(`La factura se marco pagada, pero no se pudo reactivar el servicio automaticamente: ${reactivation.error}. Reactivalo manualmente desde Cortes por deuda.`);
@@ -247,6 +300,79 @@ async function handlePay() {
     payError.value = getErrorMessage(e, 'Error al registrar el pago');
   } finally {
     paying.value = false;
+  }
+}
+
+// ---- Recibo de pago (documento INTERNO, no un comprobante electronico
+// SUNAT/SRI — SmartRayco no esta integrado con ningun sistema tributario,
+// ver comentario en la migracion Fase 7). Solo constancia de cobro para
+// entregar al cliente. ----
+const reciboInvoice = ref<Invoice | null>(null);
+const reciboAdjustments = ref<InvoiceAdjustment[]>([]);
+
+async function openRecibo(inv: Invoice) {
+  reciboInvoice.value = inv;
+  reciboAdjustments.value = await invoicesStore.fetchAdjustments(inv.id);
+}
+
+function printRecibo() {
+  window.print();
+}
+
+// ---- Facturacion recurrente (Fase 33b): boton manual ----
+const generatingDue = ref(false);
+const generateDueResult = ref<{ scanned: number; generated: number; errors: { contractId: string; message: string }[] } | null>(null);
+
+async function handleGenerateDue() {
+  generatingDue.value = true;
+  generateDueResult.value = null;
+  try {
+    generateDueResult.value = await invoicesStore.generateDue();
+    await invoicesStore.fetchInvoices();
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al generar las facturas'));
+  } finally {
+    generatingDue.value = false;
+  }
+}
+
+// ---- Descuento por averia masiva (Fase 34) ----
+const showAveriaModal = ref(false);
+const averiaForm = ref({
+  criterio: 'zona' as DescuentoCompensacionCriterio,
+  criterioId: '',
+  motivo: '',
+  modo: 'monto' as 'monto' | 'porcentaje',
+  monto: 0,
+  porcentaje: 0,
+});
+const savingAveria = ref(false);
+const averiaError = ref<string | null>(null);
+const averiaResult = ref<{ lote_id: string; clientes_afectados: number } | null>(null);
+
+function openAveriaModal() {
+  averiaForm.value = { criterio: 'zona', criterioId: '', motivo: '', modo: 'monto', monto: 0, porcentaje: 0 };
+  averiaError.value = null;
+  averiaResult.value = null;
+  showAveriaModal.value = true;
+}
+
+async function handleAveriaSubmit() {
+  if (!averiaForm.value.criterioId || !averiaForm.value.motivo.trim()) return;
+  savingAveria.value = true;
+  averiaError.value = null;
+  try {
+    averiaResult.value = await descuentosStore.createMasivo({
+      criterio: averiaForm.value.criterio,
+      criterioId: averiaForm.value.criterioId,
+      motivo: averiaForm.value.motivo.trim(),
+      monto: averiaForm.value.modo === 'monto' ? averiaForm.value.monto : undefined,
+      porcentaje: averiaForm.value.modo === 'porcentaje' ? averiaForm.value.porcentaje : undefined,
+    });
+  } catch (e) {
+    averiaError.value = getErrorMessage(e, 'Error al aplicar el descuento masivo');
+  } finally {
+    savingAveria.value = false;
   }
 }
 
@@ -259,6 +385,18 @@ async function handleCancel(inv: Invoice) {
     alert(getErrorMessage(e, 'Error al cancelar la factura'));
   }
 }
+
+// Borrado definitivo — solo SUPERADMIN (ver isSuperadmin), para limpiar
+// facturas de prueba. La RLS (Fase 35) tambien lo exige a nivel de base.
+async function handleDelete(inv: Invoice) {
+  const ok = confirm(`¿Eliminar definitivamente la factura ${inv.invoice_number}? Esta acción no se puede deshacer.`);
+  if (!ok) return;
+  try {
+    await invoicesStore.deleteInvoice(inv.id);
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al eliminar la factura'));
+  }
+}
 </script>
 
 <template>
@@ -268,10 +406,23 @@ async function handleCancel(inv: Invoice) {
         <h1 class="text-2xl font-semibold">Facturación</h1>
         <p class="text-slate-600 text-sm mt-1">Control interno de cobros — {{ invoicesStore.invoices.length }} facturas</p>
       </div>
-      <button class="btn-primary" @click="openCreate">
-        + Nueva factura
-      </button>
+      <div class="flex gap-2">
+        <button v-if="canApplyAveria" class="btn-ghost" @click="openAveriaModal">
+          Descuento por avería masiva
+        </button>
+        <button class="btn-ghost" :disabled="generatingDue" @click="handleGenerateDue">
+          {{ generatingDue ? 'Generando...' : 'Generar facturas del mes' }}
+        </button>
+        <button class="btn-primary" @click="openCreate">
+          + Nueva factura
+        </button>
+      </div>
     </div>
+
+    <p v-if="generateDueResult" class="mb-4 text-sm rounded-lg bg-sky-500/10 text-sky-700 px-3 py-2">
+      {{ generateDueResult.generated }} facturas nuevas generadas de {{ generateDueResult.scanned }} contratos activos revisados.
+      <span v-if="generateDueResult.errors.length" class="text-red-600"> {{ generateDueResult.errors.length }} con error — revisar consola.</span>
+    </p>
 
     <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
       <div class="text-left rounded-xl p-5 flex items-start justify-between" style="background:#16a34a">
@@ -351,7 +502,14 @@ async function handleCancel(inv: Invoice) {
               </button>
             </td>
             <td class="px-4 py-3 text-slate-600 text-xs">{{ inv.period_start }} → {{ inv.period_end }}</td>
-            <td class="px-4 py-3 font-medium">S/ {{ Number(inv.amount).toFixed(2) }}</td>
+            <td class="px-4 py-3 font-medium">
+              <template v-if="inv.status === 'pending' && Number(inv.amount_due) < Number(inv.amount)">
+                <div>S/ {{ Number(inv.amount_due).toFixed(2) }}</div>
+                <div class="text-[11px] text-slate-400 line-through font-normal">S/ {{ Number(inv.amount).toFixed(2) }}</div>
+                <div class="text-[10px] text-green-600 font-normal">con descuento</div>
+              </template>
+              <template v-else>S/ {{ Number(inv.amount).toFixed(2) }}</template>
+            </td>
             <td class="px-4 py-3 text-slate-600 text-xs">{{ inv.due_date }}</td>
             <td class="px-4 py-3">
               <span
@@ -366,8 +524,10 @@ async function handleCancel(inv: Invoice) {
                 <button class="text-green-600 hover:text-green-700 text-xs" @click="openPay(inv)">Marcar pagada</button>
                 <button class="text-red-500/80 hover:text-red-600 text-xs" @click="handleCancel(inv)">Cancelar</button>
               </template>
+              <button v-if="inv.status === 'paid'" class="text-sky-600 hover:text-sky-700 text-xs" @click="openRecibo(inv)">Imprimir recibo</button>
               <button v-if="isSuperadmin" class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(inv)">Editar</button>
-              <span v-if="inv.status !== 'pending' && !isSuperadmin" class="text-xs text-slate-400">—</span>
+              <button v-if="isSuperadmin" class="text-red-500/80 hover:text-red-600 text-xs" @click="handleDelete(inv)">Eliminar</button>
+              <span v-if="inv.status === 'cancelled' && !isSuperadmin" class="text-xs text-slate-400">—</span>
             </td>
           </tr>
         </tbody>
@@ -474,7 +634,27 @@ async function handleCancel(inv: Invoice) {
       <div v-if="payModal" class="modal-overlay">
         <form class="w-full max-w-sm modal-panel" @submit.prevent="handlePay">
           <h2 class="text-lg font-semibold mb-1">Registrar pago</h2>
-          <p class="text-xs text-slate-500 mb-4">{{ payModal.invoice_number }} — S/ {{ Number(payModal.amount).toFixed(2) }}</p>
+          <p class="text-xs text-slate-500 mb-3">{{ payModal.invoice_number }} — Monto de la factura: S/ {{ Number(payModal.amount).toFixed(2) }}</p>
+
+          <p v-if="loadingPayAdjustments" class="text-xs text-slate-400 mb-3">Cargando descuentos aplicados...</p>
+          <div v-else-if="payAdjustments.length" class="mb-3 rounded-lg bg-slate-50 border border-slate-200 p-2.5 text-xs space-y-1">
+            <div v-for="adj in payAdjustments" :key="adj.id" class="flex justify-between gap-2">
+              <span class="text-slate-600">{{ adj.descripcion }}</span>
+              <span class="text-green-600 font-medium whitespace-nowrap">- S/ {{ Number(adj.monto).toFixed(2) }}</span>
+            </div>
+            <div class="flex justify-between gap-2 pt-1 border-t border-slate-200 font-semibold">
+              <span>Saldo pendiente</span>
+              <span>S/ {{ payDueAmount.toFixed(2) }}</span>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Monto recibido (S/)</label>
+            <input v-model.number="payAmount" type="number" step="0.01" min="0" required class="field-input" />
+            <p v-if="payExcedente > 0" class="text-xs text-sky-600 mt-1">
+              Sobrepago de S/ {{ payExcedente.toFixed(2) }} — se guardará como saldo a favor del cliente.
+            </p>
+          </div>
 
           <div class="mb-4">
             <label class="block text-xs text-slate-600 mb-1">Metodo de pago</label>
@@ -498,5 +678,174 @@ async function handleCancel(inv: Invoice) {
         </form>
       </div>
     </Teleport>
+
+    <Teleport to="body">
+      <div v-if="reciboInvoice" class="modal-overlay no-print" @click.self="reciboInvoice = null">
+        <div class="w-full max-w-md modal-panel">
+          <div id="recibo-print" class="text-sm">
+            <div class="text-center mb-4">
+              <div class="font-bold text-base">RAYCO NETWORKS E.I.R.L.</div>
+              <div class="text-xs text-slate-600">RUC 20614647141</div>
+              <div class="text-xs text-slate-600">AAHH Luis Santa Maria Cal Mza. 17 Lote. 3 Sec. Rio Seco, El Porvenir - Trujillo - La Libertad</div>
+            </div>
+
+            <div class="text-center font-semibold border-y border-slate-300 py-1.5 mb-3">RECIBO DE PAGO</div>
+
+            <div class="grid grid-cols-2 gap-1.5 mb-3">
+              <span class="text-slate-500">Nº de factura interna</span>
+              <span class="text-right font-mono">{{ reciboInvoice.invoice_number }}</span>
+              <span class="text-slate-500">Fecha de pago</span>
+              <span class="text-right">{{ reciboInvoice.paid_at ? new Date(reciboInvoice.paid_at).toLocaleDateString('es-PE') : '—' }}</span>
+              <span class="text-slate-500">Cliente</span>
+              <span class="text-right">{{ reciboInvoice.clients ? `${reciboInvoice.clients.first_name} ${reciboInvoice.clients.last_name}` : '—' }}</span>
+              <span class="text-slate-500">Documento</span>
+              <span class="text-right font-mono">{{ reciboInvoice.clients?.document_number ?? '—' }}</span>
+              <span class="text-slate-500">Contrato</span>
+              <span class="text-right font-mono">{{ reciboInvoice.service_contracts?.contract_number ?? '—' }}</span>
+              <span class="text-slate-500">Periodo</span>
+              <span class="text-right">{{ reciboInvoice.period_start }} → {{ reciboInvoice.period_end }}</span>
+            </div>
+
+            <table class="w-full text-xs mb-3 border-t border-slate-300 pt-2">
+              <tbody>
+                <tr>
+                  <td class="py-0.5">Servicio de internet — {{ reciboInvoice.period_start }} a {{ reciboInvoice.period_end }}</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">S/ {{ Number(reciboInvoice.amount).toFixed(2) }}</td>
+                </tr>
+                <tr v-for="adj in reciboAdjustments" :key="adj.id">
+                  <td class="py-0.5 text-green-700">{{ adj.descripcion }}</td>
+                  <td class="py-0.5 text-right text-green-700 whitespace-nowrap">- S/ {{ Number(adj.monto).toFixed(2) }}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="flex justify-between font-bold text-base border-t border-slate-300 pt-2 mb-4">
+              <span>Total pagado</span>
+              <span>S/ {{ Number(reciboInvoice.amount_paid ?? (Number(reciboInvoice.amount) - reciboAdjustments.reduce((s, a) => s + Number(a.monto), 0))).toFixed(2) }}</span>
+            </div>
+
+            <p class="text-[10px] text-slate-400 text-center leading-snug">
+              Este es un recibo interno de SmartRayco como constancia de pago. NO es un comprobante de pago electrónico
+              autorizado por SUNAT y no tiene validez tributaria.
+            </p>
+          </div>
+
+          <div class="flex justify-end gap-2 mt-4 no-print">
+            <button type="button" class="btn-ghost" @click="reciboInvoice = null">Cerrar</button>
+            <button type="button" class="btn-primary" @click="printRecibo">Imprimir / Guardar PDF</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showAveriaModal" class="modal-overlay" @click.self="showAveriaModal = false">
+        <form class="w-full max-w-md modal-panel" @submit.prevent="handleAveriaSubmit">
+          <h2 class="text-lg font-semibold mb-1">Descuento por avería masiva</h2>
+          <p class="text-xs text-slate-500 mb-4">
+            Se registra como descuento pendiente y se aplicará solo en la siguiente factura de cada cliente afectado.
+          </p>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Filtrar por</label>
+            <select v-model="averiaForm.criterio" class="field-input" @change="averiaForm.criterioId = ''">
+              <option value="zona">Zona</option>
+              <option value="olt">OLT</option>
+              <option value="nap">Caja NAP</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">
+              {{ averiaForm.criterio === 'zona' ? 'Zona afectada' : averiaForm.criterio === 'olt' ? 'OLT afectada' : 'Caja NAP afectada' }}
+            </label>
+            <select v-model="averiaForm.criterioId" required class="field-input">
+              <option value="" disabled>Selecciona...</option>
+              <template v-if="averiaForm.criterio === 'zona'">
+                <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+              </template>
+              <template v-else-if="averiaForm.criterio === 'olt'">
+                <option v-for="d in oltStore.devices" :key="d.id" :value="d.id">{{ d.name }}</option>
+              </template>
+              <template v-else>
+                <option v-for="n in napBoxes" :key="n.id" :value="n.id">{{ n.name }}</option>
+              </template>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Motivo / Justificación</label>
+            <textarea
+              v-model="averiaForm.motivo"
+              required
+              rows="2"
+              placeholder="ej. Compensación por avería masiva en sector Alto Trujillo del 12/10 - 18 hrs sin servicio"
+              class="field-input"
+            ></textarea>
+          </div>
+
+          <div class="mb-4">
+            <div class="flex gap-4 mb-2 text-xs">
+              <label class="flex items-center gap-1.5">
+                <input v-model="averiaForm.modo" type="radio" value="monto" /> Monto fijo (S/)
+              </label>
+              <label class="flex items-center gap-1.5">
+                <input v-model="averiaForm.modo" type="radio" value="porcentaje" /> % de la mensualidad
+              </label>
+            </div>
+            <input
+              v-if="averiaForm.modo === 'monto'"
+              v-model.number="averiaForm.monto"
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              class="field-input"
+            />
+            <input
+              v-else
+              v-model.number="averiaForm.porcentaje"
+              type="number"
+              step="1"
+              min="1"
+              max="100"
+              required
+              class="field-input"
+            />
+          </div>
+
+          <p v-if="averiaError" class="text-sm text-red-600 mb-3">{{ averiaError }}</p>
+          <p v-if="averiaResult" class="text-sm text-green-600 mb-3">
+            Listo: descuento pendiente registrado para {{ averiaResult.clientes_afectados }} cliente(s).
+          </p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showAveriaModal = false">
+              {{ averiaResult ? 'Cerrar' : 'Cancelar' }}
+            </button>
+            <button v-if="!averiaResult" type="submit" :disabled="savingAveria" class="btn-primary">
+              {{ savingAveria ? 'Aplicando...' : 'Aplicar descuento' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
   </AppLayout>
 </template>
+
+<style>
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #recibo-print,
+  #recibo-print * {
+    visibility: visible;
+  }
+  #recibo-print {
+    position: fixed;
+    inset: 0;
+    padding: 24px;
+  }
+}
+</style>

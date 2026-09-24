@@ -77,6 +77,8 @@ export interface Client {
   status: ClientStatus;
   latitude: number | null;
   longitude: number | null;
+  /** Credito acumulado por pagos en exceso o descuentos de referido que sobraron (Fase 33) — se consume solo en la siguiente factura. */
+  saldo_a_favor: number;
   created_at: string;
   updated_at: string;
   zones?: Pick<Zone, 'id' | 'name'> | null;
@@ -406,6 +408,10 @@ export interface Invoice {
   period_start: string;
   period_end: string;
   amount: number;
+  /** Monto realmente cobrado (Fase 33) — nulo en facturas de antes de esta fase o aun no pagadas. */
+  amount_paid: number | null;
+  /** Saldo neto pendiente (amount menos sus invoice_adjustments) — lo mantiene un trigger (Fase 33b). */
+  amount_due: number;
   due_date: string;
   status: InvoiceStatus;
   paid_at: string | null;
@@ -416,6 +422,95 @@ export interface Invoice {
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
   service_contracts?: Pick<ServiceContract, 'id' | 'contract_number'> | null;
+}
+
+export type ReferidoEstado = 'pendiente' | 'aplicado' | 'cancelado';
+export type InvoiceAdjustmentTipo = 'averia' | 'referido' | 'saldo_a_favor' | 'promo_4to_gratis';
+export type ClientCreditMovementTipo =
+  | 'pago_excedente'
+  | 'consumo_saldo_favor'
+  | 'referido_sobrante'
+  | 'averia_sobrante'
+  | 'ajuste_manual';
+export type DescuentoCompensacionEstado = 'pendiente' | 'aplicado' | 'cancelado';
+export type DescuentoCompensacionCriterio = 'zona' | 'olt' | 'nap';
+
+/** Descuento de S/25 por recomendar un nuevo cliente (Fase 33) — se aplica solo en la siguiente factura del referente. */
+export interface Referido {
+  id: string;
+  referente_client_id: string;
+  referido_client_id: string;
+  monto_descuento: number;
+  estado: ReferidoEstado;
+  invoice_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  applied_at: string | null;
+  referido?: Pick<Client, 'id' | 'first_name' | 'last_name'> | null;
+}
+
+/** Una linea del desglose de descuentos/creditos aplicados a una factura (Fase 33). */
+export interface InvoiceAdjustment {
+  id: string;
+  invoice_id: string;
+  tipo: InvoiceAdjustmentTipo;
+  descripcion: string;
+  monto: number;
+  referido_id: string | null;
+  created_at: string;
+}
+
+/** Auditoria insert-only del saldo a favor de un cliente (Fase 33). */
+export interface ClientCreditMovement {
+  id: string;
+  client_id: string;
+  tipo: ClientCreditMovementTipo;
+  monto: number;
+  saldo_resultante: number;
+  invoice_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Pago adelantado de 3 meses con el 4to gratis (Fase 33) — el trigger de la BD crea las 4 facturas. */
+export interface PagoAdelantado {
+  id: string;
+  contract_id: string;
+  client_id: string;
+  meses_pagados: number;
+  monto_total: number;
+  payment_method: string | null;
+  invoice_ids: string[] | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Descuento manual por averia/compensacion de servicio (Fase 34) — individual o de un lote masivo. */
+export interface DescuentoCompensacion {
+  id: string;
+  client_id: string;
+  monto: number;
+  motivo: string;
+  estado: DescuentoCompensacionEstado;
+  invoice_id: string | null;
+  lote_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  applied_at: string | null;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name'> | null;
+}
+
+/** Metadata de una aplicacion masiva de descuento por averia (por zona/OLT/caja NAP). */
+export interface DescuentoCompensacionLote {
+  id: string;
+  criterio: DescuentoCompensacionCriterio;
+  criterio_id: string;
+  motivo: string;
+  monto: number | null;
+  porcentaje: number | null;
+  clientes_afectados: number;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface Vehiculo {

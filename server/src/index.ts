@@ -19,6 +19,7 @@ import { alertsRoutes } from './routes/alerts';
 import { startTr069Scheduler } from './services/tr069Scheduler';
 import { startDebtHoldScheduler } from './services/debtHoldScheduler';
 import { startMikrotikReconcileScheduler } from './services/mikrotikReconcileScheduler';
+import { startInvoiceScheduler } from './services/invoiceScheduler';
 
 const app = new Hono();
 
@@ -65,3 +66,4 @@ serve({ fetch: app.fetch, port }, (info) => {
 startTr069Scheduler();
 startDebtHoldScheduler();
 startMikrotikReconcileScheduler();
+startInvoiceScheduler();

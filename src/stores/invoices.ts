@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
-import type { Invoice } from '@/types/domain';
+import type { Invoice, InvoiceAdjustment } from '@/types/domain';
 
 // service_contracts!contract_id — desde Fase 25 hay una segunda relacion
 // entre invoices y service_contracts (service_contracts.debt_hold_invoice_id
@@ -50,16 +50,41 @@ export const useInvoicesStore = defineStore('invoices', () => {
 
   // Pasa por el backend (no supabase-js directo, como el resto de este
   // store) porque marcar pagada una factura puede necesitar reactivar al
-  // cliente en MikroTik/OLT si estaba en corte por deuda (ver Fase 25) —
-  // eso solo lo puede hacer el backend.
-  async function markPaid(id: string, paymentMethod: string) {
+  // cliente en MikroTik/OLT si estaba en corte por deuda (ver Fase 25), y
+  // desde la Fase 33 tambien calcula el sobrepago (saldo a favor) contra el
+  // monto ya neto de descuentos de referido/saldo previo.
+  async function markPaid(id: string, paymentMethod: string, amountPaid?: number) {
     const { invoice, reactivation } = await apiFetch<{
       invoice: Invoice;
       reactivation: { attempted: boolean; ok?: boolean; error?: string };
-    }>(`/api/invoices/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({ paymentMethod }) });
+    }>(`/api/invoices/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({ paymentMethod, amountPaid }) });
     const idx = invoices.value.findIndex((i) => i.id === id);
     if (idx !== -1) invoices.value[idx] = invoice;
     return { invoice, reactivation };
+  }
+
+  // Facturacion recurrente (Fase 33b) — genera todas las facturas pendientes
+  // de contratos activos que ya cumplieron su periodo. Boton manual en
+  // FacturacionView.vue; el scheduler automatico corre esto mismo si esta
+  // activado (INVOICE_SCHEDULER_ENABLED=true, desactivado por defecto).
+  function generateDue() {
+    return apiFetch<{ scanned: number; generated: number; errors: { contractId: string; message: string }[] }>(
+      '/api/invoices/generate-due',
+      { method: 'POST' },
+    );
+  }
+
+  // Desglose de descuentos/creditos (referido, saldo a favor, promo 4to
+  // gratis) de una factura puntual — se carga bajo demanda al expandir el
+  // detalle, no de una vez por todas las facturas listadas.
+  async function fetchAdjustments(invoiceId: string) {
+    const { data, error: err } = await supabase
+      .from('invoice_adjustments')
+      .select('*')
+      .eq('invoice_id', invoiceId)
+      .order('created_at', { ascending: true });
+    if (err) throw err;
+    return (data ?? []) as unknown as InvoiceAdjustment[];
   }
 
   // Edicion completa (monto, fechas, contrato, notas) — a diferencia de
@@ -88,5 +113,16 @@ export const useInvoicesStore = defineStore('invoices', () => {
     return data as unknown as Invoice;
   }
 
-  return { invoices, loading, error, fetchInvoices, fetchInvoicesByClient, createInvoice, updateInvoice, markPaid, cancelInvoice };
+  // Borrado definitivo (limpieza de facturas de prueba) — restringido a
+  // SUPERADMIN por RLS (Fase 35), igual criterio que deleteTicket (Fase 26).
+  // Las filas que la referencian (invoice_adjustments, referidos,
+  // client_credit_movements, debt_hold_invoice_id) ya estan preparadas para
+  // esto (cascade/set null), no hace falta limpiarlas a mano aqui.
+  async function deleteInvoice(id: string) {
+    const { error: err } = await supabase.from('invoices').delete().eq('id', id);
+    if (err) throw err;
+    invoices.value = invoices.value.filter((i) => i.id !== id);
+  }
+
+  return { invoices, loading, error, fetchInvoices, fetchInvoicesByClient, createInvoice, updateInvoice, markPaid, fetchAdjustments, generateDue, cancelInvoice, deleteInvoice };
 });

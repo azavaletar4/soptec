@@ -9,6 +9,7 @@ import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
 import { useAuthStore } from '@/stores/auth';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
+import { useReferidosStore } from '@/stores/referidos';
 import { getErrorMessage } from '@/lib/errors';
 import { NAP_CLIENT_LIMIT, ZONE_CLIENT_LIMIT, type Client, type ClientStatus, type DocumentType } from '@/types/domain';
 
@@ -20,6 +21,7 @@ const mikrotikStore = useMikrotikStore();
 const auth = useAuthStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
+const referidosStore = useReferidosStore();
 
 // TECNICO_RED puede ver/editar clientes (GPS, fotos), pero no crearlos ni
 // eliminarlos — eso queda para SOPORTE/ADMIN/FACTURACION.
@@ -34,6 +36,20 @@ const savingZone = ref(false);
 const formError = ref<string | null>(null);
 const pendingPppoeHint = ref<string | null>(null);
 const searchQuery = ref('');
+
+// Referido (Fase 33): solo aplica al ALTA de un cliente nuevo — vincula
+// quien lo recomendo para que le llegue el descuento de S/25 en su
+// siguiente factura (lo aplica el trigger de la BD, no aqui).
+const referenteId = ref('');
+const referenteFilter = ref('');
+const filteredReferentes = computed(() => {
+  const q = referenteFilter.value.trim().toLowerCase();
+  const list = clientsStore.clients;
+  if (!q) return list.slice(0, 30);
+  return list
+    .filter((c) => `${c.first_name} ${c.last_name} ${c.document_number}`.toLowerCase().includes(q))
+    .slice(0, 30);
+});
 
 const filteredClientsList = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -174,6 +190,8 @@ function openCreate(fromSecret?: PppSecret) {
   formError.value = null;
   showNewZone.value = false;
   newZoneName.value = '';
+  referenteId.value = '';
+  referenteFilter.value = '';
   showModal.value = true;
 }
 
@@ -244,6 +262,17 @@ async function handleSubmit() {
     } else {
       const created = await clientsStore.createClient(payload);
       savedId = created.id;
+
+      // Referido (Fase 33): solo en el alta. El cliente ya quedo guardado,
+      // asi que un fallo aca no debe perder los demas datos — mismo
+      // criterio que la sincronizacion de NAP de abajo.
+      if (referenteId.value) {
+        try {
+          await referidosStore.create(referenteId.value, savedId);
+        } catch (e) {
+          alert(getErrorMessage(e, 'El cliente se guardó, pero no se pudo registrar el referido'));
+        }
+      }
     }
 
     // Sincroniza la caja NAP (fo_nap_puertos, ver stores/foFibra.ts): el
@@ -529,6 +558,16 @@ function goToDetail(client: Client) {
               ⚠ El cliente sigue asignado a "{{ currentNapMismatch.name }}", que ya no pertenece a esta zona (cambió en el mapa). Se
               mantiene igual a menos que elijas otra NAP aquí.
             </p>
+          </div>
+
+          <div v-if="!editing" class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Cliente que lo recomendó (opcional)</label>
+            <p class="text-[11px] text-slate-400 mb-1.5">Si aplica, el referente recibe un descuento de S/25 en su siguiente factura.</p>
+            <input v-model="referenteFilter" placeholder="Buscar por nombre o documento..." class="field-input mb-2" />
+            <select v-model="referenteId" class="field-input" size="4">
+              <option value="">Sin referido</option>
+              <option v-for="c in filteredReferentes" :key="c.id" :value="c.id">{{ c.first_name }} {{ c.last_name }} — {{ c.document_number }}</option>
+            </select>
           </div>
 
           <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
