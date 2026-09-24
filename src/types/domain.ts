@@ -82,7 +82,7 @@ export interface Client {
   zones?: Pick<Zone, 'id' | 'name'> | null;
 }
 
-export type ClientPhotoCategory = 'facade' | 'service_sheet' | 'modem_position' | 'nap_box';
+export type ClientPhotoCategory = 'facade' | 'service_sheet' | 'modem_position' | 'nap_box' | 'pon_power';
 
 export interface ClientPhoto {
   id: string;
@@ -442,6 +442,37 @@ export interface Vehiculo {
   created_at: string;
   updated_at: string;
   tecnico?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+export type JobType = 'installation' | 'ticket';
+
+/** Cierre de un trabajo de campo (alta o averia) — GPS del cierre, serial de
+ *  ONT leido por QR y firma de conformidad. Ver Fase 32. */
+export interface WorkOrderClosure {
+  id: string;
+  job_type: JobType;
+  job_id: string;
+  client_id: string;
+  latitude: number | null;
+  longitude: number | null;
+  ont_serial: string | null;
+  closure_notes: string | null;
+  signature_path: string | null;
+  closed_by: string | null;
+  created_at: string;
+}
+
+/** Galeria de evidencia fotografica de un cierre de trabajo (no tiene slot
+ *  fijo por categoria como client_photos: una averia puede visitarse mas de
+ *  una vez y cada cierre conserva sus propias fotos). */
+export interface WorkOrderPhoto {
+  id: string;
+  job_type: JobType;
+  job_id: string;
+  category: string;
+  storage_path: string;
+  uploaded_by: string | null;
+  created_at: string;
 }
 
 export interface MantenimientoHistorial {

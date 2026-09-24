@@ -66,6 +66,18 @@ const router = createRouter({
       component: () => import('@/views/instalaciones/InstalacionesView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/campo',
+      name: 'campo',
+      component: () => import('@/views/campo/CampoDashboardView.vue'),
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] },
+    },
+    {
+      path: '/campo/:tipo/:id',
+      name: 'campo-detalle',
+      component: () => import('@/views/campo/CampoTrabajoDetailView.vue'),
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] },
+    },
     { path: '/mapa', redirect: '/mapa/red' },
     {
       path: '/mapa/red',
@@ -170,7 +182,7 @@ const router = createRouter({
 // de aterrizaje tras login, o cuando intenta entrar a algo que no le toca,
 // es Instalaciones en vez de Dashboard.
 function homeFor(role: string | null) {
-  return role === 'TECNICO_RED' ? { name: 'instalaciones' } : { name: 'dashboard' };
+  return role === 'TECNICO_RED' ? { name: 'campo' } : { name: 'dashboard' };
 }
 
 router.beforeEach(async (to) => {

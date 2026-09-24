@@ -17,6 +17,10 @@ const auth = useAuthStore();
 // pueden ver/atender los que ya existen.
 const canCreateTickets = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
+// La App de Campo (Fase 32) no tiene entrada propia en el sidebar para no
+// amontonarlo — se accede desde aqui, mismo criterio que "Ranking tecnicos".
+const canOpenCampo = computed(() => ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'].includes(auth.role ?? ''));
+
 const showModal = ref(false);
 const saving = ref(false);
 const formError = ref<string | null>(null);
@@ -168,6 +172,7 @@ function formatDate(value: string) {
         <p class="text-slate-600 text-sm mt-1">{{ ticketsStore.tickets.length }} tickets registrados</p>
       </div>
       <div class="flex gap-2">
+        <button v-if="canOpenCampo" class="btn-ghost" @click="router.push('/campo')">📱 App de Campo</button>
         <button class="btn-ghost" @click="router.push('/soporte/ranking')">🏆 Ranking técnicos</button>
         <button v-if="canCreateTickets" class="btn-primary" @click="openCreate">
           + Nuevo ticket

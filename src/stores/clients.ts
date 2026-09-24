@@ -23,6 +23,14 @@ export const useClientsStore = defineStore('clients', () => {
     clients.value = (data ?? []) as Client[];
   }
 
+  // Un solo cliente por id, sin traer el listado completo — usado por la App
+  // de Campo (Fase 32) para mostrar la ficha del cliente al tecnico.
+  async function fetchClientById(id: string) {
+    const { data, error: err } = await supabase.from('clients').select('*, zones(id, name)').eq('id', id).single();
+    if (err) throw err;
+    return data as Client;
+  }
+
   async function createClient(payload: Partial<Client>) {
     const { data, error: err } = await supabase
       .from('clients')
@@ -53,5 +61,5 @@ export const useClientsStore = defineStore('clients', () => {
     clients.value = clients.value.filter((c) => c.id !== id);
   }
 
-  return { clients, loading, error, fetchClients, createClient, updateClient, deleteClient };
+  return { clients, loading, error, fetchClients, fetchClientById, createClient, updateClient, deleteClient };
 });
