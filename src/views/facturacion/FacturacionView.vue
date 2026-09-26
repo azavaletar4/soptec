@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import FacturacionZoneAccordion, { type ZoneGroup } from '@/components/facturacion/FacturacionZoneAccordion.vue';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useContractsStore } from '@/stores/contracts';
 import { useAuthStore } from '@/stores/auth';
@@ -80,17 +81,6 @@ const emptyForm = () => ({
 });
 const form = ref(emptyForm());
 
-const STATUS_LABEL: Record<InvoiceStatus, string> = {
-  pending: 'Pendiente',
-  paid: 'Pagada',
-  cancelled: 'Cancelada',
-};
-const STATUS_CLASS: Record<InvoiceStatus, string> = {
-  pending: 'bg-yellow-500/15 text-yellow-600',
-  paid: 'bg-green-500/15 text-green-600',
-  cancelled: 'bg-slate-500/15 text-slate-600',
-};
-
 function isOverdue(inv: Invoice) {
   return inv.status === 'pending' && inv.due_date < todayIso();
 }
@@ -155,6 +145,70 @@ const STATUS_TABS: { value: InvoiceStatus | 'overdue' | 'all'; label: string }[]
   { value: 'paid', label: 'Pagadas' },
   { value: 'cancelled', label: 'Canceladas' },
 ];
+
+// ---- Agrupacion por zona ----
+// La zona de una factura se resuelve por su contrato (service_contracts.zone_id/zones),
+// ya cargado en contractsStore — no hace falta tocar el store de facturas.
+const SIN_ZONA_KEY = '__sin_zona__';
+const contractZoneById = computed(() => {
+  const map = new Map<string, { zoneKey: string; zoneName: string }>();
+  for (const c of contractsStore.contracts) {
+    map.set(c.id, {
+      zoneKey: c.zone_id ?? SIN_ZONA_KEY,
+      zoneName: c.zones?.name ?? 'Sin zona asignada',
+    });
+  }
+  return map;
+});
+
+// Se arma sobre filteredInvoices (ya respeta buscador + tab de estado) —
+// una zona sin ninguna factura que matchee el filtro activo simplemente no
+// aparece, y las 3 zonas mas urgentes (mas vencidas/pendientes) quedan arriba.
+const zoneGroups = computed<ZoneGroup[]>(() => {
+  const map = new Map<string, ZoneGroup>();
+  for (const inv of filteredInvoices.value) {
+    const info = contractZoneById.value.get(inv.contract_id) ?? { zoneKey: SIN_ZONA_KEY, zoneName: 'Sin zona asignada' };
+    let group = map.get(info.zoneKey);
+    if (!group) {
+      group = {
+        zoneKey: info.zoneKey,
+        zoneName: info.zoneName,
+        rows: [],
+        pendingCount: 0,
+        overdueCount: 0,
+        collectedTotal: 0,
+        pendingTotal: 0,
+      };
+      map.set(info.zoneKey, group);
+    }
+    const overdue = isOverdue(inv);
+    group.rows.push({ invoice: inv, overdue });
+    if (inv.status === 'pending') {
+      group.pendingCount += 1;
+      group.pendingTotal += Number(inv.amount_due);
+      if (overdue) group.overdueCount += 1;
+    } else if (inv.status === 'paid') {
+      group.collectedTotal += Number(inv.amount_paid ?? inv.amount);
+    }
+  }
+  return [...map.values()].sort(
+    (a, b) => b.overdueCount - a.overdueCount || b.pendingCount - a.pendingCount || a.zoneName.localeCompare(b.zoneName),
+  );
+});
+
+const criticalZonesCount = computed(() => zoneGroups.value.filter((g) => g.overdueCount > 0).length);
+
+const expandedZones = ref<Record<string, boolean>>({});
+function toggleZone(zoneKey: string) {
+  expandedZones.value[zoneKey] = !expandedZones.value[zoneKey];
+}
+// Con busqueda activa o un filtro de estado distinto de "Todas", las zonas
+// visibles ya son justo las que matchean — no tiene sentido dejarlas
+// colapsadas y obligar a un clic mas para ver el resultado.
+function isZoneExpanded(zoneKey: string) {
+  if (searchQuery.value.trim() || statusFilter.value !== 'all') return true;
+  return !!expandedZones.value[zoneKey];
+}
 
 onMounted(async () => {
   await Promise.all([invoicesStore.fetchInvoices(), contractsStore.fetchContracts()]);
@@ -451,8 +505,12 @@ async function handleDelete(inv: Invoice) {
     <input
       v-model="searchQuery"
       placeholder="Buscar por numero de factura, cliente o contrato..."
-      class="field-input mb-4"
+      class="field-input mb-2"
     />
+    <p v-if="criticalZonesCount" class="text-xs text-red-600 mb-4">
+      ⚠ {{ criticalZonesCount }} {{ criticalZonesCount === 1 ? 'zona tiene' : 'zonas tienen' }} facturas vencidas — revisadas primero abajo.
+    </p>
+    <div v-else class="mb-4"></div>
 
     <div class="flex flex-wrap gap-2 mb-4">
       <button
@@ -468,71 +526,24 @@ async function handleDelete(inv: Invoice) {
 
     <p v-if="invoicesStore.error" class="mb-4 text-sm text-red-600">{{ invoicesStore.error }}</p>
 
-    <div class="table-shell">
-      <table class="w-full text-sm min-w-[820px]">
-        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
-          <tr>
-            <th class="text-left px-4 py-3">Factura</th>
-            <th class="text-left px-4 py-3">Cliente</th>
-            <th class="text-left px-4 py-3">Periodo</th>
-            <th class="text-left px-4 py-3">Monto</th>
-            <th class="text-left px-4 py-3">Vence</th>
-            <th class="text-left px-4 py-3">Estado</th>
-            <th class="text-right px-4 py-3">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="invoicesStore.loading">
-            <td colspan="7" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
-          </tr>
-          <tr v-else-if="!filteredInvoices.length">
-            <td colspan="7" class="px-4 py-6 text-center text-slate-500">No hay facturas en este filtro.</td>
-          </tr>
-          <tr v-for="inv in filteredInvoices" :key="inv.id" class="border-t border-slate-200 hover:bg-slate-50">
-            <td class="px-4 py-3">
-              <div class="font-mono text-xs text-slate-500">{{ inv.invoice_number }}</div>
-              <div class="text-xs text-slate-400">{{ inv.service_contracts?.contract_number }}</div>
-            </td>
-            <td class="px-4 py-3">
-              <button
-                class="text-slate-900 hover:text-sky-600"
-                @click="router.push(`/clientes/${inv.client_id}`)"
-              >
-                {{ inv.clients ? `${inv.clients.first_name} ${inv.clients.last_name}` : '—' }}
-              </button>
-            </td>
-            <td class="px-4 py-3 text-slate-600 text-xs">{{ inv.period_start }} → {{ inv.period_end }}</td>
-            <td class="px-4 py-3 font-medium">
-              <template v-if="inv.status === 'pending' && Number(inv.amount_due) < Number(inv.amount)">
-                <div>S/ {{ Number(inv.amount_due).toFixed(2) }}</div>
-                <div class="text-[11px] text-slate-400 line-through font-normal">S/ {{ Number(inv.amount).toFixed(2) }}</div>
-                <div class="text-[10px] text-green-600 font-normal">con descuento</div>
-              </template>
-              <template v-else>S/ {{ Number(inv.amount).toFixed(2) }}</template>
-            </td>
-            <td class="px-4 py-3 text-slate-600 text-xs">{{ inv.due_date }}</td>
-            <td class="px-4 py-3">
-              <span
-                class="badge"
-                :class="isOverdue(inv) ? 'bg-red-500/15 text-red-600' : STATUS_CLASS[inv.status]"
-              >
-                {{ isOverdue(inv) ? 'Vencida' : STATUS_LABEL[inv.status] }}
-              </span>
-            </td>
-            <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
-              <template v-if="inv.status === 'pending'">
-                <button class="text-green-600 hover:text-green-700 text-xs" @click="openPay(inv)">Marcar pagada</button>
-                <button class="text-red-500/80 hover:text-red-600 text-xs" @click="handleCancel(inv)">Cancelar</button>
-              </template>
-              <button v-if="inv.status === 'paid'" class="text-sky-600 hover:text-sky-700 text-xs" @click="openRecibo(inv)">Imprimir recibo</button>
-              <button v-if="isSuperadmin" class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(inv)">Editar</button>
-              <button v-if="isSuperadmin" class="text-red-500/80 hover:text-red-600 text-xs" @click="handleDelete(inv)">Eliminar</button>
-              <span v-if="inv.status === 'cancelled' && !isSuperadmin" class="text-xs text-slate-400">—</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <p v-if="invoicesStore.loading" class="text-slate-500 text-sm">Cargando...</p>
+    <p v-else-if="!zoneGroups.length" class="text-slate-500 text-sm">No hay facturas en este filtro.</p>
+    <template v-else>
+      <FacturacionZoneAccordion
+        v-for="group in zoneGroups"
+        :key="group.zoneKey"
+        :group="group"
+        :expanded="isZoneExpanded(group.zoneKey)"
+        :is-superadmin="isSuperadmin"
+        @toggle="toggleZone(group.zoneKey)"
+        @pay="openPay"
+        @cancel="handleCancel"
+        @recibo="openRecibo"
+        @edit="openEdit"
+        @delete="handleDelete"
+        @go-client="(id) => router.push(`/clientes/${id}`)"
+      />
+    </template>
 
     <Teleport to="body">
       <div v-if="showModal" class="modal-overlay">
