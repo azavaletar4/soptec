@@ -2,10 +2,17 @@
 import { computed, onMounted, ref } from 'vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useDebtHoldStore, type ApplyResult } from '@/stores/debtHold';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type { DebtHoldEvent, ServiceContract } from '@/types/domain';
 
 const debtHoldStore = useDebtHoldStore();
+const auth = useAuthStore();
+
+// Aplicar/reactivar el corte real (OLT + MikroTik) queda solo para
+// SUPERADMIN/ADMIN — FACTURACION puede ver la cola y re-escanear, pero no
+// tocar los equipos del cliente.
+const canApplyCorte = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
 const scanning = ref(false);
 const scanMessage = ref<string | null>(null);
@@ -173,7 +180,7 @@ const total = computed(() => debtHoldStore.pending.length);
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
               <button
-                v-if="ct.debt_hold_status === 'pending'"
+                v-if="canApplyCorte && ct.debt_hold_status === 'pending'"
                 class="text-red-600 hover:underline"
                 :disabled="actingId === ct.id"
                 @click="handleApply(ct)"
@@ -181,13 +188,14 @@ const total = computed(() => debtHoldStore.pending.length);
                 {{ actingId === ct.id ? 'Aplicando...' : 'Aplicar corte' }}
               </button>
               <button
-                v-if="ct.debt_hold_status === 'suspended'"
+                v-if="canApplyCorte && ct.debt_hold_status === 'suspended'"
                 class="text-emerald-600 hover:underline"
                 :disabled="actingId === ct.id"
                 @click="handleReactivate(ct)"
               >
                 {{ actingId === ct.id ? 'Reactivando...' : 'Reactivar' }}
               </button>
+              <span v-if="!canApplyCorte" class="text-slate-400">Solo Admin/Superadmin puede confirmar</span>
               <button class="text-slate-600 hover:underline" @click="openHistory(ct)">Historial</button>
             </td>
           </tr>

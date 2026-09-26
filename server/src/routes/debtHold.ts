@@ -3,15 +3,18 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { flagOverdueContracts, applyDebtHold, reactivateContract } from '../services/debtHoldService';
 
-// Corte y reactivacion por deuda — ver Fase 25. Lectura para todo el staff
-// de facturacion; aplicar/reactivar (toca MikroTik + OLT de verdad) queda
-// restringido, igual criterio que xui.ts (FACTURACION SI puede, a
-// diferencia de mikrotik.ts/olt.ts que la dejan afuera de sus PPP_WRITE —
-// aca es su modulo principal de trabajo).
+// Corte y reactivacion por deuda — ver Fase 25. Lectura (y re-escaneo, que
+// solo marca) para todo el staff de facturacion; aplicar/reactivar el corte
+// REAL (toca MikroTik + OLT de verdad) queda restringido a SUPERADMIN/ADMIN
+// — pedido explicito: el corte es semiautomatico, pero confirmarlo siempre
+// lo hace un administrador, nunca FACTURACION.
 export const debtHoldRoutes = new Hono();
 
 const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'FACTURACION'] as const;
-const STAFF_WRITE = ['SUPERADMIN', 'ADMIN', 'FACTURACION'] as const;
+// El re-escaneo solo marca (no toca equipos), igual criterio que STAFF_READ.
+const STAFF_SCAN = ['SUPERADMIN', 'ADMIN', 'FACTURACION'] as const;
+// Aplicar/reactivar el corte real (OLT + MikroTik) — solo administracion.
+const CORTE_CONFIRM = ['SUPERADMIN', 'ADMIN'] as const;
 
 debtHoldRoutes.use('*', requireAuth, requireRole(...STAFF_READ));
 
@@ -42,7 +45,7 @@ debtHoldRoutes.get('/:contractId/events', async (c) => {
 
 // Disparo manual del escaneo (ademas del scheduler automatico) — util para
 // probar o para re-escanear al toque despues de cargar facturas.
-debtHoldRoutes.post('/scan', requireRole(...STAFF_WRITE), async (c) => {
+debtHoldRoutes.post('/scan', requireRole(...STAFF_SCAN), async (c) => {
   try {
     const result = await flagOverdueContracts();
     return c.json(result);
@@ -51,7 +54,7 @@ debtHoldRoutes.post('/scan', requireRole(...STAFF_WRITE), async (c) => {
   }
 });
 
-debtHoldRoutes.post('/:contractId/apply', requireRole(...STAFF_WRITE), async (c) => {
+debtHoldRoutes.post('/:contractId/apply', requireRole(...CORTE_CONFIRM), async (c) => {
   try {
     const result = await applyDebtHold(c.req.param('contractId') ?? '');
     return c.json(result, result.ok ? 200 : 502);
@@ -60,7 +63,7 @@ debtHoldRoutes.post('/:contractId/apply', requireRole(...STAFF_WRITE), async (c)
   }
 });
 
-debtHoldRoutes.post('/:contractId/reactivate', requireRole(...STAFF_WRITE), async (c) => {
+debtHoldRoutes.post('/:contractId/reactivate', requireRole(...CORTE_CONFIRM), async (c) => {
   try {
     const result = await reactivateContract(c.req.param('contractId') ?? '');
     return c.json(result, result.ok ? 200 : 502);
