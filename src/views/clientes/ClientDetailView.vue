@@ -281,7 +281,7 @@ onMounted(async () => {
               <input v-model.number="newServiceForm.monthly_fee" type="number" step="0.01" min="0" required class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-600 mb-1">Dia de corte</label>
+              <label class="block text-xs text-slate-600 mb-1">Fecha de emisión (día del mes)</label>
               <input v-model.number="newServiceForm.billing_day" type="number" min="1" max="28" required class="field-input" />
             </div>
           </div>

@@ -33,12 +33,17 @@ function currentMonthStartIso(): string {
   return toIso(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)));
 }
 
-/** Vencimiento dentro del periodo segun billing_day, con clamp al ultimo dia del mes. */
+/**
+ * Vencimiento = fecha de emision (billing_day dentro del periodo, con clamp
+ * al ultimo dia del mes) + 7 dias — misma convencion que las facturas
+ * manuales (ver FacturacionView.vue: due_date por defecto = hoy + 7).
+ */
 function dueDateForPeriod(periodStartIso: string, billingDay: number): string {
   const [y, m] = periodStartIso.split('-').map(Number);
   const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const day = Math.min(Math.max(billingDay, 1), daysInMonth);
-  return toIso(new Date(Date.UTC(y, m - 1, day)));
+  const emissionDate = toIso(new Date(Date.UTC(y, m - 1, day)));
+  return addDaysIso(emissionDate, 7);
 }
 
 interface ContractRow {

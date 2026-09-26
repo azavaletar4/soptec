@@ -115,6 +115,21 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   card: 'Tarjeta',
 };
 
+// Mismo criterio que dueDateForPeriod() en
+// server/src/services/invoiceGenerationService.ts: dia clamped al mes +
+// 7 dias — esto es solo una vista previa (el calculo real lo hace el
+// backend al generar cada factura).
+const emissionDuePreview = computed(() => {
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const day = Math.min(Math.max(contractForm.value.billing_day || 1, 1), daysInMonth);
+  const emissionDate = new Date(now.getFullYear(), now.getMonth(), day);
+  const dueDate = new Date(emissionDate);
+  dueDate.setDate(dueDate.getDate() + 7);
+  const fmt = (d: Date) => d.toLocaleDateString('es', { day: '2-digit', month: 'short' });
+  return { emission: fmt(emissionDate), due: fmt(dueDate) };
+});
+
 async function loadContract() {
   loadingContract.value = true;
   const all = await contractsStore.fetchContractsByClient(clientId.value);
@@ -1301,9 +1316,14 @@ onMounted(async () => {
             <input v-model.number="contractForm.monthly_fee" type="number" step="0.01" min="0" required class="field-input" />
           </div>
           <div>
-            <label class="block text-xs text-slate-600 mb-1">Dia de corte</label>
+            <label class="block text-xs text-slate-600 mb-1">Fecha de emisión (día del mes)</label>
             <input v-model.number="contractForm.billing_day" type="number" min="1" max="28" required class="field-input" />
           </div>
+        </div>
+
+        <div class="mb-3 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2 text-xs text-sky-700">
+          Ejemplo este mes: emite el <strong>{{ emissionDuePreview.emission }}</strong> · vence el
+          <strong>{{ emissionDuePreview.due }}</strong> (vencimiento = emisión + 7 días).
         </div>
 
         <div>
