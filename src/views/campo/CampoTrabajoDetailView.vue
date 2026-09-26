@@ -33,12 +33,14 @@ const trabajoDescripcion = computed(() => {
   return jobType === 'installation' ? (raw as Installation).notes : (raw as Ticket).description;
 });
 
-// El join de tickets no trae GPS del cliente (ver fromTicket en el store) —
-// la ficha del cliente (clientDetail) siempre es la fuente correcta para
-// ambos tipos de trabajo, con el join de instalaciones como respaldo.
+// El GPS de la instalacion (Fase 38) vive en el contrato, no en el cliente —
+// importante en clientes con 2+ servicios, para no mostrarle al tecnico la
+// ubicacion de la casa equivocada. Si el contrato todavia no tiene GPS
+// propio (linea vieja sin backfill), cae a la ficha del cliente y despues al
+// join de instalaciones/tickets como ultimo respaldo.
 const gps = computed(() => {
-  const lat = clientDetail.value?.latitude ?? trabajo.value?.latitude ?? null;
-  const lng = clientDetail.value?.longitude ?? trabajo.value?.longitude ?? null;
+  const lat = activeContract.value?.latitude ?? clientDetail.value?.latitude ?? trabajo.value?.latitude ?? null;
+  const lng = activeContract.value?.longitude ?? clientDetail.value?.longitude ?? trabajo.value?.longitude ?? null;
   return lat != null && lng != null ? { lat, lng } : null;
 });
 
@@ -57,7 +59,14 @@ async function loadClientInfo(clientId: string) {
       contractsStore.fetchContractsByClient(clientId),
     ]);
     clientDetail.value = client;
-    activeContract.value = contracts.find((c) => c.status === 'active') ?? contracts[0] ?? null;
+    // Si el trabajo ya tiene un contrato puntual (Fase 37/38), es ESE el que
+    // hay que mostrar — no "cualquier contrato activo del cliente", que en
+    // uno con 2+ servicios podia mostrar el plan/zona de la casa equivocada.
+    activeContract.value =
+      contracts.find((c) => c.id === trabajo.value?.contractId) ??
+      contracts.find((c) => c.status === 'active') ??
+      contracts[0] ??
+      null;
   } catch {
     // Info de apoyo: si falla, el tecnico igual puede seguir con el trabajo.
   } finally {
@@ -79,10 +88,14 @@ const PHOTO_LABEL: Record<ClientPhotoCategory, string> = {
 const existingPhotos = ref<ClientPhotoWithUrl[]>([]);
 const loadingPhotos = ref(false);
 
-async function loadExistingPhotos(clientId: string) {
+async function loadExistingPhotos(contractId: string | null) {
+  if (!contractId) {
+    existingPhotos.value = [];
+    return;
+  }
   loadingPhotos.value = true;
   try {
-    existingPhotos.value = await clientPhotosStore.fetchPhotos(clientId);
+    existingPhotos.value = await clientPhotosStore.fetchPhotos(contractId);
   } catch {
     existingPhotos.value = [];
   } finally {
@@ -98,7 +111,7 @@ onMounted(async () => {
   inventoryStore.fetchProducts().catch(() => {});
   await loadMaterials();
   if (trabajo.value) {
-    await Promise.all([loadClientInfo(trabajo.value.clientId), loadExistingPhotos(trabajo.value.clientId)]);
+    await Promise.all([loadClientInfo(trabajo.value.clientId), loadExistingPhotos(trabajo.value.contractId)]);
   }
 });
 
@@ -293,6 +306,7 @@ async function handleCloseSubmit() {
       jobType,
       jobId,
       clientId: trabajo.value.clientId,
+      contractId: trabajo.value.contractId,
       targetStatus: jobType === 'installation' ? 'completed' : 'resolved',
       latitude: closureForm.value.latitude,
       longitude: closureForm.value.longitude,
@@ -352,7 +366,7 @@ async function handleCloseSubmit() {
           <dd v-if="clientDetail.email" class="text-slate-700 text-right truncate">{{ clientDetail.email }}</dd>
 
           <dt class="text-slate-400">Zona</dt>
-          <dd class="text-slate-700 text-right">{{ clientDetail.zones?.name ?? '—' }}</dd>
+          <dd class="text-slate-700 text-right">{{ activeContract?.zones?.name ?? '—' }}</dd>
 
           <dt class="text-slate-400">GPS registrado</dt>
           <dd class="text-right font-mono">

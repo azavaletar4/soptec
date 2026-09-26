@@ -1,12 +1,12 @@
 import L from 'leaflet';
-import type { InfraElementoTipo, ClientStatus } from '@/types/domain';
+import type { ContractStatus, InfraElementoTipo } from '@/types/domain';
 import type { InfraElementoWithUrl } from '@/stores/infraElementos';
 
-export const CLIENT_COLOR: Record<ClientStatus, string> = {
+/** Color del pin de un SERVICIO en el mapa (Fase 38: un pin por linea, no por cliente). */
+export const CONTRACT_COLOR: Record<ContractStatus, string> = {
   active: '#22c55e',
   suspended: '#ef4444',
-  prospect: '#f59e0b',
-  retired: '#64748b',
+  cancelled: '#64748b',
 };
 
 export const INFRA_STYLE: Record<InfraElementoTipo, { color: string; shape: 'square' | 'diamond' | 'mufa' | 'nap' | 'circle' | 'pentagon' }> = {

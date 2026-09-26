@@ -13,10 +13,11 @@ export interface ClientPhotoWithUrl extends ClientPhoto {
 export const useClientPhotosStore = defineStore('clientPhotos', () => {
   const loading = ref(false);
 
-  async function fetchPhotos(clientId: string): Promise<ClientPhotoWithUrl[]> {
+  /** Fotos de UN servicio puntual (Fase 38) — cada linea tiene su propio slot por categoria. */
+  async function fetchPhotos(contractId: string): Promise<ClientPhotoWithUrl[]> {
     loading.value = true;
     try {
-      const { data, error } = await supabase.from('client_photos').select('*').eq('client_id', clientId);
+      const { data, error } = await supabase.from('client_photos').select('*').eq('contract_id', contractId);
       if (error) throw error;
       const rows = (data ?? []) as ClientPhoto[];
       return await Promise.all(
@@ -32,19 +33,20 @@ export const useClientPhotosStore = defineStore('clientPhotos', () => {
 
   async function uploadPhoto(
     clientId: string,
+    contractId: string,
     category: ClientPhotoCategory,
     file: File,
     previousPath?: string | null,
   ): Promise<ClientPhotoWithUrl> {
     const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg';
-    const path = `${clientId}/${category}-${Date.now()}.${ext}`;
+    const path = `${clientId}/${contractId}/${category}-${Date.now()}.${ext}`;
 
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false });
     if (uploadError) throw uploadError;
 
     const { data, error } = await supabase
       .from('client_photos')
-      .upsert({ client_id: clientId, category, storage_path: path }, { onConflict: 'client_id,category' })
+      .upsert({ client_id: clientId, contract_id: contractId, category, storage_path: path }, { onConflict: 'contract_id,category' })
       .select()
       .single();
     if (error) throw error;

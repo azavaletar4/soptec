@@ -38,6 +38,17 @@ export const useTicketsStore = defineStore('tickets', () => {
     return (data ?? []) as unknown as Ticket[];
   }
 
+  /** Tickets asociados a UN servicio/contrato puntual (Fase 37). */
+  async function fetchTicketsByContract(contractId: string) {
+    const { data, error: err } = await supabase
+      .from('tickets')
+      .select(TICKET_SELECT)
+      .eq('contract_id', contractId)
+      .order('created_at', { ascending: false });
+    if (err) throw err;
+    return (data ?? []) as unknown as Ticket[];
+  }
+
   async function createTicket(payload: Partial<Ticket>) {
     const { data, error: err } = await supabase.from('tickets').insert(payload).select(TICKET_SELECT).single();
     if (err) throw err;
@@ -134,6 +145,7 @@ export const useTicketsStore = defineStore('tickets', () => {
     error,
     fetchTickets,
     fetchTicketsByClient,
+    fetchTicketsByContract,
     createTicket,
     updateTicket,
     deleteTicket,

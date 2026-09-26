@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import type { ContractStatus, ServiceContract } from '@/types/domain';
 
 const CONTRACT_SELECT =
-  '*, clients(id, first_name, last_name, document_number), plans(id, name, download_speed, upload_speed, price)';
+  '*, clients(id, first_name, last_name, document_number), plans(id, name, download_speed, upload_speed, price), zones(id, name)';
 
 export const useContractsStore = defineStore('contracts', () => {
   const contracts = ref<ServiceContract[]>([]);
@@ -29,7 +29,7 @@ export const useContractsStore = defineStore('contracts', () => {
   async function fetchContractsByClient(clientId: string) {
     const { data, error: err } = await supabase
       .from('service_contracts')
-      .select('*, plans(id, name, download_speed, upload_speed, price)')
+      .select('*, plans(id, name, download_speed, upload_speed, price), zones(id, name)')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
     if (err) throw err;

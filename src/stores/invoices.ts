@@ -41,6 +41,17 @@ export const useInvoicesStore = defineStore('invoices', () => {
     return (data ?? []) as unknown as Invoice[];
   }
 
+  /** Facturas de UN servicio/contrato puntual (Fase 37). */
+  async function fetchInvoicesByContract(contractId: string) {
+    const { data, error: err } = await supabase
+      .from('invoices')
+      .select(INVOICE_SELECT)
+      .eq('contract_id', contractId)
+      .order('created_at', { ascending: false });
+    if (err) throw err;
+    return (data ?? []) as unknown as Invoice[];
+  }
+
   async function createInvoice(payload: Partial<Invoice>) {
     const { data, error: err } = await supabase.from('invoices').insert(payload).select(INVOICE_SELECT).single();
     if (err) throw err;
@@ -124,5 +135,5 @@ export const useInvoicesStore = defineStore('invoices', () => {
     invoices.value = invoices.value.filter((i) => i.id !== id);
   }
 
-  return { invoices, loading, error, fetchInvoices, fetchInvoicesByClient, createInvoice, updateInvoice, markPaid, fetchAdjustments, generateDue, cancelInvoice, deleteInvoice };
+  return { invoices, loading, error, fetchInvoices, fetchInvoicesByClient, fetchInvoicesByContract, createInvoice, updateInvoice, markPaid, fetchAdjustments, generateDue, cancelInvoice, deleteInvoice };
 });

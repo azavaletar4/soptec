@@ -5,14 +5,16 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useClientsStore } from '@/stores/clients';
+import { useContractsStore } from '@/stores/contracts';
 import { useInstallationsStore } from '@/stores/installations';
 import { useInfraElementosStore, type InfraElementoWithUrl } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import SpliceDiagramModal from './SpliceDiagramModal.vue';
-import { CLIENT_COLOR, infraIcon, permanentLabel } from './mapIcons';
+import { CONTRACT_COLOR, infraIcon, permanentLabel } from './mapIcons';
 
 const router = useRouter();
 const clientsStore = useClientsStore();
+const contractsStore = useContractsStore();
 const installationsStore = useInstallationsStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
@@ -28,11 +30,16 @@ let clientLayer: L.LayerGroup | null = null;
 let installationLayer: L.LayerGroup | null = null;
 let napLayer: L.LayerGroup | null = null;
 
-const clientsWithGps = computed(() => clientsStore.clients.filter((c) => c.latitude != null && c.longitude != null));
+// Un pin por SERVICIO, no por cliente (Fase 38) — un cliente con 2 lineas en
+// direcciones distintas ahora aparece con 2 pines, cada uno con su propia
+// ubicacion (service_contracts.latitude/longitude), no con el punto unico
+// del titular.
+const contractsWithGps = computed(() => contractsStore.contracts.filter((c) => c.latitude != null && c.longitude != null));
 const pendingInstallations = computed(() =>
-  installationsStore.installations.filter(
-    (i) => (i.status === 'pending' || i.status === 'scheduled') && i.clients?.latitude != null && i.clients?.longitude != null,
-  ),
+  installationsStore.installations
+    .filter((i) => i.status === 'pending' || i.status === 'scheduled')
+    .map((i) => ({ installation: i, contract: contractsStore.contracts.find((c) => c.id === i.contract_id) ?? null }))
+    .filter((x) => x.contract?.latitude != null && x.contract?.longitude != null),
 );
 const napsConGps = computed(() => infraStore.elementos.filter((e) => e.tipo === 'caja_nap' && e.latitude != null && e.longitude != null));
 
@@ -40,20 +47,20 @@ function renderClientMarkers() {
   if (!clientLayer) return;
   clientLayer.clearLayers();
   if (!showClients.value) return;
-  for (const c of clientsWithGps.value) {
-    const marker = L.circleMarker([c.latitude as number, c.longitude as number], {
+  for (const ct of contractsWithGps.value) {
+    const marker = L.circleMarker([ct.latitude as number, ct.longitude as number], {
       radius: 7,
       color: '#0f172a',
       weight: 1.5,
-      fillColor: CLIENT_COLOR[c.status],
+      fillColor: CONTRACT_COLOR[ct.status],
       fillOpacity: 0.9,
     });
     marker.bindPopup(
       `<div style="font-size:13px">
-        <b>${c.first_name} ${c.last_name}</b><br/>
-        ${c.address ?? 'Sin dirección'}<br/>
-        <span style="color:${CLIENT_COLOR[c.status]}">● ${c.status}</span><br/>
-        <a href="/clientes/${c.id}" style="color:#38bdf8">Ver cliente →</a>
+        <b>${ct.clients?.first_name ?? ''} ${ct.clients?.last_name ?? ''}</b> <span style="color:#64748b">(${ct.contract_number})</span><br/>
+        ${ct.installation_address ?? 'Sin dirección'}<br/>
+        <span style="color:${CONTRACT_COLOR[ct.status]}">● ${ct.status}</span><br/>
+        <a href="/clientes/${ct.client_id}/servicios/${ct.id}" style="color:#38bdf8">Ver servicio →</a>
       </div>`,
     );
     marker.addTo(clientLayer);
@@ -64,9 +71,9 @@ function renderInstallationMarkers() {
   if (!installationLayer) return;
   installationLayer.clearLayers();
   if (!showInstallations.value) return;
-  for (const inst of pendingInstallations.value) {
-    const lat = inst.clients!.latitude as number;
-    const lng = inst.clients!.longitude as number;
+  for (const { installation: inst, contract: ct } of pendingInstallations.value) {
+    const lat = ct!.latitude as number;
+    const lng = ct!.longitude as number;
     const icon = L.divIcon({
       html: `<div style="width:22px;height:22px;border-radius:50%;background:#0ea5e9;border:2px solid #0f172a;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 0 0 3px rgba(14,165,233,0.35)">🔧</div>`,
       className: '',
@@ -76,7 +83,7 @@ function renderInstallationMarkers() {
     const marker = L.marker([lat, lng], { icon });
     marker.bindPopup(
       `<div style="font-size:13px">
-        <b>${inst.clients?.first_name} ${inst.clients?.last_name}</b><br/>
+        <b>${inst.clients?.first_name} ${inst.clients?.last_name}</b> <span style="color:#64748b">(${ct?.contract_number ?? ''})</span><br/>
         Instalación: <b>${inst.status === 'scheduled' ? 'Programada' : 'Pendiente'}</b><br/>
         ${inst.scheduled_date ? `Fecha: ${inst.scheduled_date}` : 'Sin fecha programada'}<br/>
         <a href="/instalaciones" style="color:#38bdf8">Ver instalaciones →</a>
@@ -136,8 +143,8 @@ function wireNapPopup(el: InfraElementoWithUrl) {
 function fitToMarkers() {
   if (!map) return;
   const points: L.LatLngExpression[] = [
-    ...clientsWithGps.value.map((c) => [c.latitude as number, c.longitude as number] as L.LatLngExpression),
-    ...pendingInstallations.value.map((i) => [i.clients!.latitude as number, i.clients!.longitude as number] as L.LatLngExpression),
+    ...contractsWithGps.value.map((c) => [c.latitude as number, c.longitude as number] as L.LatLngExpression),
+    ...pendingInstallations.value.map((i) => [i.contract!.latitude as number, i.contract!.longitude as number] as L.LatLngExpression),
     ...napsConGps.value.map((e) => [e.latitude as number, e.longitude as number] as L.LatLngExpression),
   ];
   if (points.length) {
@@ -156,7 +163,13 @@ onMounted(async () => {
 
   loading.value = true;
   try {
-    await Promise.all([clientsStore.fetchClients(), installationsStore.fetchInstallations(), infraStore.fetchElementos(), fibra.fetchTodosNapPuertos()]);
+    await Promise.all([
+      clientsStore.fetchClients(),
+      contractsStore.fetchContracts(),
+      installationsStore.fetchInstallations(),
+      infraStore.fetchElementos(),
+      fibra.fetchTodosNapPuertos(),
+    ]);
   } finally {
     loading.value = false;
   }
@@ -203,7 +216,7 @@ function handlePuertosClose() {
           <h1 class="text-2xl font-semibold">Mapa de Clientes</h1>
           <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 font-medium">Clientes y cajas NAP</span>
         </div>
-        <p class="text-slate-600 text-sm mt-1">{{ clientsWithGps.length }} clientes · {{ napsConGps.length }} cajas NAP</p>
+        <p class="text-slate-600 text-sm mt-1">{{ contractsWithGps.length }} servicios · {{ napsConGps.length }} cajas NAP</p>
       </div>
       <div class="flex flex-wrap gap-2">
         <button class="btn-secondary text-xs" @click="goTo('/mapa/red')">🕸️ Ver mapa de red →</button>
@@ -212,7 +225,7 @@ function handlePuertosClose() {
           :class="showClients ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
           @click="showClients = !showClients"
         >
-          <span class="w-2 h-2 rounded-full bg-green-500"></span> Clientes ({{ clientsWithGps.length }})
+          <span class="w-2 h-2 rounded-full bg-green-500"></span> Servicios ({{ contractsWithGps.length }})
         </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
@@ -255,7 +268,7 @@ function handlePuertosClose() {
     </div>
 
     <p class="text-xs text-slate-500 mt-3">
-      Los clientes sin coordenadas GPS registradas (ver ficha del cliente) no aparecen en el mapa.
+      Los servicios sin coordenadas GPS registradas (ver pestaña "Ubicación" en la ficha de cada servicio) no aparecen en el mapa.
     </p>
 
     <SpliceDiagramModal

@@ -2,6 +2,7 @@ export type ConnectionTechnology = 'fiber' | 'radio' | 'cable' | 'dsl';
 export type DocumentType = 'cedula' | 'ruc' | 'pasaporte';
 export type ClientStatus = 'prospect' | 'active' | 'suspended' | 'retired';
 export type ContractStatus = 'active' | 'suspended' | 'cancelled';
+export type ContractPriority = 'high' | 'medium' | 'low';
 export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TicketCategory =
@@ -89,6 +90,8 @@ export type ClientPhotoCategory = 'facade' | 'service_sheet' | 'modem_position' 
 export interface ClientPhoto {
   id: string;
   client_id: string;
+  /** A que servicio/linea pertenece esta foto (Fase 38) — null en fotos viejas de clientes multi-servicio, pendientes de reasignar a mano. */
+  contract_id: string | null;
   category: ClientPhotoCategory;
   storage_path: string;
   uploaded_by: string | null;
@@ -98,14 +101,26 @@ export interface ClientPhoto {
 export interface ServiceContract {
   id: string;
   contract_number: string | null;
+  /** Codigo de cliente de ESTE servicio (Fase 39) — un titular puede tener varios, uno por linea; clients.client_code queda como dato heredado. */
+  client_code: string | null;
   client_id: string;
   plan_id: string | null;
   monthly_fee: number;
   status: ContractStatus;
+  /** Prioridad de atencion de ESTE servicio (Fase 41), en la pestaña "General". */
+  priority: ContractPriority;
   start_date: string;
   end_date: string | null;
   billing_day: number;
   payment_method: string | null;
+  /** Ubicacion de ESTA instalacion (Fase 37) — puede diferir de la del titular si tiene mas de un servicio. */
+  installation_address: string | null;
+  installation_reference: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  /** Zona de ESTA instalacion (Fase 38) — clients.zone_id queda como dato heredado, ya no se edita. */
+  zone_id: string | null;
+  zones?: Pick<Zone, 'id' | 'name'> | null;
   mikrotik_device_id: string | null;
   pppoe_username: string | null;
   mikrotik_profile: string | null;
@@ -216,6 +231,8 @@ export interface InventoryUnit {
   mac_address: string | null;
   status: InventoryUnitStatus;
   client_id: string | null;
+  /** A que servicio/linea del cliente esta asignado este equipo (Fase 37) — null en clientes con un solo contrato historico (backfill automatico) o pendiente de asignar a mano. */
+  contract_id: string | null;
   installation_id: string | null;
   assigned_at: string | null;
   notes: string | null;
@@ -342,10 +359,13 @@ export interface FoNapPuerto {
   puerto_numero: number;
   estado: FoNapPuertoEstado;
   client_id: string | null;
+  /** A que servicio/linea del cliente pertenece este puerto (Fase 38) — null en casos ambiguos (cliente multi-servicio) pendientes de reasignar a mano. */
+  contract_id: string | null;
   fusion_id: string | null;
   notes: string | null;
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name'> | null;
+  service_contracts?: Pick<ServiceContract, 'id' | 'contract_number'> | null;
 }
 
 export interface Tr069Device {
@@ -489,6 +509,8 @@ export interface PagoAdelantado {
 export interface DescuentoCompensacion {
   id: string;
   client_id: string;
+  /** null = compensacion para el cliente completo; con valor, solo aplica a facturas de ESE contrato (Fase 37). */
+  contract_id: string | null;
   monto: number;
   motivo: string;
   estado: DescuentoCompensacionEstado;

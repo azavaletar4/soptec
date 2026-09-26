@@ -2,21 +2,21 @@
 import { computed, onMounted, ref } from 'vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useCatalogsStore } from '@/stores/catalogs';
-import { useClientsStore } from '@/stores/clients';
+import { useContractsStore } from '@/stores/contracts';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { getErrorMessage } from '@/lib/errors';
 import { NAP_CLIENT_LIMIT, ZONE_CLIENT_LIMIT, ZONE_NAP_LIMIT, type Zone } from '@/types/domain';
 
 const catalogs = useCatalogsStore();
-const clientsStore = useClientsStore();
+const contractsStore = useContractsStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 
 onMounted(async () => {
   await Promise.all([
     catalogs.fetchZones(),
-    clientsStore.fetchClients(),
+    contractsStore.fetchContracts(),
     infraStore.fetchElementos(),
     fibra.fetchTodosNapPuertos(),
   ]);
@@ -52,7 +52,9 @@ const napsByZone = computed(() => {
     const clients = ocupados
       .map((p) => ({
         id: p.client_id as string,
+        contractId: p.contract_id,
         name: p.clients ? `${p.clients.first_name} ${p.clients.last_name}`.trim() : 'Cliente',
+        contractNumber: p.service_contracts?.contract_number ?? null,
         puerto: p.puerto_numero,
       }))
       .sort((a, b) => a.puerto - b.puerto);
@@ -68,7 +70,7 @@ const zonesWithCount = computed(() => {
   return catalogs.zones
     .map((z) => ({
       zone: z,
-      count: clientsStore.clients.filter((c) => c.zone_id === z.id).length,
+      count: contractsStore.contracts.filter((c) => c.zone_id === z.id).length,
       naps: napsByZone.value[z.id] ?? [],
     }))
     .filter((z) => !q || z.zone.name.toLowerCase().includes(q) || z.naps.some((n) => n.name.toLowerCase().includes(q)))
@@ -231,11 +233,11 @@ async function handleDelete(zone: Zone) {
                     <ul v-if="n.clients.length" class="space-y-0.5 max-h-28 overflow-y-auto">
                       <li v-for="c in n.clients" :key="c.id">
                         <router-link
-                          :to="`/clientes/${c.id}`"
+                          :to="c.contractId ? `/clientes/${c.id}/servicios/${c.contractId}` : `/clientes/${c.id}`"
                           class="block truncate text-xs text-sky-600 hover:underline"
                           :title="c.name"
                         >
-                          {{ c.name }}
+                          {{ c.name }} <span v-if="c.contractNumber" class="text-slate-400">({{ c.contractNumber }})</span>
                         </router-link>
                       </li>
                     </ul>

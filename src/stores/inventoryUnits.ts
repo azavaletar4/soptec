@@ -41,6 +41,17 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     return (data ?? []) as unknown as InventoryUnit[];
   }
 
+  /** Equipos asignados a UN servicio/contrato puntual (Fase 37) — subconjunto de fetchUnitsByClient. */
+  async function fetchUnitsByContract(contractId: string) {
+    const { data, error: err } = await supabase
+      .from('inventory_units')
+      .select(UNIT_SELECT)
+      .eq('contract_id', contractId)
+      .order('created_at', { ascending: false });
+    if (err) throw err;
+    return (data ?? []) as unknown as InventoryUnit[];
+  }
+
   /** Unidades por estado (o lista de estados) — usado por el modulo de Devoluciones. */
   async function fetchUnitsByStatus(status: InventoryUnitStatus | InventoryUnitStatus[]) {
     let query = supabase.from('inventory_units').select(UNIT_SELECT);
@@ -98,6 +109,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     unitId: string;
     toStatus: InventoryUnitStatus;
     clientId?: string;
+    contractId?: string;
     installationId?: string;
     reason?: string;
   }) {
@@ -107,6 +119,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
         unit_id: params.unitId,
         to_status: params.toStatus,
         client_id: params.clientId || null,
+        contract_id: params.contractId || null,
         installation_id: params.installationId || null,
         reason: params.reason || null,
       })
@@ -116,9 +129,25 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     return data as unknown as InventoryUnitEvent;
   }
 
-  /** Asocia una unidad al perfil de un cliente, tipicamente al momento de la instalacion. */
-  function assignUnit(unitId: string, clientId: string, installationId?: string, reason?: string) {
-    return registerEvent({ unitId, toStatus: 'assigned', clientId, installationId, reason: reason || 'Asignacion a cliente' });
+  /**
+   * Asocia una unidad al perfil de un cliente, tipicamente al momento de la
+   * instalacion. `contractId` (Fase 37) deja constancia de a que servicio/
+   * linea del cliente pertenece este equipo — importante en clientes con
+   * mas de un contrato, para no mezclar el equipo de una casa con otra.
+   */
+  function assignUnit(
+    unitId: string,
+    clientId: string,
+    opts?: { installationId?: string; contractId?: string; reason?: string },
+  ) {
+    return registerEvent({
+      unitId,
+      toStatus: 'assigned',
+      clientId,
+      installationId: opts?.installationId,
+      contractId: opts?.contractId,
+      reason: opts?.reason || 'Asignacion a cliente',
+    });
   }
 
   /** Devolucion de un cliente: el equipo vuelve a bodega en buen estado, dañado o para reparar. */
@@ -134,6 +163,23 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
   /** Baja definitiva: el equipo ya no se reasigna. */
   function retireUnit(unitId: string, reason?: string) {
     return registerEvent({ unitId, toStatus: 'retired', reason: reason || 'Baja de equipo' });
+  }
+
+  /**
+   * Aclara a que servicio/linea del cliente pertenece un equipo YA asignado
+   * (Fase 37), sin tocar su estado ni disparar un evento de Kardex — no es
+   * un cambio de estado, es solo precisar la metadata (mismo criterio que
+   * updateUnit para serie/MAC/notas).
+   */
+  async function setUnitContract(unitId: string, contractId: string | null) {
+    const { data, error: err } = await supabase
+      .from('inventory_units')
+      .update({ contract_id: contractId })
+      .eq('id', unitId)
+      .select(UNIT_SELECT)
+      .single();
+    if (err) throw err;
+    return data as unknown as InventoryUnit;
   }
 
   /** Corrige los datos identificativos del equipo (serie/MAC/notas), sin afectar su estado ni historial. */
@@ -169,12 +215,14 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     fetchUnitsByProduct,
     fetchUnitsByInstallation,
     fetchUnitsByClient,
+    fetchUnitsByContract,
     fetchUnitsByStatus,
     fetchEvents,
     createUnit,
     updateUnit,
     registerEvent,
     assignUnit,
+    setUnitContract,
     returnUnit,
     markRepaired,
     retireUnit,

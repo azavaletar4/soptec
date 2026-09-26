@@ -201,6 +201,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
         puerto_numero: p.puerto_numero,
         estado: p.estado,
         client_id: p.client_id,
+        contract_id: p.contract_id,
         fusion_id: p.fusion_id ? (fusionIdMap[p.fusion_id] ?? null) : null,
         notes: p.notes,
       });
@@ -209,7 +210,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
 
   /** Carga la ocupación de puertos de TODAS las cajas NAP de una vez (resumen para el mapa de clientes). */
   async function fetchTodosNapPuertos() {
-    const { data, error } = await supabase.from('fo_nap_puertos').select('*, clients(id, first_name, last_name)').order('puerto_numero');
+    const { data, error } = await supabase.from('fo_nap_puertos').select('*, clients(id, first_name, last_name), service_contracts(id, contract_number)').order('puerto_numero');
     if (error) throw error;
     const porElemento: Record<string, FoNapPuerto[]> = {};
     for (const row of (data ?? []) as FoNapPuerto[]) {
@@ -221,7 +222,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
   async function fetchNapPuertos(infraElementoId: string) {
     const { data, error } = await supabase
       .from('fo_nap_puertos')
-      .select('*, clients(id, first_name, last_name)')
+      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number)')
       .eq('infra_elemento_id', infraElementoId)
       .order('puerto_numero');
     if (error) throw error;
@@ -234,13 +235,14 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     puerto_numero: number;
     estado: FoNapPuerto['estado'];
     client_id?: string | null;
+    contract_id?: string | null;
     fusion_id?: string | null;
     notes?: string | null;
   }) {
     const { data, error } = await supabase
       .from('fo_nap_puertos')
       .upsert(payload, { onConflict: 'infra_elemento_id,puerto_numero' })
-      .select('*, clients(id, first_name, last_name)')
+      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number)')
       .single();
     if (error) throw error;
     const list = napPuertosPorElemento.value[payload.infra_elemento_id] ?? [];
@@ -251,13 +253,13 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     return data as FoNapPuerto;
   }
 
-  /** Libera cualquier puerto NAP que tenga asignado este cliente (lo deja 'libre'). */
-  async function unassignClient(clientId: string) {
+  /** Libera solo el puerto NAP de ESTE contrato (Fase 38), sin tocar otros puertos del mismo cliente. */
+  async function unassignContract(contractId: string) {
     const { data, error } = await supabase
       .from('fo_nap_puertos')
-      .update({ estado: 'libre', client_id: null })
-      .eq('client_id', clientId)
-      .select('*, clients(id, first_name, last_name)');
+      .update({ estado: 'libre', client_id: null, contract_id: null })
+      .eq('contract_id', contractId)
+      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number)');
     if (error) throw error;
     for (const row of (data ?? []) as FoNapPuerto[]) {
       const list = napPuertosPorElemento.value[row.infra_elemento_id] ?? [];
@@ -267,25 +269,38 @@ export const useFoFibraStore = defineStore('foFibra', () => {
   }
 
   /**
-   * Asigna un cliente a una caja NAP desde la ficha de cliente (fuera del
-   * diagrama de empalmes): libera cualquier puerto que ya tuviera en otra
-   * NAP, reutiliza el primer puerto 'libre' de la NAP destino, o crea uno
-   * nuevo si hay cupo (bajo `capacity`, ver NAP_CLIENT_LIMIT).
+   * Asigna UN SERVICIO puntual (contractId) a una caja NAP: libera solo el
+   * puerto que esa linea ya tuviera en otra NAP (nunca los de otras lineas
+   * del mismo cliente — ese era el bug real de assignClientToNap con
+   * clientes multi-servicio), reutiliza el primer puerto 'libre' de la NAP
+   * destino, o crea uno nuevo si hay cupo (bajo `capacity`).
    */
-  async function assignClientToNap(infraElementoId: string, clientId: string, capacity: number) {
-    await unassignClient(clientId);
+  async function assignContractToNap(infraElementoId: string, contractId: string, clientId: string, capacity: number) {
+    await unassignContract(contractId);
 
     const puertos = napPuertosPorElemento.value[infraElementoId] ?? (await fetchNapPuertos(infraElementoId));
     const libre = puertos.find((p) => p.estado === 'libre');
     if (libre) {
-      return upsertNapPuerto({ infra_elemento_id: infraElementoId, puerto_numero: libre.puerto_numero, estado: 'ocupado', client_id: clientId });
+      return upsertNapPuerto({
+        infra_elemento_id: infraElementoId,
+        puerto_numero: libre.puerto_numero,
+        estado: 'ocupado',
+        client_id: clientId,
+        contract_id: contractId,
+      });
     }
 
     if (puertos.length >= capacity) {
-      throw new Error(`La caja NAP ya alcanzó su capacidad máxima (${capacity} clientes). Libera un puerto antes de asignar este cliente.`);
+      throw new Error(`La caja NAP ya alcanzó su capacidad máxima (${capacity} clientes). Libera un puerto antes de asignar este servicio.`);
     }
     const nextPuerto = puertos.reduce((max, p) => Math.max(max, p.puerto_numero), 0) + 1;
-    return upsertNapPuerto({ infra_elemento_id: infraElementoId, puerto_numero: nextPuerto, estado: 'ocupado', client_id: clientId });
+    return upsertNapPuerto({
+      infra_elemento_id: infraElementoId,
+      puerto_numero: nextPuerto,
+      estado: 'ocupado',
+      client_id: clientId,
+      contract_id: contractId,
+    });
   }
 
   /**
@@ -364,8 +379,8 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     fetchTodosNapPuertos,
     fetchNapPuertos,
     upsertNapPuerto,
-    unassignClient,
-    assignClientToNap,
+    unassignContract,
+    assignContractToNap,
     traceFromNapPuerto,
   };
 });

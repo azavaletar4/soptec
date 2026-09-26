@@ -31,6 +31,15 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: NOT_TECNICO },
     },
     {
+      // Ficha independiente de UN servicio/contrato puntual (Fase 37): ver
+      // comentario en ClientDetailView.vue sobre por que un cliente con 2+
+      // servicios no los muestra mezclados en una sola pantalla.
+      path: '/clientes/:id/servicios/:contractId',
+      name: 'cliente-servicio-detalle',
+      component: () => import('@/views/clientes/ClientServiceDetailView.vue'),
+      meta: { requiresAuth: true, roles: NOT_TECNICO },
+    },
+    {
       path: '/olt',
       name: 'olt',
       component: () => import('@/views/olt/OltDevicesView.vue'),
@@ -168,6 +177,14 @@ const router = createRouter({
       name: 'mikrotik',
       component: () => import('@/views/mikrotik/MikrotikDevicesView.vue'),
       meta: { requiresAuth: true, roles: NOT_TECNICO },
+    },
+    {
+      path: '/analitica',
+      name: 'analitica',
+      component: () => import('@/views/analitica/AnaliticaView.vue'),
+      // Vision global de consumo de TODA la red — solo administracion,
+      // igual que /usuarios (ver server/src/routes/analytics.ts).
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
     },
     {
       path: '/mikrotik/:id',

@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useClientsStore } from '@/stores/clients';
+import { useContractsStore } from '@/stores/contracts';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
-import type { Ticket, TicketCategory, TicketPriority, TicketStatus } from '@/types/domain';
+import type { ServiceContract, Ticket, TicketCategory, TicketPriority, TicketStatus } from '@/types/domain';
 
+const route = useRoute();
 const router = useRouter();
 const ticketsStore = useTicketsStore();
 const clientsStore = useClientsStore();
+const contractsStore = useContractsStore();
 const auth = useAuthStore();
 
 // Crear tickets es solo para ADMIN/SUPERADMIN; TECNICO_RED y SOPORTE
@@ -30,12 +33,15 @@ const searchQuery = ref('');
 
 const emptyForm = () => ({
   client_id: '',
+  contract_id: '',
   title: '',
   description: '',
   category: 'other' as TicketCategory,
   priority: 'medium' as TicketPriority,
 });
 const form = ref(emptyForm());
+const ticketContracts = ref<ServiceContract[]>([]);
+const loadingTicketContracts = ref(false);
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: 'Abierto',
@@ -104,11 +110,39 @@ const filteredClients = computed(() => {
 
 onMounted(async () => {
   await Promise.all([ticketsStore.fetchTickets(), clientsStore.fetchClients()]);
+  // Deep link desde la ficha de un servicio puntual (Fase 37):
+  // /soporte?client_id=..&contract_id=.. abre el modal ya precargado, para
+  // que el ticket quede asociado a ESA linea y no solo al cliente.
+  const clientId = route.query.client_id as string | undefined;
+  if (clientId && canCreateTickets.value) {
+    openCreate();
+    form.value.client_id = clientId;
+    await onTicketClientChange();
+    const contractId = route.query.contract_id as string | undefined;
+    if (contractId && ticketContracts.value.some((c) => c.id === contractId)) form.value.contract_id = contractId;
+  }
 });
+
+// Un cliente puede tener mas de un servicio (Fase 37): al elegirlo, se
+// cargan sus contratos para poder asociar el ticket a la linea puntual
+// (o dejarlo general si no aplica a una linea especifica).
+async function onTicketClientChange() {
+  form.value.contract_id = '';
+  ticketContracts.value = [];
+  if (!form.value.client_id) return;
+  loadingTicketContracts.value = true;
+  try {
+    ticketContracts.value = await contractsStore.fetchContractsByClient(form.value.client_id);
+    if (ticketContracts.value.length === 1) form.value.contract_id = ticketContracts.value[0].id;
+  } finally {
+    loadingTicketContracts.value = false;
+  }
+}
 
 function openCreate() {
   form.value = emptyForm();
   clientFilter.value = '';
+  ticketContracts.value = [];
   formError.value = null;
   showModal.value = true;
 }
@@ -123,6 +157,7 @@ async function handleSubmit() {
   try {
     const created = await ticketsStore.createTicket({
       client_id: form.value.client_id,
+      contract_id: form.value.contract_id || null,
       title: form.value.title,
       description: form.value.description || null,
       category: form.value.category,
@@ -283,11 +318,25 @@ function formatDate(value: string) {
               required
               size="5"
               class="field-input"
+              @change="onTicketClientChange"
             >
               <option v-for="c in filteredClients" :key="c.id" :value="c.id">
                 {{ c.first_name }} {{ c.last_name }} — {{ c.document_number }}
               </option>
             </select>
+          </div>
+
+          <div v-if="form.client_id" class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Servicio/línea</label>
+            <select v-model="form.contract_id" class="field-input" :disabled="loadingTicketContracts">
+              <option value="">{{ loadingTicketContracts ? 'Cargando...' : 'General (no aplica a una línea específica)' }}</option>
+              <option v-for="ct in ticketContracts" :key="ct.id" :value="ct.id">
+                {{ ct.contract_number }} — {{ ct.installation_address || 'Sin dirección' }}
+              </option>
+            </select>
+            <p v-if="ticketContracts.length > 1" class="text-xs text-amber-600 mt-1">
+              Este cliente tiene {{ ticketContracts.length }} servicios — elige a cuál corresponde el reclamo.
+            </p>
           </div>
 
           <div class="mb-3">

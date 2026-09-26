@@ -177,12 +177,11 @@ async function handleAssignUnit() {
   savingUnit.value = true;
   unitError.value = null;
   try {
-    await inventoryUnitsStore.assignUnit(
-      unitForm.value.unitId,
-      materialsInstallation.value.client_id,
-      materialsInstallation.value.id,
-      `Instalación ${materialsInstallation.value.contracts?.contract_number ?? materialsInstallation.value.id}`,
-    );
+    await inventoryUnitsStore.assignUnit(unitForm.value.unitId, materialsInstallation.value.client_id, {
+      installationId: materialsInstallation.value.id,
+      contractId: materialsInstallation.value.contract_id ?? undefined,
+      reason: `Instalación ${materialsInstallation.value.contracts?.contract_number ?? materialsInstallation.value.id}`,
+    });
     assignedUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(materialsInstallation.value.id);
     await onUnitProductChange();
   } catch (e) {
@@ -334,15 +333,22 @@ async function handleCompleteSubmit() {
   completeError.value = null;
   try {
     const clientId = completingInstallation.value.client_id;
+    const contractId = completingInstallation.value.contract_id;
     if (completeGps.value.latitude != null && completeGps.value.longitude != null) {
       await clientsStore.updateClient(clientId, {
         latitude: completeGps.value.latitude,
         longitude: completeGps.value.longitude,
       });
+      if (contractId) {
+        await contractsStore.updateContract(contractId, {
+          latitude: completeGps.value.latitude,
+          longitude: completeGps.value.longitude,
+        });
+      }
     }
     for (const cat of COMPLETE_PHOTO_CATEGORIES.map((c) => c.value)) {
       const file = completePhotos.value[cat];
-      if (file) await clientPhotosStore.uploadPhoto(clientId, cat, file);
+      if (file && contractId) await clientPhotosStore.uploadPhoto(clientId, contractId, cat, file);
     }
     await installationsStore.updateStatus(completingInstallation.value.id, 'completed');
     showCompleteModal.value = false;

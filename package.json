@@ -20,6 +20,7 @@
   "dependencies": {
     "@hono/node-server": "^1.13.1",
     "@supabase/supabase-js": "^2.45.4",
+    "apexcharts": "^7.6.0",
     "dotenv": "^16.4.5",
     "hono": "^4.6.3",
     "idb-keyval": "^6.3.0",
@@ -31,7 +32,8 @@
     "ssh2": "^1.16.0",
     "undici": "^6.19.8",
     "vue": "^3.5.10",
-    "vue-router": "^4.4.5"
+    "vue-router": "^4.4.5",
+    "vue3-apexcharts": "^1.11.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

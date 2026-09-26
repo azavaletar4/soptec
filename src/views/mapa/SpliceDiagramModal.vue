@@ -3,8 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import HiloGrid from './HiloGrid.vue';
 import { useFoFibraStore } from '@/stores/foFibra';
 import type { TraceResult } from '@/stores/foFibra';
+import { useContractsStore } from '@/stores/contracts';
 import { ubicarHilo } from '@/lib/fiberColors';
-import type { Client, FoCable, FoFusionDestinoTipo, InfraElemento } from '@/types/domain';
+import type { Client, FoCable, FoFusionDestinoTipo, InfraElemento, ServiceContract } from '@/types/domain';
 import { getErrorMessage } from '@/lib/errors';
 
 const props = defineProps<{
@@ -21,6 +22,7 @@ const emit = defineEmits<{
 }>();
 
 const fibra = useFoFibraStore();
+const contractsStore = useContractsStore();
 const tab = ref<'fusiones' | 'puertos'>(props.soloPuertos ? 'puertos' : 'fusiones');
 const error = ref<string | null>(null);
 const saving = ref(false);
@@ -105,7 +107,16 @@ const traceResult = ref<TraceResult | null>(null);
 const tracing = ref(false);
 
 function puertoInfo(n: number) {
-  return puertos.value.find((p) => p.puerto_numero === n) ?? { puerto_numero: n, estado: 'libre' as const, client_id: null, fusion_id: null };
+  return (
+    puertos.value.find((p) => p.puerto_numero === n) ?? {
+      puerto_numero: n,
+      estado: 'libre' as const,
+      client_id: null,
+      contract_id: null,
+      fusion_id: null,
+      service_contracts: null,
+    }
+  );
 }
 
 const puertoActual = computed(() => (puertoSeleccionado.value != null ? puertoInfo(puertoSeleccionado.value) : null));
@@ -126,7 +137,37 @@ async function cargarPuertos() {
   }
 }
 
-async function asignarCliente(clientId: string | null) {
+// Un cliente puede tener mas de un servicio (Fase 38): elegirlo aca no
+// asigna el puerto todavia, primero hay que decidir a cual de sus lineas
+// corresponde — si tiene una sola, se salta el paso solo.
+const clientePendiente = ref<Client | null>(null);
+const contratosPendientes = ref<ServiceContract[]>([]);
+const loadingContratosPendientes = ref(false);
+
+async function elegirCliente(c: Client) {
+  clientePendiente.value = c;
+  loadingContratosPendientes.value = true;
+  try {
+    contratosPendientes.value = await contractsStore.fetchContractsByClient(c.id);
+    if (contratosPendientes.value.length === 1) {
+      await asignarContrato(contratosPendientes.value[0].id);
+    } else if (!contratosPendientes.value.length) {
+      error.value = 'Este cliente no tiene ningun servicio creado todavia.';
+      clientePendiente.value = null;
+    }
+  } finally {
+    loadingContratosPendientes.value = false;
+  }
+}
+
+async function asignarContrato(contractId: string) {
+  if (!clientePendiente.value) return;
+  await asignarCliente(clientePendiente.value.id, contractId);
+  clientePendiente.value = null;
+  contratosPendientes.value = [];
+}
+
+async function asignarCliente(clientId: string | null, contractId: string | null = null) {
   if (puertoSeleccionado.value == null) return;
   const actual = puertoInfo(puertoSeleccionado.value);
   try {
@@ -135,6 +176,7 @@ async function asignarCliente(clientId: string | null) {
       puerto_numero: puertoSeleccionado.value,
       estado: clientId ? 'ocupado' : 'libre',
       client_id: clientId,
+      contract_id: contractId,
       fusion_id: actual.fusion_id,
     });
   } catch (e) {
@@ -307,7 +349,23 @@ onMounted(() => {
 
               <div v-if="clienteActual" class="text-sm mb-2">
                 Cliente: <b>{{ clienteActual.first_name }} {{ clienteActual.last_name }}</b>
+                <span v-if="puertoActual?.service_contracts" class="text-xs text-slate-500 ml-1">({{ puertoActual.service_contracts.contract_number }})</span>
+                <span v-else class="text-xs text-amber-600 ml-1">(sin línea especificada)</span>
                 <button class="ml-2 text-red-600 hover:underline text-xs" @click="asignarCliente(null)">Quitar</button>
+              </div>
+              <div v-else-if="clientePendiente" class="mb-2">
+                <p class="text-xs text-slate-600 mb-1">
+                  {{ clientePendiente.first_name }} {{ clientePendiente.last_name }} tiene {{ contratosPendientes.length }} servicios — ¿cuál va en este puerto?
+                </p>
+                <button
+                  v-for="ct in contratosPendientes"
+                  :key="ct.id"
+                  class="block w-full text-left px-2 py-1 rounded hover:bg-slate-100 text-xs"
+                  @click="asignarContrato(ct.id)"
+                >
+                  {{ ct.contract_number }} — {{ ct.installation_address || 'Sin dirección' }}
+                </button>
+                <button class="text-xs text-slate-500 hover:underline mt-1" @click="clientePendiente = null">Cancelar</button>
               </div>
               <div v-else class="mb-2">
                 <input v-model="clienteBuscado" placeholder="Buscar cliente por nombre…" class="field-input mb-1" />
@@ -316,7 +374,8 @@ onMounted(() => {
                     v-for="c in clientesFiltrados"
                     :key="c.id"
                     class="block w-full text-left px-2 py-1 rounded hover:bg-slate-100"
-                    @click="asignarCliente(c.id)"
+                    :disabled="loadingContratosPendientes"
+                    @click="elegirCliente(c)"
                   >
                     {{ c.first_name }} {{ c.last_name }}
                   </button>

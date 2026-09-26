@@ -101,6 +101,7 @@ export interface ClosureInput {
   jobType: JobType;
   jobId: string;
   clientId: string;
+  contractId: string | null;
   targetStatus: string;
   latitude: number | null;
   longitude: number | null;
@@ -257,6 +258,9 @@ export const useCampoStore = defineStore('campo', () => {
   async function performClosureSubmit(input: ClosureInput) {
     if (input.updateClientGps && input.latitude != null && input.longitude != null) {
       await clientsStore.updateClient(input.clientId, { latitude: input.latitude, longitude: input.longitude });
+      if (input.contractId) {
+        await contractsStore.updateContract(input.contractId, { latitude: input.latitude, longitude: input.longitude });
+      }
     }
 
     for (const photo of input.photos) {
@@ -269,8 +273,8 @@ export const useCampoStore = defineStore('campo', () => {
         .insert({ job_type: input.jobType, job_id: input.jobId, category: photo.category, storage_path: path });
       if (rowErr) throw rowErr;
 
-      if (input.clientPhotoCategories.includes(photo.category as ClientPhotoCategory)) {
-        await clientPhotosStore.uploadPhoto(input.clientId, photo.category as ClientPhotoCategory, photo.file);
+      if (input.contractId && input.clientPhotoCategories.includes(photo.category as ClientPhotoCategory)) {
+        await clientPhotosStore.uploadPhoto(input.clientId, input.contractId, photo.category as ClientPhotoCategory, photo.file);
       }
     }
 
@@ -310,6 +314,7 @@ export const useCampoStore = defineStore('campo', () => {
       jobType: item.jobType,
       jobId: item.jobId,
       clientId: item.clientId,
+      contractId: item.contractId,
       targetStatus: item.targetStatus,
       latitude: item.latitude,
       longitude: item.longitude,
@@ -328,6 +333,7 @@ export const useCampoStore = defineStore('campo', () => {
         jobType: input.jobType,
         jobId: input.jobId,
         clientId: input.clientId,
+        contractId: input.contractId,
         targetStatus: input.targetStatus,
         latitude: input.latitude,
         longitude: input.longitude,
@@ -350,6 +356,7 @@ export const useCampoStore = defineStore('campo', () => {
           jobType: input.jobType,
           jobId: input.jobId,
           clientId: input.clientId,
+          contractId: input.contractId,
           targetStatus: input.targetStatus,
           latitude: input.latitude,
           longitude: input.longitude,

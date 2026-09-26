@@ -5,15 +5,24 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useClientsStore } from '@/stores/clients';
+import { useContractsStore } from '@/stores/contracts';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
-import type { InventoryMovement, InventoryMovementType, InventoryUnit, InventoryUnitEvent, InventoryUnitStatus } from '@/types/domain';
+import type {
+  InventoryMovement,
+  InventoryMovementType,
+  InventoryUnit,
+  InventoryUnitEvent,
+  InventoryUnitStatus,
+  ServiceContract,
+} from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
 const inventoryStore = useInventoryStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
 const clientsStore = useClientsStore();
+const contractsStore = useContractsStore();
 const auth = useAuthStore();
 
 const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
@@ -175,6 +184,9 @@ const showAssignModal = ref(false);
 const assignUnitTarget = ref<InventoryUnit | null>(null);
 const assignClientFilter = ref('');
 const assignClientId = ref('');
+const assignContractId = ref('');
+const assignContracts = ref<ServiceContract[]>([]);
+const loadingAssignContracts = ref(false);
 const assignSaving = ref(false);
 const assignError = ref<string | null>(null);
 
@@ -189,9 +201,27 @@ async function openAssign(unit: InventoryUnit) {
   assignUnitTarget.value = unit;
   assignClientFilter.value = '';
   assignClientId.value = '';
+  assignContractId.value = '';
+  assignContracts.value = [];
   assignError.value = null;
   showAssignModal.value = true;
   if (!clientsStore.clients.length) await clientsStore.fetchClients();
+}
+
+// Un cliente puede tener mas de un servicio (Fase 37): al elegirlo, se
+// carga sus contratos para que el equipo quede vinculado al que
+// corresponde y no se mezcle con el de otra linea del mismo cliente.
+async function onAssignClientChange() {
+  assignContractId.value = '';
+  assignContracts.value = [];
+  if (!assignClientId.value) return;
+  loadingAssignContracts.value = true;
+  try {
+    assignContracts.value = await contractsStore.fetchContractsByClient(assignClientId.value);
+    if (assignContracts.value.length === 1) assignContractId.value = assignContracts.value[0].id;
+  } finally {
+    loadingAssignContracts.value = false;
+  }
 }
 
 async function handleAssign() {
@@ -199,7 +229,9 @@ async function handleAssign() {
   assignSaving.value = true;
   assignError.value = null;
   try {
-    await inventoryUnitsStore.assignUnit(assignUnitTarget.value.id, assignClientId.value);
+    await inventoryUnitsStore.assignUnit(assignUnitTarget.value.id, assignClientId.value, {
+      contractId: assignContractId.value || undefined,
+    });
     showAssignModal.value = false;
     await loadUnits();
   } catch (e) {
@@ -686,11 +718,24 @@ async function handleDeleteProduct() {
             <input v-model="assignClientFilter" class="field-input" placeholder="Nombre o documento..." />
           </div>
 
-          <select v-model="assignClientId" required size="6" class="field-input mb-4">
+          <select v-model="assignClientId" required size="6" class="field-input mb-4" @change="onAssignClientChange">
             <option v-for="c in filteredAssignClients" :key="c.id" :value="c.id">
               {{ c.first_name }} {{ c.last_name }} · {{ c.document_number }}
             </option>
           </select>
+
+          <div v-if="assignClientId" class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Servicio/contrato</label>
+            <select v-model="assignContractId" class="field-input" :disabled="loadingAssignContracts">
+              <option value="">{{ loadingAssignContracts ? 'Cargando...' : 'Sin vincular a un contrato especifico' }}</option>
+              <option v-for="ct in assignContracts" :key="ct.id" :value="ct.id">
+                {{ ct.contract_number }} — {{ ct.installation_address || 'Sin direccion' }}
+              </option>
+            </select>
+            <p v-if="assignContracts.length > 1" class="text-xs text-amber-600 mt-1">
+              Este cliente tiene {{ assignContracts.length }} servicios — elige a cual va este equipo.
+            </p>
+          </div>
 
           <p v-if="assignError" class="text-sm text-red-600 mb-3">{{ assignError }}</p>
 

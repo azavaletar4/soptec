@@ -12,10 +12,16 @@ const SELECT = '*, clients(id, first_name, last_name)';
 export const useDescuentosCompensacionStore = defineStore('descuentosCompensacion', () => {
   const loading = ref(false);
 
-  async function createIndividual(clientId: string, monto: number, motivo: string) {
+  /**
+   * `contractId` (Fase 37): sin el, el descuento aplica a la siguiente
+   * factura de CUALQUIER servicio del cliente (compensacion general);
+   * con el, solo a las facturas de esa linea puntual (ej. se cayo la fibra
+   * de una sola casa).
+   */
+  async function createIndividual(clientId: string, monto: number, motivo: string, contractId?: string) {
     const { data, error: err } = await supabase
       .from('descuentos_compensacion')
-      .insert({ client_id: clientId, monto, motivo })
+      .insert({ client_id: clientId, contract_id: contractId ?? null, monto, motivo })
       .select(SELECT)
       .single();
     if (err) throw err;

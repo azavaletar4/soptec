@@ -3,24 +3,18 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useClientsStore } from '@/stores/clients';
-import { useCatalogsStore } from '@/stores/catalogs';
 import { useContractsStore } from '@/stores/contracts';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
 import { useAuthStore } from '@/stores/auth';
-import { useInfraElementosStore } from '@/stores/infraElementos';
-import { useFoFibraStore } from '@/stores/foFibra';
 import { useReferidosStore } from '@/stores/referidos';
 import { getErrorMessage } from '@/lib/errors';
-import { NAP_CLIENT_LIMIT, ZONE_CLIENT_LIMIT, type Client, type ClientStatus, type DocumentType } from '@/types/domain';
+import type { Client, ClientStatus, ContractPriority, DocumentType } from '@/types/domain';
 
 const router = useRouter();
 const clientsStore = useClientsStore();
-const catalogs = useCatalogsStore();
 const contractsStore = useContractsStore();
 const mikrotikStore = useMikrotikStore();
 const auth = useAuthStore();
-const infraStore = useInfraElementosStore();
-const fibra = useFoFibraStore();
 const referidosStore = useReferidosStore();
 
 // TECNICO_RED puede ver/editar clientes (GPS, fotos), pero no crearlos ni
@@ -30,9 +24,6 @@ const canManageClients = computed(() => auth.role !== 'TECNICO_RED');
 const showModal = ref(false);
 const editing = ref<Client | null>(null);
 const saving = ref(false);
-const showNewZone = ref(false);
-const newZoneName = ref('');
-const savingZone = ref(false);
 const formError = ref<string | null>(null);
 const pendingPppoeHint = ref<string | null>(null);
 const searchQuery = ref('');
@@ -51,66 +42,55 @@ const filteredReferentes = computed(() => {
     .slice(0, 30);
 });
 
+// Un DNI/RUC/pasaporte es unico por cliente (constraint en BD): si ya existe,
+// no hay que crear un cliente nuevo, sino agregarle un contrato (linea) desde
+// su ficha. Sin este chequeo, el intento de alta falla recien al guardar con
+// el error crudo de Postgres (unique constraint), sin decir que hacer.
+const duplicateClient = computed<Client | null>(() => {
+  const doc = form.value.document_number.trim();
+  if (!doc) return null;
+  return (
+    clientsStore.clients.find(
+      (c) => c.document_number.trim().toLowerCase() === doc.toLowerCase() && c.id !== editing.value?.id,
+    ) ?? null
+  );
+});
+
+// El codigo de cliente ahora es por servicio (Fase 39, se edita desde la
+// pestaña "Contrato" de cada linea) — ya no se muestra aca, pero se sigue
+// pudiendo buscar por el.
+function clientCodesOf(clientId: string) {
+  return contractsStore.contracts
+    .filter((ct) => ct.client_id === clientId && ct.client_code)
+    .map((ct) => ct.client_code)
+    .join(' ');
+}
+
+// Prioridad (Fase 41): tambien es por servicio, reemplaza al codigo en esta
+// columna de la lista general de clientes.
+const PRIORITY_LABEL: Record<ContractPriority, string> = {
+  high: 'Alta',
+  medium: 'Media',
+  low: 'Baja',
+};
+const PRIORITY_CLASS: Record<ContractPriority, string> = {
+  high: 'bg-red-500/15 text-red-600',
+  medium: 'bg-yellow-500/15 text-yellow-600',
+  low: 'bg-slate-500/15 text-slate-600',
+};
+function clientPrioritiesOf(clientId: string): ContractPriority[] {
+  return contractsStore.contracts.filter((ct) => ct.client_id === clientId).map((ct) => ct.priority);
+}
+
 const filteredClientsList = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return clientsStore.clients;
   return clientsStore.clients.filter((c) =>
-    `${c.first_name} ${c.last_name} ${c.client_code ?? ''} ${c.document_number} ${c.phone ?? ''} ${c.phone_2 ?? ''} ${c.email ?? ''}`
+    `${c.first_name} ${c.last_name} ${clientCodesOf(c.id)} ${c.document_number} ${c.phone ?? ''} ${c.phone_2 ?? ''} ${c.email ?? ''}`
       .toLowerCase()
       .includes(q),
   );
 });
-
-function zoneClientCount(zoneId: string, excludeClientId?: string | null) {
-  return clientsStore.clients.filter((c) => c.zone_id === zoneId && c.id !== excludeClientId).length;
-}
-
-const selectedZoneCount = computed(() =>
-  form.value.zone_id ? zoneClientCount(form.value.zone_id, editing.value?.id) : null,
-);
-
-// Cajas NAP disponibles para asignar al cliente, con su ocupacion actual.
-// Se filtran por la zona ya elegida (primero zona, luego NAP) para no
-// mostrar cajas de otras zonas.
-const napOptionsAll = computed(() =>
-  infraStore.elementos
-    .filter((e) => e.tipo === 'caja_nap')
-    .map((e) => {
-      const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
-      const used = puertos.filter((p) => p.estado === 'ocupado').length;
-      const capacity = e.puertos_total ?? NAP_CLIENT_LIMIT;
-      return { id: e.id, name: e.name, used, capacity, zoneId: e.zone_id };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name)),
-);
-
-const napOptions = computed(() => napOptionsAll.value.filter((n) => n.zoneId === form.value.zone_id));
-
-// Caso raro: la NAP ya asignada al cliente cambio de zona en el mapa (ver
-// /mapa/red) despues de asignarla aqui, y ya no coincide con la zona actual
-// del cliente. No se limpia sola (evita desasignar sin querer al guardar) —
-// solo se avisa.
-const currentNapMismatch = computed(() => {
-  if (!form.value.nap_id) return null;
-  const nap = napOptionsAll.value.find((n) => n.id === form.value.nap_id);
-  return nap && nap.zoneId !== form.value.zone_id ? nap : null;
-});
-
-function findClientNapId(clientId: string): string {
-  for (const puertos of Object.values(fibra.napPuertosPorElemento)) {
-    const found = puertos.find((p) => p.client_id === clientId && p.estado === 'ocupado');
-    if (found) return found.infra_elemento_id;
-  }
-  return '';
-}
-
-// Si cambia la zona y la NAP elegida ya no pertenece a ella, se limpia (la
-// zona manda sobre la NAP: primero se elige zona, luego se filtra la NAP).
-function onZoneChange() {
-  if (form.value.nap_id && !napOptions.value.some((n) => n.id === form.value.nap_id)) {
-    form.value.nap_id = '';
-  }
-}
 
 // Usuarios PPPoE (del router elegido) que no tienen NINGUN contrato en
 // SmartRayco todavia, leido en vivo de la tabla service_contracts.
@@ -140,7 +120,6 @@ async function loadUnlinked() {
 watch(unlinkedDeviceId, () => loadUnlinked());
 
 const emptyForm = () => ({
-  client_code: '',
   document_type: 'cedula' as DocumentType,
   document_number: '',
   first_name: '',
@@ -149,8 +128,6 @@ const emptyForm = () => ({
   phone_2: '',
   email: '',
   address: '',
-  zone_id: '',
-  nap_id: '',
   status: 'prospect' as ClientStatus,
 });
 
@@ -170,14 +147,7 @@ const STATUS_CLASS: Record<ClientStatus, string> = {
 };
 
 onMounted(async () => {
-  await Promise.all([
-    clientsStore.fetchClients(),
-    catalogs.fetchZones(),
-    contractsStore.fetchContracts(),
-    mikrotikStore.fetchDevices(),
-    infraStore.fetchElementos(),
-    fibra.fetchTodosNapPuertos(),
-  ]);
+  await Promise.all([clientsStore.fetchClients(), contractsStore.fetchContracts(), mikrotikStore.fetchDevices()]);
   if (mikrotikStore.devices.length === 1) {
     unlinkedDeviceId.value = mikrotikStore.devices[0].id;
   }
@@ -188,8 +158,6 @@ function openCreate(fromSecret?: PppSecret) {
   form.value = emptyForm();
   pendingPppoeHint.value = fromSecret ? fromSecret.name : null;
   formError.value = null;
-  showNewZone.value = false;
-  newZoneName.value = '';
   referenteId.value = '';
   referenteFilter.value = '';
   showModal.value = true;
@@ -198,7 +166,6 @@ function openCreate(fromSecret?: PppSecret) {
 function openEdit(client: Client) {
   editing.value = client;
   form.value = {
-    client_code: client.client_code ?? '',
     document_type: client.document_type,
     document_number: client.document_number,
     first_name: client.first_name,
@@ -207,49 +174,22 @@ function openEdit(client: Client) {
     phone_2: client.phone_2 ?? '',
     email: client.email ?? '',
     address: client.address ?? '',
-    zone_id: client.zone_id ?? '',
-    nap_id: findClientNapId(client.id),
     status: client.status,
   };
   formError.value = null;
-  showNewZone.value = false;
-  newZoneName.value = '';
   showModal.value = true;
 }
 
-async function handleCreateZone() {
-  const name = newZoneName.value.trim();
-  if (!name) return;
-  savingZone.value = true;
-  formError.value = null;
-  try {
-    const zone = await catalogs.createZone(name);
-    form.value.zone_id = zone.id;
-    showNewZone.value = false;
-    newZoneName.value = '';
-  } catch (e) {
-    formError.value = getErrorMessage(e, 'Error al crear la zona');
-  } finally {
-    savingZone.value = false;
-  }
-}
-
 async function handleSubmit() {
-  if (form.value.zone_id) {
-    const count = zoneClientCount(form.value.zone_id, editing.value?.id);
-    if (count >= ZONE_CLIENT_LIMIT) {
-      formError.value = `Esa zona ya tiene ${count}/${ZONE_CLIENT_LIMIT} clientes (límite alcanzado). Elige otra zona o libera cupo primero.`;
-      return;
-    }
+  if (duplicateClient.value) {
+    formError.value = `Ya existe un cliente con ese documento (${duplicateClient.value.first_name} ${duplicateClient.value.last_name}). Ve a su ficha y usa "+ Nuevo contrato" para agregarle otro servicio.`;
+    return;
   }
   saving.value = true;
   formError.value = null;
   try {
-    const { nap_id, ...rest } = form.value;
     const payload = {
-      ...rest,
-      client_code: form.value.client_code.trim() || null,
-      zone_id: form.value.zone_id || null,
+      ...form.value,
       phone: form.value.phone || null,
       phone_2: form.value.phone_2 || null,
       email: form.value.email || null,
@@ -264,8 +204,7 @@ async function handleSubmit() {
       savedId = created.id;
 
       // Referido (Fase 33): solo en el alta. El cliente ya quedo guardado,
-      // asi que un fallo aca no debe perder los demas datos — mismo
-      // criterio que la sincronizacion de NAP de abajo.
+      // asi que un fallo aca no debe perder los demas datos.
       if (referenteId.value) {
         try {
           await referidosStore.create(referenteId.value, savedId);
@@ -273,20 +212,6 @@ async function handleSubmit() {
           alert(getErrorMessage(e, 'El cliente se guardó, pero no se pudo registrar el referido'));
         }
       }
-    }
-
-    // Sincroniza la caja NAP (fo_nap_puertos, ver stores/foFibra.ts): el
-    // cliente ya se guardo, asi que un fallo aca no debe perder los demas
-    // datos — solo se avisa para que se ajuste manualmente si hace falta.
-    try {
-      if (nap_id) {
-        const nap = napOptions.value.find((n) => n.id === nap_id);
-        await fibra.assignClientToNap(nap_id, savedId, nap?.capacity ?? NAP_CLIENT_LIMIT);
-      } else {
-        await fibra.unassignClient(savedId);
-      }
-    } catch (e) {
-      alert(getErrorMessage(e, 'El cliente se guardo, pero no se pudo asignar la caja NAP'));
     }
 
     showModal.value = false;
@@ -347,11 +272,11 @@ function goToDetail(client: Client) {
       <table class="w-full text-sm min-w-[720px]">
         <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
-            <th class="text-left px-4 py-3">Código</th>
+            <th class="text-left px-4 py-3">Prioridad</th>
             <th class="text-left px-4 py-3">Nombre</th>
             <th class="text-left px-4 py-3">Documento</th>
             <th class="text-left px-4 py-3">Telefono</th>
-            <th class="text-left px-4 py-3">Zona</th>
+            <th class="text-left px-4 py-3">Servicios</th>
             <th class="text-left px-4 py-3">Estado</th>
             <th class="text-right px-4 py-3">Acciones</th>
           </tr>
@@ -366,7 +291,17 @@ function goToDetail(client: Client) {
             </td>
           </tr>
           <tr v-for="c in filteredClientsList" :key="c.id" class="border-t border-slate-200 hover:bg-slate-50">
-            <td class="px-4 py-3 text-slate-600 font-mono text-xs">{{ c.client_code || '—' }}</td>
+            <td class="px-4 py-3">
+              <span v-if="!clientPrioritiesOf(c.id).length" class="text-slate-400 text-xs">—</span>
+              <span
+                v-for="(p, idx) in clientPrioritiesOf(c.id)"
+                :key="idx"
+                class="badge mr-1"
+                :class="PRIORITY_CLASS[p]"
+              >
+                {{ PRIORITY_LABEL[p] }}
+              </span>
+            </td>
             <td class="px-4 py-3">
               <button class="text-slate-900 hover:text-sky-600 font-medium" @click="goToDetail(c)">
                 {{ c.first_name }} {{ c.last_name }}
@@ -374,7 +309,7 @@ function goToDetail(client: Client) {
             </td>
             <td class="px-4 py-3 text-slate-600">{{ c.document_number }}</td>
             <td class="px-4 py-3 text-slate-600">{{ c.phone || '—' }}</td>
-            <td class="px-4 py-3 text-slate-600">{{ c.zones?.name || '—' }}</td>
+            <td class="px-4 py-3 text-slate-600">{{ contractsStore.contracts.filter((ct) => ct.client_id === c.id).length }}</td>
             <td class="px-4 py-3">
               <span class="badge" :class="STATUS_CLASS[c.status]">
                 {{ STATUS_LABEL[c.status] }}
@@ -442,11 +377,9 @@ function goToDetail(client: Client) {
             Vinculado a partir del usuario PPPoE <span class="font-mono">{{ pendingPppoeHint }}</span> — el vinculo se completa al crear el contrato.
           </p>
           <div v-else class="mb-3"></div>
-
-          <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Código de cliente</label>
-            <input v-model="form.client_code" placeholder="Ej. CL-0001" class="field-input" />
-          </div>
+          <p class="text-xs text-slate-400 mb-3">
+            El código de cliente ahora se asigna por servicio, desde la ficha de cada línea.
+          </p>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
@@ -461,6 +394,19 @@ function goToDetail(client: Client) {
               <label class="block text-xs text-slate-600 mb-1">Numero de documento</label>
               <input v-model="form.document_number" required class="field-input" />
             </div>
+          </div>
+
+          <div v-if="duplicateClient" class="mb-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            Ya existe un cliente con este documento:
+            <span class="font-medium">{{ duplicateClient.first_name }} {{ duplicateClient.last_name }}</span>.
+            Un mismo cliente puede tener varias lineas — no crees otro cliente, agrega el contrato desde su ficha.
+            <button
+              type="button"
+              class="block mt-1 font-medium text-sky-700 hover:text-sky-800 underline"
+              @click="showModal = false; router.push(`/clientes/${duplicateClient.id}`)"
+            >
+              Ir a la ficha y agregar "+ Nuevo contrato"
+            </button>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
@@ -496,69 +442,18 @@ function goToDetail(client: Client) {
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <div class="flex items-center justify-between mb-1">
-                <label class="block text-xs text-slate-600">Zona</label>
-                <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="showNewZone = !showNewZone">
-                  {{ showNewZone ? 'Cancelar' : '+ Nueva zona' }}
-                </button>
-              </div>
-              <select v-if="!showNewZone" v-model="form.zone_id" class="field-input" @change="onZoneChange">
-                <option value="">Sin asignar</option>
-                <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
-              </select>
-              <p
-                v-if="selectedZoneCount !== null"
-                class="text-xs mt-1"
-                :class="selectedZoneCount >= ZONE_CLIENT_LIMIT ? 'text-red-600' : selectedZoneCount >= ZONE_CLIENT_LIMIT * 0.9 ? 'text-amber-600' : 'text-slate-400'"
-              >
-                {{ selectedZoneCount }} / {{ ZONE_CLIENT_LIMIT }} clientes en esa zona
-                <span v-if="selectedZoneCount >= ZONE_CLIENT_LIMIT">— límite alcanzado</span>
-              </p>
-              <div v-if="showNewZone" class="flex gap-2">
-                <input
-                  v-model="newZoneName"
-                  placeholder="Nombre de la zona"
-                  class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
-                  @keydown.enter.prevent="handleCreateZone"
-                />
-                <button
-                  type="button"
-                  :disabled="savingZone || !newZoneName.trim()"
-                  class="px-3 py-2 rounded-lg bg-sky-500 text-slate-950 text-sm font-semibold disabled:opacity-60"
-                  @click="handleCreateZone"
-                >
-                  {{ savingZone ? '...' : 'Agregar' }}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Estado</label>
-              <select v-model="form.status" class="field-input">
-                <option value="prospect">Prospecto</option>
-                <option value="active">Activo</option>
-                <option value="suspended">Suspendido</option>
-                <option value="retired">Baja</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="mb-4">
-            <label class="block text-xs text-slate-600 mb-1">Caja NAP</label>
-            <select v-model="form.nap_id" class="field-input" :disabled="!form.zone_id">
-              <option value="">Sin asignar</option>
-              <option v-for="n in napOptions" :key="n.id" :value="n.id">
-                {{ n.name }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity ? ' (LLENA)' : '' }}
-              </option>
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Estado</label>
+            <select v-model="form.status" class="field-input">
+              <option value="prospect">Prospecto</option>
+              <option value="active">Activo</option>
+              <option value="suspended">Suspendido</option>
+              <option value="retired">Baja</option>
             </select>
-            <p v-if="!form.zone_id" class="text-xs text-slate-400 mt-1">Elige primero una zona para ver sus cajas NAP.</p>
-            <p v-else-if="!napOptions.length" class="text-xs text-slate-400 mt-1">Esa zona no tiene cajas NAP asignadas (ver /mapa/red).</p>
-            <p v-if="currentNapMismatch" class="text-xs text-amber-600 mt-1">
-              ⚠ El cliente sigue asignado a "{{ currentNapMismatch.name }}", que ya no pertenece a esta zona (cambió en el mapa). Se
-              mantiene igual a menos que elijas otra NAP aquí.
-            </p>
           </div>
+          <p class="text-xs text-slate-400 mb-3">
+            La zona y la caja NAP ahora se asignan por servicio, desde la ficha de cada línea del cliente.
+          </p>
 
           <div v-if="!editing" class="mb-4">
             <label class="block text-xs text-slate-600 mb-1">Cliente que lo recomendó (opcional)</label>

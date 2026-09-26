@@ -19,6 +19,7 @@ export interface QueuedClosure {
   jobType: JobType;
   jobId: string;
   clientId: string;
+  contractId: string | null;
   targetStatus: string;
   latitude: number | null;
   longitude: number | null;
