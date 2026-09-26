@@ -94,7 +94,11 @@ const filteredOnts = computed(() => {
     if (statusFilter.value === 'offline' && o.status !== 'offline') return false;
     if (statusFilter.value === 'lowSignal' && !(o.rx_power != null && o.rx_power < LOW_SIGNAL_THRESHOLD_DBM)) return false;
     if (!q) return true;
-    return `${o.serial} ${o.clients?.first_name ?? ''} ${o.clients?.last_name ?? ''} ${o.frame}/${o.slot}/${o.port}:${o.ont_id}`
+    // o.description es el nombre que la tabla muestra como "Cliente" cuando
+    // la ONT no esta vinculada a un cliente de la app (la inmensa mayoria,
+    // vienen de "import-existing" con el nombre puesto directo en la OLT) —
+    // sin esto, buscar por ese mismo nombre que se ve en pantalla no encontraba nada.
+    return `${o.serial} ${o.clients?.first_name ?? ''} ${o.clients?.last_name ?? ''} ${o.description ?? ''} ${o.frame}/${o.slot}/${o.port}:${o.ont_id}`
       .toLowerCase()
       .includes(q);
   });
