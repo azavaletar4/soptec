@@ -28,22 +28,26 @@ function addDaysIso(iso: string, days: number): string {
   return toIso(new Date(Date.UTC(y, m - 1, d + days)));
 }
 
-function currentMonthStartIso(): string {
+/** billing_day dentro de year/month0 (0-indexado), con clamp al ultimo dia del mes. */
+function anchorDateForMonth(year: number, month0: number, billingDay: number): string {
+  const daysInMonth = new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+  const day = Math.min(Math.max(billingDay, 1), daysInMonth);
+  return toIso(new Date(Date.UTC(year, month0, day)));
+}
+
+/** Primer periodo de un contrato sin facturas: billing_day del mes actual (fecha de emision). */
+function firstPeriodStartFor(billingDay: number): string {
   const now = new Date();
-  return toIso(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)));
+  return anchorDateForMonth(now.getUTCFullYear(), now.getUTCMonth(), billingDay);
 }
 
 /**
- * Vencimiento = fecha de emision (billing_day dentro del periodo, con clamp
- * al ultimo dia del mes) + 7 dias — misma convencion que las facturas
- * manuales (ver FacturacionView.vue: due_date por defecto = hoy + 7).
+ * Vencimiento = fecha de emision (periodStart, que YA es el billing_day del
+ * periodo) + 7 dias — misma convencion que las facturas manuales (ver
+ * FacturacionView.vue: due_date por defecto = hoy + 7).
  */
-function dueDateForPeriod(periodStartIso: string, billingDay: number): string {
-  const [y, m] = periodStartIso.split('-').map(Number);
-  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const day = Math.min(Math.max(billingDay, 1), daysInMonth);
-  const emissionDate = toIso(new Date(Date.UTC(y, m - 1, day)));
-  return addDaysIso(emissionDate, 7);
+function dueDateForPeriod(periodStartIso: string): string {
+  return addDaysIso(periodStartIso, 7);
 }
 
 interface ContractRow {
@@ -59,7 +63,7 @@ export interface GenerateDueResult {
   errors: { contractId: string; message: string }[];
 }
 
-async function nextPeriodStartFor(contractId: string): Promise<string> {
+async function nextPeriodStartFor(contractId: string, billingDay: number): Promise<string> {
   const { data, error } = await supabaseAdmin
     .from('invoices')
     .select('period_end')
@@ -69,7 +73,7 @@ async function nextPeriodStartFor(contractId: string): Promise<string> {
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? addDaysIso(data.period_end, 1) : currentMonthStartIso();
+  return data ? addDaysIso(data.period_end, 1) : firstPeriodStartFor(billingDay);
 }
 
 /**
@@ -91,12 +95,12 @@ export async function generateDueInvoices(): Promise<GenerateDueResult> {
 
   for (const contract of (contracts ?? []) as ContractRow[]) {
     try {
-      let periodStart = await nextPeriodStartFor(contract.id);
+      let periodStart = await nextPeriodStartFor(contract.id, contract.billing_day);
       let iterations = 0;
 
       while (periodStart <= today && iterations < MAX_PERIODS_PER_CONTRACT) {
         const periodEnd = addDaysIso(addMonthsIso(periodStart, 1), -1);
-        const dueDate = dueDateForPeriod(periodStart, contract.billing_day);
+        const dueDate = dueDateForPeriod(periodStart);
 
         const { error: insErr } = await supabaseAdmin.from('invoices').insert({
           contract_id: contract.id,
