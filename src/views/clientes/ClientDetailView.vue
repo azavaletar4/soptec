@@ -33,6 +33,18 @@ const canApplyAveria = computed(() => auth.role === 'SUPERADMIN' || auth.role ==
 const clientId = computed(() => route.params.id as string);
 const client = computed(() => clientsStore.clients.find((c) => c.id === clientId.value));
 const contracts = ref<ServiceContract[]>([]);
+
+// Con un solo servicio (el 99% de los casos) la tarjeta "Dirección de
+// contacto" del encabezado muestra en vivo la ubicación de ESE servicio en
+// vez de clients.address por separado — evita que se vean como "dos
+// direcciones distintas que no se actualizan" cuando en realidad casi
+// siempre deberían ser la misma. Con 2+ servicios no hay una sola dirección
+// de servicio que mostrar, asi que se mantiene la del cliente.
+const isServiceAddress = computed(() => contracts.value.length === 1);
+const displayContactAddress = computed(() => {
+  if (isServiceAddress.value) return contracts.value[0].installation_address || client.value?.address || null;
+  return client.value?.address ?? null;
+});
 const loadingContracts = ref(true);
 const updatingClientStatus = ref(false);
 const clientStatusError = ref<string | null>(null);
@@ -197,7 +209,8 @@ onMounted(async () => {
           <div>{{ client.email || '—' }}</div>
         </ClientStatCard>
         <ClientStatCard icon="📍" label="Dirección de contacto">
-          <div>{{ client.address || '—' }}</div>
+          <div>{{ displayContactAddress || '—' }}</div>
+          <p v-if="isServiceAddress" class="text-[10px] text-slate-400 mt-0.5">Del servicio — se edita en la pestaña Ubicación</p>
         </ClientStatCard>
         <ClientStatCard icon="●" label="Estado del cliente">
           <select
