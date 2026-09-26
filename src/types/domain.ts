@@ -605,3 +605,33 @@ export interface MantenimientoHistorial {
   created_at: string;
   author?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
+
+export type CajaChicaTipo = 'ingreso' | 'egreso';
+
+/** Categoria editable (Fase 43) — el usuario puede crear una nueva desde el
+ *  formulario y queda disponible para el resto de los movimientos. */
+export interface CajaChicaCategoria {
+  id: string;
+  nombre: string;
+  /** Si true, el formulario ofrece vincular el movimiento a un vehiculo de Flota. */
+  permite_vehiculo: boolean;
+  created_at: string;
+}
+
+export interface CajaChicaMovimiento {
+  id: string;
+  fecha: string;
+  tipo: CajaChicaTipo;
+  categoria_id: string;
+  monto: number;
+  descripcion: string;
+  responsable: string;
+  vehiculo_id: string | null;
+  /** Ruta dentro del bucket privado 'caja-chica-comprobantes' (no una URL publica) — ver url en CajaChicaMovimientoWithUrl. */
+  comprobante_path: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  caja_chica_categorias?: Pick<CajaChicaCategoria, 'id' | 'nombre' | 'permite_vehiculo'> | null;
+  vehiculos?: Pick<Vehiculo, 'id' | 'placa' | 'marca' | 'modelo'> | null;
+}

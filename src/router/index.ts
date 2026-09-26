@@ -140,13 +140,21 @@ const router = createRouter({
       path: '/facturacion',
       name: 'facturacion',
       component: () => import('@/views/facturacion/FacturacionView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'FACTURACION'] },
+      // Comercial (Planes/Facturacion/Cortes/Caja Chica) es solo para
+      // SUPERADMIN/ADMIN (pedido explicito) — FACTURACION ya no entra.
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
     },
     {
       path: '/cortes',
       name: 'cortes',
       component: () => import('@/views/facturacion/CortesView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'FACTURACION'] },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
+    },
+    {
+      path: '/caja-chica',
+      name: 'caja-chica',
+      component: () => import('@/views/caja-chica/CajaChicaView.vue'),
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
     },
     {
       path: '/usuarios',
@@ -164,7 +172,7 @@ const router = createRouter({
       path: '/planes',
       name: 'planes',
       component: () => import('@/views/planes/PlanesView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
     },
     {
       path: '/flota',

@@ -8,7 +8,6 @@ const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
 
-const BILLING_ROLES = ['SUPERADMIN', 'ADMIN', 'FACTURACION'];
 const SUPERADMIN_ROLES = ['SUPERADMIN'];
 const ADMIN_ROLES = ['SUPERADMIN', 'ADMIN'];
 // Modulos administrativos que TECNICO_RED no necesita ver (mismo criterio
@@ -47,6 +46,7 @@ const ICONS: Record<string, string> = {
   tr069: 'M12 20v-6m0 0a4 4 0 0 0 4-4V7a4 4 0 0 0-8 0v3a4 4 0 0 0 4 4Zm-7 2h14M5 8H3m18 0h-2M5 4 3 2m16 2 2-2',
   reportes: 'M4 19V10m6 9V5m6 14v-8m-13 8h16',
   usuarios: 'M17 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 5 18.5V20M9.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM21 8v6M18 11h6',
+  'caja-chica': 'M4 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1h1a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Zm0 0v10M16 12.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0Z',
 };
 
 // Iconos de las categorias desplegables.
@@ -62,7 +62,6 @@ interface ModuloItem {
   key: string;
   label: string;
   to: string;
-  requiresBilling?: boolean;
   requiresSuperadmin?: boolean;
   requiresAdmin?: boolean;
 }
@@ -99,9 +98,10 @@ const GRUPOS: ModuloGrupo[] = [
     key: 'comercial',
     label: 'Comercial',
     items: [
-      { key: 'planes', label: 'Planes', to: '/planes' },
-      { key: 'facturacion', label: 'Facturación', to: '/facturacion', requiresBilling: true },
-      { key: 'cortes', label: 'Cortes por deuda', to: '/cortes', requiresBilling: true },
+      { key: 'planes', label: 'Planes', to: '/planes', requiresAdmin: true },
+      { key: 'facturacion', label: 'Facturación', to: '/facturacion', requiresAdmin: true },
+      { key: 'cortes', label: 'Cortes por deuda', to: '/cortes', requiresAdmin: true },
+      { key: 'caja-chica', label: 'Caja Chica', to: '/caja-chica', requiresAdmin: true },
     ],
   },
   {
@@ -128,7 +128,6 @@ const GRUPOS: ModuloGrupo[] = [
 
 function isVisible(mod: ModuloItem) {
   return (
-    (!mod.requiresBilling || BILLING_ROLES.includes(auth.role ?? '')) &&
     (!mod.requiresSuperadmin || SUPERADMIN_ROLES.includes(auth.role ?? '')) &&
     (!mod.requiresAdmin || ADMIN_ROLES.includes(auth.role ?? '')) &&
     !(auth.role === 'TECNICO_RED' && HIDDEN_FROM_TECNICO.includes(mod.key))
