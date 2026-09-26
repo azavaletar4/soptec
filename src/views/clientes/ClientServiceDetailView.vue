@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import ClientSectionCard from '@/components/clientes/ClientSectionCard.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -103,6 +104,16 @@ const PRIORITY_LABEL: Record<ContractPriority, string> = {
   medium: 'Media',
   low: 'Baja',
 };
+const PRIORITY_CLASS: Record<ContractPriority, string> = {
+  high: 'bg-red-500/15 text-red-600',
+  medium: 'bg-amber-500/15 text-amber-600',
+  low: 'bg-slate-500/15 text-slate-600',
+};
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cash: 'Efectivo',
+  transfer: 'Transferencia',
+  card: 'Tarjeta',
+};
 
 async function loadContract() {
   loadingContract.value = true;
@@ -111,17 +122,15 @@ async function loadContract() {
   loadingContract.value = false;
 }
 
-type Tab = 'general' | 'contrato' | 'ubicacion' | 'equipo' | 'descuentos' | 'fotos' | 'tickets' | 'facturas';
-const activeTab = ref<Tab>('general');
+type Tab = 'resumen' | 'datos' | 'ubicacion' | 'facturacion' | 'fotos' | 'soporte';
+const activeTab = ref<Tab>('resumen');
 const TABS: { value: Tab; label: string }[] = [
-  { value: 'general', label: 'General' },
-  { value: 'contrato', label: 'Contrato' },
+  { value: 'resumen', label: 'Resumen' },
+  { value: 'datos', label: 'Datos del servicio' },
   { value: 'ubicacion', label: 'Ubicación' },
-  { value: 'equipo', label: 'Equipo' },
-  { value: 'descuentos', label: 'Descuentos' },
+  { value: 'facturacion', label: 'Facturación' },
   { value: 'fotos', label: 'Fotos' },
-  { value: 'tickets', label: 'Tickets' },
-  { value: 'facturas', label: 'Facturas' },
+  { value: 'soporte', label: 'Soporte' },
 ];
 
 // ---- Tab General + Ubicación: un solo formulario, un solo guardado ----
@@ -1113,7 +1122,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <nav v-if="!embedded" class="flex gap-1 border-b border-slate-200 mb-6 overflow-x-auto">
+      <nav class="flex gap-1 border-b border-slate-200 mb-6 overflow-x-auto">
         <button
           v-for="tab in TABS"
           :key="tab.value"
@@ -1130,9 +1139,59 @@ onMounted(async () => {
         </button>
       </nav>
 
-      <!-- ---- General ---- -->
-      <h2 v-if="embedded" class="text-lg font-semibold mb-3">General</h2>
-      <form v-if="embedded || activeTab === 'general'" class="max-w-lg" :class="{ 'mb-8': embedded }" @submit.prevent="handleSaveContract">
+      <!-- ---- Resumen ---- -->
+      <div v-if="activeTab === 'resumen'">
+        <ClientSectionCard title="Datos del servicio" icon="🛠️">
+          <template #actions>
+            <button type="button" class="text-xs text-sky-600 hover:underline" @click="activeTab = 'datos'">Editar</button>
+          </template>
+          <div class="grid gap-4 text-sm" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
+            <div>
+              <div class="text-xs text-slate-500 mb-1">Estado</div>
+              <span class="badge" :class="STATUS_CLASS[contract.status]">{{ STATUS_LABEL[contract.status] }}</span>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500 mb-1">Prioridad</div>
+              <span class="badge" :class="PRIORITY_CLASS[contract.priority]">{{ PRIORITY_LABEL[contract.priority] }}</span>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500 mb-1">Plan</div>
+              <div class="font-medium">{{ contract.plans?.name || 'Sin plan' }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500 mb-1">Mensualidad</div>
+              <div class="font-medium">S/ {{ Number(contract.monthly_fee).toFixed(2) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500 mb-1">Método de pago</div>
+              <div class="font-medium">{{ contract.payment_method ? (PAYMENT_METHOD_LABEL[contract.payment_method] ?? contract.payment_method) : '—' }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500 mb-1">Código de cliente</div>
+              <div class="font-mono">{{ contract.client_code || '—' }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-slate-500 mb-1">IPTV</div>
+              <div :class="contract.xui_line_id ? 'text-emerald-600 font-mono' : 'text-slate-400'">{{ contract.xui_username || 'Sin vincular' }}</div>
+            </div>
+          </div>
+        </ClientSectionCard>
+
+        <ClientSectionCard title="Ubicación" icon="📍">
+          <template #actions>
+            <button type="button" class="text-xs text-sky-600 hover:underline" @click="activeTab = 'ubicacion'">Editar</button>
+          </template>
+          <p class="text-sm">
+            {{ contract.installation_address || 'Sin dirección registrada' }}
+            <span v-if="contract.installation_reference"> · {{ contract.installation_reference }}</span>
+          </p>
+        </ClientSectionCard>
+      </div>
+
+      <!-- ---- Datos del servicio ---- -->
+      <div v-if="activeTab === 'datos'">
+      <ClientSectionCard title="Datos generales" icon="⚙️">
+      <div class="max-w-lg">
         <div class="mb-3">
           <label class="block text-xs text-slate-600 mb-1">Prioridad</label>
           <select v-model="contractForm.priority" class="field-input">
@@ -1140,7 +1199,7 @@ onMounted(async () => {
           </select>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <div>
             <label class="block text-xs text-slate-600 mb-1">Router MikroTik</label>
             <select v-model="contractForm.mikrotik_device_id" class="field-input" @change="onMikrotikDeviceChange">
@@ -1190,22 +1249,29 @@ onMounted(async () => {
           <p v-if="profilesError" class="text-xs text-amber-600 mt-1">{{ profilesError }} — puedes escribir el nombre manualmente.</p>
         </div>
 
-        <div class="mb-4 flex items-center gap-3">
-          <span class="text-xs text-slate-600 font-mono">IPTV: {{ contract.xui_username || 'Sin vincular' }}</span>
-          <button type="button" class="text-xs text-sky-600 hover:underline" @click="openIptvModal">
+        <div
+          class="mb-4 flex items-center justify-between gap-3 rounded-xl border px-4 py-3"
+          :class="contract.xui_line_id ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'"
+        >
+          <div class="flex items-center gap-3">
+            <span
+              class="w-11 h-11 rounded-full flex items-center justify-center text-2xl shrink-0"
+              :class="contract.xui_line_id ? 'bg-emerald-500/15 text-emerald-600' : 'bg-slate-300/50 text-slate-500'"
+            >
+              📺
+            </span>
+            <div>
+              <div class="text-sm font-semibold" :class="contract.xui_line_id ? 'text-emerald-700' : 'text-slate-500'">IPTV</div>
+              <div class="text-sm" :class="contract.xui_line_id ? 'text-slate-700 font-mono' : 'text-slate-400'">
+                {{ contract.xui_username || 'Sin vincular' }}
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn-secondary text-xs whitespace-nowrap" @click="openIptvModal">
             {{ contract.xui_line_id ? 'Gestionar' : 'Vincular' }}
           </button>
         </div>
 
-        <p v-if="contractError" class="text-sm text-red-600 mb-3">{{ contractError }}</p>
-        <button type="submit" :disabled="savingContract" class="btn-primary">
-          {{ savingContract ? 'Guardando...' : 'Guardar cambios' }}
-        </button>
-      </form>
-
-      <!-- ---- Contrato ---- -->
-      <h2 v-if="embedded" class="text-lg font-semibold mb-3">Contrato</h2>
-      <form v-if="embedded || activeTab === 'contrato'" class="max-w-lg" :class="{ 'mb-8': embedded }" @submit.prevent="handleSaveContract">
         <div class="mb-3">
           <label class="block text-xs text-slate-600 mb-1">Código de cliente (de este servicio)</label>
           <input v-model="contractForm.client_code" placeholder="Ej. CL-0001" class="field-input" />
@@ -1229,7 +1295,7 @@ onMounted(async () => {
           </select>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
           <div>
             <label class="block text-xs text-slate-600 mb-1">Mensualidad (S/)</label>
             <input v-model.number="contractForm.monthly_fee" type="number" step="0.01" min="0" required class="field-input" />
@@ -1240,7 +1306,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="mb-3">
+        <div>
           <label class="block text-xs text-slate-600 mb-1">Metodo de pago</label>
           <select v-model="contractForm.payment_method" class="field-input">
             <option value="cash">Efectivo</option>
@@ -1248,16 +1314,14 @@ onMounted(async () => {
             <option value="card">Tarjeta</option>
           </select>
         </div>
-
-        <p v-if="contractError" class="text-sm text-red-600 mb-3">{{ contractError }}</p>
-        <button type="submit" :disabled="savingContract" class="btn-primary">
-          {{ savingContract ? 'Guardando...' : 'Guardar cambios' }}
-        </button>
-      </form>
+      </div>
+      </ClientSectionCard>
+      </div>
 
       <!-- ---- Ubicación ---- -->
-      <h2 v-if="embedded" class="text-lg font-semibold mb-3">Ubicación, zona y NAP</h2>
-      <form v-if="embedded || activeTab === 'ubicacion'" class="max-w-lg" :class="{ 'mb-8': embedded }" @submit.prevent="handleSaveContract">
+      <div v-if="activeTab === 'ubicacion'">
+      <ClientSectionCard title="Ubicación, zona y NAP" icon="📍">
+      <div class="max-w-lg">
         <p class="text-xs text-slate-500 mb-3">
           Ubicación de ESTA instalación — si el cliente tiene más de un servicio, cada uno tiene su propia dirección/GPS.
         </p>
@@ -1269,7 +1333,7 @@ onMounted(async () => {
           <label class="block text-xs text-slate-600 mb-1">Referencia</label>
           <input v-model="contractForm.installation_reference" class="field-input" placeholder="Ej. casa azul, portón negro" />
         </div>
-        <div class="grid grid-cols-2 gap-3 mb-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
           <div>
             <label class="block text-xs text-slate-600 mb-1">Latitud</label>
             <input v-model.number="contractForm.latitude" type="number" step="any" class="field-input" />
@@ -1289,7 +1353,7 @@ onMounted(async () => {
           Ver en Google Maps
         </a>
 
-        <div class="grid grid-cols-2 gap-3 mb-3 pt-3 border-t border-slate-200">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 pt-3 border-t border-slate-200">
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="block text-xs text-slate-600">Zona</label>
@@ -1342,18 +1406,14 @@ onMounted(async () => {
           </div>
         </div>
         <p v-if="zoneNapError" class="text-sm text-red-600 mb-3">{{ zoneNapError }}</p>
+      </div>
+      </ClientSectionCard>
+      </div>
 
-        <p v-if="contractError" class="text-sm text-red-600 mb-3">{{ contractError }}</p>
-        <div>
-          <button type="submit" :disabled="savingContract" class="btn-primary">
-            {{ savingContract ? 'Guardando...' : 'Guardar ubicación' }}
-          </button>
-        </div>
-      </form>
-
-      <!-- ---- Equipo ---- -->
-      <h2 v-if="embedded" class="text-lg font-semibold mb-3">ONT y equipo asignado</h2>
-      <div v-if="embedded || activeTab === 'equipo'" class="max-w-2xl" :class="{ 'mb-8': embedded }">
+      <!-- ---- Equipo (parte de "Datos del servicio") ---- -->
+      <div v-if="activeTab === 'datos'">
+      <ClientSectionCard title="ONT y equipo asignado" icon="📡">
+      <div class="max-w-2xl">
         <p v-if="equipoTabError" class="text-sm text-red-600 mb-3">{{ equipoTabError }}</p>
 
         <h3 class="text-sm font-semibold mb-2">ONT (OLT)</h3>
@@ -1462,10 +1522,25 @@ onMounted(async () => {
           </div>
         </template>
       </div>
+      </ClientSectionCard>
+      </div>
 
-      <!-- ---- Descuentos ---- -->
-      <h2 v-if="embedded" class="text-lg font-semibold mb-3">Descuentos</h2>
-      <div v-if="embedded || activeTab === 'descuentos'" class="max-w-lg" :class="{ 'mb-8': embedded }">
+      <!-- Barra de guardado (Datos del servicio / Ubicación comparten el mismo contractForm) -->
+      <div
+        v-if="activeTab === 'datos' || activeTab === 'ubicacion'"
+        class="sticky bottom-0 z-10 -mx-4 sm:mx-0 mt-2 mb-6 border-t border-slate-200 bg-white/95 backdrop-blur px-4 sm:px-0 py-3 flex items-center justify-between gap-3"
+      >
+        <p v-if="contractError" class="text-sm text-red-600">{{ contractError }}</p>
+        <p v-else class="text-xs text-slate-400">Los cambios se guardan para todo el servicio (no solo esta pestaña).</p>
+        <button type="button" :disabled="savingContract" class="btn-primary shrink-0" @click="handleSaveContract">
+          {{ savingContract ? 'Guardando...' : 'Guardar cambios' }}
+        </button>
+      </div>
+
+      <!-- ---- Facturación: Descuentos ---- -->
+      <div v-if="activeTab === 'facturacion'">
+      <ClientSectionCard title="Descuentos" icon="🏷️">
+      <div class="max-w-lg">
         <h3 class="text-sm font-semibold mb-2">Descuentos que aplican a la próxima factura</h3>
         <p v-if="loadingContractDiscounts" class="text-sm text-slate-500 mb-2">Cargando...</p>
         <p v-else-if="!contractApplicableDiscounts.length" class="text-sm text-slate-500 mb-2">Sin descuentos pendientes.</p>
@@ -1479,7 +1554,7 @@ onMounted(async () => {
 
         <h3 v-if="canApplyAveria" class="text-sm font-semibold mt-6 mb-2">Nuevo descuento para esta línea</h3>
         <template v-if="canApplyAveria">
-          <div class="grid grid-cols-2 gap-3 mb-2">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
             <input v-model.number="contractAveriaForm.monto" type="number" step="0.01" min="0.01" placeholder="Monto (S/)" class="field-input" />
             <button
               type="button"
@@ -1495,89 +1570,18 @@ onMounted(async () => {
           <p class="text-xs text-slate-500 mt-1">Solo afecta las facturas de esta línea, no las demás del cliente.</p>
         </template>
       </div>
+      </ClientSectionCard>
 
-      <!-- ---- Fotos ---- -->
-      <h2 v-if="embedded" class="text-lg font-semibold mb-3">Fotos de instalación</h2>
-      <div v-if="embedded || activeTab === 'fotos'" :class="{ 'mb-8': embedded }">
-        <p v-if="photoError" class="mb-3 text-sm text-red-600">{{ photoError }}</p>
-        <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
-          <div v-for="cat in PHOTO_CATEGORIES" :key="cat.value" class="surface p-4">
-            <div class="text-slate-500 text-xs mb-2">{{ cat.label }}</div>
-            <a v-if="photos[cat.value]?.url" :href="photos[cat.value]!.url!" target="_blank" rel="noopener">
-              <img :src="photos[cat.value]!.url!" class="w-full h-32 object-cover rounded-lg mb-2" />
-            </a>
-            <div v-else class="w-full h-32 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-xs text-slate-400 mb-2">
-              Sin foto
-            </div>
-            <div class="flex gap-2">
-              <label
-                class="flex-1 text-center px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs cursor-pointer"
-                :class="{ 'opacity-60 pointer-events-none': uploadingCategory === cat.value }"
-              >
-                {{ uploadingCategory === cat.value ? 'Subiendo...' : photos[cat.value] ? 'Reemplazar' : 'Subir foto' }}
-                <input type="file" accept="image/*" class="hidden" @change="handlePhotoChange(cat.value, $event)" />
-              </label>
-              <button
-                v-if="photos[cat.value]"
-                class="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-red-500/20 text-red-600 text-xs"
-                @click="handleDeletePhoto(cat.value)"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ---- Tickets ---- -->
-      <div v-if="embedded || activeTab === 'tickets'" :class="{ 'mb-8': embedded }">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-semibold">Tickets de soporte</h2>
-          <router-link
-            v-if="canCreateTickets"
-            :to="`/soporte?client_id=${clientId}&contract_id=${contractId}`"
-            class="text-sm text-sky-600 hover:text-sky-700"
-          >
-            + Nuevo ticket
-          </router-link>
-        </div>
-        <p v-if="loadingTickets" class="text-slate-500 text-sm">Cargando...</p>
-        <p v-else-if="!tickets.length" class="text-slate-500 text-sm">Esta línea aun no tiene tickets.</p>
-        <div v-else class="table-shell">
-          <table class="w-full text-sm min-w-[560px]">
-            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
-              <tr>
-                <th class="text-left px-4 py-3">Ticket</th>
-                <th class="text-left px-4 py-3">Título</th>
-                <th class="text-left px-4 py-3">Creado</th>
-                <th class="text-left px-4 py-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="t in tickets" :key="t.id" class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer" @click="router.push(`/soporte/${t.id}`)">
-                <td class="px-4 py-3 font-mono text-xs">{{ t.ticket_number }}</td>
-                <td class="px-4 py-3">{{ t.title }}</td>
-                <td class="px-4 py-3 text-slate-600">{{ t.created_at.slice(0, 10) }}</td>
-                <td class="px-4 py-3">
-                  <span class="badge" :class="TICKET_STATUS_CLASS[t.status]">{{ TICKET_STATUS_LABEL[t.status] }}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ---- Facturas ---- -->
-      <div v-if="embedded || activeTab === 'facturas'">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-semibold">Facturas</h2>
+      <!-- ---- Facturación: Facturas ---- -->
+      <ClientSectionCard title="Facturas" icon="🧾">
+        <template #actions>
           <div class="flex items-center gap-3">
-            <button v-if="canRegisterAdvancePayment" type="button" class="text-sm text-sky-600 hover:text-sky-700" @click="openAdvanceModal">
+            <button v-if="canRegisterAdvancePayment" type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="openAdvanceModal">
               Pago adelantado (3+1)
             </button>
-            <router-link to="/facturacion" class="text-sm text-sky-600 hover:text-sky-700">+ Nueva factura</router-link>
+            <router-link to="/facturacion" class="text-xs text-sky-600 hover:text-sky-700">+ Nueva factura</router-link>
           </div>
-        </div>
+        </template>
         <p v-if="loadingInvoices" class="text-slate-500 text-sm">Cargando...</p>
         <p v-else-if="!invoices.length" class="text-slate-500 text-sm">Esta línea aun no tiene facturas.</p>
         <div v-else class="table-shell">
@@ -1604,6 +1608,86 @@ onMounted(async () => {
             </tbody>
           </table>
         </div>
+      </ClientSectionCard>
+      </div>
+
+      <!-- ---- Fotos ---- -->
+      <div v-if="activeTab === 'fotos'">
+      <ClientSectionCard title="Fotos de instalación" icon="📷">
+        <p v-if="photoError" class="mb-3 text-sm text-red-600">{{ photoError }}</p>
+        <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
+          <div v-for="cat in PHOTO_CATEGORIES" :key="cat.value" class="surface p-4">
+            <div class="text-slate-500 text-xs mb-2">{{ cat.label }}</div>
+            <a v-if="photos[cat.value]?.url" :href="photos[cat.value]!.url!" target="_blank" rel="noopener">
+              <img :src="photos[cat.value]!.url!" class="w-full h-32 object-cover rounded-lg mb-2" />
+            </a>
+            <label
+              v-else
+              class="w-full h-32 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-1 text-xs text-slate-400 mb-2 cursor-pointer transition-colors hover:border-sky-400 hover:bg-sky-50/50 hover:text-sky-600"
+              :class="{ 'opacity-60 pointer-events-none': uploadingCategory === cat.value }"
+            >
+              <span class="text-2xl">📷</span>
+              <span>{{ uploadingCategory === cat.value ? 'Subiendo...' : 'Sin foto' }}</span>
+              <input type="file" accept="image/*" class="hidden" @change="handlePhotoChange(cat.value, $event)" />
+            </label>
+            <div class="flex gap-2">
+              <label
+                class="flex-1 text-center px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs cursor-pointer"
+                :class="{ 'opacity-60 pointer-events-none': uploadingCategory === cat.value }"
+              >
+                {{ uploadingCategory === cat.value ? 'Subiendo...' : photos[cat.value] ? 'Reemplazar' : 'Subir foto' }}
+                <input type="file" accept="image/*" class="hidden" @change="handlePhotoChange(cat.value, $event)" />
+              </label>
+              <button
+                v-if="photos[cat.value]"
+                class="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-red-500/20 text-red-600 text-xs"
+                @click="handleDeletePhoto(cat.value)"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      </ClientSectionCard>
+      </div>
+
+      <!-- ---- Soporte ---- -->
+      <div v-if="activeTab === 'soporte'">
+      <ClientSectionCard title="Tickets de soporte" icon="🎫">
+        <template #actions>
+          <router-link
+            v-if="canCreateTickets"
+            :to="`/soporte?client_id=${clientId}&contract_id=${contractId}`"
+            class="text-xs text-sky-600 hover:text-sky-700"
+          >
+            + Nuevo ticket
+          </router-link>
+        </template>
+        <p v-if="loadingTickets" class="text-slate-500 text-sm">Cargando...</p>
+        <p v-else-if="!tickets.length" class="text-slate-500 text-sm">Esta línea aun no tiene tickets.</p>
+        <div v-else class="table-shell">
+          <table class="w-full text-sm min-w-[560px]">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+              <tr>
+                <th class="text-left px-4 py-3">Ticket</th>
+                <th class="text-left px-4 py-3">Título</th>
+                <th class="text-left px-4 py-3">Creado</th>
+                <th class="text-left px-4 py-3">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in tickets" :key="t.id" class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer" @click="router.push(`/soporte/${t.id}`)">
+                <td class="px-4 py-3 font-mono text-xs">{{ t.ticket_number }}</td>
+                <td class="px-4 py-3">{{ t.title }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ t.created_at.slice(0, 10) }}</td>
+                <td class="px-4 py-3">
+                  <span class="badge" :class="TICKET_STATUS_CLASS[t.status]">{{ TICKET_STATUS_LABEL[t.status] }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </ClientSectionCard>
       </div>
     </template>
 

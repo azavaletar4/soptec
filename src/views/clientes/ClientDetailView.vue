@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientServiceDetailView from './ClientServiceDetailView.vue';
+import ClientStatCard from '@/components/clientes/ClientStatCard.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -46,6 +47,12 @@ const CLIENT_STATUS_LABEL: Record<ClientStatus, string> = {
   active: 'Activo',
   suspended: 'Suspendido',
   retired: 'Baja',
+};
+const CLIENT_STATUS_CLASS: Record<ClientStatus, string> = {
+  prospect: 'bg-yellow-500/15 text-yellow-600',
+  active: 'bg-green-500/15 text-green-600',
+  suspended: 'bg-red-500/15 text-red-600',
+  retired: 'bg-slate-500/15 text-slate-600',
 };
 const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
   active: 'Activo',
@@ -174,7 +181,10 @@ onMounted(async () => {
     <template v-else>
       <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <h1 class="text-2xl font-semibold">{{ client.first_name }} {{ client.last_name }}</h1>
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="text-2xl font-semibold">{{ client.first_name }} {{ client.last_name }}</h1>
+            <span class="badge" :class="CLIENT_STATUS_CLASS[client.status]">{{ CLIENT_STATUS_LABEL[client.status] }}</span>
+          </div>
           <p class="text-slate-600 text-sm mt-1">
             {{ DOCUMENT_TYPE_LABEL[client.document_type] }} {{ client.document_number }} · {{ client.phone || 'sin telefono' }}<span v-if="client.phone_2"> · {{ client.phone_2 }}</span>
           </p>
@@ -183,16 +193,13 @@ onMounted(async () => {
       </div>
 
       <div class="grid gap-4 mb-8 text-sm" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
-        <div class="surface p-4">
-          <div class="text-slate-500 text-xs mb-1">Correo</div>
+        <ClientStatCard icon="✉️" label="Correo">
           <div>{{ client.email || '—' }}</div>
-        </div>
-        <div class="surface p-4">
-          <div class="text-slate-500 text-xs mb-1">Direccion de contacto</div>
+        </ClientStatCard>
+        <ClientStatCard icon="📍" label="Dirección de contacto">
           <div>{{ client.address || '—' }}</div>
-        </div>
-        <div class="surface p-4">
-          <div class="text-slate-500 text-xs mb-2">Estado del cliente</div>
+        </ClientStatCard>
+        <ClientStatCard icon="●" label="Estado del cliente">
           <select
             :value="client.status"
             :disabled="updatingClientStatus"
@@ -202,9 +209,8 @@ onMounted(async () => {
             <option v-for="(label, value) in CLIENT_STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
           </select>
           <p v-if="clientStatusError" class="text-xs text-red-600 mt-1">{{ clientStatusError }}</p>
-        </div>
-        <div class="surface p-4">
-          <div class="text-slate-500 text-xs mb-1">Saldo a favor</div>
+        </ClientStatCard>
+        <ClientStatCard icon="💰" label="Saldo a favor">
           <div class="font-semibold" :class="client.saldo_a_favor > 0 ? 'text-green-600' : ''">
             S/ {{ client.saldo_a_favor.toFixed(2) }}
           </div>
@@ -212,7 +218,7 @@ onMounted(async () => {
           <button v-if="canApplyAveria" type="button" class="text-[11px] text-sky-600 hover:text-sky-700 mt-1" @click="openAveriaModal">
             + Descuento general (todos los servicios)
           </button>
-        </div>
+        </ClientStatCard>
       </div>
 
       <p v-if="loadingContracts" class="text-slate-500 text-sm">Cargando...</p>
