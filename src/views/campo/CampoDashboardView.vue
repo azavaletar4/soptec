@@ -36,7 +36,7 @@ function openTrabajo(t: TrabajoItem) {
 function formatFecha(value: string | null) {
   if (!value) return '—';
   const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
-  return d.toLocaleDateString('es-EC', { day: '2-digit', month: 'short' });
+  return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
 }
 
 onMounted(() => {

@@ -115,7 +115,7 @@ const EVENT_LABEL: Record<string, string> = {
 
 function formatDate(value: string | null) {
   if (!value) return '—';
-  return new Date(value).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' });
+  return new Date(value).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 const total = computed(() => debtHoldStore.pending.length);

@@ -358,7 +358,7 @@ async function handlePay() {
 }
 
 // ---- Recibo de pago (documento INTERNO, no un comprobante electronico
-// SUNAT/SRI — SmartRayco no esta integrado con ningun sistema tributario,
+// SUNAT — SmartRayco no esta integrado con ningun sistema tributario,
 // ver comentario en la migracion Fase 7). Solo constancia de cobro para
 // entregar al cliente. ----
 const reciboInvoice = ref<Invoice | null>(null);

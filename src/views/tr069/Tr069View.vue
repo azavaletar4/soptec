@@ -167,7 +167,7 @@ onMounted(async () => {
 
 function formatDate(value: string | null) {
   if (!value) return 'Nunca';
-  return new Date(value).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' });
+  return new Date(value).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 async function handleSync() {

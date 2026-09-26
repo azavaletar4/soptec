@@ -394,7 +394,7 @@ async function handleMovement() {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' });
+  return new Date(value).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 async function handleDeleteProduct() {

@@ -1034,7 +1034,7 @@ const gauges = computed(() => {
               <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
               <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.vlan ?? '—' }}</td>
               <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.onu_type ?? '—' }}</td>
-              <td class="px-4 py-3 text-slate-500 text-xs">{{ new Date(ont.created_at).toLocaleDateString('es-EC') }}</td>
+              <td class="px-4 py-3 text-slate-500 text-xs">{{ new Date(ont.created_at).toLocaleDateString('es-PE') }}</td>
               <td class="px-4 py-3">
                 <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-600">Activo</span>
                 <span v-else class="text-slate-500 text-xs">—</span>

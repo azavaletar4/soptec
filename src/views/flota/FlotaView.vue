@@ -509,7 +509,7 @@ async function handleDeleteMantenimiento(m: MantenimientoHistorial) {
                   </span>
                   <span class="text-slate-500">{{ m.fecha }}</span>
                   <span v-if="m.kilometraje != null" class="text-slate-400">· {{ m.kilometraje }} km</span>
-                  <span v-if="m.costo != null" class="text-slate-400">· ${{ Number(m.costo).toFixed(2) }}</span>
+                  <span v-if="m.costo != null" class="text-slate-400">· S/ {{ Number(m.costo).toFixed(2) }}</span>
                 </div>
                 <p v-if="m.taller" class="text-slate-600 mt-0.5">{{ m.taller }}</p>
                 <p v-if="m.descripcion" class="text-slate-500 mt-0.5">{{ m.descripcion }}</p>

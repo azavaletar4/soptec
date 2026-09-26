@@ -103,7 +103,7 @@ async function loadExistingPhotos(contractId: string | null) {
   }
 }
 
-const DOCUMENT_LABEL: Record<string, string> = { cedula: 'Cédula', ruc: 'RUC', pasaporte: 'Pasaporte' };
+const DOCUMENT_LABEL: Record<string, string> = { cedula: 'DNI', ruc: 'RUC', pasaporte: 'Pasaporte' };
 
 onMounted(async () => {
   if (!campoStore.trabajos.length) await campoStore.fetchAll();

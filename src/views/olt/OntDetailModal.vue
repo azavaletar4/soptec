@@ -55,7 +55,7 @@ function relativeTime(value: string | null): string {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(value).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 async function refreshSignal() {

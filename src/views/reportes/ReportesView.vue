@@ -87,7 +87,7 @@ function setPreset(preset: 'month' | '30d' | 'year') {
 }
 
 function money(n: number) {
-  return `$${n.toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `S/ ${n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function maxOf(record: Record<string, number>) {

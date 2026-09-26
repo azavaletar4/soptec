@@ -69,7 +69,7 @@ function switchTab(tab: Tab) {
 onMounted(loadUnits);
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' });
+  return new Date(value).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 // ---- Registrar devolucion (equipo asignado -> bodega / dañado / reparacion) ----

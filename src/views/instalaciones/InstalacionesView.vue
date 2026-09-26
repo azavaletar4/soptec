@@ -388,7 +388,7 @@ function goToClient(inst: Installation) {
 
 function formatDate(value: string | null) {
   if (!value) return '—';
-  return new Date(value + 'T00:00:00').toLocaleDateString('es-EC', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(value + 'T00:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 </script>
 
