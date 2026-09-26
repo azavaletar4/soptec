@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useOltStore, type OltOnt, type OltHealth, type UnconfiguredOnt } from '@/stores/olt';
@@ -157,16 +157,59 @@ async function loadHealth() {
 const unconfiguredOnts = ref<UnconfiguredOnt[]>([]);
 const unconfiguredLoading = ref(false);
 const unconfiguredError = ref<string | null>(null);
+const unconfiguredCheckedAt = ref<string | null>(null);
+const unconfiguredLive = ref(false);
 
-async function loadUnconfigured() {
+async function loadUnconfigured(opts: { live?: boolean } = {}) {
   unconfiguredLoading.value = true;
   unconfiguredError.value = null;
   try {
-    unconfiguredOnts.value = await oltStore.fetchUnconfiguredOnts(deviceId.value);
+    const res = await oltStore.fetchUnconfiguredOnts(deviceId.value, opts);
+    unconfiguredOnts.value = res.items;
+    unconfiguredCheckedAt.value = res.checkedAt;
+    unconfiguredLive.value = res.live;
   } catch (e) {
     unconfiguredError.value = getErrorMessage(e, 'Error al consultar ONUs sin autorizar');
   } finally {
     unconfiguredLoading.value = false;
+  }
+}
+
+// "Actualizar ahora": ya no hace Telnet en vivo desde el navegador (Fase
+// 40) — encola un sync completo en el backend (202 inmediato) y espera a
+// que llegue por SSE (connectOltEvents) para refrescar summary/health/onts
+// desde la cache ya actualizada. syncStatusPoll es solo un respaldo por si
+// el SSE se desconecta.
+const fullSyncing = ref(false);
+const fullSyncMessage = ref<string | null>(null);
+let syncStatusPoll: ReturnType<typeof setInterval> | undefined;
+
+async function handleTriggerFullSync() {
+  fullSyncing.value = true;
+  fullSyncMessage.value = null;
+  try {
+    const res = await oltStore.triggerFullSync(deviceId.value);
+    fullSyncMessage.value =
+      res.status === 'already_running' ? 'Ya hay una sincronización en curso.' : 'Sincronización en curso en segundo plano...';
+
+    clearInterval(syncStatusPoll);
+    syncStatusPoll = setInterval(async () => {
+      try {
+        const status = await oltStore.fetchSyncStatus(deviceId.value);
+        if (!status.running) {
+          clearInterval(syncStatusPoll);
+          fullSyncing.value = false;
+          fullSyncMessage.value = null;
+          await Promise.all([loadSummary(), loadHealth(), oltStore.fetchOnts(deviceId.value), loadUnconfigured()]);
+        }
+      } catch {
+        // se reintenta en el proximo tick; si el SSE sigue vivo, tambien se
+        // entera por ahi sin depender de este sondeo.
+      }
+    }, 5000);
+  } catch (e) {
+    fullSyncing.value = false;
+    fullSyncMessage.value = getErrorMessage(e, 'Error al iniciar la sincronización');
   }
 }
 
@@ -179,10 +222,28 @@ onMounted(async () => {
   }
 
   if (!oltStore.devices.length) await oltStore.fetchDevices();
-  await Promise.all([oltStore.fetchOnts(deviceId.value), loadSummary(), loadHealth(), catalogsStore.fetchZones()]);
-  // Secuencial (no sumada al Promise.all de arriba): evitar mas conexiones
-  // Telnet simultaneas a la misma OLT (ver leccion aprendida en el backend).
-  await loadUnconfigured();
+  // Los 4 son lecturas de cache (Fase 40) — ya no hacen Telnet en vivo, por
+  // eso si pueden ir en paralelo sin riesgo de chocar contra la OLT.
+  await Promise.all([
+    oltStore.fetchOnts(deviceId.value),
+    loadSummary(),
+    loadHealth(),
+    catalogsStore.fetchZones(),
+    loadUnconfigured(),
+  ]);
+
+  // Tiempo real: cuando el sync en background (o una accion manual desde
+  // otra pestana) cambia una ONT, se refleja sola en la tabla; cuando
+  // cambia el resumen/salud cacheados, se vuelven a pedir (son baratos).
+  void oltStore.connectOltEvents(deviceId.value, () => {
+    void loadSummary();
+    void loadHealth();
+  });
+});
+
+onUnmounted(() => {
+  oltStore.disconnectOltEvents();
+  clearInterval(syncStatusPoll);
 });
 
 async function handleSync() {
@@ -592,7 +653,13 @@ const gauges = computed(() => {
           <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
           <p class="text-slate-600 text-sm">{{ device.host }}:{{ device.telnet_port }} · {{ device.brand.toUpperCase() }}</p>
         </div>
-        <button class="btn-ghost text-xs" @click="openAcsProfileModal">ACS (GenieACS) por defecto</button>
+        <div class="flex items-center gap-2">
+          <span v-if="fullSyncMessage" class="text-xs text-slate-500">{{ fullSyncMessage }}</span>
+          <button class="btn-ghost text-xs" :disabled="fullSyncing" @click="handleTriggerFullSync">
+            {{ fullSyncing ? 'Sincronizando...' : '↻ Actualizar ahora' }}
+          </button>
+          <button class="btn-ghost text-xs" @click="openAcsProfileModal">ACS (GenieACS) por defecto</button>
+        </div>
       </div>
 
       <!-- Resumen estilo SmartOLT -->
@@ -648,9 +715,9 @@ const gauges = computed(() => {
         dato local disponible.
       </p>
       <p class="text-xs text-slate-500 mb-6">
-        "Sin autorizar" y "Online/Offline" se consultan en vivo a toda la OLT en cada actualización
-        (un solo comando, ~8-10s). "Señales bajas" todavía depende de leer la señal óptica ONT por
-        ONT (ver botón "Señal" en la tabla) — se está evaluando automatizarlo.
+        Estos datos vienen de la última sincronización en segundo plano con la OLT (automática cada
+        rato, o al presionar "Actualizar ahora"), no de una consulta en vivo — por eso la pantalla
+        carga al instante. Los cambios de estado se reflejan solos en la tabla en tiempo real.
       </p>
 
       <!-- Telemetria: cluster de velocimetros estilo deportivo -->
@@ -833,10 +900,24 @@ const gauges = computed(() => {
       <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-6">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-sm font-semibold">ONTs sin autorizar ({{ unconfiguredOnts.length }})</h2>
-          <button class="text-xs text-sky-600 hover:underline" :disabled="unconfiguredLoading" @click="loadUnconfigured">
-            {{ unconfiguredLoading ? 'Consultando...' : 'Actualizar' }}
-          </button>
+          <div class="flex items-center gap-2">
+            <button class="text-xs text-sky-600 hover:underline" :disabled="unconfiguredLoading" @click="loadUnconfigured()">
+              {{ unconfiguredLoading ? 'Consultando...' : 'Actualizar' }}
+            </button>
+            <button
+              class="text-xs text-amber-700 hover:underline"
+              :disabled="unconfiguredLoading"
+              title="Escaneo Telnet en vivo — usar justo antes de registrar una ONT nueva, para el dato mas fresco posible"
+              @click="loadUnconfigured({ live: true })"
+            >
+              Escanear ahora
+            </button>
+          </div>
         </div>
+        <p class="text-xs text-slate-500 mb-3">
+          {{ unconfiguredLive ? 'Escaneo en vivo' : 'Desde la última sincronización' }}
+          <template v-if="unconfiguredCheckedAt">— {{ new Date(unconfiguredCheckedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) }}</template>
+        </p>
         <p v-if="unconfiguredError" class="text-xs text-red-600 mb-3">{{ unconfiguredError }}</p>
         <p v-else-if="!unconfiguredLoading && !unconfiguredOnts.length" class="text-sm text-slate-500">
           No hay ONUs detectadas sin autorizar en este momento.

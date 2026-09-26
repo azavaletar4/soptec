@@ -1,6 +1,7 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 export interface OltDevice {
   id: string;
@@ -20,6 +21,8 @@ export interface OltOnt {
   id: string;
   olt_device_id: string;
   client_id: string | null;
+  /** A que servicio/linea del cliente pertenece este ONT (Fase 37). Opcional: solo viene si server/src/routes/olt.ts ya lo lee/escribe (pendiente). */
+  contract_id?: string | null;
   frame: number;
   slot: number;
   port: number;
@@ -118,11 +121,30 @@ export interface UnconfiguredOnt {
   port: number | null;
 }
 
+export interface UnconfiguredOntsResult {
+  items: UnconfiguredOnt[];
+  checkedAt: string | null;
+  live: boolean;
+}
+
+export interface OltSyncStatus {
+  running: boolean;
+  lastFullSyncAt: string | null;
+}
+
 export const useOltStore = defineStore('olt', () => {
   const devices = ref<OltDevice[]>([]);
   const onts = ref<OltOnt[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+
+  // Tiempo real (Fase 40): Server-Sent Events desde el backend, no Supabase
+  // Realtime directo — olt_onts es de acceso exclusivo del backend (RLS sin
+  // policies a proposito). Se usa fetch()+ReadableStream en vez de
+  // EventSource nativo porque este necesita mandar el token via header
+  // Authorization (igual que apiFetch), y EventSource no permite headers
+  // custom.
+  let eventsAbortController: AbortController | null = null;
 
   async function fetchDevices() {
     loading.value = true;
@@ -237,8 +259,99 @@ export const useOltStore = defineStore('olt', () => {
     return apiFetch<{ tcontProfiles: string[]; trafficProfiles: string[] }>(`/api/olt-devices/${deviceId}/profiles`);
   }
 
-  function fetchUnconfiguredOnts(deviceId: string) {
-    return apiFetch<UnconfiguredOnt[]>(`/api/olt-devices/${deviceId}/onts/unconfigured`);
+  // Por defecto lee la cache (instantaneo). live:true fuerza un escaneo
+  // Telnet en vivo — usar justo antes de registrar una ONT nueva.
+  function fetchUnconfiguredOnts(deviceId: string, opts: { live?: boolean } = {}) {
+    const query = opts.live ? '?live=1' : '';
+    return apiFetch<UnconfiguredOntsResult>(`/api/olt-devices/${deviceId}/onts/unconfigured${query}`);
+  }
+
+  // "Actualizar ahora": encola un sync completo en background (202
+  // inmediato); el resultado llega despues via connectOltEvents o sondeando
+  // fetchSyncStatus.
+  function triggerFullSync(deviceId: string) {
+    return apiFetch<{ status: 'queued' | 'already_running' }>(`/api/olt-devices/${deviceId}/sync/full`, {
+      method: 'POST',
+    });
+  }
+
+  function fetchSyncStatus(deviceId: string) {
+    return apiFetch<OltSyncStatus>(`/api/olt-devices/${deviceId}/sync/status`);
+  }
+
+  /**
+   * Conecta al SSE de la OLT: parchea `onts` en vivo con cada cambio de
+   * estado/senal (sync en background o una accion manual de otra pestana) y
+   * llama a `onSummaryChanged` cuando el resumen/salud cacheados cambiaron
+   * (para que la vista los vuelva a pedir). Idempotente: llamar de nuevo
+   * cierra la conexion anterior antes de abrir una nueva.
+   */
+  async function connectOltEvents(deviceId: string, onSummaryChanged?: () => void) {
+    disconnectOltEvents();
+    const controller = new AbortController();
+    eventsAbortController = controller;
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+
+    try {
+      const res = await fetch(`/api/olt-devices/${deviceId}/events`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: controller.signal,
+      });
+      if (!res.body) return;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let sepIndex = buffer.indexOf('\n\n');
+        while (sepIndex !== -1) {
+          const rawEvent = buffer.slice(0, sepIndex);
+          buffer = buffer.slice(sepIndex + 2);
+
+          let eventName = 'message';
+          const dataLines: string[] = [];
+          for (const line of rawEvent.split('\n')) {
+            if (line.startsWith('event:')) eventName = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+          }
+          const payload = dataLines.join('\n');
+
+          if (eventName === 'ontChanged') {
+            try {
+              const patch = JSON.parse(payload) as Partial<OltOnt> & { id: string; deleted?: boolean };
+              if (patch.deleted) {
+                onts.value = onts.value.filter((o) => o.id !== patch.id);
+              } else {
+                const idx = onts.value.findIndex((o) => o.id === patch.id);
+                if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...patch };
+              }
+            } catch {
+              // ignorar payloads malformados
+            }
+          } else if (eventName === 'summaryChanged') {
+            onSummaryChanged?.();
+          }
+
+          sepIndex = buffer.indexOf('\n\n');
+        }
+      }
+    } catch (e) {
+      if (controller.signal.aborted) return; // desconexion intencional (unmount)
+      // eslint-disable-next-line no-console
+      console.error('Error en la conexion de eventos de la OLT:', e);
+    }
+  }
+
+  function disconnectOltEvents() {
+    eventsAbortController?.abort();
+    eventsAbortController = null;
   }
 
   async function assignTr069(deviceId: string, ontDbId: string, acsUrl: string, veip = 1) {
@@ -276,10 +389,19 @@ export const useOltStore = defineStore('olt', () => {
     );
   }
 
-  function linkOntToClient(deviceId: string, ontDbId: string, clientId: string) {
+  function linkOntToClient(deviceId: string, ontDbId: string, clientId: string, contractId?: string) {
     return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/meta`, {
       method: 'PUT',
-      body: JSON.stringify({ client_id: clientId }),
+      body: JSON.stringify({ client_id: clientId, contract_id: contractId ?? null }),
+    });
+  }
+
+  // Reasigna una ONT ya vinculada al cliente a otro de sus contratos (Fase
+  // 37) — no cambia client_id, solo a que servicio pertenece.
+  function setOntContract(deviceId: string, ontDbId: string, contractId: string | null) {
+    return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/meta`, {
+      method: 'PUT',
+      body: JSON.stringify({ contract_id: contractId }),
     });
   }
 
@@ -336,6 +458,10 @@ export const useOltStore = defineStore('olt', () => {
     fetchHealth,
     fetchProfiles,
     fetchUnconfiguredOnts,
+    triggerFullSync,
+    fetchSyncStatus,
+    connectOltEvents,
+    disconnectOltEvents,
     assignTr069,
     removeTr069,
     fetchRunningConfig,
@@ -344,6 +470,7 @@ export const useOltStore = defineStore('olt', () => {
     changeOntPlan,
     searchUnlinkedOnts,
     fetchOntStatusBySerials,
+    setOntContract,
     linkOntToClient,
   };
 });

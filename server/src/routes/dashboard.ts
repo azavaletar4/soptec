@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
-import { computeOltSummary, type OltDeviceRow } from './olt';
 
 export const dashboardRoutes = new Hono();
 
@@ -54,29 +53,41 @@ dashboardRoutes.get('/network-status', async (c) => {
 
 /**
  * Resumen estilo SmartOLT agregado de TODAS las OLTs activas (suma de
- * sin-autorizar/online/offline/senal-baja), con el mismo escaneo en vivo
- * que /api/olt-devices/:id/summary — reutiliza esa misma logica.
+ * sin-autorizar/online/offline/senal-baja). YA NO escanea las OLTs en vivo
+ * (Fase 40): lee olt_sync_cache, llenada en segundo plano por
+ * oltSyncScheduler.ts — instantaneo aunque haya varias OLTs.
  */
 dashboardRoutes.get('/olt-summary', async (c) => {
   const { data: devices, error } = await supabaseAdmin
     .from('olt_devices')
-    .select('*')
+    .select('id')
     .eq('is_active', true);
   if (error) return c.json({ error: error.message }, 500);
 
-  const rows = (devices ?? []) as OltDeviceRow[];
-  const results = await Promise.all(rows.map((d) => computeOltSummary(d)));
+  const deviceIds = (devices ?? []).map((d) => d.id as string);
+  const { data: cacheRows, error: cacheError } = deviceIds.length
+    ? await supabaseAdmin
+        .from('olt_sync_cache')
+        .select('unconfigured, online, offline, low_signal, scan_complete, checked_at')
+        .in('olt_device_id', deviceIds)
+    : { data: [], error: null };
+  if (cacheError) return c.json({ error: cacheError.message }, 500);
 
-  const totals = results.reduce(
+  const rows = cacheRows ?? [];
+  const totals = rows.reduce(
     (acc, r) => ({
       unconfigured: acc.unconfigured + r.unconfigured,
       online: acc.online + r.online,
       offline: acc.offline + r.offline,
-      lowSignal: acc.lowSignal + r.lowSignal,
-      scanComplete: acc.scanComplete && r.scanComplete,
+      lowSignal: acc.lowSignal + r.low_signal,
+      scanComplete: acc.scanComplete && r.scan_complete,
     }),
-    { unconfigured: 0, online: 0, offline: 0, lowSignal: 0, scanComplete: true },
+    { unconfigured: 0, online: 0, offline: 0, lowSignal: 0, scanComplete: rows.length > 0 },
   );
+  const checkedAt = rows.reduce<string | null>((oldest, r) => {
+    if (!r.checked_at) return oldest;
+    return !oldest || r.checked_at < oldest ? r.checked_at : oldest;
+  }, null);
 
-  return c.json({ ...totals, deviceCount: rows.length, checkedAt: new Date().toISOString() });
+  return c.json({ ...totals, deviceCount: deviceIds.length, checkedAt });
 });

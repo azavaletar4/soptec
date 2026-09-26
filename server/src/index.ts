@@ -16,10 +16,13 @@ import { debtHoldRoutes } from './routes/debtHold';
 import { invoicesRoutes } from './routes/invoices';
 import { soporteRoutes } from './routes/soporte';
 import { alertsRoutes } from './routes/alerts';
+import { analyticsRoutes } from './routes/analytics';
 import { startTr069Scheduler } from './services/tr069Scheduler';
 import { startDebtHoldScheduler } from './services/debtHoldScheduler';
 import { startMikrotikReconcileScheduler } from './services/mikrotikReconcileScheduler';
 import { startInvoiceScheduler } from './services/invoiceScheduler';
+import { startTrafficAnalyticsScheduler } from './services/trafficAnalyticsScheduler';
+import { startOltSyncScheduler } from './services/oltSyncScheduler';
 
 const app = new Hono();
 
@@ -43,6 +46,7 @@ app.route('/api/xui', xuiRoutes);
 app.route('/api/debt-hold', debtHoldRoutes);
 app.route('/api/invoices', invoicesRoutes);
 app.route('/api/soporte', soporteRoutes);
+app.route('/api/analytics', analyticsRoutes);
 // Sin requireAuth: la llama LibreNMS (un sistema externo), no un usuario
 // logueado — se protege con ALERTS_WEBHOOK_SECRET en su lugar (ver alerts.ts).
 app.route('/api/alerts', alertsRoutes);
@@ -67,3 +71,5 @@ startTr069Scheduler();
 startDebtHoldScheduler();
 startMikrotikReconcileScheduler();
 startInvoiceScheduler();
+startTrafficAnalyticsScheduler();
+startOltSyncScheduler();
