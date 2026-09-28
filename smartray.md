@@ -96,6 +96,83 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   - Si el nombre de la VM sugiere que aloja el propio panel SmartRayco, aparece un aviso ámbar
     chico antes de los botones de apagar/reiniciar.
 
+### Componente `ConfirmModal` — accesibilidad y nuevo botón `.btn-destructive`
+- Nueva clase `.btn-destructive` en `style.css`: botón rojo **sólido** (`bg-red-600` → hover
+  `bg-red-700`, texto blanco) para la acción principal de un modal irreversible — distinta de la
+  ya existente `.btn-danger` (texto rojo sin relleno, para acciones sueltas en tablas). El botón
+  de confirmar del modal ahora usa `.btn-destructive` cuando `danger=true` y `.btn-primary`
+  cuando no, sin clases inline sueltas.
+- El panel del modal ahora tiene `max-h-[90vh] overflow-y-auto` (evita que un mensaje largo se
+  salga de la pantalla).
+- Accesibilidad (no cambia el look, pero sí cómo se navega con teclado): al abrir, el foco va al
+  botón "Cancelar" si es una acción `danger`, o al de confirmar si no; con Tab el foco queda
+  atrapado dentro del modal (no se escapa hacia el resto de la página); Escape cierra el modal
+  (salvo mientras está `loading`); al cerrar, el foco vuelve al botón que lo abrió.
+
+### Sistema nuevo: avisos (toast) y confirmaciones globales
+- **`<ToastHost>`** (montado una vez en `AppLayout.vue` y `CampoLayout.vue`): reemplaza los
+  `alert()` nativos del navegador. Los avisos se apilan **abajo a la derecha** en pantallas
+  grandes; en **celular** se centran y ocupan el ancho, respetando el espacio de la barra/
+  home-indicator del teléfono. Colores: rojo (`bg-red-600`) para error, verde (`bg-emerald-600`)
+  para éxito, gris oscuro (`bg-slate-800`) para informativo. Se cierran solos — 8 segundos los
+  errores, 6 segundos el resto — o con la "✕" de cada uno.
+- **`<ConfirmHost>`** (montado igual, una vez en cada layout): un solo `ConfirmModal` global que
+  cualquier pantalla puede pedir con `useConfirm()`, en vez del `confirm()` nativo del navegador.
+  Mismo diseño que el `ConfirmModal` ya existente (ver entrada anterior).
+- Se reemplazaron **todos** los `alert()`/`confirm()` nativos en: Servidores (el error de
+  encender/apagar/reiniciar una VM ahora es un toast, no un cartel fijo propio), Cortes por
+  deuda, TR-069, Usuarios, Zonas, Mapa de Red, Importar mapa y el diagrama de empalmes (fusiones
+  de fibra).
+
+### Contraste: badges y texto chico de verde/ámbar/azul, un tono más oscuro
+- En **badges** (`.badge`, pastillas de color `bg-X-500/15 text-X-600`) y en cualquier texto
+  `text-xs`/`text-[11px]`, los colores `text-emerald-600`, `text-amber-600` y `text-sky-600` se
+  cambiaron a `text-emerald-700`/`text-amber-700`/`text-sky-700` (un tono más oscuro, más
+  contraste sobre fondo blanco). Aplicado en **114 lugares** de **26 pantallas/componentes**.
+  Textos grandes (KPIs en `text-xl`/`text-2xl`/`text-3xl`/`text-4xl`) y texto normal
+  (`text-sm` sin badge) se dejaron en `-600` a propósito — no estaban en el pedido.
+- **Dashboard**: las tarjetas de resumen (`.kpi-tile`) de color ámbar ("Prospectos", "Tickets
+  abiertos") y naranja ("Señales bajas") pasaron de `bg-amber-600/80`/`bg-orange-600/80`
+  (semitransparentes) a **sólidas** `bg-amber-700`/`bg-orange-700`.
+
+### Tabla de ONTs (OLT → detalle): pulido de scroll y toque
+- Cada `<th>` del encabezado (que ya era `sticky`) ahora tiene una sombra fina de 1px abajo
+  (`shadow-[0_1px_0_0_var(--color-slate-200)]`) — separa visualmente el encabezado fijo de las
+  filas que se deslizan debajo al hacer scroll.
+- El alto máximo de la tabla pasó de `max-h-[70vh]` a `max-h-[70dvh]` (unidad de viewport
+  "dinámica" — en celular, `vh` no descuenta la barra de direcciones del navegador que aparece/
+  desaparece al hacer scroll, así que la tabla podía quedar más alta de lo que realmente cabía;
+  `dvh` sí se ajusta a eso).
+- Nueva columna final angosta con un **"›"** gris en cada fila: como en celular no existe el
+  ":hover" que en desktop sugiere "esto se puede tocar", el "›" cumple ese rol — indica que la
+  fila abre el detalle de la ONT.
+
+### Servidores: confirmaciones más claras, color de gráfica, animación y botones táctiles
+- Reiniciar una VM ahora también pide confirmación en **rojo** (antes solo Apagar) — reiniciar
+  corta el servicio igual que apagar, aunque sea por un momento.
+- Si la VM parece ser la del propio panel, el mensaje de confirmación ahora dice explícitamente
+  **"perderás acceso al panel unos minutos"**, no solo "podría ser la VM del panel".
+- La serie "Retardo I/O" de la gráfica CPU pasó de ámbar (`#f59e0b`) a **teal** (`#14b8a6`).
+  ⚠️ *Nota:* validé este color contra el azul de la otra serie y no pasa la prueba de contraste
+  para daltonismo — quedan demasiado parecidos. Aplicado igual porque así se pidió, pendiente de
+  decidir si se cambia a algo con más contraste.
+- El punto verde "En línea" ya no parpadea si el visitante tiene activado "reducir movimiento" en
+  su sistema (`motion-safe:animate-ping`).
+- Los botones de cada tarjeta de VM (Iniciar/Reiniciar/Apagar/Abrir consola) ahora tienen una
+  altura mínima de 40px — objetivo táctil más cómodo en celular.
+
+### Firma del cliente (App de Campo): más robusta y accesible
+- **SignaturePad**: si el técnico gira el celular a mitad de firmar (o cualquier cambio de
+  tamaño), el trazo ya dibujado se conserva en vez de perderse — antes quedaba en blanco.
+  También reacciona bien si el sistema cancela el trazo a mitad de camino (ej. una notificación
+  interrumpe el toque).
+- En instalaciones, la etiqueta ahora dice **"Firma del cliente * (obligatoria)"** (antes solo el
+  asterisco rojo, sin la palabra). El recuadro de firma tiene `aria-required` cuando es
+  obligatoria.
+- Si se intenta completar la instalación sin firmar, el recuadro se pinta con **borde rojo**
+  (`border-red-400`) y la pantalla hace scroll automático hasta la firma, en vez de solo mostrar
+  el mensaje de error arriba sin más contexto de dónde corregirlo.
+
 ---
 
 ## Cómo se sigue actualizando este archivo
