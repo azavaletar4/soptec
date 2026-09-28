@@ -41,8 +41,6 @@ const editForm = ref({ name: '', category: '', unit: '', price: 0, min_stock: 0,
 const showMovementModal = ref(false);
 const movementType = ref<InventoryMovementType>('ingreso');
 const movementForm = ref({ quantity: 1, reason: '' });
-const movementSaving = ref(false);
-const movementError = ref<string | null>(null);
 
 const MOVEMENT_LABEL: Record<InventoryMovementType, string> = { ingreso: 'Ingreso', egreso: 'Egreso' };
 const MOVEMENT_CLASS: Record<InventoryMovementType, string> = {
@@ -74,9 +72,9 @@ const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
 };
 const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
-  assigned: 'bg-sky-500/15 text-sky-600',
+  assigned: 'bg-sky-500/15 text-sky-700',
   damaged: 'bg-red-500/15 text-red-600',
-  in_repair: 'bg-amber-500/15 text-amber-600',
+  in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-500/15 text-slate-600',
 };
 
@@ -383,27 +381,26 @@ function openMovement(type: InventoryMovementType) {
   showMovementModal.value = true;
 }
 
+// useAsyncAction (segundo de los ~7 formularios de esta vista migrados al
+// molde — ver comentario junto a handleEdit).
+const { loading: movementSaving, error: movementError, run: submitMovement } = useAsyncAction(async () => {
+  if (!product.value) return;
+  await inventoryStore.registerMovement({
+    productId: product.value.id,
+    type: movementType.value,
+    quantity: movementForm.value.quantity,
+    reason: movementForm.value.reason,
+  });
+  await loadMovements();
+}, 'Error al registrar el movimiento');
+
 async function handleMovement() {
   if (!product.value || movementForm.value.quantity <= 0) {
     movementError.value = 'La cantidad debe ser mayor a 0';
     return;
   }
-  movementSaving.value = true;
-  movementError.value = null;
-  try {
-    await inventoryStore.registerMovement({
-      productId: product.value.id,
-      type: movementType.value,
-      quantity: movementForm.value.quantity,
-      reason: movementForm.value.reason,
-    });
-    showMovementModal.value = false;
-    await loadMovements();
-  } catch (e) {
-    movementError.value = getErrorMessage(e, 'Error al registrar el movimiento');
-  } finally {
-    movementSaving.value = false;
-  }
+  await submitMovement();
+  if (!movementError.value) showMovementModal.value = false;
 }
 
 function formatDate(value: string) {
@@ -563,9 +560,9 @@ async function handleDeleteProduct() {
                 <td class="px-4 py-3 text-right">
                   <div class="flex justify-end gap-1.5 flex-wrap">
                     <button class="text-xs text-slate-600 hover:text-slate-900" @click="openHistory(u)">Historial</button>
-                    <button class="text-xs text-sky-600 hover:text-sky-700" @click="openEditUnit(u)">Editar</button>
-                    <button v-if="u.status === 'in_stock'" class="text-xs text-sky-600 hover:text-sky-700" @click="openAssign(u)">Asignar</button>
-                    <button v-if="u.status === 'assigned'" class="text-xs text-amber-600 hover:text-amber-700" @click="openReturn(u)">Devolución</button>
+                    <button class="text-xs text-sky-700 hover:text-sky-700" @click="openEditUnit(u)">Editar</button>
+                    <button v-if="u.status === 'in_stock'" class="text-xs text-sky-700 hover:text-sky-700" @click="openAssign(u)">Asignar</button>
+                    <button v-if="u.status === 'assigned'" class="text-xs text-amber-700 hover:text-amber-700" @click="openReturn(u)">Devolución</button>
                     <button v-if="u.status === 'in_repair'" class="text-xs text-green-600 hover:text-green-700" @click="handleMarkRepaired(u)">Marcar reparado</button>
                     <button v-if="u.status === 'damaged' || u.status === 'in_repair'" class="text-xs text-red-600 hover:text-red-700" @click="handleRetire(u)">Dar de baja</button>
                     <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click="handleDeleteUnit(u)">Eliminar</button>
@@ -749,7 +746,7 @@ async function handleDeleteProduct() {
                 {{ ct.contract_number }} — {{ ct.installation_address || 'Sin direccion' }}
               </option>
             </select>
-            <p v-if="assignContracts.length > 1" class="text-xs text-amber-600 mt-1">
+            <p v-if="assignContracts.length > 1" class="text-xs text-amber-700 mt-1">
               Este cliente tiene {{ assignContracts.length }} servicios — elige a cual va este equipo.
             </p>
           </div>

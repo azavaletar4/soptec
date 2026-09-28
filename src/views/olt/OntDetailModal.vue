@@ -163,7 +163,7 @@ async function toggleConfig() {
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-slate-500">Perfil TR-069</span>
-                <span class="badge" :class="ont.tr069_enabled ? 'bg-emerald-500/15 text-emerald-600' : 'bg-slate-200 text-slate-600'">
+                <span class="badge" :class="ont.tr069_enabled ? 'bg-emerald-500/15 text-emerald-700' : 'bg-slate-200 text-slate-600'">
                   {{ ont.tr069_enabled ? 'Activo' : 'Inactivo' }}
                 </span>
               </div>

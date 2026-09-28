@@ -106,7 +106,7 @@ const PRIORITY_LABEL: Record<ContractPriority, string> = {
 };
 const PRIORITY_CLASS: Record<ContractPriority, string> = {
   high: 'bg-red-500/15 text-red-600',
-  medium: 'bg-amber-500/15 text-amber-600',
+  medium: 'bg-amber-500/15 text-amber-700',
   low: 'bg-slate-500/15 text-slate-600',
 };
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
@@ -624,9 +624,9 @@ const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
 };
 const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
-  assigned: 'bg-sky-500/15 text-sky-600',
+  assigned: 'bg-sky-500/15 text-sky-700',
   damaged: 'bg-red-500/15 text-red-600',
-  in_repair: 'bg-amber-500/15 text-amber-600',
+  in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-500/15 text-slate-600',
 };
 
@@ -801,7 +801,7 @@ const TICKET_STATUS_LABEL: Record<TicketStatus, string> = {
 };
 const TICKET_STATUS_CLASS: Record<TicketStatus, string> = {
   open: 'bg-yellow-500/15 text-yellow-600',
-  in_progress: 'bg-sky-500/15 text-sky-600',
+  in_progress: 'bg-sky-500/15 text-sky-700',
   resolved: 'bg-green-500/15 text-green-600',
   closed: 'bg-slate-500/15 text-slate-600',
 };
@@ -825,7 +825,7 @@ const INVOICE_STATUS_CLASS: Record<InvoiceStatus, string> = {
   pending: 'bg-yellow-500/15 text-yellow-600',
   paid: 'bg-green-500/15 text-green-600',
   cancelled: 'bg-slate-500/15 text-slate-600',
-  exonerada: 'bg-sky-500/15 text-sky-600',
+  exonerada: 'bg-sky-500/15 text-sky-700',
 };
 
 async function loadInvoices() {
@@ -1171,7 +1171,7 @@ onMounted(async () => {
       <div v-if="activeTab === 'resumen'">
         <ClientSectionCard title="Datos del servicio" icon="🛠️">
           <template #actions>
-            <button type="button" class="text-xs text-sky-600 hover:underline" @click="activeTab = 'datos'">Editar</button>
+            <button type="button" class="text-xs text-sky-700 hover:underline" @click="activeTab = 'datos'">Editar</button>
           </template>
           <div class="grid gap-4 text-sm" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
             <div>
@@ -1207,7 +1207,7 @@ onMounted(async () => {
 
         <ClientSectionCard title="Ubicación" icon="📍">
           <template #actions>
-            <button type="button" class="text-xs text-sky-600 hover:underline" @click="activeTab = 'ubicacion'">Editar</button>
+            <button type="button" class="text-xs text-sky-700 hover:underline" @click="activeTab = 'ubicacion'">Editar</button>
           </template>
           <p class="text-sm">
             {{ contract.installation_address || 'Sin dirección registrada' }}
@@ -1254,7 +1254,7 @@ onMounted(async () => {
             <button
               v-if="contractForm.mikrotik_device_id"
               type="button"
-              class="text-xs text-sky-600 hover:underline whitespace-nowrap"
+              class="text-xs text-sky-700 hover:underline whitespace-nowrap"
               :disabled="loadingProfiles"
               @click="loadPppProfilesForModal(contractForm.mikrotik_device_id)"
             >
@@ -1274,7 +1274,7 @@ onMounted(async () => {
           <p class="text-xs text-slate-500 mt-1">
             Solo cambia el profile PPPoE en MikroTik (el ancho de banda del cliente se controla desde la OLT).
           </p>
-          <p v-if="profilesError" class="text-xs text-amber-600 mt-1">{{ profilesError }} — puedes escribir el nombre manualmente.</p>
+          <p v-if="profilesError" class="text-xs text-amber-700 mt-1">{{ profilesError }} — puedes escribir el nombre manualmente.</p>
         </div>
 
         <div
@@ -1284,7 +1284,7 @@ onMounted(async () => {
           <div class="flex items-center gap-3">
             <span
               class="w-11 h-11 rounded-full flex items-center justify-center text-2xl shrink-0"
-              :class="contract.xui_line_id ? 'bg-emerald-500/15 text-emerald-600' : 'bg-slate-300/50 text-slate-500'"
+              :class="contract.xui_line_id ? 'bg-emerald-500/15 text-emerald-700' : 'bg-slate-300/50 text-slate-500'"
             >
               📺
             </span>
@@ -1396,7 +1396,7 @@ onMounted(async () => {
           :href="`https://www.google.com/maps?q=${contractForm.latitude},${contractForm.longitude}`"
           target="_blank"
           rel="noopener"
-          class="text-xs text-sky-600 hover:underline mb-4 inline-block"
+          class="text-xs text-sky-700 hover:underline mb-4 inline-block"
         >
           Ver en Google Maps
         </a>
@@ -1405,7 +1405,7 @@ onMounted(async () => {
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="block text-xs text-slate-600">Zona</label>
-              <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="showNewZone = !showNewZone">
+              <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="showNewZone = !showNewZone">
                 {{ showNewZone ? 'Cancelar' : '+ Nueva zona' }}
               </button>
             </div>
@@ -1448,7 +1448,7 @@ onMounted(async () => {
             </select>
             <p v-if="!contractForm.zone_id" class="text-xs text-slate-400 mt-1">Elige primero una zona para ver sus cajas NAP.</p>
             <p v-else-if="!napOptions.length" class="text-xs text-slate-400 mt-1">Esa zona no tiene cajas NAP asignadas (ver /mapa/red).</p>
-            <p v-if="currentNapMismatch" class="text-xs text-amber-600 mt-1">
+            <p v-if="currentNapMismatch" class="text-xs text-amber-700 mt-1">
               ⚠ Sigue asignado a "{{ currentNapMismatch.name }}", que ya no pertenece a esta zona.
             </p>
           </div>
@@ -1483,7 +1483,7 @@ onMounted(async () => {
               </span>
             </div>
             <div class="flex items-center gap-2">
-              <button v-if="canChangeOntPlan" type="button" class="text-xs text-sky-600 hover:underline" @click="openOntPlanModal(ont)">
+              <button v-if="canChangeOntPlan" type="button" class="text-xs text-sky-700 hover:underline" @click="openOntPlanModal(ont)">
                 Cambiar plan
               </button>
               <button type="button" class="text-xs text-red-600 hover:underline" :disabled="equipoTabSaving" @click="handleUnassignOntFromContract(ont)">
@@ -1515,7 +1515,7 @@ onMounted(async () => {
                 {{ searchingOnt ? 'Buscando...' : 'Buscar' }}
               </button>
             </div>
-            <p v-if="ontLinkError" class="text-xs text-amber-600 mb-2">{{ ontLinkError }}</p>
+            <p v-if="ontLinkError" class="text-xs text-amber-700 mb-2">{{ ontLinkError }}</p>
             <div v-if="ontSearchResults.length" class="table-shell max-w-lg">
               <table class="w-full text-sm">
                 <tbody>
@@ -1523,7 +1523,7 @@ onMounted(async () => {
                     <td class="px-3 py-2 font-mono text-xs">{{ r.serial }}</td>
                     <td class="px-3 py-2 text-xs text-slate-600">{{ r.olt_devices?.name }} · {{ r.slot }}/{{ r.port }}</td>
                     <td class="px-3 py-2 text-right">
-                      <button type="button" class="text-xs text-sky-600 hover:underline" :disabled="linkingOntId === r.id" @click="handleLinkOnt(r)">
+                      <button type="button" class="text-xs text-sky-700 hover:underline" :disabled="linkingOntId === r.id" @click="handleLinkOnt(r)">
                         {{ linkingOntId === r.id ? 'Vinculando...' : 'Vincular a esta línea' }}
                       </button>
                     </td>
@@ -1536,7 +1536,7 @@ onMounted(async () => {
 
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-sm font-semibold">Equipo de inventario (router/ONU)</h3>
-          <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="openAddUnit">+ Agregar equipo</button>
+          <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="openAddUnit">+ Agregar equipo</button>
         </div>
         <p v-if="loadingUnits" class="text-sm text-slate-500">Cargando...</p>
         <template v-else>
@@ -1547,7 +1547,7 @@ onMounted(async () => {
               <span class="badge ml-2" :class="UNIT_STATUS_CLASS[u.status]">{{ UNIT_STATUS_LABEL[u.status] }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <button v-if="u.status === 'assigned'" type="button" class="text-xs text-amber-600 hover:text-amber-700" @click="openReturn(u)">
+              <button v-if="u.status === 'assigned'" type="button" class="text-xs text-amber-700 hover:text-amber-700" @click="openReturn(u)">
                 Devolución
               </button>
               <button type="button" class="text-xs text-red-600 hover:underline" :disabled="equipoTabSaving" @click="handleUnassignUnitFromContract(u)">
@@ -1624,10 +1624,10 @@ onMounted(async () => {
       <ClientSectionCard title="Facturas" icon="🧾">
         <template #actions>
           <div class="flex items-center gap-3">
-            <button v-if="canRegisterAdvancePayment" type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="openAdvanceModal">
+            <button v-if="canRegisterAdvancePayment" type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="openAdvanceModal">
               Pago adelantado (3+1)
             </button>
-            <router-link to="/facturacion" class="text-xs text-sky-600 hover:text-sky-700">+ Nueva factura</router-link>
+            <router-link to="/facturacion" class="text-xs text-sky-700 hover:text-sky-700">+ Nueva factura</router-link>
           </div>
         </template>
         <p v-if="loadingInvoices" class="text-slate-500 text-sm">Cargando...</p>
@@ -1671,7 +1671,7 @@ onMounted(async () => {
             </a>
             <label
               v-else
-              class="w-full h-32 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-1 text-xs text-slate-400 mb-2 cursor-pointer transition-colors hover:border-sky-400 hover:bg-sky-50/50 hover:text-sky-600"
+              class="w-full h-32 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-1 text-xs text-slate-400 mb-2 cursor-pointer transition-colors hover:border-sky-400 hover:bg-sky-50/50 hover:text-sky-700"
               :class="{ 'opacity-60 pointer-events-none': uploadingCategory === cat.value }"
             >
               <span class="text-2xl">📷</span>
@@ -1706,7 +1706,7 @@ onMounted(async () => {
           <router-link
             v-if="canCreateTickets"
             :to="`/soporte?client_id=${clientId}&contract_id=${contractId}`"
-            class="text-xs text-sky-600 hover:text-sky-700"
+            class="text-xs text-sky-700 hover:text-sky-700"
           >
             + Nuevo ticket
           </router-link>
@@ -1782,7 +1782,7 @@ onMounted(async () => {
               <div>
                 <label class="block text-xs text-slate-500 mb-1">Bouquets (canales)</label>
                 <p v-if="iptvBouquetsLoading" class="text-xs text-slate-500">Cargando bouquets...</p>
-                <p v-else-if="!iptvBouquets.length" class="text-xs text-amber-600">No hay bouquets configurados en XUI.</p>
+                <p v-else-if="!iptvBouquets.length" class="text-xs text-amber-700">No hay bouquets configurados en XUI.</p>
                 <div v-else class="space-y-1 border border-slate-200 rounded p-2">
                   <label v-for="bq in iptvBouquets" :key="bq.id" class="flex items-center gap-2 text-xs">
                     <input type="checkbox" :checked="iptvEditForm.bouquetIds.includes(bq.id)" @change="toggleIptvEditBouquet(bq.id)" />
@@ -1834,7 +1834,7 @@ onMounted(async () => {
                 <div>
                   <label class="block text-xs text-slate-600 mb-1">Bouquets (canales a asignar)</label>
                   <p v-if="iptvBouquetsLoading" class="text-xs text-slate-500">Cargando bouquets...</p>
-                  <p v-else-if="!iptvBouquets.length" class="text-xs text-amber-600">No hay bouquets configurados en XUI.</p>
+                  <p v-else-if="!iptvBouquets.length" class="text-xs text-amber-700">No hay bouquets configurados en XUI.</p>
                   <div v-else class="space-y-1 border border-slate-200 rounded p-2">
                     <label v-for="bq in iptvBouquets" :key="bq.id" class="flex items-center gap-2 text-xs">
                       <input type="checkbox" :checked="iptvSelectedBouquets.includes(bq.id)" @change="toggleIptvBouquet(bq.id)" />
@@ -1870,7 +1870,7 @@ onMounted(async () => {
                 {{ p.name }} — ↓{{ p.download_speed }}/↑{{ p.upload_speed }} Mbps
               </option>
             </select>
-            <p v-if="!plansWithOltProfile.length" class="text-xs text-amber-600 mt-1">
+            <p v-if="!plansWithOltProfile.length" class="text-xs text-amber-700 mt-1">
               Ningun plan tiene perfiles OLT configurados todavia (ver seccion Planes → Perfiles de ancho de banda).
             </p>
             <p class="text-xs text-slate-500 mt-1">

@@ -161,7 +161,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
           </div>
           <span class="text-2xl">✕</span>
         </button>
-        <button class="kpi-tile bg-orange-600/80" @click="goToOlt('lowSignal')">
+        <button class="kpi-tile bg-orange-700" @click="goToOlt('lowSignal')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.oltSummary.lowSignal }}</div>
             <div class="text-sm text-white/85 mt-1">Señales bajas</div>
@@ -173,7 +173,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
         Total autorizado: {{ dashboard.summary.oltSummary.online + dashboard.summary.oltSummary.offline }}
         · {{ dashboard.summary.oltSummary.deviceCount }} OLT(s)
         · Información válida a las {{ oltCheckedAtLabel }}
-        <span v-if="!dashboard.summary.oltSummary.scanComplete" class="text-amber-600/80">(escaneo parcial)</span>
+        <span v-if="!dashboard.summary.oltSummary.scanComplete" class="text-amber-700/80">(escaneo parcial)</span>
       </p>
 
       <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
@@ -219,7 +219,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
           </div>
           <span class="text-2xl">⏸</span>
         </button>
-        <button class="kpi-tile bg-amber-600/80" @click="goTo('/clientes')">
+        <button class="kpi-tile bg-amber-700" @click="goTo('/clientes')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.clients.prospect }}</div>
             <div class="text-sm text-white/85 mt-1">Prospectos</div>
@@ -238,7 +238,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
       <!-- Soporte -->
       <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Soporte</h2>
       <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
-        <button class="kpi-tile bg-amber-600/80" @click="goTo('/soporte')">
+        <button class="kpi-tile bg-amber-700" @click="goTo('/soporte')">
           <div>
             <div class="text-3xl font-bold text-white">{{ dashboard.summary.tickets.open }}</div>
             <div class="text-sm text-white/85 mt-1">Tickets abiertos</div>
@@ -265,7 +265,7 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
       <div class="surface p-5 mb-8">
         <div class="flex items-center justify-between mb-4">
           <div class="text-sm font-semibold">Facturación del mes</div>
-          <button class="text-xs text-sky-600 hover:text-sky-700 font-medium" @click="goTo('/facturacion')">Ver todo →</button>
+          <button class="text-xs text-sky-700 hover:text-sky-700 font-medium" @click="goTo('/facturacion')">Ver todo →</button>
         </div>
         <div class="grid gap-4 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr))">
           <div>

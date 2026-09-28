@@ -23,7 +23,7 @@ const TIPO_LABEL: Record<VehiculoTipo, string> = { auto: 'Auto', moto: 'Moto' };
 const ESTADO_LABEL: Record<VehiculoEstado, string> = { activo: 'Activo', mantenimiento: 'En mantenimiento', inactivo: 'Inactivo' };
 const ESTADO_CLASS: Record<VehiculoEstado, string> = {
   activo: 'bg-green-500/15 text-green-600',
-  mantenimiento: 'bg-amber-500/15 text-amber-600',
+  mantenimiento: 'bg-amber-500/15 text-amber-700',
   inactivo: 'bg-slate-500/15 text-slate-600',
 };
 const MANTENIMIENTO_LABEL: Record<MantenimientoTipo, string> = { preventivo: 'Preventivo', correctivo: 'Correctivo' };
@@ -329,7 +329,7 @@ async function handleDeleteMantenimiento(m: MantenimientoHistorial) {
             <td class="px-4 py-3 text-right font-mono">{{ f.vehiculo.kilometraje_actual }}</td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
               <button class="text-xs text-slate-600 hover:text-slate-900" @click="openHistorial(f.vehiculo)">Mantenimiento</button>
-              <button class="text-xs text-sky-600 hover:text-sky-700" @click="openEdit(f.vehiculo)">Editar</button>
+              <button class="text-xs text-sky-700 hover:text-sky-700" @click="openEdit(f.vehiculo)">Editar</button>
               <button v-if="canDelete" class="text-xs text-red-500/80 hover:text-red-600" @click="handleDelete(f.vehiculo)">Borrar</button>
             </td>
           </tr>
@@ -410,7 +410,7 @@ async function handleDeleteMantenimiento(m: MantenimientoHistorial) {
               <a :href="editing.soatUrl" target="_blank" rel="noopener" class="text-sky-600 hover:underline">📄 Ver archivo actual</a>
               <button type="button" class="text-red-500/80 hover:text-red-600" @click="removeSoatFile">Quitar</button>
             </div>
-            <p v-else-if="soatFileRemoved" class="text-xs text-amber-600 mb-2">El archivo se quitará al guardar.</p>
+            <p v-else-if="soatFileRemoved" class="text-xs text-amber-700 mb-2">El archivo se quitará al guardar.</p>
             <input type="file" accept="application/pdf,image/*" class="field-input" @change="onSoatFileChange" />
             <p v-if="soatFile" class="text-xs text-slate-500 mt-1">Se subirá: {{ soatFile.name }}</p>
           </div>
@@ -498,7 +498,7 @@ async function handleDeleteMantenimiento(m: MantenimientoHistorial) {
             <li v-for="m in historial" :key="m.id" class="text-xs border-l-2 border-slate-300 pl-3 py-1 flex items-start justify-between gap-2">
               <div>
                 <div class="flex items-center gap-2">
-                  <span class="badge" :class="m.tipo === 'correctivo' ? 'bg-amber-500/15 text-amber-600' : 'bg-sky-500/15 text-sky-600'">
+                  <span class="badge" :class="m.tipo === 'correctivo' ? 'bg-amber-500/15 text-amber-700' : 'bg-sky-500/15 text-sky-700'">
                     {{ MANTENIMIENTO_LABEL[m.tipo] }}
                   </span>
                   <span class="text-slate-500">{{ m.fecha }}</span>

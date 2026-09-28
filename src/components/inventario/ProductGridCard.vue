@@ -23,14 +23,14 @@ const isLowStock = computed(
       <h4 class="text-sm font-semibold text-slate-900 leading-snug">{{ product.name }}</h4>
       <span
         class="badge shrink-0"
-        :class="isLowStock ? 'bg-amber-500/15 text-amber-600' : 'bg-green-500/15 text-green-600'"
+        :class="isLowStock ? 'bg-amber-500/15 text-amber-700' : 'bg-green-500/15 text-green-600'"
       >
         {{ stockLabel }}
       </span>
     </div>
 
     <div class="flex flex-wrap gap-1.5">
-      <span v-if="product.is_serialized" class="badge bg-sky-500/15 text-sky-600">Por serie/MAC</span>
+      <span v-if="product.is_serialized" class="badge bg-sky-500/15 text-sky-700">Por serie/MAC</span>
       <span v-else class="badge bg-slate-100 text-slate-500">Por cantidad</span>
       <span v-if="!product.is_active" class="badge bg-red-500/15 text-red-600">Inactivo</span>
     </div>
@@ -38,7 +38,7 @@ const isLowStock = computed(
     <p class="text-sm font-semibold text-slate-700 mt-1">S/ {{ Number(product.price).toFixed(2) }}</p>
 
     <div class="mt-auto pt-2 flex justify-end" @click.stop>
-      <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="$emit('move')">
+      <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="$emit('move')">
         🔀 Mover
       </button>
     </div>

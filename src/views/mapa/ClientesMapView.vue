@@ -214,7 +214,7 @@ function handlePuertosClose() {
       <div>
         <div class="flex items-center gap-2">
           <h1 class="text-2xl font-semibold">Mapa de Clientes</h1>
-          <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 font-medium">Clientes y cajas NAP</span>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 font-medium">Clientes y cajas NAP</span>
         </div>
         <p class="text-slate-600 text-sm mt-1">{{ contractsWithGps.length }} servicios · {{ napsConGps.length }} cajas NAP</p>
       </div>

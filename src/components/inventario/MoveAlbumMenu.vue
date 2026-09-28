@@ -61,7 +61,7 @@ function pickStatus(status: InventoryUnitStatus) {
           >
             <span>{{ c.icon }}</span>
             <span>{{ c.name }}</span>
-            <span v-if="c.id === currentCategoryId" class="ml-auto text-xs text-sky-600">Actual</span>
+            <span v-if="c.id === currentCategoryId" class="ml-auto text-xs text-sky-700">Actual</span>
           </button>
         </div>
 
@@ -81,7 +81,7 @@ function pickStatus(status: InventoryUnitStatus) {
               @click="pickStatus(s.value)"
             >
               {{ s.label }}
-              <span v-if="s.value === currentStatus" class="ml-2 text-xs text-sky-600">Actual</span>
+              <span v-if="s.value === currentStatus" class="ml-2 text-xs text-sky-700">Actual</span>
             </button>
           </div>
         </div>

@@ -109,9 +109,9 @@ const STATUS_LABEL: Record<InventoryUnitStatus, string> = {
 };
 const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
-  assigned: 'bg-sky-500/15 text-sky-600',
+  assigned: 'bg-sky-500/15 text-sky-700',
   damaged: 'bg-red-500/15 text-red-600',
-  in_repair: 'bg-amber-500/15 text-amber-600',
+  in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-200 text-slate-500',
 };
 </script>
@@ -160,7 +160,7 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
           <p v-if="u.clients" class="text-xs text-slate-500">Último cliente: {{ u.clients.first_name }} {{ u.clients.last_name }}</p>
           <p v-if="u.notes" class="text-xs text-slate-400 italic">{{ u.notes }}</p>
           <div class="mt-auto pt-2 flex justify-end">
-            <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="movingUnit = u">
+            <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="movingUnit = u">
               🔀 Cambiar estado
             </button>
           </div>

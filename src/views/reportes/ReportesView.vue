@@ -31,7 +31,7 @@ const dateTo = ref(isoDate(new Date()));
 const STATUS_LABEL: Record<TicketStatus, string> = { open: 'Abierto', in_progress: 'En progreso', resolved: 'Resuelto', closed: 'Cerrado' };
 const STATUS_CLASS: Record<TicketStatus, string> = {
   open: 'bg-yellow-500/15 text-yellow-600',
-  in_progress: 'bg-sky-500/15 text-sky-600',
+  in_progress: 'bg-sky-500/15 text-sky-700',
   resolved: 'bg-green-500/15 text-green-600',
   closed: 'bg-slate-500/15 text-slate-600',
 };

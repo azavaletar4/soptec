@@ -308,7 +308,7 @@ onMounted(async () => {
               {{ m.tipo === 'ingreso' ? '+' : '-' }} S/ {{ Number(m.monto).toFixed(2) }}
             </td>
             <td class="px-4 py-3">
-              <span class="badge" :class="m.tipo === 'ingreso' ? 'bg-green-500/15 text-green-600' : 'bg-amber-500/15 text-amber-600'">
+              <span class="badge" :class="m.tipo === 'ingreso' ? 'bg-green-500/15 text-green-600' : 'bg-amber-500/15 text-amber-700'">
                 {{ TIPO_LABEL[m.tipo] }}
               </span>
             </td>
@@ -347,7 +347,7 @@ onMounted(async () => {
           <div class="mb-3">
             <div class="flex items-center justify-between mb-1">
               <label class="block text-xs text-slate-600">Categoría</label>
-              <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="showNewCategoria = !showNewCategoria">
+              <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="showNewCategoria = !showNewCategoria">
                 {{ showNewCategoria ? 'Cancelar' : '+ Nueva categoría' }}
               </button>
             </div>
@@ -403,7 +403,7 @@ onMounted(async () => {
 
           <div class="mb-4">
             <label class="block text-xs text-slate-600 mb-1">Comprobante (opcional)</label>
-            <a v-if="editing?.url" :href="editing.url" target="_blank" rel="noopener" class="text-xs text-sky-600 hover:underline mb-1 inline-block">
+            <a v-if="editing?.url" :href="editing.url" target="_blank" rel="noopener" class="text-xs text-sky-700 hover:underline mb-1 inline-block">
               Ver comprobante actual
             </a>
             <input type="file" accept="image/*,.pdf" class="field-input" @change="onComprobanteChange" />

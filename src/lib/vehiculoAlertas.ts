@@ -55,7 +55,7 @@ export function alertaMantenimiento(v: Pick<Vehiculo, 'proximo_mantenimiento_fec
 
 export const ALERTA_BADGE_CLASS: Record<AlertaNivel, string> = {
   rojo: 'bg-red-500/15 text-red-600',
-  amarillo: 'bg-amber-500/15 text-amber-600',
+  amarillo: 'bg-amber-500/15 text-amber-700',
   verde: 'bg-green-500/15 text-green-600',
   sin_datos: 'bg-slate-500/15 text-slate-500',
 };

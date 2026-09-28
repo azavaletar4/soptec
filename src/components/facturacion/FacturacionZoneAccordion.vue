@@ -42,7 +42,7 @@ const STATUS_CLASS: Record<InvoiceStatus, string> = {
   pending: 'bg-yellow-500/15 text-yellow-600',
   paid: 'bg-green-500/15 text-green-600',
   cancelled: 'bg-slate-500/15 text-slate-600',
-  exonerada: 'bg-sky-500/15 text-sky-600',
+  exonerada: 'bg-sky-500/15 text-sky-700',
 };
 
 function semaphoreClass(group: ZoneGroup) {
@@ -62,7 +62,7 @@ function semaphoreClass(group: ZoneGroup) {
       <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="semaphoreClass(group)"></span>
       <span class="font-semibold flex-1 min-w-[140px]">{{ group.zoneName }}</span>
       <span class="flex flex-wrap items-center gap-2 text-xs">
-        <span v-if="group.pendingCount" class="badge bg-amber-500/15 text-amber-600">{{ group.pendingCount }} pendientes</span>
+        <span v-if="group.pendingCount" class="badge bg-amber-500/15 text-amber-700">{{ group.pendingCount }} pendientes</span>
         <span v-if="group.overdueCount" class="badge bg-red-500/15 text-red-600">{{ group.overdueCount }} vencidas</span>
         <span class="badge bg-green-500/15 text-green-600">Cobrado S/ {{ group.collectedTotal.toFixed(2) }}</span>
         <span v-if="group.pendingTotal" class="badge bg-slate-500/15 text-slate-600">Pendiente S/ {{ group.pendingTotal.toFixed(2) }}</span>
@@ -117,7 +117,7 @@ function semaphoreClass(group: ZoneGroup) {
                      quedaban pegados cuando isSuperadmin, facil de tocar el que no era. -->
                 <button class="text-slate-600 hover:text-slate-900 text-xs" @click="$emit('cancel', inv)">Cancelar</button>
               </template>
-              <button v-if="inv.status === 'paid'" class="text-sky-600 hover:text-sky-700 text-xs" @click="$emit('recibo', inv)">Imprimir recibo</button>
+              <button v-if="inv.status === 'paid'" class="text-sky-700 hover:text-sky-700 text-xs" @click="$emit('recibo', inv)">Imprimir recibo</button>
               <button v-if="isSuperadmin" class="text-slate-600 hover:text-slate-900 text-xs" @click="$emit('edit', inv)">Editar</button>
               <span v-if="isSuperadmin" class="inline-block w-px h-3 bg-slate-300 align-middle mx-0.5"></span>
               <button v-if="isSuperadmin" class="text-red-500/80 hover:text-red-600 text-xs" @click="$emit('delete', inv)">Eliminar</button>

@@ -206,7 +206,7 @@ async function handleDelete(plan: Plan) {
               <span class="badge" :class="p.is_active ? 'bg-green-500/15 text-green-600' : 'bg-slate-500/15 text-slate-600'">
                 {{ p.is_active ? 'Activo' : 'Inactivo' }}
               </span>
-              <span v-if="p.is_debt_suspension_plan" class="badge bg-amber-500/15 text-amber-600 ml-1">Corte por deuda</span>
+              <span v-if="p.is_debt_suspension_plan" class="badge bg-amber-500/15 text-amber-700 ml-1">Corte por deuda</span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
               <button v-if="canManagePlans" class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(p)">Editar</button>
@@ -272,7 +272,7 @@ async function handleDelete(plan: Plan) {
                 <select v-model="oltDeviceId" class="field-input !py-1 !text-xs w-auto" @change="loadOltProfiles">
                   <option v-for="d in oltStore.devices" :key="d.id" :value="d.id">{{ d.name }}</option>
                 </select>
-                <button type="button" class="text-xs text-sky-600 hover:underline whitespace-nowrap" :disabled="loadingOltProfiles" @click="loadOltProfiles">
+                <button type="button" class="text-xs text-sky-700 hover:underline whitespace-nowrap" :disabled="loadingOltProfiles" @click="loadOltProfiles">
                   {{ loadingOltProfiles ? 'Sincronizando...' : 'Sincronizar' }}
                 </button>
               </div>
@@ -296,7 +296,7 @@ async function handleDelete(plan: Plan) {
             <p class="text-xs text-slate-500 mt-1">
               El ancho de banda real lo aplica la OLT con estos perfiles al elegir este plan en un cliente.
             </p>
-            <p v-if="oltProfilesError" class="text-xs text-amber-600 mt-1">{{ oltProfilesError }}</p>
+            <p v-if="oltProfilesError" class="text-xs text-amber-700 mt-1">{{ oltProfilesError }}</p>
           </div>
 
           <div class="mb-3">
@@ -314,7 +314,7 @@ async function handleDelete(plan: Plan) {
             Es el plan de "corte por deuda"
           </label>
           <div v-if="form.is_debt_suspension_plan" class="mb-4 pl-6">
-            <p class="text-xs text-amber-600 mb-2">
+            <p class="text-xs text-amber-700 mb-2">
               Solo puede haber un plan asi a la vez — marcarlo aca desmarca automaticamente cualquier otro. Se usa para
               el corte automatico por deuda (Cortes por deuda): los perfiles OLT de arriba deben apuntar a un plan
               reducido/walled-garden real.

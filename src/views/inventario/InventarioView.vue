@@ -216,18 +216,18 @@ async function handleDelete(p: InventoryProduct) {
             <td class="px-4 py-3 text-slate-900">{{ p.name }}</td>
             <td class="px-4 py-3 text-slate-600">{{ p.inventory_categories?.name ?? p.category ?? '—' }}</td>
             <td class="px-4 py-3 text-right">
-              <span class="badge" :class="isLowStock(p) ? 'bg-amber-500/15 text-amber-600' : 'bg-green-500/15 text-green-600'">
+              <span class="badge" :class="isLowStock(p) ? 'bg-amber-500/15 text-amber-700' : 'bg-green-500/15 text-green-600'">
                 {{ p.current_stock }}
               </span>
             </td>
             <td class="px-4 py-3">
-              <span v-if="p.is_serialized" class="badge bg-sky-500/15 text-sky-600">Por serie/MAC</span>
+              <span v-if="p.is_serialized" class="badge bg-sky-500/15 text-sky-700">Por serie/MAC</span>
               <span v-else class="text-slate-400 text-xs">Por cantidad</span>
             </td>
             <td class="px-4 py-3 text-right text-slate-600">S/ {{ Number(p.price).toFixed(2) }}</td>
             <td class="px-4 py-3 text-right">
               <div class="flex justify-end gap-2">
-                <button class="text-xs text-sky-600 hover:text-sky-700" @click.stop="openEdit(p)">Editar</button>
+                <button class="text-xs text-sky-700 hover:text-sky-700" @click.stop="openEdit(p)">Editar</button>
                 <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click.stop="handleDelete(p)">Eliminar</button>
               </div>
             </td>

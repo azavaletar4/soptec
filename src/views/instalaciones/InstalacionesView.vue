@@ -74,7 +74,7 @@ const STATUS_LABEL: Record<InstallationStatus, string> = {
 };
 const STATUS_CLASS: Record<InstallationStatus, string> = {
   pending: 'bg-yellow-500/15 text-yellow-600',
-  scheduled: 'bg-sky-500/15 text-sky-600',
+  scheduled: 'bg-sky-500/15 text-sky-700',
   completed: 'bg-green-500/15 text-green-600',
   cancelled: 'bg-slate-500/15 text-slate-600',
 };
@@ -794,7 +794,7 @@ function formatDate(value: string | null) {
                 📺 Solo IPTV (App Smart TV)
               </button>
             </div>
-            <p v-if="!canChangeServiceType" class="text-[11px] text-amber-600 mt-1">
+            <p v-if="!canChangeServiceType" class="text-[11px] text-amber-700 mt-1">
               Esta instalación no tiene un contrato/servicio vinculado — vincula uno para poder marcarla como Solo IPTV.
             </p>
             <p v-else class="text-[11px] text-slate-400 mt-1">Se guarda en el servicio del cliente y aplica a futuras visitas.</p>
@@ -829,7 +829,7 @@ function formatDate(value: string | null) {
                     />
                     <span class="text-[11px] text-slate-400 w-16">{{ row.product.unit }}</span>
                   </template>
-                  <span v-else class="text-[11px] text-amber-600">
+                  <span v-else class="text-[11px] text-amber-700">
                     Falta crear "{{ row.label }}" en
                     <router-link to="/inventario/album/ferreteria" class="underline" @click="showMaterialsModal = false">Inventario</router-link>
                   </span>
@@ -922,7 +922,7 @@ function formatDate(value: string | null) {
                     <option value="" disabled>{{ loadingAvailableUnits ? 'Cargando...' : 'Selecciona...' }}</option>
                     <option v-for="u in availableUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
                   </select>
-                  <p v-if="unitForm.productId && !loadingAvailableUnits && !availableUnits.length" class="text-xs text-amber-600 mt-1">
+                  <p v-if="unitForm.productId && !loadingAvailableUnits && !availableUnits.length" class="text-xs text-amber-700 mt-1">
                     Sin unidades disponibles en bodega para este producto.
                   </p>
                 </div>
@@ -979,7 +979,7 @@ function formatDate(value: string | null) {
           <button
             type="button"
             :disabled="gettingLocation"
-            class="text-xs text-sky-600 hover:text-sky-700 mb-4"
+            class="text-xs text-sky-700 hover:text-sky-700 mb-4"
             @click="useCurrentLocation"
           >
             {{ gettingLocation ? 'Obteniendo ubicación...' : '📍 Usar mi ubicación actual' }}

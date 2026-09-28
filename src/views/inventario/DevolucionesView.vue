@@ -32,9 +32,9 @@ const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
 };
 const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
-  assigned: 'bg-sky-500/15 text-sky-600',
+  assigned: 'bg-sky-500/15 text-sky-700',
   damaged: 'bg-red-500/15 text-red-600',
-  in_repair: 'bg-amber-500/15 text-amber-600',
+  in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-500/15 text-slate-600',
 };
 
@@ -203,7 +203,7 @@ async function openHistory(unit: InventoryUnit) {
             <td class="px-4 py-3 text-right">
               <div class="flex justify-end gap-1.5 flex-wrap">
                 <button class="text-xs text-slate-600 hover:text-slate-900" @click="openHistory(u)">Historial</button>
-                <button v-if="u.status === 'assigned'" class="text-xs text-amber-600 hover:text-amber-700" @click="openReturn(u)">Devolución</button>
+                <button v-if="u.status === 'assigned'" class="text-xs text-amber-700 hover:text-amber-700" @click="openReturn(u)">Devolución</button>
                 <button v-if="u.status === 'in_repair'" class="text-xs text-green-600 hover:text-green-700" @click="handleMarkRepaired(u)">Marcar reparado</button>
                 <button v-if="u.status === 'damaged' || u.status === 'in_repair'" class="text-xs text-red-600 hover:text-red-700" @click="handleRetire(u)">Dar de baja</button>
               </div>

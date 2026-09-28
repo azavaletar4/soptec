@@ -158,7 +158,7 @@ async function handleToggleSecret(secret: PppSecret) {
                   </span>
                 </td>
                 <td class="px-4 py-3 text-right">
-                  <button class="text-sky-600 hover:underline text-xs" @click="handleToggleSecret(s)">
+                  <button class="text-sky-700 hover:underline text-xs" @click="handleToggleSecret(s)">
                     {{ s.disabled === 'true' ? 'Habilitar' : 'Deshabilitar' }}
                   </button>
                 </td>

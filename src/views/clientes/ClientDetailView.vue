@@ -228,7 +228,7 @@ onMounted(async () => {
             S/ {{ client.saldo_a_favor.toFixed(2) }}
           </div>
           <p v-if="client.saldo_a_favor > 0" class="text-[11px] text-slate-400 mt-0.5">Se aplica solo en la siguiente factura.</p>
-          <button v-if="canApplyAveria" type="button" class="text-[11px] text-sky-600 hover:text-sky-700 mt-1" @click="openAveriaModal">
+          <button v-if="canApplyAveria" type="button" class="text-[11px] text-sky-700 hover:text-sky-700 mt-1" @click="openAveriaModal">
             + Descuento general (todos los servicios)
           </button>
         </ClientStatCard>
@@ -283,7 +283,7 @@ onMounted(async () => {
                 {{ p.name }} — ↓{{ p.download_speed }}/↑{{ p.upload_speed }} Mbps — S/ {{ Number(p.price).toFixed(2) }}
               </option>
             </select>
-            <p v-if="!catalogs.plans.length" class="text-xs text-amber-600 mt-1">
+            <p v-if="!catalogs.plans.length" class="text-xs text-amber-700 mt-1">
               No hay planes activos. Crea uno primero en Supabase (tabla <code>plans</code>).
             </p>
           </div>

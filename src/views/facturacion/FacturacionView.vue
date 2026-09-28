@@ -629,7 +629,7 @@ async function confirmDelete() {
                 {{ c.contract_number }} — {{ c.clients?.first_name }} {{ c.clients?.last_name }} — S/ {{ Number(c.monthly_fee).toFixed(2) }}
               </option>
             </select>
-            <p v-if="!selectableContracts.length" class="text-xs text-amber-600 mt-1">No hay contratos activos.</p>
+            <p v-if="!selectableContracts.length" class="text-xs text-amber-700 mt-1">No hay contratos activos.</p>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
@@ -655,7 +655,7 @@ async function confirmDelete() {
                 :disabled="form.status === 'exonerada'"
                 class="field-input disabled:bg-slate-100 disabled:text-slate-400"
               />
-              <p v-if="form.status === 'exonerada'" class="text-xs text-sky-600 mt-1">Servicio de cortesía: monto en S/0.</p>
+              <p v-if="form.status === 'exonerada'" class="text-xs text-sky-700 mt-1">Servicio de cortesía: monto en S/0.</p>
             </div>
             <div>
               <label class="block text-xs text-slate-600 mb-1">Fecha de vencimiento</label>
@@ -723,7 +723,7 @@ async function confirmDelete() {
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Monto recibido (S/)</label>
             <input v-model.number="payAmount" type="number" step="0.01" min="0.01" required class="field-input" />
-            <p v-if="payExcedente > 0" class="text-xs text-sky-600 mt-1">
+            <p v-if="payExcedente > 0" class="text-xs text-sky-700 mt-1">
               Sobrepago de S/ {{ payExcedente.toFixed(2) }} — se guardará como saldo a favor del cliente.
             </p>
           </div>
@@ -908,6 +908,7 @@ async function confirmDelete() {
       title="Cancelar factura"
       :message="`¿Cancelar la factura ${cancelTarget?.invoice_number}? El cliente ya no la vera como pendiente de cobro.`"
       confirm-label="Sí, cancelar"
+      cancel-label="No, volver"
       :loading="cancelingInvoice"
       @confirm="confirmCancel"
       @cancel="cancelTarget = null"
@@ -917,6 +918,7 @@ async function confirmDelete() {
       title="Eliminar factura"
       :message="`¿Eliminar definitivamente la factura ${deleteTarget?.invoice_number}?`"
       confirm-label="Sí, eliminar"
+      cancel-label="No, volver"
       danger
       :loading="deletingInvoice"
       @confirm="confirmDelete"

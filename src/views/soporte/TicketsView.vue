@@ -51,7 +51,7 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 };
 const STATUS_CLASS: Record<TicketStatus, string> = {
   open: 'bg-yellow-500/15 text-yellow-600',
-  in_progress: 'bg-sky-500/15 text-sky-600',
+  in_progress: 'bg-sky-500/15 text-sky-700',
   resolved: 'bg-green-500/15 text-green-600',
   closed: 'bg-slate-500/15 text-slate-600',
 };
@@ -63,7 +63,7 @@ const PRIORITY_LABEL: Record<TicketPriority, string> = {
 };
 const PRIORITY_CLASS: Record<TicketPriority, string> = {
   low: 'bg-slate-500/15 text-slate-600',
-  medium: 'bg-sky-500/15 text-sky-600',
+  medium: 'bg-sky-500/15 text-sky-700',
   high: 'bg-orange-500/15 text-orange-600',
   urgent: 'bg-red-500/15 text-red-600',
 };
@@ -334,7 +334,7 @@ function formatDate(value: string) {
                 {{ ct.contract_number }} — {{ ct.installation_address || 'Sin dirección' }}
               </option>
             </select>
-            <p v-if="ticketContracts.length > 1" class="text-xs text-amber-600 mt-1">
+            <p v-if="ticketContracts.length > 1" class="text-xs text-amber-700 mt-1">
               Este cliente tiene {{ ticketContracts.length }} servicios — elige a cuál corresponde el reclamo.
             </p>
           </div>

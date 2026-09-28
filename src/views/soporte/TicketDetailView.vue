@@ -270,7 +270,7 @@ async function handleDelete() {
         <div class="surface p-4">
           <div class="flex items-center justify-between mb-2">
             <div class="text-slate-500 text-xs">Técnico designado</div>
-            <button v-if="canEdit" class="text-xs text-sky-600 hover:text-sky-700" @click="openAssignModal">
+            <button v-if="canEdit" class="text-xs text-sky-700 hover:text-sky-700" @click="openAssignModal">
               {{ ticket.assigned_to ? 'Editar' : 'Asignar' }}
             </button>
           </div>

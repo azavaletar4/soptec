@@ -370,7 +370,7 @@ function goToDetail(client: Client) {
               <td class="px-4 py-2 text-slate-600">{{ s.profile }}</td>
               <td class="px-4 py-2 text-slate-600">{{ s.comment || '—' }}</td>
               <td class="px-4 py-2 text-right">
-                <button v-if="canManageClients" class="text-sky-600 hover:underline text-xs" @click="openCreate(s)">Crear cliente</button>
+                <button v-if="canManageClients" class="text-sky-700 hover:underline text-xs" @click="openCreate(s)">Crear cliente</button>
                 <span v-else class="text-xs text-slate-400">—</span>
               </td>
             </tr>
@@ -389,7 +389,7 @@ function goToDetail(client: Client) {
           @submit.prevent="handleSubmit"
         >
           <h2 class="text-lg font-semibold mb-1">{{ editing ? 'Editar cliente' : 'Nuevo cliente' }}</h2>
-          <p v-if="pendingPppoeHint" class="text-xs text-sky-600/80 mb-3">
+          <p v-if="pendingPppoeHint" class="text-xs text-sky-700/80 mb-3">
             Vinculado a partir del usuario PPPoE <span class="font-mono">{{ pendingPppoeHint }}</span> — el vinculo se completa al crear el contrato.
           </p>
           <div v-else class="mb-3"></div>

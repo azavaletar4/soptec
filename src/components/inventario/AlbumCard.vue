@@ -32,7 +32,7 @@ const accentClass = computed(() => ACCENT[props.color] ?? ACCENT.slate);
     :class="accentClass"
     @click="$emit('click')"
   >
-    <span v-if="lowStock > 0" class="badge absolute right-4 top-4 bg-amber-500/15 text-amber-600">
+    <span v-if="lowStock > 0" class="badge absolute right-4 top-4 bg-amber-500/15 text-amber-700">
       ⚠ {{ lowStock }} bajo stock
     </span>
 

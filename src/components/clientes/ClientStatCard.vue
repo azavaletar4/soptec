@@ -7,7 +7,7 @@ defineProps<{
 
 <template>
   <div class="surface p-4 flex items-start gap-3">
-    <span class="w-10 h-10 rounded-full bg-sky-500/15 text-sky-600 flex items-center justify-center text-lg shrink-0">
+    <span class="w-10 h-10 rounded-full bg-sky-500/15 text-sky-700 flex items-center justify-center text-lg shrink-0">
       {{ icon }}
     </span>
     <div class="min-w-0 flex-1">
