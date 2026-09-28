@@ -13,6 +13,15 @@ export type TicketCategory =
   | 'equipment'
   | 'reconnection_relocation'
   | 'other';
+export type TicketMotivoAveria =
+  | 'bad_installation'
+  | 'material_wear'
+  | 'client_damage'
+  | 'external_factor'
+  | 'defective_equipment';
+
+/** Categorias de ticket que cuentan como averia para el ranking de puntos (Fase 27) y el cierre con motivo (Fase 49). */
+export const AVERIA_TICKET_CATEGORIES: TicketCategory[] = ['no_service', 'slow_speed', 'equipment'];
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled' | 'exonerada';
 export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
 export type InventoryMovementType = 'ingreso' | 'egreso';
@@ -194,6 +203,14 @@ export interface Ticket {
   updated_at: string;
   resolved_at: string | null;
   closed_at: string | null;
+  /** Motivo de la averia al cerrarla (Fase 49) — solo aplica a categorias en AVERIA_TICKET_CATEGORIES. */
+  motivo_averia: TicketMotivoAveria | null;
+  /** Se deriva de motivo_averia en un trigger de BD — el ranking de puntos ignora las averias con esto en false. */
+  imputable_a_tecnico: boolean;
+  /** Justificacion obligatoria cuando el motivo es client_damage o external_factor. */
+  observacion_cierre: string | null;
+  /** Ruta dentro del bucket privado work-evidence (no una URL publica lista para usar). */
+  evidencia_url: string | null;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }

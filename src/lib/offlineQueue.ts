@@ -28,6 +28,8 @@ export interface QueuedClosure {
   photos: QueuedPhoto[];
   signatureBlob: Blob | null;
   clientPhotoCategories: string[]; // categorias que ademas deben reflejarse en client_photos (instalaciones)
+  motivoAveria: string | null; // Fase 49 — solo aplica a tickets, no a instalaciones
+  justificacionCierre: string | null;
   lastError?: string;
 }
 

@@ -7,7 +7,9 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
-import type { Ticket, TicketComment, TicketPriority, TicketStatus, InventoryMovement } from '@/types/domain';
+import { supabase } from '@/lib/supabase';
+import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
+import type { Ticket, TicketComment, TicketPriority, TicketStatus, TicketMotivoAveria, InventoryMovement } from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
@@ -67,6 +69,28 @@ const CATEGORY_LABEL: Record<string, string> = {
   reconnection_relocation: 'Reconexión / Traslado',
   other: 'Otro',
 };
+const MOTIVO_LABEL: Record<TicketMotivoAveria, string> = {
+  bad_installation: 'Mala instalación',
+  material_wear: 'Deterioro de material',
+  client_damage: 'Daño provocado por el cliente',
+  external_factor: 'Factor externo',
+  defective_equipment: 'Equipo defectuoso',
+};
+
+// Liquidar una averia (categorias en AVERIA_TICKET_CATEGORIES) exige elegir
+// un motivo antes de marcarla resuelta/cerrada — alimenta el ranking de
+// puntos (Fase 49) y evita penalizar al tecnico sin justificacion cuando la
+// causa fue el cliente o un factor externo. El resto de categorias (billing,
+// instalacion, reconexion, otro) se cierran directo, como antes.
+const isAveriaCategory = computed(() => !!ticket.value && AVERIA_TICKET_CATEGORIES.includes(ticket.value.category));
+
+const showCloseAveriaModal = ref(false);
+const closeAveriaForm = ref({ status: 'resolved' as TicketStatus, motivoAveria: '' as TicketMotivoAveria | '', observacion: '' });
+const savingCloseAveria = ref(false);
+const closeAveriaError = ref<string | null>(null);
+const requiresJustification = computed(
+  () => closeAveriaForm.value.motivoAveria === 'client_damage' || closeAveriaForm.value.motivoAveria === 'external_factor',
+);
 
 async function loadTicket() {
   loading.value = true;
@@ -129,6 +153,18 @@ onMounted(async () => {
 
 async function handleStatusChange(status: TicketStatus) {
   if (!ticket.value) return;
+  // Resolver/cerrar una averia siempre pasa por el modal de liquidacion, para
+  // que quede clasificado el motivo antes de que el ranking de puntos la use.
+  if ((status === 'resolved' || status === 'closed') && isAveriaCategory.value) {
+    closeAveriaForm.value = {
+      status,
+      motivoAveria: ticket.value.motivo_averia ?? '',
+      observacion: ticket.value.observacion_cierre ?? '',
+    };
+    closeAveriaError.value = null;
+    showCloseAveriaModal.value = true;
+    return;
+  }
   updating.value = true;
   actionError.value = null;
   try {
@@ -137,6 +173,44 @@ async function handleStatusChange(status: TicketStatus) {
     actionError.value = getErrorMessage(e, 'Error al cambiar el estado');
   } finally {
     updating.value = false;
+  }
+}
+
+async function handleCloseAveriaSubmit() {
+  if (!ticket.value || !closeAveriaForm.value.motivoAveria) return;
+  if (requiresJustification.value && !closeAveriaForm.value.observacion.trim()) {
+    closeAveriaError.value = 'La justificación es obligatoria para este motivo.';
+    return;
+  }
+  savingCloseAveria.value = true;
+  closeAveriaError.value = null;
+  try {
+    // imputable_a_tecnico se deriva del motivo en un trigger de BD (Fase 49).
+    ticket.value = await ticketsStore.updateTicket(ticket.value.id, {
+      status: closeAveriaForm.value.status,
+      motivo_averia: closeAveriaForm.value.motivoAveria,
+      observacion_cierre: closeAveriaForm.value.observacion.trim() || null,
+    });
+    showCloseAveriaModal.value = false;
+  } catch (e) {
+    closeAveriaError.value = getErrorMessage(e, 'Error al liquidar la avería');
+  } finally {
+    savingCloseAveria.value = false;
+  }
+}
+
+const evidenciaLoading = ref(false);
+async function openEvidencia() {
+  if (!ticket.value?.evidencia_url) return;
+  evidenciaLoading.value = true;
+  try {
+    const { data, error: err } = await supabase.storage.from('work-evidence').createSignedUrl(ticket.value.evidencia_url, 3600);
+    if (err || !data?.signedUrl) throw err ?? new Error('Sin URL firmada');
+    window.open(data.signedUrl, '_blank', 'noopener');
+  } catch (e) {
+    actionError.value = getErrorMessage(e, 'No se pudo abrir la evidencia');
+  } finally {
+    evidenciaLoading.value = false;
   }
 }
 
@@ -288,6 +362,29 @@ async function handleDelete() {
         <p class="whitespace-pre-wrap">{{ ticket.description || 'Sin descripción.' }}</p>
       </div>
 
+      <div v-if="ticket.motivo_averia" class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-8 text-sm">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-slate-500 text-xs">Motivo de cierre</div>
+          <span
+            class="badge text-[10px]"
+            :class="ticket.imputable_a_tecnico ? 'bg-amber-500/15 text-amber-700' : 'bg-emerald-500/15 text-emerald-700'"
+          >
+            {{ ticket.imputable_a_tecnico ? 'Imputable al técnico' : 'No imputable al técnico' }}
+          </span>
+        </div>
+        <p class="font-medium">{{ MOTIVO_LABEL[ticket.motivo_averia] }}</p>
+        <p v-if="ticket.observacion_cierre" class="text-slate-700 whitespace-pre-wrap mt-2">{{ ticket.observacion_cierre }}</p>
+        <button
+          v-if="ticket.evidencia_url"
+          type="button"
+          class="text-xs text-sky-700 hover:text-sky-700 mt-2"
+          :disabled="evidenciaLoading"
+          @click="openEvidencia"
+        >
+          {{ evidenciaLoading ? 'Abriendo...' : '📷 Ver evidencia' }}
+        </button>
+      </div>
+
       <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-8 text-sm">
         <h2 class="text-sm font-semibold mb-3">Materiales usados</h2>
         <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
@@ -387,6 +484,44 @@ async function handleDelete() {
             </button>
             <button type="submit" :disabled="savingAssign" class="btn-primary">
               {{ savingAssign ? 'Guardando...' : 'Guardar' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showCloseAveriaModal" class="modal-overlay">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleCloseAveriaSubmit">
+          <h2 class="text-lg font-semibold mb-4">Liquidar avería</h2>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Motivo de la avería</label>
+            <select v-model="closeAveriaForm.motivoAveria" required class="field-input">
+              <option value="" disabled>Selecciona el motivo...</option>
+              <option value="bad_installation">Mala instalación</option>
+              <option value="material_wear">Deterioro de material</option>
+              <option value="client_damage">Daño provocado por el cliente (ej. mascota, golpe)</option>
+              <option value="external_factor">Factor externo (corte de fibra troncal, corte eléctrico)</option>
+              <option value="defective_equipment">Equipo defectuoso</option>
+            </select>
+          </div>
+
+          <div v-if="requiresJustification" class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">
+              Justificación <span class="text-red-500">* (obligatoria, no cuenta contra los puntos del técnico)</span>
+            </label>
+            <textarea v-model="closeAveriaForm.observacion" rows="3" placeholder="Explica qué pasó..." class="field-input"></textarea>
+          </div>
+
+          <p v-if="closeAveriaError" class="text-sm text-red-600 mb-3">{{ closeAveriaError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showCloseAveriaModal = false">
+              Cancelar
+            </button>
+            <button type="submit" :disabled="savingCloseAveria || !closeAveriaForm.motivoAveria" class="btn-primary">
+              {{ savingCloseAveria ? 'Guardando...' : 'Guardar' }}
             </button>
           </div>
         </form>

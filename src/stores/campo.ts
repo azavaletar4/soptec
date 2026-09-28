@@ -17,7 +17,7 @@ import {
   listQueuedClosures,
   type QueuedClosure,
 } from '@/lib/offlineQueue';
-import type { ClientPhotoCategory, Installation, JobType, ServiceContract, Ticket } from '@/types/domain';
+import type { ClientPhotoCategory, Installation, JobType, ServiceContract, Ticket, TicketMotivoAveria } from '@/types/domain';
 
 const BUCKET = 'work-evidence';
 
@@ -120,6 +120,10 @@ export interface ClosureInput {
   /** Categorias que ademas de guardarse en work_order_photos deben reflejarse en
    *  el slot fijo de client_photos (fachada/caja NAP/modem/potencia PON). */
   clientPhotoCategories: ClientPhotoCategory[];
+  /** Fase 49 — solo aplica a tickets (averias), null en instalaciones. */
+  motivoAveria: TicketMotivoAveria | null;
+  /** Justificacion obligatoria cuando motivoAveria es client_damage o external_factor. */
+  justificacionCierre: string | null;
 }
 
 /**
@@ -278,13 +282,22 @@ export const useCampoStore = defineStore('campo', () => {
     // quedo guardada se salta.
     const { data: existingPhotos } = await supabase
       .from('work_order_photos')
-      .select('category')
+      .select('category, storage_path')
       .eq('job_type', input.jobType)
       .eq('job_id', input.jobId);
-    const alreadyUploaded = new Set((existingPhotos ?? []).map((p) => p.category));
+    const alreadyUploaded = new Map((existingPhotos ?? []).map((p) => [p.category, p.storage_path as string]));
+
+    // Foto de respaldo del motivo de cierre (Fase 49): la primera evidencia
+    // subida, ya sea en este intento o en uno anterior si el cierre se esta
+    // reintentando. Solo aplica a tickets (evidencia_1/evidencia_2).
+    const isEvidenceCategory = (cat: string) => cat === 'evidencia_1' || cat === 'evidencia_2';
+    let evidenciaPath: string | null = null;
 
     for (const photo of input.photos) {
-      if (alreadyUploaded.has(photo.category)) continue;
+      if (alreadyUploaded.has(photo.category)) {
+        if (isEvidenceCategory(photo.category) && !evidenciaPath) evidenciaPath = alreadyUploaded.get(photo.category)!;
+        continue;
+      }
       const ext = photo.file.name.includes('.') ? photo.file.name.split('.').pop() : 'jpg';
       const path = `${input.jobType}/${input.jobId}/${photo.category}-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, photo.file, { upsert: false });
@@ -294,6 +307,7 @@ export const useCampoStore = defineStore('campo', () => {
         .insert({ job_type: input.jobType, job_id: input.jobId, category: photo.category, storage_path: path });
       if (rowErr) throw rowErr;
 
+      if (isEvidenceCategory(photo.category) && !evidenciaPath) evidenciaPath = path;
       if (input.contractId && input.clientPhotoCategories.includes(photo.category as ClientPhotoCategory)) {
         await clientPhotosStore.uploadPhoto(input.clientId, input.contractId, photo.category as ClientPhotoCategory, photo.file);
       }
@@ -326,7 +340,14 @@ export const useCampoStore = defineStore('campo', () => {
     if (input.jobType === 'installation') {
       await installationsStore.updateStatus(input.jobId, 'completed');
     } else {
-      await ticketsStore.updateTicketStatus(input.jobId, input.targetStatus as Ticket['status']);
+      // imputable_a_tecnico se deriva del motivo en un trigger de BD (Fase
+      // 49) — no se manda desde aca, para que quede una sola fuente de verdad.
+      await ticketsStore.updateTicket(input.jobId, {
+        status: input.targetStatus as Ticket['status'],
+        motivo_averia: input.motivoAveria,
+        observacion_cierre: input.justificacionCierre,
+        evidencia_url: evidenciaPath,
+      });
     }
   }
 
@@ -345,6 +366,8 @@ export const useCampoStore = defineStore('campo', () => {
       signatureBlob: item.signatureBlob,
       updateClientGps: true,
       clientPhotoCategories: item.clientPhotoCategories as ClientPhotoCategory[],
+      motivoAveria: item.motivoAveria as TicketMotivoAveria | null,
+      justificacionCierre: item.justificacionCierre,
     });
   }
 
@@ -363,6 +386,8 @@ export const useCampoStore = defineStore('campo', () => {
         photos: input.photos.map((p) => ({ category: p.category, blob: p.file, fileName: p.file.name })),
         signatureBlob: input.signatureBlob,
         clientPhotoCategories: input.clientPhotoCategories,
+        motivoAveria: input.motivoAveria,
+        justificacionCierre: input.justificacionCierre,
       });
       await refreshQueuedCount();
       return { queued: true };
@@ -386,6 +411,8 @@ export const useCampoStore = defineStore('campo', () => {
           photos: input.photos.map((p) => ({ category: p.category, blob: p.file, fileName: p.file.name })),
           signatureBlob: input.signatureBlob,
           clientPhotoCategories: input.clientPhotoCategories,
+          motivoAveria: input.motivoAveria,
+          justificacionCierre: input.justificacionCierre,
         });
         await refreshQueuedCount();
         return { queued: true };

@@ -173,6 +173,23 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   (`border-red-400`) y la pantalla hace scroll automático hasta la firma, en vez de solo mostrar
   el mensaje de error arriba sin más contexto de dónde corregirlo.
 
+### Cierre de averías con motivo (Soporte + App de Campo)
+- **App de Campo** (`CampoTrabajoDetailView.vue`, sección "Cierre de trabajo"): en trabajos de
+  tipo avería (no instalaciones) se agregó un selector obligatorio **"Motivo de la avería"** con
+  5 opciones (Mala instalación, Deterioro de material, Daño provocado por el cliente, Factor
+  externo, Equipo defectuoso), justo antes del campo de firma.
+- Si el motivo elegido es "Daño provocado por el cliente" o "Factor externo", aparece un campo de
+  texto **"Justificación"** obligatorio (borde rojo `border-red-400` si falta al intentar
+  guardar) y se exige al menos una foto en "Evidencia 1"/"Evidencia 2" (ya existían como campos
+  opcionales, ahora se vuelven obligatorios solo en este caso).
+- **Soporte** (`TicketDetailView.vue`): al cambiar el estado de una avería a "Resuelto" o
+  "Cerrado" desde el panel de oficina, en vez de guardar directo se abre un modal **"Liquidar
+  avería"** con el mismo selector de motivo (y justificación obligatoria si aplica) — mismo
+  estilo que el modal existente "Asignar técnico".
+- Nueva tarjeta debajo de "Descripción" (visible solo si ya tiene motivo registrado): muestra el
+  motivo elegido y una insignia **"Imputable al técnico"** (ámbar) o **"No imputable al técnico"**
+  (verde), la justificación si la hay, y un botón **"📷 Ver evidencia"** si se adjuntó foto.
+
 ---
 
 ## Cómo se sigue actualizando este archivo

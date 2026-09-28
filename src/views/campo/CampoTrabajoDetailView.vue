@@ -12,7 +12,7 @@ import { useContractsStore } from '@/stores/contracts';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
 import { getErrorMessage } from '@/lib/errors';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
-import type { Client, ClientPhotoCategory, Installation, InventoryMovement, JobType, ServiceContract, Ticket } from '@/types/domain';
+import type { Client, ClientPhotoCategory, Installation, InventoryMovement, JobType, ServiceContract, Ticket, TicketMotivoAveria } from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
@@ -266,7 +266,31 @@ const TICKET_PHOTO_CATEGORIES = [
   { value: 'evidencia_2', label: 'Evidencia 2' },
 ];
 
-const closureForm = ref({ latitude: null as number | null, longitude: null as number | null, ontSerial: '', closureNotes: '' });
+// Motivo de cierre de la averia (Fase 49) — clasifica si es responsabilidad
+// del tecnico antes de que el ranking de puntos la use para penalizar. Solo
+// "cliente" y "factor externo" lo eximen; el resto (mala instalacion,
+// deterioro, equipo defectuoso) si es imputable al tecnico.
+const MOTIVO_AVERIA_OPTIONS: { value: TicketMotivoAveria; label: string }[] = [
+  { value: 'bad_installation', label: 'Mala instalación' },
+  { value: 'material_wear', label: 'Deterioro de material' },
+  { value: 'client_damage', label: 'Daño provocado por el cliente (ej. mascota, golpe)' },
+  { value: 'external_factor', label: 'Factor externo (corte de fibra troncal, corte eléctrico)' },
+  { value: 'defective_equipment', label: 'Equipo defectuoso' },
+];
+const MOTIVOS_EXIMEN_TECNICO: TicketMotivoAveria[] = ['client_damage', 'external_factor'];
+
+const closureForm = ref({
+  latitude: null as number | null,
+  longitude: null as number | null,
+  ontSerial: '',
+  closureNotes: '',
+  motivoAveria: '' as TicketMotivoAveria | '',
+  justificacion: '',
+});
+const requiresJustification = computed(
+  () => jobType !== 'installation' && MOTIVOS_EXIMEN_TECNICO.includes(closureForm.value.motivoAveria as TicketMotivoAveria),
+);
+const justificacionMissing = ref(false);
 const closurePhotos = ref<Record<string, File | undefined>>({});
 const signatureBlob = ref<Blob | null>(null);
 const signaturePadRef = ref<InstanceType<typeof SignaturePad> | null>(null);
@@ -314,6 +338,29 @@ async function handleCloseSubmit() {
     return;
   }
   signatureMissing.value = false;
+
+  // Averia/soporte: el motivo de cierre es obligatorio para poder liquidarla
+  // (alimenta el ranking de puntos, Fase 49). Si el motivo exime al tecnico,
+  // ademas exige justificacion y al menos una foto de evidencia como respaldo.
+  if (jobType !== 'installation') {
+    if (!closureForm.value.motivoAveria) {
+      closeError.value = 'Selecciona el motivo de la avería para poder cerrarla.';
+      return;
+    }
+    if (requiresJustification.value) {
+      if (!closureForm.value.justificacion.trim()) {
+        closeError.value = 'Falta la justificación del motivo seleccionado.';
+        justificacionMissing.value = true;
+        return;
+      }
+      if (!TICKET_PHOTO_CATEGORIES.some((c) => closurePhotos.value[c.value])) {
+        closeError.value = 'Agrega al menos una foto de evidencia para respaldar el motivo seleccionado.';
+        return;
+      }
+    }
+  }
+  justificacionMissing.value = false;
+
   closing.value = true;
   closeError.value = null;
   closeResult.value = null;
@@ -337,6 +384,8 @@ async function handleCloseSubmit() {
       signatureBlob: signatureBlob.value,
       updateClientGps: jobType === 'installation',
       clientPhotoCategories: jobType === 'installation' ? (INSTALL_PHOTO_CATEGORIES.map((c) => c.value) as ClientPhotoCategory[]) : [],
+      motivoAveria: jobType === 'installation' ? null : (closureForm.value.motivoAveria || null),
+      justificacionCierre: jobType === 'installation' ? null : (closureForm.value.justificacion.trim() || null),
     });
     closeResult.value = result.queued ? 'queued' : 'ok';
     if (!result.queued) setTimeout(() => router.push('/campo'), 1200);
@@ -552,6 +601,30 @@ async function handleCloseSubmit() {
         </div>
 
         <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
+
+        <template v-if="jobType !== 'installation'">
+          <label class="block text-xs text-slate-600 mb-1">
+            Motivo de la avería<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
+          </label>
+          <select v-model="closureForm.motivoAveria" class="field-input text-sm mb-3">
+            <option value="" disabled>Selecciona el motivo...</option>
+            <option v-for="m in MOTIVO_AVERIA_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
+          </select>
+
+          <template v-if="requiresJustification">
+            <label class="block text-xs text-slate-600 mb-1">
+              Justificación<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria, no cuenta contra tus puntos)</span></span>
+            </label>
+            <textarea
+              v-model="closureForm.justificacion"
+              rows="2"
+              placeholder="Explica qué pasó..."
+              class="field-input text-sm mb-1"
+              :class="justificacionMissing ? 'border-red-400' : ''"
+            ></textarea>
+            <p class="text-[11px] text-slate-500 mb-3">Agrega también una foto de evidencia arriba (Evidencia 1 o 2).</p>
+          </template>
+        </template>
 
         <label class="block text-xs text-slate-600 mb-1">
           Firma del cliente<span v-if="jobType === 'installation'" class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria)</span></span>
