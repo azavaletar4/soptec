@@ -620,8 +620,8 @@ function needlePolygon(angleDeg: number): string {
 
 function statusLabel(value: number, warn: number, danger: number) {
   if (value >= danger) return { text: 'CRÍTICO', classes: 'bg-red-500/15 text-red-600' };
-  if (value >= warn) return { text: 'ALERTA', classes: 'bg-amber-500/15 text-amber-600' };
-  return { text: 'NORMAL', classes: 'bg-emerald-500/15 text-emerald-600' };
+  if (value >= warn) return { text: 'ALERTA', classes: 'bg-amber-500/15 text-amber-700' };
+  return { text: 'NORMAL', classes: 'bg-emerald-500/15 text-emerald-700' };
 }
 
 function buildGauge(g: GaugeSpec) {
@@ -726,7 +726,7 @@ const gauges = computed(() => {
         <button class="ml-2 text-sky-600 hover:underline" @click="loadSummary">Actualizar</button>
       </p>
       <p v-if="summaryError" class="text-xs text-red-600 mb-4">{{ summaryError }}</p>
-      <p v-if="summary && !summary.scanComplete" class="text-xs text-amber-600/80 mb-4">
+      <p v-if="summary && !summary.scanComplete" class="text-xs text-amber-700/80 mb-4">
         ⚠ El escaneo completo de la OLT falló esta vez; "Online/Offline" se muestran con el último
         dato local disponible.
       </p>
@@ -917,7 +917,7 @@ const gauges = computed(() => {
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-sm font-semibold">ONTs sin autorizar ({{ unconfiguredOnts.length }})</h2>
           <div class="flex items-center gap-2">
-            <button class="text-xs text-sky-600 hover:underline" :disabled="unconfiguredLoading" @click="loadUnconfigured()">
+            <button class="text-xs text-sky-700 hover:underline" :disabled="unconfiguredLoading" @click="loadUnconfigured()">
               {{ unconfiguredLoading ? 'Consultando...' : 'Actualizar' }}
             </button>
             <button
@@ -953,7 +953,7 @@ const gauges = computed(() => {
                 <td class="px-4 py-2 font-mono text-xs text-slate-600">{{ u.frame }}/{{ u.slot }}/{{ u.port }}</td>
                 <td class="px-4 py-2 text-right">
                   <button
-                    class="text-sky-600 hover:underline text-xs"
+                    class="text-sky-700 hover:underline text-xs"
                     :disabled="u.slot === null || u.port === null"
                     @click="openRegister({ serial: u.serial, slot: u.slot!, port: u.port! })"
                   >
@@ -987,7 +987,7 @@ const gauges = computed(() => {
       <div ref="ontsTableEl" class="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h2 class="text-lg font-semibold">ONTs registradas</h2>
         <div v-if="statusFilter !== 'all'" class="flex items-center gap-2 text-xs">
-          <span class="badge bg-sky-500/15 text-sky-600">Filtro: {{ STATUS_FILTER_LABEL[statusFilter] }} ({{ filteredOnts.length }})</span>
+          <span class="badge bg-sky-500/15 text-sky-700">Filtro: {{ STATUS_FILTER_LABEL[statusFilter] }} ({{ filteredOnts.length }})</span>
           <button class="text-slate-600 hover:text-slate-900" @click="statusFilter = 'all'">Quitar filtro</button>
         </div>
       </div>
@@ -1002,7 +1002,7 @@ const gauges = computed(() => {
            pixeles mas abajo, practicamente inalcanzable. Con la altura
            limitada, las dos barras de scroll quedan siempre a la vista aca
            mismo. El encabezado queda fijo arriba mientras se baja. -->
-      <div class="table-shell max-h-[70vh] overflow-y-auto">
+      <div class="table-shell max-h-[70dvh] overflow-y-auto">
         <!-- En celular se ocultan las columnas secundarias (quedan Serial/Cliente/
              Estado/Señal/TR-069/Acciones) — antes las 11 columnas forzaban scroll
              horizontal incluso para ver "Acciones". El detalle completo sigue
@@ -1014,22 +1014,26 @@ const gauges = computed(() => {
                    columna a ser mas ancha que el dato real ("1/2/1:1", corto) —
                    un titulo corto + whitespace-nowrap deja que la columna se
                    achique al tamaño del dato en vez del titulo. -->
-              <th class="text-left px-2 py-3 hidden md:table-cell whitespace-nowrap" title="Shelf/Slot/Port:ID de la ONU">Posición</th>
-              <th class="text-left px-3 py-3">Serial</th>
-              <th class="text-left px-3 py-3">Cliente</th>
-              <th class="text-left px-3 py-3 hidden md:table-cell">Zona</th>
-              <th class="text-left px-3 py-3">Estado</th>
-              <th class="text-left px-3 py-3 whitespace-nowrap">Rx/Tx (dBm)</th>
-              <th class="text-left px-3 py-3 hidden md:table-cell">VLAN</th>
-              <th class="text-left px-3 py-3 hidden md:table-cell">Tipo</th>
-              <th class="text-left px-3 py-3 hidden md:table-cell">Alta</th>
-              <th class="text-left px-3 py-3">TR-069</th>
-              <th class="text-right px-3 py-3">Acciones</th>
+              <th class="text-left px-2 py-3 hidden md:table-cell whitespace-nowrap shadow-[0_1px_0_0_var(--color-slate-200)]" title="Shelf/Slot/Port:ID de la ONU">Posición</th>
+              <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Serial</th>
+              <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Cliente</th>
+              <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Zona</th>
+              <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Estado</th>
+              <th class="text-left px-3 py-3 whitespace-nowrap shadow-[0_1px_0_0_var(--color-slate-200)]">Rx/Tx (dBm)</th>
+              <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">VLAN</th>
+              <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Tipo</th>
+              <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Alta</th>
+              <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">TR-069</th>
+              <th class="text-right px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Acciones</th>
+              <!-- Columna solo-icono: en tactil no hay ":hover" que sugiera que la
+                   fila es clickeable (abre el detalle), asi que el ">" cumple ese
+                   rol visualmente en vez de depender del cursor. -->
+              <th class="w-8 px-2 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]"><span class="sr-only">Abrir detalle</span></th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="!filteredOnts.length">
-              <td colspan="11" class="px-4 py-6 text-center text-slate-500">
+              <td colspan="12" class="px-4 py-6 text-center text-slate-500">
                 {{ ontSearch || statusFilter !== 'all' ? 'Sin resultados para ese filtro/busqueda.' : 'Sin ONTs. Sincroniza un puerto o registra una nueva.' }}
               </td>
             </tr>
@@ -1062,7 +1066,7 @@ const gauges = computed(() => {
               <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">{{ ont.onu_type ?? '—' }}</td>
               <td class="px-3 py-3 text-slate-500 text-xs hidden md:table-cell whitespace-nowrap">{{ new Date(ont.created_at).toLocaleDateString('es-PE') }}</td>
               <td class="px-3 py-3">
-                <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-600">Activo</span>
+                <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-700">Activo</span>
                 <span v-else class="text-slate-500 text-xs">—</span>
               </td>
               <!-- "Señal"/"Zona"/"TR-069" se sacaron de la fila: son EXACTAMENTE lo
@@ -1090,6 +1094,7 @@ const gauges = computed(() => {
                   {{ deletingId === ont.id ? 'Eliminando...' : 'Eliminar' }}
                 </button>
               </td>
+              <td class="px-2 py-3 text-slate-300 text-center" aria-hidden="true">›</td>
             </tr>
           </tbody>
         </table>
