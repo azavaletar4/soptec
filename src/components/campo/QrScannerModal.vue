@@ -11,8 +11,15 @@ const emit = defineEmits<{ close: []; scan: [value: string] }>();
 const videoEl = ref<HTMLVideoElement | null>(null);
 const error = ref<string | null>(null);
 let scanner: QrScanner | null = null;
+// Se incrementa en cada stop() — si el modal se cierra MIENTRAS start() sigue
+// esperando permiso/apertura de camara (getUserMedia puede tardar), start()
+// lo nota al terminar y apaga la camara que acaba de abrir en vez de dejarla
+// prendida de fondo sin que nada la vuelva a referenciar (bug real: cerrar
+// el modal justo durante ese hueco dejaba la camara encendida).
+let openToken = 0;
 
 async function start() {
+  const myToken = ++openToken;
   error.value = null;
   if (!videoEl.value) return;
 
@@ -33,16 +40,25 @@ async function start() {
 
   try {
     const hasCamera = await QrScanner.hasCamera();
+    if (myToken !== openToken) return; // se cerro el modal mientras se consultaba la camara
     if (!hasCamera) {
       error.value = 'No se detectó ninguna cámara en este dispositivo.';
       return;
     }
-    scanner = new QrScanner(videoEl.value, (result) => handleResult(result.data), {
+    const s = new QrScanner(videoEl.value, (result) => handleResult(result.data), {
       highlightScanRegion: true,
       highlightCodeOutline: true,
       preferredCamera: 'environment',
     });
-    await scanner.start();
+    await s.start();
+    if (myToken !== openToken) {
+      // se cerro el modal mientras la camara terminaba de abrir: apagarla ya
+      // mismo en vez de dejarla prendida de fondo sin referencia.
+      s.stop();
+      s.destroy();
+      return;
+    }
+    scanner = s;
   } catch (e) {
     if (e instanceof DOMException && e.name === 'NotAllowedError') {
       error.value = 'Permiso de cámara denegado. Actívalo en los ajustes del navegador para este sitio e inténtalo de nuevo.';
@@ -61,6 +77,7 @@ function handleResult(value: string) {
 }
 
 function stop() {
+  openToken += 1;
   scanner?.stop();
   scanner?.destroy();
   scanner = null;

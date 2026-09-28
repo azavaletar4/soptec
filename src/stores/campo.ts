@@ -41,6 +41,13 @@ export interface TrabajoItem {
 
 function installationEstado(i: Installation): TrabajoEstadoUi {
   if (i.status === 'completed') return 'completado';
+  // Antes 'scheduled' caia junto con 'pending' en 'pendiente', asi que una
+  // instalacion YA programada por la oficina (InstalacionesView.vue la
+  // distingue con su propio estado "Programada") se veia identica a una sin
+  // tocar todavia en la app de Campo — el tecnico no podia distinguirlas.
+  // 'en_proceso' ya existe para tickets "en curso"; es el bucket mas cercano
+  // a "esto ya esta en marcha" para una instalacion agendada.
+  if (i.status === 'scheduled') return 'en_proceso';
   return 'pendiente';
 }
 
@@ -129,7 +136,7 @@ function withTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Pro
   ]);
 }
 
-function isNetworkError(e: unknown) {
+export function isNetworkError(e: unknown) {
   if (e instanceof TypeError) return true;
   if (e instanceof Error) return /network|fetch|failed to fetch|internet/i.test(e.message);
   return false;
@@ -263,7 +270,21 @@ export const useCampoStore = defineStore('campo', () => {
       }
     }
 
+    // Si un intento anterior de este mismo cierre subio algunas fotos y
+    // fallo a mitad de camino (red cortada), reintentar volvia a subir TODAS
+    // las fotos de nuevo — las que ya habian quedado guardadas terminaban
+    // duplicadas (insert, no upsert, sin tope de una fila por categoria).
+    // Este chequeo hace el reintento idempotente: una foto cuya categoria ya
+    // quedo guardada se salta.
+    const { data: existingPhotos } = await supabase
+      .from('work_order_photos')
+      .select('category')
+      .eq('job_type', input.jobType)
+      .eq('job_id', input.jobId);
+    const alreadyUploaded = new Set((existingPhotos ?? []).map((p) => p.category));
+
     for (const photo of input.photos) {
+      if (alreadyUploaded.has(photo.category)) continue;
       const ext = photo.file.name.includes('.') ? photo.file.name.split('.').pop() : 'jpg';
       const path = `${input.jobType}/${input.jobId}/${photo.category}-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, photo.file, { upsert: false });

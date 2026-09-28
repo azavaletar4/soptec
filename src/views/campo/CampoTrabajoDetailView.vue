@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import SignaturePad from '@/components/campo/SignaturePad.vue';
 import QrScannerModal from '@/components/campo/QrScannerModal.vue';
-import { useCampoStore, type DiagnosticoResult } from '@/stores/campo';
+import { useCampoStore, isNetworkError, type DiagnosticoResult } from '@/stores/campo';
 import { useOltStore } from '@/stores/olt';
 import { useInventoryStore } from '@/stores/inventory';
 import { useClientsStore } from '@/stores/clients';
@@ -127,7 +127,13 @@ async function runDiagnostico() {
   try {
     diagnostico.value = await campoStore.runDiagnostico(trabajo.value.clientId, trabajo.value.contractId);
   } catch (e) {
-    diagError.value = getErrorMessage(e, 'No se pudo ejecutar el diagnóstico');
+    // A diferencia del cierre de trabajo, esto necesita hablar con la OLT en
+    // vivo — no se puede "guardar para mas tarde" como las fotos. Lo minimo
+    // que si se puede hacer es distinguir "sin señal, reintenta" de un error
+    // real, para no mandar al tecnico a buscar un problema que no existe.
+    diagError.value = isNetworkError(e)
+      ? 'Sin señal por ahora — revisa tu conexión y toca "Diagnóstico express" de nuevo.'
+      : getErrorMessage(e, 'No se pudo ejecutar el diagnóstico');
   } finally {
     diagLoading.value = false;
   }
@@ -206,7 +212,9 @@ async function handleProvision() {
     provisionResult.value = { rxPower: result.rx_power, txPower: result.tx_power };
     closureForm.value.ontSerial = provisionForm.value.serial;
   } catch (e) {
-    provisionError.value = getErrorMessage(e, 'Error al registrar la ONT en la OLT (revisa perfiles y puerto)');
+    provisionError.value = isNetworkError(e)
+      ? 'Sin señal por ahora — el registro en la OLT necesita conexión en el momento, no se puede dejar pendiente. Revisa tu señal y toca "Registrar" de nuevo.'
+      : getErrorMessage(e, 'Error al registrar la ONT en la OLT (revisa perfiles y puerto)');
   } finally {
     provisioning.value = false;
   }
@@ -293,6 +301,14 @@ function onPhotoChange(category: string, event: Event) {
 
 async function handleCloseSubmit() {
   if (!trabajo.value) return;
+  // Prueba de servicio entregado: en una instalacion NUEVA la firma del
+  // cliente es obligatoria (sin ella no queda constancia de que acepto el
+  // trabajo). En una averia/soporte sigue siendo opcional — a veces se
+  // resuelve remoto o el cliente no esta presente.
+  if (jobType === 'installation' && !signatureBlob.value) {
+    closeError.value = 'Falta la firma del cliente para completar la instalación.';
+    return;
+  }
   closing.value = true;
   closeError.value = null;
   closeResult.value = null;
@@ -532,6 +548,9 @@ async function handleCloseSubmit() {
 
         <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
 
+        <label class="block text-xs text-slate-600 mb-1">
+          Firma del cliente<span v-if="jobType === 'installation'" class="text-red-500"> *</span>
+        </label>
         <SignaturePad @change="(b) => (signatureBlob = b)" />
 
         <p v-if="closeError" class="text-sm text-red-600 mt-3">{{ closeError }}</p>
