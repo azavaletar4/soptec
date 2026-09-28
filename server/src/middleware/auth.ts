@@ -21,6 +21,26 @@ declare module 'hono' {
 // llaves publicas automaticamente (y las refresca si rotan).
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
+// requireAuth corre en CADA request autenticado — sin cache, cada clic en el
+// panel dispara una consulta a profiles solo para leer el rol. 60s de cache
+// (mismo patron que xuiService.ts) recorta esa latencia sin dejar una cuenta
+// desactivada/con rol cambiado colgada por mucho tiempo (un admin que
+// desactiva a alguien lo ve tomar efecto en <=60s, no al instante, pero
+// tampoco arrastrado por minutos).
+const PROFILE_TTL_MS = 60 * 1000;
+const profileCache = new Map<string, { role: Role; active: boolean; cachedAt: number }>();
+
+function getCachedProfile(userId: string): { role: Role; active: boolean } | null {
+  const entry = profileCache.get(userId);
+  if (!entry || Date.now() - entry.cachedAt >= PROFILE_TTL_MS) return null;
+  return entry;
+}
+
+/** Llamar despues de cambiar el rol o desactivar/activar a alguien (routes/users.ts) — si no, el cambio tarda hasta 60s en verse reflejado. */
+export function invalidateProfileCache(userId: string) {
+  profileCache.delete(userId);
+}
+
 function getJwks() {
   if (jwks) return jwks;
 
@@ -46,7 +66,11 @@ export async function requireAuth(c: Context, next: Next) {
   let userId: string | undefined;
   let email: string | undefined;
   try {
-    const { payload } = await jwtVerify(token, getJwks());
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const { payload } = await jwtVerify(token, getJwks(), {
+      issuer: supabaseUrl ? `${supabaseUrl}/auth/v1` : undefined,
+      audience: 'authenticated',
+    });
     userId = typeof payload.sub === 'string' ? payload.sub : undefined;
     email = typeof payload.email === 'string' ? payload.email : undefined;
   } catch (e) {
@@ -56,20 +80,21 @@ export async function requireAuth(c: Context, next: Next) {
 
   if (!userId) return c.json({ error: 'Token invalido' }, 401);
 
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('role, active')
-    .eq('id', userId)
-    .maybeSingle();
+  let profile = getCachedProfile(userId);
+  if (!profile) {
+    const { data } = await supabaseAdmin.from('profiles').select('role, active').eq('id', userId).maybeSingle();
+    profile = { role: (data?.role as Role | undefined) ?? 'CLIENTE', active: data?.active !== false };
+    profileCache.set(userId, { ...profile, cachedAt: Date.now() });
+  }
 
-  if (profile && profile.active === false) {
+  if (profile.active === false) {
     return c.json({ error: 'Esta cuenta esta desactivada' }, 401);
   }
 
   c.set('user', {
     id: userId,
     email,
-    role: (profile?.role as Role | undefined) ?? 'CLIENTE',
+    role: profile.role,
   });
 
   await next();

@@ -41,6 +41,33 @@ import { supabaseAdmin } from '../src/lib/supabaseAdmin';
 import { runTelnetCommands } from '../src/telnet/client';
 import { setTr069AcsCommands } from '../src/ssh/zteCommands';
 
+/**
+ * Este script corre como proceso Node aparte del backend (pm2 smartrayco-api),
+ * asi que el candado en memoria de oltTelnetLock.ts (server/src/services/) no
+ * lo puede ver ni serializar contra el. Si el backend esta corriendo al mismo
+ * tiempo (scheduler automatico o un tecnico haciendo una accion en el panel),
+ * las dos sesiones Telnet a la vez pueden repetir el incidente real del
+ * 2026-09-11 (8/19 puertos fallaron por timeouts). Por eso, antes de escribir
+ * en la OLT (--apply --yes) se verifica que el backend NO este respondiendo en
+ * este puerto — si esta arriba, se aborta y se pide detenerlo primero.
+ */
+async function assertBackendIsDown(): Promise<void> {
+  const port = process.env.PORT ? Number(process.env.PORT) : 3001;
+  try {
+    const res = await fetch(`http://localhost:${port}/api/health`, { signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      throw new Error(
+        `El backend (smartrayco-api) esta corriendo en localhost:${port}. Detenlo antes de aplicar ` +
+          `cambios en la OLT desde este script (pm2 stop smartrayco-api), para no abrir dos sesiones ` +
+          `Telnet a la vez contra el mismo equipo. Vuelve a correr con --apply --yes despues de detenerlo.`,
+      );
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('El backend')) throw e;
+    // fetch fallo (conexion rechazada / timeout): asumimos que el backend esta abajo, seguimos.
+  }
+}
+
 interface Args {
   set: string | null;
   apply: boolean;
@@ -145,6 +172,8 @@ async function main() {
     );
     return;
   }
+
+  if (staleOnts.length > 0) await assertBackendIsDown();
 
   for (const p of staleProfiles) {
     const { error } = await supabaseAdmin.from('olt_tr069_acs_profiles').update({ acs_url: args.set }).eq('id', p.id);

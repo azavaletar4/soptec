@@ -9,10 +9,23 @@ const NBI = process.env.GENIEACS_NBI || 'http://localhost:7557';
 export const genieacsRoutes = new Hono();
 
 const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
+// Mismo set que genieacsSync.ts (PPP_WRITE) — SOPORTE puede leer pero no
+// escribir/reiniciar/borrar equipos de TR-069. Antes este proxy dejaba
+// pasar CUALQUIER metodo (incluido POST /devices/:id/tasks, DELETE, etc.)
+// con solo STAFF_READ, saltandose esa restriccion (ver revision de
+// seguridad 2026-09-28).
+const WRITE_ROLES = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
 genieacsRoutes.use('*', requireAuth, requireRole(...STAFF_READ));
 
 genieacsRoutes.all('*', async (c) => {
+  if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
+    const user = c.get('user');
+    if (!user || !(WRITE_ROLES as readonly string[]).includes(user.role)) {
+      return c.json({ error: 'No tienes permisos para esta accion' }, 403);
+    }
+  }
+
   const rawUrl = new URL(c.req.url);
   const prefix = '/api/genieacs';
   const subPath = rawUrl.pathname.startsWith(prefix) ? rawUrl.pathname.slice(prefix.length) || '/' : rawUrl.pathname;

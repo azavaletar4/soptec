@@ -25,12 +25,79 @@ export interface ZteInterfaceRef {
   port: number;
 }
 
-function oltInterface({ shelf, slot, port }: ZteInterfaceRef): string {
+/**
+ * runTelnetCommands (server/src/telnet/client.ts) manda cada string de estos
+ * arrays tal cual, terminado en "\r\n", directo al CLI de la OLT real. Un
+ * valor que venga de un campo del formulario (descripcion, serial, VLAN...)
+ * con un salto de linea incrustado cortaria el comando antes de tiempo y
+ * haria que el resto se ejecute como uno o mas comandos CLI aparte contra el
+ * equipo real (10.15.15.2, ~675 clientes) — estas funciones son la unica
+ * barrera antes de eso, asi que TODO valor no controlado por este archivo
+ * (no venga de un literal fijo como 'enable'/'exit') debe pasar por aqui.
+ */
+function sanitizeIdentifier(value: string, fieldName: string, maxLen = 64): string {
+  const v = String(value).trim();
+  if (!v) throw new Error(`${fieldName} no puede estar vacio`);
+  if (v.length > maxLen) throw new Error(`${fieldName} es demasiado largo (maximo ${maxLen} caracteres)`);
+  // Identificadores tecnicos (serial, tipo de ONU, nombre de perfil): solo
+  // letras/numeros/guion/guion-bajo/punto — nada que pueda alterar el CLI.
+  if (!/^[A-Za-z0-9_.-]+$/.test(v)) {
+    throw new Error(`${fieldName} tiene caracteres no permitidos (solo letras, numeros, "-", "_" y ".")`);
+  }
+  return v;
+}
+
+function sanitizeFreeText(value: string, fieldName: string, maxLen = 100): string {
+  // Texto libre (ej. descripcion): se permite casi cualquier caracter, pero
+  // se quitan saltos de linea / tabs / caracteres de control y comillas
+  // dobles (que ya rompian el comando `description "..."`).
+  const cleaned = String(value)
+    .replace(/[\r\n\t\x00-\x1f\x7f]/g, ' ')
+    .replace(/"/g, "'")
+    .trim();
+  if (cleaned.length > maxLen) throw new Error(`${fieldName} es demasiado largo (maximo ${maxLen} caracteres)`);
+  return cleaned;
+}
+
+function sanitizeInt(value: number, fieldName: string, opts: { min?: number; max?: number } = {}): number {
+  const n = Number(value);
+  if (!Number.isInteger(n)) throw new Error(`${fieldName} debe ser un numero entero`);
+  if (opts.min != null && n < opts.min) throw new Error(`${fieldName} debe ser >= ${opts.min}`);
+  if (opts.max != null && n > opts.max) throw new Error(`${fieldName} debe ser <= ${opts.max}`);
+  return n;
+}
+
+function sanitizeAcsUrl(value: string): string {
+  const v = String(value).trim();
+  if (/[\r\n\t\x00-\x1f\x7f\s]/.test(v)) throw new Error('acsUrl no puede contener espacios ni saltos de linea');
+  let parsed: URL;
+  try {
+    parsed = new URL(v);
+  } catch {
+    throw new Error('acsUrl no es una URL valida (ej. http://192.168.1.10:7547)');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('acsUrl debe usar http:// o https://');
+  }
+  return v;
+}
+
+function safeRef({ shelf, slot, port }: ZteInterfaceRef): ZteInterfaceRef {
+  return {
+    shelf: sanitizeInt(shelf, 'shelf', { min: 0, max: 31 }),
+    slot: sanitizeInt(slot, 'slot', { min: 0, max: 31 }),
+    port: sanitizeInt(port, 'port', { min: 0, max: 127 }),
+  };
+}
+
+function oltInterface(ref: ZteInterfaceRef): string {
+  const { shelf, slot, port } = safeRef(ref);
   return `gpon-olt_${shelf}/${slot}/${port}`;
 }
 
 function onuInterface(ref: ZteInterfaceRef, onuId: number): string {
-  return `gpon-onu_${ref.shelf}/${ref.slot}/${ref.port}:${onuId}`;
+  const { shelf, slot, port } = safeRef(ref);
+  return `gpon-onu_${shelf}/${slot}/${port}:${onuId}`;
 }
 
 export function testConnectionCommands(): string[] {
@@ -79,23 +146,28 @@ export function listUnconfiguredOntsCommands(): string[] {
  * "veip" casi siempre es 1 (una sola interfaz virtual de gestion por ONU).
  */
 export function setTr069AcsCommands(ref: ZteInterfaceRef, onuId: number, veip: number, acsUrl: string): string[] {
+  const safeOnuId = sanitizeInt(onuId, 'onuId', { min: 0, max: 127 });
+  const safeVeip = sanitizeInt(veip, 'veip', { min: 1, max: 8 });
+  const safeAcsUrl = sanitizeAcsUrl(acsUrl);
   return [
     'enable',
     'configure terminal',
-    `pon-onu-mng ${onuInterface(ref, onuId)}`,
-    `tr069-mgmt ${veip} acs ${acsUrl}`,
-    `tr069-mgmt ${veip} state unlock`,
+    `pon-onu-mng ${onuInterface(ref, safeOnuId)}`,
+    `tr069-mgmt ${safeVeip} acs ${safeAcsUrl}`,
+    `tr069-mgmt ${safeVeip} state unlock`,
     'exit',
   ];
 }
 
 /** Desactiva la gestion TR-069 de una ONT (sin borrar la URL configurada). */
 export function disableTr069Commands(ref: ZteInterfaceRef, onuId: number, veip: number): string[] {
+  const safeOnuId = sanitizeInt(onuId, 'onuId', { min: 0, max: 127 });
+  const safeVeip = sanitizeInt(veip, 'veip', { min: 1, max: 8 });
   return [
     'enable',
     'configure terminal',
-    `pon-onu-mng ${onuInterface(ref, onuId)}`,
-    `tr069-mgmt ${veip} state lock`,
+    `pon-onu-mng ${onuInterface(ref, safeOnuId)}`,
+    `tr069-mgmt ${safeVeip} state lock`,
     'exit',
   ];
 }
@@ -119,14 +191,20 @@ export function registerOntCommands(params: {
   trafficProfile: string;
 }): string[] {
   const { ref, onuId, serial, onuType, vlan, description, tcontProfile, trafficProfile } = params;
-  const safeDesc = description.replace(/"/g, "'");
+  const safeOnuId = sanitizeInt(onuId, 'onuId', { min: 0, max: 127 });
+  const safeSerial = sanitizeIdentifier(serial, 'serial', 32);
+  const safeOnuType = sanitizeIdentifier(onuType, 'onuType', 32);
+  const safeVlan = sanitizeInt(vlan, 'vlan', { min: 1, max: 4094 });
+  const safeTcontProfile = sanitizeIdentifier(tcontProfile, 'tcontProfile', 64);
+  const safeTrafficProfile = sanitizeIdentifier(trafficProfile, 'trafficProfile', 64);
+  const safeDesc = sanitizeFreeText(description, 'description', 100);
   return [
     'enable',
     'configure terminal',
     `interface ${oltInterface(ref)}`,
-    `onu ${onuId} type ${onuType} sn ${serial}`,
+    `onu ${safeOnuId} type ${safeOnuType} sn ${safeSerial}`,
     'exit',
-    `interface ${onuInterface(ref, onuId)}`,
+    `interface ${onuInterface(ref, safeOnuId)}`,
     `description "${safeDesc}"`,
     // "tcont 1 name ..." (sin perfil) es rechazado por el firmware real
     // ("Incomplete command") y deja la ONU sin ancho de banda real, aunque
@@ -134,10 +212,10 @@ export function registerOntCommands(params: {
     // real. Los perfiles (ej. "SMARTOLT-100M-UP"/"SMARTOLT-100M-DOWN") ya
     // existen en la OLT (heredados de SmartOLT); listarlos con
     // "show gpon profile tcont" / "show gpon profile traffic".
-    `tcont 1 profile ${tcontProfile}`,
+    `tcont 1 profile ${safeTcontProfile}`,
     'gemport 1 tcont 1',
-    `gemport 1 traffic-limit downstream ${trafficProfile}`,
-    `service-port 1 vport 1 user-vlan ${vlan} vlan ${vlan}`,
+    `gemport 1 traffic-limit downstream ${safeTrafficProfile}`,
+    `service-port 1 vport 1 user-vlan ${safeVlan} vlan ${safeVlan}`,
     'exit',
   ];
 }
@@ -158,32 +236,37 @@ export function changeOntProfileCommands(
   tcontProfile: string,
   trafficProfile: string,
 ): string[] {
+  const safeOnuId = sanitizeInt(onuId, 'onuId', { min: 0, max: 127 });
+  const safeTcontProfile = sanitizeIdentifier(tcontProfile, 'tcontProfile', 64);
+  const safeTrafficProfile = sanitizeIdentifier(trafficProfile, 'trafficProfile', 64);
   return [
     'enable',
     'configure terminal',
-    `interface ${onuInterface(ref, onuId)}`,
-    `tcont 1 profile ${tcontProfile}`,
-    `gemport 1 traffic-limit downstream ${trafficProfile}`,
+    `interface ${onuInterface(ref, safeOnuId)}`,
+    `tcont 1 profile ${safeTcontProfile}`,
+    `gemport 1 traffic-limit downstream ${safeTrafficProfile}`,
     'exit',
   ];
 }
 
 export function setAdminStateCommands(ref: ZteInterfaceRef, onuId: number, enable: boolean): string[] {
+  const safeOnuId = sanitizeInt(onuId, 'onuId', { min: 0, max: 127 });
   return [
     'enable',
     'configure terminal',
     `interface ${oltInterface(ref)}`,
-    `onu ${onuId} admin-state ${enable ? 'enable' : 'disable'}`,
+    `onu ${safeOnuId} admin-state ${enable ? 'enable' : 'disable'}`,
     'exit',
   ];
 }
 
 export function deleteOntCommands(ref: ZteInterfaceRef, onuId: number): string[] {
+  const safeOnuId = sanitizeInt(onuId, 'onuId', { min: 0, max: 127 });
   return [
     'enable',
     'configure terminal',
     `interface ${oltInterface(ref)}`,
-    `no onu ${onuId}`,
+    `no onu ${safeOnuId}`,
     'exit',
   ];
 }

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireRole, invalidateProfileCache } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import type { Role } from '../types';
 
@@ -123,6 +123,10 @@ usersRoutes.patch('/:id', requireRole(...MANAGE), async (c) => {
       const message = /duplicate key|unique/i.test(error.message) ? 'Ese nombre de usuario ya esta en uso' : error.message;
       return c.json({ error: message }, 400);
     }
+    // Sin esto, un rol cambiado o una cuenta recien desactivada seguiria
+    // actuando con los permisos viejos hasta 60s (ver PROFILE_TTL_MS en
+    // middleware/auth.ts) en vez de quedar sin efecto al instante.
+    if (body.role !== undefined || body.active !== undefined) invalidateProfileCache(id);
   }
 
   if (typeof body.password === 'string' && body.password.length > 0) {
