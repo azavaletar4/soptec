@@ -206,6 +206,14 @@ const router = createRouter({
       component: () => import('@/views/mikrotik/MikrotikDetailView.vue'),
       meta: { requiresAuth: true, roles: NOT_TECNICO },
     },
+    {
+      path: '/servidores',
+      name: 'servidores',
+      component: () => import('@/views/servidores/ServidoresView.vue'),
+      // Pedido explicito: exclusivo ADMIN/SUPERADMIN (ni siquiera el resto
+      // de NOT_TECNICO) — encender/apagar VMs no es para todo el staff.
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
+    },
   ],
 });
 
