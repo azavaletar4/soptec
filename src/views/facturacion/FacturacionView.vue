@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import FacturacionZoneAccordion, { type ZoneGroup } from '@/components/facturacion/FacturacionZoneAccordion.vue';
+import ConfirmModal from '@/components/ConfirmModal.vue';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useContractsStore } from '@/stores/contracts';
 import { useAuthStore } from '@/stores/auth';
@@ -143,6 +144,7 @@ const STATUS_TABS: { value: InvoiceStatus | 'overdue' | 'all'; label: string }[]
   { value: 'pending', label: 'Pendientes' },
   { value: 'overdue', label: 'Vencidas' },
   { value: 'paid', label: 'Pagadas' },
+  { value: 'exonerada', label: 'Exoneradas' },
   { value: 'cancelled', label: 'Canceladas' },
 ];
 
@@ -242,20 +244,41 @@ function openEdit(inv: Invoice) {
     status: inv.status,
     payment_method: inv.payment_method || 'cash',
   };
-  contractFilter.value = '';
+  // Antes quedaba vacio y el selector mostraba los primeros 30 contratos
+  // "porque si" (sin relacion con esta factura) — de ahi que aparecieran
+  // contratos de otros clientes al editar. Precargado con el nombre del
+  // cliente de ESTA factura, el selector arranca ya filtrado a su(s)
+  // contrato(s); si de verdad hace falta reasignarla a otro cliente, se
+  // puede borrar el texto y buscar otro.
+  contractFilter.value = inv.clients ? `${inv.clients.first_name} ${inv.clients.last_name}` : '';
   formError.value = null;
   showModal.value = true;
 }
 
 function onContractChange() {
   const contract = activeContracts.value.find((c) => c.id === form.value.contract_id);
-  if (contract && !editingInvoice.value) form.value.amount = Number(contract.monthly_fee);
+  if (!contract || editingInvoice.value) return;
+  // Servicio marcado como cortesia (ver "Servicio gratuito" en la ficha del
+  // contrato): la factura nace ya exonerada, en S/0, en vez de que alguien
+  // tenga que "registrar un pago de S/0" a mano cada mes.
+  if (contract.is_courtesy) {
+    form.value.status = 'exonerada';
+    form.value.amount = 0;
+  } else {
+    form.value.status = 'pending';
+    form.value.amount = Number(contract.monthly_fee);
+  }
 }
 
 async function handleSubmit() {
+  if (saving.value) return;
   const contract = [...activeContracts.value, ...contractsStore.contracts].find((c) => c.id === form.value.contract_id);
   if (!contract) {
     formError.value = 'Selecciona un contrato';
+    return;
+  }
+  if (form.value.status !== 'exonerada' && (!form.value.amount || form.value.amount <= 0)) {
+    formError.value = 'El monto debe ser mayor a S/ 0.00 (usa el estado "Exonerada" para servicios de cortesía)';
     return;
   }
   saving.value = true;
@@ -308,11 +331,15 @@ async function handleSubmit() {
       await invoicesStore.createInvoice({
         contract_id: contract.id,
         client_id: contract.client_id,
-        amount: form.value.amount,
+        amount: form.value.status === 'exonerada' ? 0 : form.value.amount,
         period_start: form.value.period_start,
         period_end: form.value.period_end,
         due_date: form.value.due_date,
         notes: form.value.notes || null,
+        // Solo 'pending' (por defecto) o 'exonerada' pueden nacer asi — 'paid'
+        // debe pasar siempre por markPaid (registra amount_paid e intenta
+        // reactivar el servicio si estaba en corte por deuda).
+        status: form.value.status === 'exonerada' ? 'exonerada' : 'pending',
       });
     }
     showModal.value = false;
@@ -341,7 +368,14 @@ async function openPay(inv: Invoice) {
 }
 
 async function handlePay() {
-  if (!payModal.value) return;
+  if (!payModal.value || paying.value) return;
+  // Los servicios gratuitos ya se manejan aparte (factura nace 'exonerada',
+  // nunca llega a este modal) — un pago en S/0 aca siempre es un descuido
+  // (doble clic, campo vaciado sin querer), nunca un caso legitimo.
+  if (!payAmount.value || payAmount.value <= 0) {
+    payError.value = 'El monto recibido debe ser mayor a S/ 0.00';
+    return;
+  }
   paying.value = true;
   payError.value = null;
   try {
@@ -430,25 +464,49 @@ async function handleAveriaSubmit() {
   }
 }
 
-async function handleCancel(inv: Invoice) {
-  const ok = confirm(`¿Cancelar la factura ${inv.invoice_number}?`);
-  if (!ok) return;
+// Confirmacion propia del diseno de la app (ConfirmModal) en vez de
+// confirm()/alert() nativos del navegador — separa ademas visualmente
+// "Cancelar" (reversible) de "Eliminar" (irreversible, boton rojo aparte).
+const cancelTarget = ref<Invoice | null>(null);
+const deleteTarget = ref<Invoice | null>(null);
+const cancelingInvoice = ref(false);
+const deletingInvoice = ref(false);
+const confirmActionError = ref<string | null>(null);
+
+function askCancel(inv: Invoice) {
+  confirmActionError.value = null;
+  cancelTarget.value = inv;
+}
+function askDelete(inv: Invoice) {
+  confirmActionError.value = null;
+  deleteTarget.value = inv;
+}
+
+async function confirmCancel() {
+  if (!cancelTarget.value) return;
+  cancelingInvoice.value = true;
   try {
-    await invoicesStore.cancelInvoice(inv.id);
+    await invoicesStore.cancelInvoice(cancelTarget.value.id);
+    cancelTarget.value = null;
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al cancelar la factura'));
+    confirmActionError.value = getErrorMessage(e, 'Error al cancelar la factura');
+  } finally {
+    cancelingInvoice.value = false;
   }
 }
 
 // Borrado definitivo — solo SUPERADMIN (ver isSuperadmin), para limpiar
 // facturas de prueba. La RLS (Fase 35) tambien lo exige a nivel de base.
-async function handleDelete(inv: Invoice) {
-  const ok = confirm(`¿Eliminar definitivamente la factura ${inv.invoice_number}? Esta acción no se puede deshacer.`);
-  if (!ok) return;
+async function confirmDelete() {
+  if (!deleteTarget.value) return;
+  deletingInvoice.value = true;
   try {
-    await invoicesStore.deleteInvoice(inv.id);
+    await invoicesStore.deleteInvoice(deleteTarget.value.id);
+    deleteTarget.value = null;
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al eliminar la factura'));
+    confirmActionError.value = getErrorMessage(e, 'Error al eliminar la factura');
+  } finally {
+    deletingInvoice.value = false;
   }
 }
 </script>
@@ -537,10 +595,10 @@ async function handleDelete(inv: Invoice) {
         :is-superadmin="isSuperadmin"
         @toggle="toggleZone(group.zoneKey)"
         @pay="openPay"
-        @cancel="handleCancel"
+        @cancel="askCancel"
         @recibo="openRecibo"
         @edit="openEdit"
-        @delete="handleDelete"
+        @delete="askDelete"
         @go-client="(id) => router.push(`/clientes/${id}`)"
       />
     </template>
@@ -592,10 +650,12 @@ async function handleDelete(inv: Invoice) {
                 v-model.number="form.amount"
                 type="number"
                 step="0.01"
-                min="0"
+                :min="form.status === 'exonerada' ? 0 : 0.01"
                 required
-                class="field-input"
+                :disabled="form.status === 'exonerada'"
+                class="field-input disabled:bg-slate-100 disabled:text-slate-400"
               />
+              <p v-if="form.status === 'exonerada'" class="text-xs text-sky-600 mt-1">Servicio de cortesía: monto en S/0.</p>
             </div>
             <div>
               <label class="block text-xs text-slate-600 mb-1">Fecha de vencimiento</label>
@@ -603,13 +663,14 @@ async function handleDelete(inv: Invoice) {
             </div>
           </div>
 
-          <div v-if="editingInvoice" class="grid grid-cols-2 gap-3 mb-3">
+          <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label class="block text-xs text-slate-600 mb-1">Estado</label>
-              <select v-model="form.status" class="field-input">
+              <select v-model="form.status" class="field-input" @change="form.status === 'exonerada' && (form.amount = 0)">
                 <option value="pending">Pendiente</option>
-                <option value="paid">Pagada</option>
-                <option value="cancelled">Cancelada</option>
+                <option value="exonerada">Exonerada (cortesía)</option>
+                <option v-if="editingInvoice" value="paid">Pagada</option>
+                <option v-if="editingInvoice" value="cancelled">Cancelada</option>
               </select>
             </div>
             <div v-if="form.status === 'paid'">
@@ -661,7 +722,7 @@ async function handleDelete(inv: Invoice) {
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Monto recibido (S/)</label>
-            <input v-model.number="payAmount" type="number" step="0.01" min="0" required class="field-input" />
+            <input v-model.number="payAmount" type="number" step="0.01" min="0.01" required class="field-input" />
             <p v-if="payExcedente > 0" class="text-xs text-sky-600 mt-1">
               Sobrepago de S/ {{ payExcedente.toFixed(2) }} — se guardará como saldo a favor del cliente.
             </p>
@@ -841,6 +902,29 @@ async function handleDelete(inv: Invoice) {
         </form>
       </div>
     </Teleport>
+
+    <ConfirmModal
+      :open="!!cancelTarget"
+      title="Cancelar factura"
+      :message="`¿Cancelar la factura ${cancelTarget?.invoice_number}? El cliente ya no la vera como pendiente de cobro.`"
+      confirm-label="Sí, cancelar"
+      :loading="cancelingInvoice"
+      @confirm="confirmCancel"
+      @cancel="cancelTarget = null"
+    />
+    <ConfirmModal
+      :open="!!deleteTarget"
+      title="Eliminar factura"
+      :message="`¿Eliminar definitivamente la factura ${deleteTarget?.invoice_number}?`"
+      confirm-label="Sí, eliminar"
+      danger
+      :loading="deletingInvoice"
+      @confirm="confirmDelete"
+      @cancel="deleteTarget = null"
+    />
+    <p v-if="confirmActionError" class="fixed bottom-4 right-4 z-[70] bg-red-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg">
+      {{ confirmActionError }}
+    </p>
   </AppLayout>
 </template>
 

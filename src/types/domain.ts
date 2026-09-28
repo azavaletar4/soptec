@@ -13,7 +13,7 @@ export type TicketCategory =
   | 'equipment'
   | 'reconnection_relocation'
   | 'other';
-export type InvoiceStatus = 'pending' | 'paid' | 'cancelled';
+export type InvoiceStatus = 'pending' | 'paid' | 'cancelled' | 'exonerada';
 export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
 export type InventoryMovementType = 'ingreso' | 'egreso';
 export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired';
@@ -113,6 +113,9 @@ export interface ServiceContract {
   status: ContractStatus;
   /** Prioridad de atencion de ESTE servicio (Fase 41), en la pestaña "General". */
   priority: ContractPriority;
+  /** Servicio gratuito (Fase 47) — sus facturas se generan como 'exonerada' (S/0), no pasan por cobro. */
+  is_courtesy: boolean;
+  courtesy_reason: string | null;
   start_date: string;
   end_date: string | null;
   billing_day: number;

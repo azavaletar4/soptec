@@ -36,11 +36,13 @@ const STATUS_LABEL: Record<InvoiceStatus, string> = {
   pending: 'Pendiente',
   paid: 'Pagada',
   cancelled: 'Cancelada',
+  exonerada: 'Exonerada',
 };
 const STATUS_CLASS: Record<InvoiceStatus, string> = {
   pending: 'bg-yellow-500/15 text-yellow-600',
   paid: 'bg-green-500/15 text-green-600',
   cancelled: 'bg-slate-500/15 text-slate-600',
+  exonerada: 'bg-sky-500/15 text-sky-600',
 };
 
 function semaphoreClass(group: ZoneGroup) {
@@ -110,10 +112,14 @@ function semaphoreClass(group: ZoneGroup) {
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
               <template v-if="inv.status === 'pending'">
                 <button class="text-green-600 hover:text-green-700 text-xs" @click="$emit('pay', inv)">Marcar pagada</button>
-                <button class="text-red-500/80 hover:text-red-600 text-xs" @click="$emit('cancel', inv)">Cancelar</button>
+                <!-- "Cancelar" (reversible) en color neutro a proposito, distinto del
+                     rojo de "Eliminar" (irreversible) — antes ambos eran rojos y
+                     quedaban pegados cuando isSuperadmin, facil de tocar el que no era. -->
+                <button class="text-slate-600 hover:text-slate-900 text-xs" @click="$emit('cancel', inv)">Cancelar</button>
               </template>
               <button v-if="inv.status === 'paid'" class="text-sky-600 hover:text-sky-700 text-xs" @click="$emit('recibo', inv)">Imprimir recibo</button>
               <button v-if="isSuperadmin" class="text-slate-600 hover:text-slate-900 text-xs" @click="$emit('edit', inv)">Editar</button>
+              <span v-if="isSuperadmin" class="inline-block w-px h-3 bg-slate-300 align-middle mx-0.5"></span>
               <button v-if="isSuperadmin" class="text-red-500/80 hover:text-red-600 text-xs" @click="$emit('delete', inv)">Eliminar</button>
               <span v-if="inv.status === 'cancelled' && !isSuperadmin" class="text-xs text-slate-400">—</span>
             </td>

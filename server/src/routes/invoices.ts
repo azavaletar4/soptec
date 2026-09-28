@@ -40,15 +40,25 @@ invoicesRoutes.post('/:id/mark-paid', async (c) => {
   // monto, no contra el bruto.
   const { data: before, error: beforeErr } = await supabaseAdmin
     .from('invoices')
-    .select('amount_due, client_id')
+    .select('amount_due, client_id, status')
     .eq('id', id)
     .single();
   if (beforeErr || !before) return c.json({ error: beforeErr?.message ?? 'Factura no encontrada' }, 404);
+  if (before.status !== 'pending') {
+    return c.json({ error: `Esta factura ya no esta pendiente (estado actual: ${before.status}) — no se puede registrar el pago de nuevo` }, 409);
+  }
 
   const dueAmount = Number(before.amount_due);
   const paidAmount = amountPaid ?? dueAmount;
+  if (!(paidAmount > 0)) return c.json({ error: 'El monto pagado debe ser mayor a 0' }, 400);
   const excedente = paidAmount - dueAmount;
 
+  // .eq('status', 'pending') en el UPDATE (no solo en el select de arriba)
+  // cierra la ventana entre leer y escribir: si dos peticiones casi
+  // simultaneas (doble clic, reintento) llegan aca, solo la primera
+  // encuentra la fila todavia en 'pending' y la actualiza — la segunda no
+  // afecta ninguna fila (maybeSingle() devuelve null) y se corta antes de
+  // duplicar el excedente en el saldo del cliente.
   const { data: invoice, error: invErr } = await supabaseAdmin
     .from('invoices')
     .update({
@@ -59,22 +69,26 @@ invoicesRoutes.post('/:id/mark-paid', async (c) => {
       amount_due: 0,
     })
     .eq('id', id)
+    .eq('status', 'pending')
     .select(INVOICE_SELECT)
-    .single();
-  if (invErr || !invoice) return c.json({ error: invErr?.message ?? 'Factura no encontrada' }, 400);
+    .maybeSingle();
+  if (invErr) return c.json({ error: invErr.message }, 400);
+  if (!invoice) {
+    return c.json({ error: 'Esta factura ya fue marcada como pagada por otra accion al mismo tiempo — recarga la lista' }, 409);
+  }
 
   // Pago en exceso (por error o voluntario del cliente): el excedente pasa a
   // saldo a favor, disponible para la siguiente factura (aplicado por el
-  // trigger apply_invoice_credits al crearla).
+  // trigger apply_invoice_credits al crearla). increment_client_saldo suma
+  // en un solo UPDATE atomico en la base (Fase 48) — evita perder un
+  // sobrepago si dos pagos casi simultaneos del mismo cliente leian el
+  // mismo saldo de partida.
   if (excedente > 0) {
-    const { data: client, error: clientErr } = await supabaseAdmin
-      .from('clients')
-      .select('saldo_a_favor')
-      .eq('id', before.client_id)
-      .single();
-    if (!clientErr && client) {
-      const nuevoSaldo = Number(client.saldo_a_favor) + excedente;
-      await supabaseAdmin.from('clients').update({ saldo_a_favor: nuevoSaldo }).eq('id', before.client_id);
+    const { data: nuevoSaldo, error: saldoErr } = await supabaseAdmin.rpc('increment_client_saldo', {
+      p_client_id: before.client_id,
+      p_monto: excedente,
+    });
+    if (!saldoErr) {
       await supabaseAdmin.from('client_credit_movements').insert({
         client_id: before.client_id,
         tipo: 'pago_excedente',

@@ -159,6 +159,8 @@ const contractForm = ref({
   payment_method: 'cash',
   status: 'active' as ContractStatus,
   priority: 'medium' as ContractPriority,
+  is_courtesy: false,
+  courtesy_reason: '',
   mikrotik_device_id: '',
   pppoe_username: '',
   mikrotik_profile: '',
@@ -225,6 +227,8 @@ function fillFormFromContract(c: ServiceContract) {
     payment_method: c.payment_method ?? 'cash',
     status: c.status,
     priority: c.priority ?? 'medium',
+    is_courtesy: c.is_courtesy ?? false,
+    courtesy_reason: c.courtesy_reason ?? '',
     mikrotik_device_id: c.mikrotik_device_id ?? '',
     pppoe_username: c.pppoe_username ?? '',
     mikrotik_profile: c.mikrotik_profile ?? '',
@@ -384,6 +388,8 @@ async function handleSaveContract() {
     payment_method: contractForm.value.payment_method,
     status: contractForm.value.status,
     priority: contractForm.value.priority,
+    is_courtesy: contractForm.value.is_courtesy,
+    courtesy_reason: contractForm.value.is_courtesy ? contractForm.value.courtesy_reason.trim() || null : null,
     mikrotik_device_id: contractForm.value.mikrotik_device_id || null,
     pppoe_username: contractForm.value.pppoe_username || null,
     mikrotik_profile: contractForm.value.mikrotik_profile || null,
@@ -813,11 +819,13 @@ const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
   pending: 'Pendiente',
   paid: 'Pagada',
   cancelled: 'Cancelada',
+  exonerada: 'Exonerada',
 };
 const INVOICE_STATUS_CLASS: Record<InvoiceStatus, string> = {
   pending: 'bg-yellow-500/15 text-yellow-600',
   paid: 'bg-green-500/15 text-green-600',
   cancelled: 'bg-slate-500/15 text-slate-600',
+  exonerada: 'bg-sky-500/15 text-sky-600',
 };
 
 async function loadInvoices() {
@@ -1086,10 +1094,15 @@ async function handleIptvUnlink() {
 
 onMounted(async () => {
   if (!clientsStore.clients.length) await clientsStore.fetchClients();
+  // fetchContracts() trae TODOS los contratos de la empresa (hace falta para
+  // checkZoneCapacity, que cuenta cupo por zona contra todos los clientes,
+  // no solo este) — pero repetirlo cada vez que se abre la ficha de UN
+  // cliente es un viaje de red caro y evitable si ya se cargaron antes en
+  // esta sesion (mismo criterio que clientsStore arriba).
+  if (!contractsStore.contracts.length) await contractsStore.fetchContracts();
   await Promise.all([
     catalogs.fetchPlans(),
     catalogs.fetchZones(),
-    contractsStore.fetchContracts(),
     loadContract(),
     loadTickets(),
     loadInvoices(),
@@ -1326,13 +1339,28 @@ onMounted(async () => {
           <strong>{{ emissionDuePreview.due }}</strong> (vencimiento = emisión + 7 días).
         </div>
 
-        <div>
+        <div class="mb-3">
           <label class="block text-xs text-slate-600 mb-1">Metodo de pago</label>
           <select v-model="contractForm.payment_method" class="field-input">
             <option value="cash">Efectivo</option>
             <option value="transfer">Transferencia</option>
             <option value="card">Tarjeta</option>
           </select>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 px-3 py-2">
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="contractForm.is_courtesy" type="checkbox" class="h-4 w-4" />
+            Servicio gratuito (cortesía)
+          </label>
+          <p class="text-xs text-slate-500 mt-1">
+            Ej. módem de oficina, familiar o trabajador con beneficio. Las facturas que se generen para este
+            servicio quedan como "Exonerada" (S/ 0.00), sin pasar por "Registrar pago".
+          </p>
+          <div v-if="contractForm.is_courtesy" class="mt-2">
+            <label class="block text-xs text-slate-600 mb-1">Motivo</label>
+            <input v-model="contractForm.courtesy_reason" placeholder="Ej. módem de oficina" class="field-input" />
+          </div>
         </div>
       </div>
       </ClientSectionCard>
