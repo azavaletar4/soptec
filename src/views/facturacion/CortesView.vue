@@ -4,9 +4,11 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useDebtHoldStore, type ApplyResult } from '@/stores/debtHold';
 import { useAuthStore } from '@/stores/auth';
 import { useAsyncAction } from '@/composables/useAsyncAction';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import type { DebtHoldEvent, ServiceContract } from '@/types/domain';
 
+const { confirmDialog } = useConfirm();
 const debtHoldStore = useDebtHoldStore();
 const auth = useAuthStore();
 
@@ -33,7 +35,7 @@ const STATUS_LABEL: Record<string, string> = {
   suspended: 'Corte aplicado',
 };
 const STATUS_CLASS: Record<string, string> = {
-  pending: 'bg-amber-500/15 text-amber-600',
+  pending: 'bg-amber-500/15 text-amber-700',
   suspended: 'bg-red-500/15 text-red-600',
 };
 
@@ -58,7 +60,12 @@ function describeResult(result: ApplyResult): string | null {
 
 async function handleApply(contract: ServiceContract) {
   const clientName = contract.clients ? `${contract.clients.first_name} ${contract.clients.last_name}` : contract.contract_number;
-  if (!confirm(`¿Aplicar el corte por deuda a ${clientName} (${contract.contract_number})? Esto cambia su plan real en la OLT y su perfil PPPoE en MikroTik ahora mismo.`)) return;
+  const ok = await confirmDialog({
+    title: 'Aplicar corte por deuda',
+    message: `¿Aplicar el corte por deuda a ${clientName} (${contract.contract_number})? Esto cambia su plan real en la OLT y su perfil PPPoE en MikroTik ahora mismo.`,
+    danger: true,
+  });
+  if (!ok) return;
   actingId.value = contract.id;
   actionError.value = null;
   try {
@@ -74,7 +81,11 @@ async function handleApply(contract: ServiceContract) {
 
 async function handleReactivate(contract: ServiceContract) {
   const clientName = contract.clients ? `${contract.clients.first_name} ${contract.clients.last_name}` : contract.contract_number;
-  if (!confirm(`¿Reactivar a ${clientName} (${contract.contract_number})? Vuelve al plan contratado en la OLT y su perfil PPPoE original.`)) return;
+  const ok = await confirmDialog({
+    title: 'Reactivar servicio',
+    message: `¿Reactivar a ${clientName} (${contract.contract_number})? Vuelve al plan contratado en la OLT y su perfil PPPoE original.`,
+  });
+  if (!ok) return;
   actingId.value = contract.id;
   actionError.value = null;
   try {

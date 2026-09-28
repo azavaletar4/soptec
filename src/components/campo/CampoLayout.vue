@@ -3,6 +3,8 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useCampoStore } from '@/stores/campo';
+import ToastHost from '@/components/ToastHost.vue';
+import ConfirmHost from '@/components/ConfirmHost.vue';
 import logoIcon from '@/assets/logo-icon.png';
 
 withDefaults(defineProps<{ title: string; showBack?: boolean }>(), { showBack: false });
@@ -81,5 +83,8 @@ onBeforeUnmount(() => {
     <main class="flex-1 p-3 pb-8 max-w-lg w-full mx-auto">
       <slot />
     </main>
+
+    <ToastHost />
+    <ConfirmHost />
   </div>
 </template>

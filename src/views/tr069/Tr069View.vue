@@ -5,6 +5,7 @@ import { useTr069Store } from '@/stores/tr069';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useOltStore, type OltOnt } from '@/stores/olt';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import type { ServiceContract, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { WifiNetwork } from '@/stores/tr069';
@@ -13,6 +14,7 @@ const tr069Store = useTr069Store();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const oltStore = useOltStore();
+const { confirmDialog } = useConfirm();
 
 // Estado online/offline real de la ONU (olt_onts.status), por numero de
 // serie del CPE — distinto del "ultimo reporte" de GenieACS (ese es TR-069,
@@ -124,7 +126,11 @@ const rebootingId = ref<string | null>(null);
 const refreshingId = ref<string | null>(null);
 
 async function handleReboot(device: Tr069Device) {
-  if (!confirm(`¿Reiniciar el equipo ${device.cpe_serial}? El cliente va a perder internet unos minutos.`)) return;
+  const ok = await confirmDialog({
+    title: 'Reiniciar equipo',
+    message: `¿Reiniciar el equipo ${device.cpe_serial}? El cliente va a perder internet unos minutos.`,
+  });
+  if (!ok) return;
   rebootingId.value = device.id;
   actionError.value = null;
   actionMessage.value = null;
@@ -358,7 +364,7 @@ async function handleUnlink() {
               <td class="px-4 py-3 font-mono text-xs">{{ device.wan_ip ?? '—' }}</td>
               <td class="px-4 py-3">{{ device.ssid ?? '—' }}</td>
               <td class="px-4 py-3">
-                <span v-if="device.contracts" class="badge bg-sky-500/15 text-sky-600">{{ device.contracts.contract_number }}</span>
+                <span v-if="device.contracts" class="badge bg-sky-500/15 text-sky-700">{{ device.contracts.contract_number }}</span>
                 <span v-else class="text-slate-500 text-xs">Sin vincular</span>
               </td>
               <td class="px-4 py-3 text-slate-600">{{ formatDate(device.last_seen_at) }}</td>
@@ -381,7 +387,7 @@ async function handleUnlink() {
                 <div v-if="metricsLoadingId === device.id" class="text-xs text-slate-500">Consultando...</div>
                 <div v-else-if="!metricsById[device.id]" class="flex items-center justify-between">
                   <span class="text-xs text-slate-500">Sin métricas registradas todavía.</span>
-                  <button class="text-sky-600 hover:underline text-xs" @click="refreshDeviceMetrics(device)">Recolectar ahora</button>
+                  <button class="text-sky-700 hover:underline text-xs" @click="refreshDeviceMetrics(device)">Recolectar ahora</button>
                 </div>
                 <div v-else class="flex flex-wrap items-center gap-6 text-xs">
                   <div><span class="text-slate-500">Rx:</span> {{ metricsById[device.id]?.rx_power ?? '—' }} dBm</div>
@@ -482,7 +488,7 @@ async function handleUnlink() {
 
           <div class="mb-3">
             <p class="text-xs font-semibold text-slate-700 mb-2">WiFi</p>
-            <p v-if="!configLoadingCurrent && !configWifiNetworks.length" class="text-xs text-amber-600 mb-2">
+            <p v-if="!configLoadingCurrent && !configWifiNetworks.length" class="text-xs text-amber-700 mb-2">
               No se encontraron redes WiFi activas en el equipo.
             </p>
             <div v-if="configWifiNetworks.length" class="mb-2">

@@ -6,6 +6,7 @@ import type { TraceResult } from '@/stores/foFibra';
 import { useContractsStore } from '@/stores/contracts';
 import { ubicarHilo } from '@/lib/fiberColors';
 import type { Client, FoCable, FoFusionDestinoTipo, InfraElemento, ServiceContract } from '@/types/domain';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 
 const props = defineProps<{
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 
 const fibra = useFoFibraStore();
 const contractsStore = useContractsStore();
+const { confirmDialog } = useConfirm();
 const tab = ref<'fusiones' | 'puertos'>(props.soloPuertos ? 'puertos' : 'fusiones');
 const error = ref<string | null>(null);
 const saving = ref(false);
@@ -90,7 +92,8 @@ async function crearFusion() {
 }
 
 async function eliminarFusion(id: string) {
-  if (!confirm('¿Eliminar esta fusión?')) return;
+  const ok = await confirmDialog({ title: 'Eliminar fusión', message: '¿Eliminar esta fusión?', danger: true });
+  if (!ok) return;
   try {
     await fibra.deleteFusion(id);
   } catch (e) {
@@ -350,7 +353,7 @@ onMounted(() => {
               <div v-if="clienteActual" class="text-sm mb-2">
                 Cliente: <b>{{ clienteActual.first_name }} {{ clienteActual.last_name }}</b>
                 <span v-if="puertoActual?.service_contracts" class="text-xs text-slate-500 ml-1">({{ puertoActual.service_contracts.contract_number }})</span>
-                <span v-else class="text-xs text-amber-600 ml-1">(sin línea especificada)</span>
+                <span v-else class="text-xs text-amber-700 ml-1">(sin línea especificada)</span>
                 <button class="ml-2 text-red-600 hover:underline text-xs" @click="asignarCliente(null)">Quitar</button>
               </div>
               <div v-else-if="clientePendiente" class="mb-2">

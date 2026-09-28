@@ -5,6 +5,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useOltStore } from '@/stores/olt';
 import { useMapImportStore } from '@/stores/mapImport';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { INFRA_LABEL } from './mapIcons';
 
@@ -12,6 +13,7 @@ const catalogs = useCatalogsStore();
 const infraStore = useInfraElementosStore();
 const oltStore = useOltStore();
 const mapImport = useMapImportStore();
+const { confirmDialog } = useConfirm();
 
 const loadingBase = ref(true);
 const commitError = ref<string | null>(null);
@@ -35,9 +37,10 @@ async function handleFileChange(e: Event) {
 
 async function handleCommit() {
   commitError.value = null;
-  const ok = confirm(
-    `Vas a crear ${mapImport.totals.create} elemento(s) nuevo(s), actualizar ${mapImport.totals.update} y crear ${mapImport.totals.lines} cable(s) en la base de datos real. ¿Continuar?`,
-  );
+  const ok = await confirmDialog({
+    title: 'Confirmar importación',
+    message: `Vas a crear ${mapImport.totals.create} elemento(s) nuevo(s), actualizar ${mapImport.totals.update} y crear ${mapImport.totals.lines} cable(s) en la base de datos real. ¿Continuar?`,
+  });
   if (!ok) return;
   try {
     await mapImport.commit();
@@ -48,7 +51,11 @@ async function handleCommit() {
 
 async function handleRevert() {
   if (!mapImport.lastResult) return;
-  const ok = confirm('¿Deshacer esta importación? Se eliminarán solo los elementos y cables que ella creó (lo que solo actualizó posición no se toca).');
+  const ok = await confirmDialog({
+    title: 'Deshacer importación',
+    message: '¿Deshacer esta importación? Se eliminarán solo los elementos y cables que ella creó (lo que solo actualizó posición no se toca).',
+    danger: true,
+  });
   if (!ok) return;
   reverting.value = true;
   try {
@@ -126,7 +133,7 @@ function startOver() {
               <template v-for="folder in mapImport.preview" :key="folder.name">
                 <tr class="border-t border-slate-200 hover:bg-slate-50">
                   <td class="px-4 py-3">
-                    <button class="text-xs text-sky-600 hover:underline font-medium" @click="toggleExpanded(folder.name)">
+                    <button class="text-xs text-sky-700 hover:underline font-medium" @click="toggleExpanded(folder.name)">
                       {{ expanded[folder.name] ? '▾' : '▸' }} {{ folder.name }}
                     </button>
                   </td>
@@ -162,8 +169,8 @@ function startOver() {
                               class="badge shrink-0"
                               :class="{
                                 'bg-green-500/15 text-green-600': pp.match.action === 'create',
-                                'bg-sky-500/15 text-sky-600': pp.match.action === 'update',
-                                'bg-amber-500/15 text-amber-600': pp.match.action === 'conflict',
+                                'bg-sky-500/15 text-sky-700': pp.match.action === 'update',
+                                'bg-amber-500/15 text-amber-700': pp.match.action === 'conflict',
                               }"
                             >
                               {{ pp.match.action === 'create' ? 'Nuevo' : pp.match.action === 'update' ? 'Actualizar' : 'Conflicto' }}
@@ -205,7 +212,7 @@ function startOver() {
           <li v-if="mapImport.lastResult.skipped">⚠ {{ mapImport.lastResult.skipped }} omitido(s) (conflictos o errores)</li>
         </ul>
         <div v-if="mapImport.lastResult.errors.length" class="mb-4">
-          <p class="text-xs font-semibold text-amber-600 mb-1">Detalle de lo omitido:</p>
+          <p class="text-xs font-semibold text-amber-700 mb-1">Detalle de lo omitido:</p>
           <ul class="text-xs text-slate-500 space-y-0.5 max-h-40 overflow-y-auto">
             <li v-for="(err, i) in mapImport.lastResult.errors" :key="i">{{ err.ref }} — {{ err.message }}</li>
           </ul>

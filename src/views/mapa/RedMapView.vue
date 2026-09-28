@@ -14,6 +14,8 @@ import CableFormModal from './CableFormModal.vue';
 import CableHilosModal from './CableHilosModal.vue';
 import SpliceDiagramModal from './SpliceDiagramModal.vue';
 import { INFRA_STYLE, INFRA_LABEL, INACTIVE_COLOR, OLT_GLYPH, MIKROTIK_GLYPH, teardropIcon, infraIcon, permanentLabel } from './mapIcons';
+import { useConfirm } from '@/composables/useConfirm';
+import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import type { FoCable, FoCableTipo, FoFusion, FoNapPuerto, InfraElemento, InfraElementoTipo, LatLngPoint } from '@/types/domain';
 
@@ -25,6 +27,8 @@ const mikrotikStore = useMikrotikStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 const catalogs = useCatalogsStore();
+const { confirmDialog } = useConfirm();
+const toast = useToast();
 
 const loading = ref(true);
 const showOlt = ref(true);
@@ -135,7 +139,7 @@ async function undo() {
     redoStack.value.push(action);
   } catch (e) {
     undoStack.value.push(action);
-    alert(getErrorMessage(e, 'No se pudo deshacer la acción'));
+    toast.error(getErrorMessage(e, 'No se pudo deshacer la acción'));
   } finally {
     undoing.value = false;
   }
@@ -151,7 +155,7 @@ async function redo() {
     undoStack.value.push(action);
   } catch (e) {
     redoStack.value.push(action);
-    alert(getErrorMessage(e, 'No se pudo rehacer la acción'));
+    toast.error(getErrorMessage(e, 'No se pudo rehacer la acción'));
   } finally {
     undoing.value = false;
   }
@@ -188,7 +192,7 @@ function renderOltMarkers() {
         await oltStore.updateCoords(d.id, after.lat, after.lng);
         pushHistory({ kind: 'move', target: 'olt', id: d.id, before, after });
       } catch (e) {
-        alert(getErrorMessage(e, 'Error al guardar la posición de la OLT'));
+        toast.error(getErrorMessage(e, 'Error al guardar la posición de la OLT'));
       }
     });
     marker.addTo(oltLayer);
@@ -213,7 +217,7 @@ function renderMikrotikMarkers() {
         await mikrotikStore.updateDevice(d.id, { latitude: after.lat, longitude: after.lng });
         pushHistory({ kind: 'move', target: 'mikrotik', id: d.id, before, after });
       } catch (e) {
-        alert(getErrorMessage(e, 'Error al guardar la posición del router'));
+        toast.error(getErrorMessage(e, 'Error al guardar la posición del router'));
       }
     });
     marker.addTo(mikrotikLayer);
@@ -254,7 +258,7 @@ function renderInfraMarkers() {
         await infraStore.updateCoords(el.id, after.lat, after.lng);
         pushHistory({ kind: 'move', target: 'infra', id: el.id, before, after });
       } catch (e) {
-        alert(getErrorMessage(e, 'Error al guardar la posición'));
+        toast.error(getErrorMessage(e, 'Error al guardar la posición'));
       }
     });
     marker.addTo(infraLayer);
@@ -371,7 +375,7 @@ async function placeOlt(id: string) {
     await oltStore.updateCoords(id, Number(center.lat.toFixed(7)), Number(center.lng.toFixed(7)));
     renderOltMarkers();
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al ubicar la OLT'));
+    toast.error(getErrorMessage(e, 'Error al ubicar la OLT'));
   }
 }
 async function placeMikrotik(id: string) {
@@ -381,7 +385,7 @@ async function placeMikrotik(id: string) {
     await mikrotikStore.updateDevice(id, { latitude: Number(center.lat.toFixed(7)), longitude: Number(center.lng.toFixed(7)) });
     renderMikrotikMarkers();
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al ubicar el router'));
+    toast.error(getErrorMessage(e, 'Error al ubicar el router'));
   }
 }
 
@@ -500,7 +504,10 @@ async function handleDeleteInfra() {
   const cableWarning = cableLinks.length
     ? ` Tiene ${cableLinks.length} cable(s) conectados: quedarán sin ese extremo (podrás reconectarlos después desde el editor de cables).`
     : '';
-  const ok = confirm(`¿Eliminar "${infraForm.value.name}"?${cableWarning} Puedes deshacerlo con el botón "Deshacer" o Ctrl+Z.`);
+  const ok = await confirmDialog({
+    title: 'Eliminar elemento',
+    message: `¿Eliminar "${infraForm.value.name}"?${cableWarning} Puedes deshacerlo con el botón "Deshacer" o Ctrl+Z.`,
+  });
   if (!ok) return;
   infraSaving.value = true;
   try {
@@ -607,7 +614,7 @@ const pendingPath = ref<LatLngPoint[] | null>(null);
 
 function finishDrawing() {
   if (drawPoints.value.length < 2) {
-    alert('Traza al menos dos puntos para definir el cable.');
+    toast.error('Traza al menos dos puntos para definir el cable.');
     return;
   }
   pendingPath.value = [...drawPoints.value];
@@ -627,21 +634,26 @@ async function handleSaveCable(payload: Record<string, unknown>) {
     pendingPath.value = null;
     renderCables();
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al guardar el cable'));
+    toast.error(getErrorMessage(e, 'Error al guardar el cable'));
   }
 }
 
 async function handleDeleteCable(cableOverride?: FoCable) {
   const cable = cableOverride ?? editingCable.value;
   if (!cable) return;
-  if (!confirm(`¿Eliminar el cable "${cable.codigo}"? Se borrará también su traza, hilos y fusiones asociadas.`)) return;
+  const ok = await confirmDialog({
+    title: 'Eliminar cable',
+    message: `¿Eliminar el cable "${cable.codigo}"? Se borrará también su traza, hilos y fusiones asociadas.`,
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await fibra.deleteCable(cable.id);
     showCableForm.value = false;
     showCableHilos.value = false;
     renderCables();
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al eliminar el cable'));
+    toast.error(getErrorMessage(e, 'Error al eliminar el cable'));
   }
 }
 
@@ -699,7 +711,7 @@ function clearTrace() {
       <div>
         <div class="flex items-center gap-2">
           <h1 class="text-2xl font-semibold">Mapa de Red</h1>
-          <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-600 font-medium">Diseño de planta externa</span>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-700 font-medium">Diseño de planta externa</span>
         </div>
         <p class="text-slate-600 text-sm mt-1">
           {{ oltsWithGps.length }} OLTs · {{ mikrotiksWithGps.length }} MikroTiks · {{ infraStore.elementos.length }} elementos pasivos ·

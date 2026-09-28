@@ -6,6 +6,8 @@ import { useContractsStore } from '@/stores/contracts';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { useAsyncAction } from '@/composables/useAsyncAction';
+import { useConfirm } from '@/composables/useConfirm';
+import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { NAP_CLIENT_LIMIT, ZONE_CLIENT_LIMIT, ZONE_NAP_LIMIT, type Zone } from '@/types/domain';
 
@@ -13,6 +15,8 @@ const catalogs = useCatalogsStore();
 const contractsStore = useContractsStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
+const { confirmDialog } = useConfirm();
+const toast = useToast();
 
 // Antes: ref(true) + try/finally a mano, sin mostrar nada si fallaba. Con
 // useAsyncAction (arranque de la refactorizacion gradual del patron
@@ -33,7 +37,7 @@ const search = ref('');
 
 function fillClass(count: number, limit: number) {
   if (count >= limit) return 'bg-red-500/15 text-red-600';
-  if (count >= limit * 0.9) return 'bg-amber-500/15 text-amber-600';
+  if (count >= limit * 0.9) return 'bg-amber-500/15 text-amber-700';
   return 'bg-green-500/15 text-green-600';
 }
 
@@ -142,12 +146,16 @@ async function handleSubmit() {
 }
 
 async function handleDelete(zone: Zone) {
-  const ok = confirm(`¿Eliminar la zona "${zone.name}"? Esta acción no se puede deshacer.`);
+  const ok = await confirmDialog({
+    title: 'Eliminar zona',
+    message: `¿Eliminar la zona "${zone.name}"?`,
+    danger: true,
+  });
   if (!ok) return;
   try {
     await catalogs.deleteZone(zone.id);
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al eliminar la zona'));
+    toast.error(getErrorMessage(e, 'Error al eliminar la zona'));
   }
 }
 </script>
@@ -215,7 +223,7 @@ async function handleDelete(zone: Zone) {
               <td class="px-4 py-3">
                 <button
                   v-if="z.naps.length"
-                  class="inline-flex items-center gap-1 text-xs text-sky-600 hover:underline"
+                  class="inline-flex items-center gap-1 text-xs text-sky-700 hover:underline"
                   @click="toggleExpanded(z.zone.id)"
                 >
                   <span>{{ isExpanded(z.zone.id) ? '▾' : '▸' }}</span>
@@ -235,7 +243,7 @@ async function handleDelete(zone: Zone) {
                     <div class="flex items-center justify-between gap-2 mb-1.5">
                       <router-link
                         :to="`/mapa/red?nap=${n.id}`"
-                        class="text-xs font-medium text-slate-700 hover:text-sky-600 hover:underline truncate"
+                        class="text-xs font-medium text-slate-700 hover:text-sky-700 hover:underline truncate"
                         :title="`Ver ${n.name} en el mapa`"
                       >
                         {{ n.name }}
@@ -246,7 +254,7 @@ async function handleDelete(zone: Zone) {
                       <li v-for="c in n.clients" :key="c.id">
                         <router-link
                           :to="c.contractId ? `/clientes/${c.id}/servicios/${c.contractId}` : `/clientes/${c.id}`"
-                          class="block truncate text-xs text-sky-600 hover:underline"
+                          class="block truncate text-xs text-sky-700 hover:underline"
                           :title="c.name"
                         >
                           {{ c.name }} <span v-if="c.contractNumber" class="text-slate-400">({{ c.contractNumber }})</span>

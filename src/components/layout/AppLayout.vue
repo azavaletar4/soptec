@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import ToastHost from '@/components/ToastHost.vue';
+import ConfirmHost from '@/components/ConfirmHost.vue';
 import logoIcon from '@/assets/logo-icon.png';
 
 const auth = useAuthStore();
@@ -347,5 +349,8 @@ async function handleLogout() {
     <main class="flex-1 p-4 md:p-8 min-w-0">
       <slot />
     </main>
+
+    <ToastHost />
+    <ConfirmHost />
   </div>
 </template>

@@ -4,7 +4,10 @@ import VueApexCharts from 'vue3-apexcharts';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import { useProxmoxStore, type VmAction, type VmSummary, type VmType } from '@/stores/proxmox';
+import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
+
+const toast = useToast();
 
 const proxmoxStore = useProxmoxStore();
 const loadError = ref<string | null>(null);
@@ -71,9 +74,9 @@ function barTextClass(p: number): string {
 
 const STATUS_LABEL: Record<string, string> = { running: 'Encendida', stopped: 'Apagada', paused: 'Pausada' };
 const STATUS_CLASS: Record<string, string> = {
-  running: 'bg-emerald-500/15 text-emerald-600',
+  running: 'bg-emerald-500/15 text-emerald-700',
   stopped: 'bg-red-500/15 text-red-600',
-  paused: 'bg-amber-500/15 text-amber-600',
+  paused: 'bg-amber-500/15 text-amber-700',
 };
 
 function looksLikeSelf(vm: VmSummary): boolean {
@@ -107,7 +110,7 @@ const rrdCategories = computed(() => proxmoxStore.rrdData.map((p) => p.time * 10
 const cpuChartOptions = computed(() => ({
   ...chartBaseOptions,
   chart: { ...chartBaseOptions.chart, type: 'area' as const },
-  colors: ['#0ea5e9', '#f59e0b'],
+  colors: ['#0ea5e9', '#14b8a6'],
   fill: { type: 'gradient', gradient: { opacityFrom: 0.3, opacityTo: 0.02, stops: [0, 90, 100] } },
   xaxis: { type: 'datetime' as const, categories: rrdCategories.value, labels: { datetimeUTC: false } },
   yaxis: { min: 0, max: 100, labels: { formatter: (v: number) => `${v.toFixed(0)}%` } },
@@ -132,13 +135,25 @@ const ramChartSeries = computed(() => [
 // ---- Acciones de energia ----
 const pendingAction = ref<{ vm: VmSummary; action: VmAction } | null>(null);
 const running = ref(false);
-const actionError = ref<string | null>(null);
 const ACTION_LABEL: Record<VmAction, string> = { start: 'Iniciar', shutdown: 'Apagar', reboot: 'Reiniciar' };
 
 function askAction(vm: VmSummary, action: VmAction) {
-  actionError.value = null;
   pendingAction.value = { vm, action };
 }
+
+// Apagar Y reiniciar cortan el servicio real de esa VM aunque sea un
+// segundo — las dos merecen el boton rojo, no solo "Apagar".
+const confirmDanger = computed(() => pendingAction.value?.action === 'shutdown' || pendingAction.value?.action === 'reboot');
+
+const confirmMessage = computed(() => {
+  if (!pendingAction.value) return '';
+  const { vm, action } = pendingAction.value;
+  const base = `¿${ACTION_LABEL[action]} ${vm.type === 'lxc' ? 'el contenedor' : 'la VM'} ${vm.name} (#${vm.vmid})?`;
+  if (action !== 'start' && looksLikeSelf(vm)) {
+    return `${base} Podría ser la VM del propio panel — perderás acceso al panel unos minutos.`;
+  }
+  return base;
+});
 
 async function confirmAction() {
   if (!pendingAction.value) return;
@@ -149,7 +164,7 @@ async function confirmAction() {
     pendingAction.value = null;
     setTimeout(loadSummary, 2000);
   } catch (e) {
-    actionError.value = getErrorMessage(e, 'Error al enviar la acción a Proxmox');
+    toast.error(getErrorMessage(e, 'Error al enviar la acción a Proxmox'));
   } finally {
     running.value = false;
   }
@@ -172,12 +187,12 @@ async function confirmAction() {
           <span class="relative flex h-2.5 w-2.5">
             <span
               v-if="proxmoxStore.summary.node.online"
-              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+              class="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
             ></span>
             <span class="relative inline-flex rounded-full h-2.5 w-2.5" :class="proxmoxStore.summary.node.online ? 'bg-emerald-500' : 'bg-red-500'"></span>
           </span>
           <span class="text-lg font-semibold">{{ proxmoxStore.summary.node.node }}</span>
-          <span class="badge" :class="proxmoxStore.summary.node.online ? 'bg-emerald-500/15 text-emerald-600' : 'bg-red-500/15 text-red-600'">
+          <span class="badge" :class="proxmoxStore.summary.node.online ? 'bg-emerald-500/15 text-emerald-700' : 'bg-red-500/15 text-red-600'">
             {{ proxmoxStore.summary.node.online ? 'En línea' : 'Sin respuesta' }}
           </span>
         </div>
@@ -323,15 +338,15 @@ async function confirmAction() {
             <div class="flex justify-between text-slate-500"><span>Encendida hace</span><span>{{ formatUptime(vm.uptimeSeconds) }}</span></div>
           </div>
 
-          <p v-if="looksLikeSelf(vm)" class="text-[11px] text-amber-600 mb-2">
+          <p v-if="looksLikeSelf(vm)" class="text-[11px] text-amber-700 mb-2">
             ⚠ Por el nombre, esta podría ser la VM del propio panel — si la apagas, perderías acceso a SmartRayco hasta encenderla de nuevo desde Proxmox directamente.
           </p>
 
           <div class="flex flex-wrap gap-2">
-            <button class="btn-secondary text-xs" :disabled="vm.status === 'running'" @click="askAction(vm, 'start')">Iniciar</button>
-            <button class="btn-secondary text-xs" :disabled="vm.status !== 'running'" @click="askAction(vm, 'reboot')">Reiniciar</button>
-            <button class="btn-secondary text-xs text-red-600" :disabled="vm.status !== 'running'" @click="askAction(vm, 'shutdown')">Apagar</button>
-            <a :href="consoleUrl(vm)" target="_blank" rel="noopener" class="btn-ghost text-xs ml-auto">Abrir consola ↗</a>
+            <button class="btn-secondary text-xs min-h-[40px]" :disabled="vm.status === 'running'" @click="askAction(vm, 'start')">Iniciar</button>
+            <button class="btn-secondary text-xs min-h-[40px]" :disabled="vm.status !== 'running'" @click="askAction(vm, 'reboot')">Reiniciar</button>
+            <button class="btn-secondary text-xs text-red-600 min-h-[40px]" :disabled="vm.status !== 'running'" @click="askAction(vm, 'shutdown')">Apagar</button>
+            <a :href="consoleUrl(vm)" target="_blank" rel="noopener" class="btn-ghost text-xs min-h-[40px] ml-auto">Abrir consola ↗</a>
           </div>
         </div>
       </div>
@@ -341,14 +356,12 @@ async function confirmAction() {
     <ConfirmModal
       :open="!!pendingAction"
       :title="pendingAction ? `${ACTION_LABEL[pendingAction.action]} ${pendingAction.vm.name}` : ''"
-      :message="pendingAction ? `¿${ACTION_LABEL[pendingAction.action]} ${pendingAction.vm.type === 'lxc' ? 'el contenedor' : 'la VM'} ${pendingAction.vm.name} (#${pendingAction.vm.vmid})?` + (pendingAction.action !== 'start' && looksLikeSelf(pendingAction.vm) ? ' Podría ser la VM del propio panel.' : '')
-        : ''"
-      :danger="pendingAction?.action === 'shutdown'"
+      :message="confirmMessage"
+      :danger="confirmDanger"
       :confirm-label="pendingAction ? ACTION_LABEL[pendingAction.action] : 'Confirmar'"
       :loading="running"
       @confirm="confirmAction"
       @cancel="pendingAction = null"
     />
-    <p v-if="actionError" class="fixed bottom-4 right-4 z-[70] bg-red-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg">{{ actionError }}</p>
   </AppLayout>
 </template>

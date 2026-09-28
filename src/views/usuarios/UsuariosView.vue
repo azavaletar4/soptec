@@ -4,11 +4,15 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useUsersStore } from '@/stores/users';
 import { useAuthStore } from '@/stores/auth';
 import { useAsyncAction } from '@/composables/useAsyncAction';
+import { useConfirm } from '@/composables/useConfirm';
+import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import type { StaffRole, UserAccount } from '@/types/domain';
 
 const usersStore = useUsersStore();
 const auth = useAuthStore();
+const { confirmDialog } = useConfirm();
+const toast = useToast();
 
 const ROLE_LABEL: Record<StaffRole, string> = {
   SUPERADMIN: 'Super admin',
@@ -88,20 +92,29 @@ async function handleSubmit() {
 
 async function handleToggleActive(u: UserAccount) {
   const action = u.active ? 'desactivar' : 'activar';
-  if (!confirm(`¿${action.charAt(0).toUpperCase() + action.slice(1)} a ${u.full_name ?? u.email}?`)) return;
+  const ok = await confirmDialog({
+    title: `${action.charAt(0).toUpperCase() + action.slice(1)} usuario`,
+    message: `¿${action.charAt(0).toUpperCase() + action.slice(1)} a ${u.full_name ?? u.email}?`,
+  });
+  if (!ok) return;
   try {
     await usersStore.updateUser(u.id, { active: !u.active });
   } catch (e) {
-    alert(getErrorMessage(e, `Error al ${action} el usuario`));
+    toast.error(getErrorMessage(e, `Error al ${action} el usuario`));
   }
 }
 
 async function handleDelete(u: UserAccount) {
-  if (!confirm(`¿Eliminar a ${u.full_name ?? u.email}? Esta acción no se puede deshacer.`)) return;
+  const ok = await confirmDialog({
+    title: 'Eliminar usuario',
+    message: `¿Eliminar a ${u.full_name ?? u.email}?`,
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await usersStore.deleteUser(u.id);
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al eliminar el usuario'));
+    toast.error(getErrorMessage(e, 'Error al eliminar el usuario'));
   }
 }
 </script>
@@ -153,7 +166,7 @@ async function handleDelete(u: UserAccount) {
             <td class="px-4 py-3 text-slate-600">{{ u.email }}</td>
             <td class="px-4 py-3 text-slate-600">{{ u.phone || '—' }}</td>
             <td class="px-4 py-3">
-              <span class="badge bg-sky-500/15 text-sky-600">{{ ROLE_LABEL[u.role] }}</span>
+              <span class="badge bg-sky-500/15 text-sky-700">{{ ROLE_LABEL[u.role] }}</span>
             </td>
             <td class="px-4 py-3">
               <span class="badge" :class="u.active ? 'bg-green-500/15 text-green-600' : 'bg-slate-500/15 text-slate-600'">
@@ -221,7 +234,7 @@ async function handleDelete(u: UserAccount) {
           <div class="mb-4">
             <div class="flex items-center justify-between mb-1">
               <label class="block text-xs text-slate-600">{{ editing ? 'Nueva contraseña (opcional)' : 'Contraseña' }}</label>
-              <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="generatePassword">Generar</button>
+              <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="generatePassword">Generar</button>
             </div>
             <input
               v-model="form.password"
