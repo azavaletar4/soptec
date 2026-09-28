@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 
+withDefaults(defineProps<{ required?: boolean; invalid?: boolean }>(), { required: false, invalid: false });
 const emit = defineEmits<{ change: [blob: Blob | null] }>();
 
 const canvasEl = ref<HTMLCanvasElement | null>(null);
@@ -8,9 +9,23 @@ const hasStroke = ref(false);
 let ctx: CanvasRenderingContext2D | null = null;
 let drawing = false;
 
+function applyStrokeStyle() {
+  if (!ctx) return;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#0f172a';
+}
+
 function resizeCanvas() {
   const canvas = canvasEl.value;
   if (!canvas) return;
+  // Cambiar canvas.width/height borra el lienzo aunque el tamaño en pantalla
+  // no cambie realmente — si ya habia una firma (ej. el celular roto por
+  // orientationchange a mitad de firmar), se guarda como imagen para
+  // volver a dibujarla despues de redimensionar, en vez de perderla.
+  const previousImage = hasStroke.value ? canvas.toDataURL('image/png') : null;
+
   const ratio = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * ratio;
@@ -18,10 +33,13 @@ function resizeCanvas() {
   ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.scale(ratio, ratio);
-  ctx.lineWidth = 2.5;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#0f172a';
+  applyStrokeStyle();
+
+  if (previousImage) {
+    const img = new Image();
+    img.onload = () => ctx?.drawImage(img, 0, 0, rect.width, rect.height);
+    img.src = previousImage;
+  }
 }
 
 function pointFromEvent(e: PointerEvent) {
@@ -70,24 +88,42 @@ function clear() {
   emit('change', null);
 }
 
-defineExpose({ clear });
+function scrollIntoView() {
+  canvasEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 
-onMounted(resizeCanvas);
+defineExpose({ clear, scrollIntoView });
+
+onMounted(() => {
+  resizeCanvas();
+  // Girar el celular a mitad de firmar (o cualquier resize del contenedor)
+  // cambia el tamaño real del <canvas> — sin esto, el trazo quedaba
+  // desalineado con el nuevo tamaño o directamente se perdia.
+  window.addEventListener('resize', resizeCanvas);
+  window.addEventListener('orientationchange', resizeCanvas);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCanvas);
+  window.removeEventListener('orientationchange', resizeCanvas);
+});
 </script>
 
 <template>
   <div>
     <canvas
       ref="canvasEl"
-      class="w-full h-40 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 touch-none"
+      class="w-full h-40 rounded-lg border-2 border-dashed bg-slate-50 touch-none"
+      :class="invalid ? 'border-red-400' : 'border-slate-300'"
+      :aria-required="required"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointerleave="onPointerUp"
+      @pointercancel="onPointerUp"
     ></canvas>
     <div class="flex items-center justify-between mt-1.5">
       <p class="text-[11px] text-slate-500">Firma del cliente confirmando conformidad</p>
-      <button type="button" class="text-xs text-sky-600 hover:text-sky-700" @click="clear">Borrar</button>
+      <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="clear">Borrar</button>
     </div>
   </div>
 </template>

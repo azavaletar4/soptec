@@ -269,6 +269,8 @@ const TICKET_PHOTO_CATEGORIES = [
 const closureForm = ref({ latitude: null as number | null, longitude: null as number | null, ontSerial: '', closureNotes: '' });
 const closurePhotos = ref<Record<string, File | undefined>>({});
 const signatureBlob = ref<Blob | null>(null);
+const signaturePadRef = ref<InstanceType<typeof SignaturePad> | null>(null);
+const signatureMissing = ref(false);
 const gettingLocation = ref(false);
 const closing = ref(false);
 const closeError = ref<string | null>(null);
@@ -307,8 +309,11 @@ async function handleCloseSubmit() {
   // resuelve remoto o el cliente no esta presente.
   if (jobType === 'installation' && !signatureBlob.value) {
     closeError.value = 'Falta la firma del cliente para completar la instalación.';
+    signatureMissing.value = true;
+    signaturePadRef.value?.scrollIntoView();
     return;
   }
+  signatureMissing.value = false;
   closing.value = true;
   closeError.value = null;
   closeResult.value = null;
@@ -533,7 +538,7 @@ async function handleCloseSubmit() {
           <button type="button" class="btn-secondary text-xs shrink-0" @click="openQr('closure')">📷 QR</button>
         </div>
 
-        <button type="button" :disabled="gettingLocation" class="text-xs text-sky-600 mb-2.5 block" @click="useCurrentLocation">
+        <button type="button" :disabled="gettingLocation" class="text-xs text-sky-700 mb-2.5 block" @click="useCurrentLocation">
           {{ gettingLocation ? 'Obteniendo ubicación...' : `📍 ${closureForm.latitude ? 'Ubicación capturada' : 'Usar mi ubicación actual'}` }}
         </button>
 
@@ -549,9 +554,14 @@ async function handleCloseSubmit() {
         <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
 
         <label class="block text-xs text-slate-600 mb-1">
-          Firma del cliente<span v-if="jobType === 'installation'" class="text-red-500"> *</span>
+          Firma del cliente<span v-if="jobType === 'installation'" class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria)</span></span>
         </label>
-        <SignaturePad @change="(b) => (signatureBlob = b)" />
+        <SignaturePad
+          ref="signaturePadRef"
+          :required="jobType === 'installation'"
+          :invalid="signatureMissing"
+          @change="(b) => { signatureBlob = b; if (b) signatureMissing = false; }"
+        />
 
         <p v-if="closeError" class="text-sm text-red-600 mt-3">{{ closeError }}</p>
         <p v-if="closeResult === 'queued'" class="text-sm text-amber-600 mt-3">
