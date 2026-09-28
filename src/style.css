@@ -94,6 +94,14 @@ body {
       transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
       bg-transparent text-red-600 hover:bg-red-500/10 hover:text-red-700;
   }
+  /* Boton solido para la accion irreversible de un ConfirmModal (danger=true)
+     — distinto de .btn-danger (texto rojo sin relleno, usado suelto en
+     tablas): este es la accion PRINCIPAL de un dialogo, necesita mas peso
+     visual. */
+  .btn-destructive {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
+      bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
 
   /* Tarjetas / superficies */
   .surface {
