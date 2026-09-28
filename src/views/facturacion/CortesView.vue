@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useDebtHoldStore, type ApplyResult } from '@/stores/debtHold';
 import { useAuthStore } from '@/stores/auth';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import type { DebtHoldEvent, ServiceContract } from '@/types/domain';
 
@@ -14,10 +15,18 @@ const auth = useAuthStore();
 // tocar los equipos del cliente.
 const canApplyCorte = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
-const scanning = ref(false);
 const scanMessage = ref<string | null>(null);
-const actionError = ref<string | null>(null);
 const actingId = ref<string | null>(null);
+
+// useAsyncAction (mismo molde que las otras pantallas) — "actionError" se
+// reutiliza tal cual en handleApply/handleReactivate/loadHistory de mas
+// abajo (siempre fue un error compartido de toda la pantalla, no solo del
+// escaneo).
+const { loading: scanning, error: actionError, run: runScan } = useAsyncAction(async () => {
+  const res = await debtHoldStore.runScan();
+  await debtHoldStore.fetchPending();
+  return `Escaneo: ${res.flagged} contrato(s) marcado(s) de ${res.scanned} con facturas vencidas${res.errors ? ` (${res.errors} errores)` : ''}.`;
+}, 'Error al escanear vencidos');
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Pendiente de confirmar',
@@ -35,18 +44,7 @@ onMounted(() => {
 });
 
 async function handleScan() {
-  scanning.value = true;
-  scanMessage.value = null;
-  actionError.value = null;
-  try {
-    const res = await debtHoldStore.runScan();
-    scanMessage.value = `Escaneo: ${res.flagged} contrato(s) marcado(s) de ${res.scanned} con facturas vencidas${res.errors ? ` (${res.errors} errores)` : ''}.`;
-    await debtHoldStore.fetchPending();
-  } catch (e) {
-    actionError.value = getErrorMessage(e, 'Error al escanear vencidos');
-  } finally {
-    scanning.value = false;
-  }
+  scanMessage.value = (await runScan()) ?? null;
 }
 
 function describeResult(result: ApplyResult): string | null {

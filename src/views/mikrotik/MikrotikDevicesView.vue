@@ -5,6 +5,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useMikrotikStore, type MikrotikDevice, type ReconcileReport } from '@/stores/mikrotik';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 
 const router = useRouter();
@@ -41,8 +42,6 @@ const emptyForm = () => ({
 const form = ref(emptyForm());
 
 const reconcileReport = ref<ReconcileReport | null>(null);
-const reconcileLoading = ref(false);
-const reconcileError = ref<string | null>(null);
 const showReconcileDetail = ref(false);
 
 async function loadReconcileReport() {
@@ -53,16 +52,16 @@ async function loadReconcileReport() {
   }
 }
 
+// useAsyncAction (mismo molde que Zonas/Planes) — "run" ya deja
+// reconcileLoading/reconcileError manejados; solo falta guardar el
+// resultado si la llamada tuvo exito.
+const { loading: reconcileLoading, error: reconcileError, run: runReconcile } = useAsyncAction(
+  () => mikrotikStore.runReconcileNow(),
+  'Error al reconciliar',
+);
 async function handleReconcileNow() {
-  reconcileLoading.value = true;
-  reconcileError.value = null;
-  try {
-    reconcileReport.value = await mikrotikStore.runReconcileNow();
-  } catch (e) {
-    reconcileError.value = getErrorMessage(e, 'Error al reconciliar');
-  } finally {
-    reconcileLoading.value = false;
-  }
+  const report = await runReconcile();
+  if (report) reconcileReport.value = report;
 }
 
 function formatReconcileDate(iso: string) {

@@ -4,6 +4,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { usePlansStore } from '@/stores/plans';
 import { useAuthStore } from '@/stores/auth';
 import { useOltStore } from '@/stores/olt';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import type { ConnectionTechnology, Plan } from '@/types/domain';
 
@@ -21,24 +22,22 @@ const canManagePlans = computed(() => ['SUPERADMIN', 'ADMIN', 'FACTURACION'].inc
 // silenciosamente al aplicar el plan en una ONT).
 const oltDeviceId = ref('');
 const oltProfiles = ref<{ tcontProfiles: string[]; trafficProfiles: string[] }>({ tcontProfiles: [], trafficProfiles: [] });
-const loadingOltProfiles = ref(false);
-const oltProfilesError = ref<string | null>(null);
+const EMPTY_PROFILES = { tcontProfiles: [] as string[], trafficProfiles: [] as string[] };
+
+// useAsyncAction (mismo molde que ZonasView.vue) se encarga del
+// loading/error — esta funcion solo agrega el caso especial de "sin equipo
+// elegido" y decide que hacer con el resultado.
+const { loading: loadingOltProfiles, error: oltProfilesError, run: fetchOltProfiles } = useAsyncAction(
+  (deviceId: string) => oltStore.fetchProfiles(deviceId),
+  'No se pudo leer los perfiles de la OLT',
+);
 
 async function loadOltProfiles() {
   if (!oltDeviceId.value) {
-    oltProfiles.value = { tcontProfiles: [], trafficProfiles: [] };
+    oltProfiles.value = EMPTY_PROFILES;
     return;
   }
-  loadingOltProfiles.value = true;
-  oltProfilesError.value = null;
-  try {
-    oltProfiles.value = await oltStore.fetchProfiles(oltDeviceId.value);
-  } catch (e) {
-    oltProfilesError.value = getErrorMessage(e, 'No se pudo leer los perfiles de la OLT');
-    oltProfiles.value = { tcontProfiles: [], trafficProfiles: [] };
-  } finally {
-    loadingOltProfiles.value = false;
-  }
+  oltProfiles.value = (await fetchOltProfiles(oltDeviceId.value)) ?? EMPTY_PROFILES;
 }
 
 // Asegura que el perfil ya guardado en el plan siga apareciendo en el

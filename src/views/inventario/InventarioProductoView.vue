@@ -8,6 +8,7 @@ import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useAuthStore } from '@/stores/auth';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import type {
   InventoryMovement,
@@ -36,8 +37,6 @@ const movementsLoading = ref(true);
 
 const showEditModal = ref(false);
 const editForm = ref({ name: '', category: '', unit: '', price: 0, min_stock: 0, purchase_date: '' });
-const editSaving = ref(false);
-const editError = ref<string | null>(null);
 
 const showMovementModal = ref(false);
 const movementType = ref<InventoryMovementType>('ingreso');
@@ -357,25 +356,24 @@ function openEdit() {
   showEditModal.value = true;
 }
 
-async function handleEdit() {
+// useAsyncAction (mismo molde que las otras pantallas) — esta pantalla
+// tiene varios formularios parecidos (unidad, asignar, devolver...); este es
+// el primero migrado, los demas quedan para otra pasada.
+const { loading: editSaving, error: editError, run: submitEdit } = useAsyncAction(async () => {
   if (!product.value) return;
-  editSaving.value = true;
-  editError.value = null;
-  try {
-    await inventoryStore.updateProduct(product.value.id, {
-      name: editForm.value.name,
-      category: editForm.value.category || null,
-      unit: editForm.value.unit,
-      price: editForm.value.price,
-      min_stock: editForm.value.min_stock,
-      purchase_date: editForm.value.purchase_date || null,
-    });
-    showEditModal.value = false;
-  } catch (e) {
-    editError.value = getErrorMessage(e, 'Error al actualizar el producto');
-  } finally {
-    editSaving.value = false;
-  }
+  await inventoryStore.updateProduct(product.value.id, {
+    name: editForm.value.name,
+    category: editForm.value.category || null,
+    unit: editForm.value.unit,
+    price: editForm.value.price,
+    min_stock: editForm.value.min_stock,
+    purchase_date: editForm.value.purchase_date || null,
+  });
+}, 'Error al actualizar el producto');
+
+async function handleEdit() {
+  await submitEdit();
+  if (!editError.value) showEditModal.value = false;
 }
 
 function openMovement(type: InventoryMovementType) {

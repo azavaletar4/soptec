@@ -4,6 +4,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useVehiculosStore, type VehiculoWithUrl } from '@/stores/vehiculos';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import { ALERTA_BADGE_CLASS, alertaMantenimiento, alertaSoat, peorNivel } from '@/lib/vehiculoAlertas';
 import type { MantenimientoHistorial, MantenimientoTipo, Vehiculo, VehiculoEstado, VehiculoTipo } from '@/types/domain';
@@ -190,8 +191,25 @@ const historial = ref<MantenimientoHistorial[]>([]);
 const historialLoading = ref(false);
 
 const mantForm = ref({ fecha: '', tipo: 'preventivo' as MantenimientoTipo, kilometraje: null as number | null, costo: null as number | null, taller: '', descripcion: '' });
-const mantSaving = ref(false);
-const mantError = ref<string | null>(null);
+
+// useAsyncAction (mismo molde que las otras pantallas) — mantError se
+// reutiliza en handleDeleteMantenimiento y openHistorial, igual que antes.
+const { loading: mantSaving, error: mantError, run: addMantenimiento } = useAsyncAction(async () => {
+  if (!historialVehiculo.value) return;
+  await vehiculosStore.createMantenimiento({
+    vehiculo_id: historialVehiculo.value.id,
+    fecha: mantForm.value.fecha || todayIso(),
+    tipo: mantForm.value.tipo,
+    descripcion: mantForm.value.descripcion.trim() || null,
+    costo: numOrNull(mantForm.value.costo),
+    taller: mantForm.value.taller.trim() || null,
+    kilometraje: numOrNull(mantForm.value.kilometraje),
+  });
+  historial.value = await vehiculosStore.fetchHistorial(historialVehiculo.value.id);
+  historialVehiculo.value = vehiculosStore.vehiculos.find((v) => v.id === historialVehiculo.value?.id) ?? historialVehiculo.value;
+  mantForm.value = { fecha: todayIso(), tipo: 'preventivo', kilometraje: Number(historialVehiculo.value?.kilometraje_actual) || null, costo: null, taller: '', descripcion: '' };
+}, 'Error al registrar el mantenimiento');
+const handleAddMantenimiento = addMantenimiento;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -207,30 +225,6 @@ async function openHistorial(v: Vehiculo) {
     historial.value = await vehiculosStore.fetchHistorial(v.id);
   } finally {
     historialLoading.value = false;
-  }
-}
-
-async function handleAddMantenimiento() {
-  if (!historialVehiculo.value) return;
-  mantSaving.value = true;
-  mantError.value = null;
-  try {
-    await vehiculosStore.createMantenimiento({
-      vehiculo_id: historialVehiculo.value.id,
-      fecha: mantForm.value.fecha || todayIso(),
-      tipo: mantForm.value.tipo,
-      descripcion: mantForm.value.descripcion.trim() || null,
-      costo: numOrNull(mantForm.value.costo),
-      taller: mantForm.value.taller.trim() || null,
-      kilometraje: numOrNull(mantForm.value.kilometraje),
-    });
-    historial.value = await vehiculosStore.fetchHistorial(historialVehiculo.value.id);
-    historialVehiculo.value = vehiculosStore.vehiculos.find((v) => v.id === historialVehiculo.value?.id) ?? historialVehiculo.value;
-    mantForm.value = { fecha: todayIso(), tipo: 'preventivo', kilometraje: Number(historialVehiculo.value?.kilometraje_actual) || null, costo: null, taller: '', descripcion: '' };
-  } catch (e) {
-    mantError.value = getErrorMessage(e, 'Error al registrar el mantenimiento');
-  } finally {
-    mantSaving.value = false;
   }
 }
 

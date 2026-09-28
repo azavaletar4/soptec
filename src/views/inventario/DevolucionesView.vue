@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import type { InventoryUnit, InventoryUnitEvent, InventoryUnitStatus } from '@/types/domain';
 
@@ -20,9 +21,7 @@ const TABS: { value: Tab; label: string }[] = [
 
 const activeTab = ref<Tab>('assigned');
 const units = ref<InventoryUnit[]>([]);
-const loading = ref(true);
 const searchQuery = ref('');
-const listError = ref<string | null>(null);
 
 const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   in_stock: 'En bodega',
@@ -49,16 +48,16 @@ const filteredUnits = computed(() => {
   );
 });
 
+// useAsyncAction (mismo molde que Zonas/Planes/MikroTik) — listError se
+// reutiliza mas abajo en handleMarkRepaired/handleRetire para mostrar un
+// error de esas acciones en la misma lista, no solo el de esta carga.
+const { loading, error: listError, run: fetchUnits } = useAsyncAction(
+  (tab: Tab) => inventoryUnitsStore.fetchUnitsByStatus(tab),
+  'Error al cargar los equipos',
+);
+loading.value = true;
 async function loadUnits() {
-  loading.value = true;
-  listError.value = null;
-  try {
-    units.value = await inventoryUnitsStore.fetchUnitsByStatus(activeTab.value);
-  } catch (e) {
-    listError.value = getErrorMessage(e, 'Error al cargar los equipos');
-  } finally {
-    loading.value = false;
-  }
+  units.value = (await fetchUnits(activeTab.value)) ?? units.value;
 }
 
 function switchTab(tab: Tab) {

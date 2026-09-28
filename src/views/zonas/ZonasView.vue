@@ -5,6 +5,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useContractsStore } from '@/stores/contracts';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import { NAP_CLIENT_LIMIT, ZONE_CLIENT_LIMIT, ZONE_NAP_LIMIT, type Zone } from '@/types/domain';
 
@@ -13,20 +14,20 @@ const contractsStore = useContractsStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 
-const loading = ref(true);
-onMounted(async () => {
-  loading.value = true;
-  try {
-    await Promise.all([
-      catalogs.fetchZones(),
-      contractsStore.fetchContracts(),
-      infraStore.fetchElementos(),
-      fibra.fetchTodosNapPuertos(),
-    ]);
-  } finally {
-    loading.value = false;
-  }
-});
+// Antes: ref(true) + try/finally a mano, sin mostrar nada si fallaba. Con
+// useAsyncAction (arranque de la refactorizacion gradual del patron
+// loading/error) se suma el mensaje de error que faltaba, sin escribir el
+// try/catch/finally de nuevo.
+const { loading, error: loadError, run: load } = useAsyncAction(async () => {
+  await Promise.all([
+    catalogs.fetchZones(),
+    contractsStore.fetchContracts(),
+    infraStore.fetchElementos(),
+    fibra.fetchTodosNapPuertos(),
+  ]);
+}, 'Error al cargar las zonas');
+loading.value = true; // arranca en true (antes de que onMounted corra) para que la tabla muestre "Cargando..." de una
+onMounted(load);
 
 const search = ref('');
 
@@ -185,6 +186,8 @@ async function handleDelete(zone: Zone) {
       ⚠ {{ napsAtLimit.length }} caja(s) NAP llenas ({{ NAP_CLIENT_LIMIT }} clientes):
       {{ napsAtLimit.map((n) => `${n.nap} (${n.zone})`).join(', ') }}.
     </p>
+
+    <p v-if="loadError" class="mb-4 text-sm text-red-600">{{ loadError }}</p>
 
     <div class="table-shell mb-6">
       <table class="w-full text-sm min-w-[560px]">

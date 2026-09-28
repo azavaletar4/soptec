@@ -5,6 +5,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import AlbumCard from '@/components/inventario/AlbumCard.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useAuthStore } from '@/stores/auth';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import type { InventoryProduct } from '@/types/domain';
 
@@ -15,8 +16,6 @@ const auth = useAuthStore();
 const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
 const showModal = ref(false);
-const saving = ref(false);
-const formError = ref<string | null>(null);
 const searchQuery = ref('');
 const editingProduct = ref<InventoryProduct | null>(null);
 
@@ -100,41 +99,39 @@ function openEdit(p: InventoryProduct) {
   showModal.value = true;
 }
 
+// useAsyncAction (mismo molde que las otras pantallas) — la validacion del
+// nombre queda antes de llamar a run(), igual que en UsuariosView.vue.
+const { loading: saving, error: formError, run: submitProduct } = useAsyncAction(async () => {
+  if (editingProduct.value) {
+    await inventoryStore.updateProduct(editingProduct.value.id, {
+      name: form.value.name,
+      category_id: form.value.category_id || null,
+      unit: form.value.unit || 'unidad',
+      price: form.value.price,
+      min_stock: form.value.min_stock,
+      purchase_date: form.value.purchase_date || null,
+    });
+  } else {
+    await inventoryStore.createProduct({
+      name: form.value.name,
+      category_id: form.value.category_id || null,
+      unit: form.value.unit || 'unidad',
+      price: form.value.price,
+      min_stock: form.value.min_stock,
+      purchase_date: form.value.purchase_date || null,
+      is_serialized: form.value.is_serialized,
+    });
+  }
+  await loadAll();
+}, 'Error al guardar el producto');
+
 async function handleSubmit() {
   if (!form.value.name.trim()) {
     formError.value = 'El nombre es requerido';
     return;
   }
-  saving.value = true;
-  formError.value = null;
-  try {
-    if (editingProduct.value) {
-      await inventoryStore.updateProduct(editingProduct.value.id, {
-        name: form.value.name,
-        category_id: form.value.category_id || null,
-        unit: form.value.unit || 'unidad',
-        price: form.value.price,
-        min_stock: form.value.min_stock,
-        purchase_date: form.value.purchase_date || null,
-      });
-    } else {
-      await inventoryStore.createProduct({
-        name: form.value.name,
-        category_id: form.value.category_id || null,
-        unit: form.value.unit || 'unidad',
-        price: form.value.price,
-        min_stock: form.value.min_stock,
-        purchase_date: form.value.purchase_date || null,
-        is_serialized: form.value.is_serialized,
-      });
-    }
-    showModal.value = false;
-    await loadAll();
-  } catch (e) {
-    formError.value = getErrorMessage(e, editingProduct.value ? 'Error al actualizar el producto' : 'Error al crear el producto');
-  } finally {
-    saving.value = false;
-  }
+  await submitProduct();
+  if (!formError.value) showModal.value = false;
 }
 
 function goToDetail(p: InventoryProduct) {

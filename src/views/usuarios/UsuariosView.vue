@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useUsersStore } from '@/stores/users';
 import { useAuthStore } from '@/stores/auth';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import type { StaffRole, UserAccount } from '@/types/domain';
 
@@ -33,8 +34,6 @@ onMounted(() => {
 
 const showModal = ref(false);
 const editing = ref<UserAccount | null>(null);
-const saving = ref(false);
-const formError = ref<string | null>(null);
 
 const emptyForm = () => ({ full_name: '', username: '', email: '', phone: '', password: '', role: 'TECNICO_RED' as StaffRole });
 const form = ref(emptyForm());
@@ -60,32 +59,31 @@ function openEdit(u: UserAccount) {
   showModal.value = true;
 }
 
-async function handleSubmit() {
-  saving.value = true;
-  formError.value = null;
-  try {
-    if (editing.value) {
-      const payload: Record<string, unknown> = {
-        full_name: form.value.full_name,
-        username: form.value.username,
-        phone: form.value.phone,
-        role: form.value.role,
-      };
-      if (form.value.password) payload.password = form.value.password;
-      await usersStore.updateUser(editing.value.id, payload);
-    } else {
-      if (!form.value.password || form.value.password.length < 8) {
-        formError.value = 'La contraseña debe tener al menos 8 caracteres';
-        return;
-      }
-      await usersStore.createUser(form.value);
-    }
-    showModal.value = false;
-  } catch (e) {
-    formError.value = getErrorMessage(e, 'Error al guardar el usuario');
-  } finally {
-    saving.value = false;
+// useAsyncAction (mismo molde que las otras pantallas) — la validacion de
+// contraseña corta queda ANTES de llamar a run(), como una condicion propia
+// del formulario, no un error de la llamada a la API.
+const { loading: saving, error: formError, run: submitUser } = useAsyncAction(async () => {
+  if (editing.value) {
+    const payload: Record<string, unknown> = {
+      full_name: form.value.full_name,
+      username: form.value.username,
+      phone: form.value.phone,
+      role: form.value.role,
+    };
+    if (form.value.password) payload.password = form.value.password;
+    await usersStore.updateUser(editing.value.id, payload);
+  } else {
+    await usersStore.createUser(form.value);
   }
+}, 'Error al guardar el usuario');
+
+async function handleSubmit() {
+  if (!editing.value && (!form.value.password || form.value.password.length < 8)) {
+    formError.value = 'La contraseña debe tener al menos 8 caracteres';
+    return;
+  }
+  await submitUser();
+  if (!formError.value) showModal.value = false;
 }
 
 async function handleToggleActive(u: UserAccount) {

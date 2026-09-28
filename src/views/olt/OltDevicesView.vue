@@ -5,6 +5,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useOltStore, type OltDevice } from '@/stores/olt';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 
 const router = useRouter();
@@ -18,8 +19,6 @@ const canManageDevices = computed(() => auth.role !== 'TECNICO_RED');
 
 const showModal = ref(false);
 const editingId = ref<string | null>(null);
-const saving = ref(false);
-const formError = ref<string | null>(null);
 const testResults = reactive<Record<string, string>>({});
 const searchQuery = ref('');
 
@@ -66,21 +65,18 @@ function openEdit(device: OltDevice) {
   showModal.value = true;
 }
 
-async function handleSubmit() {
-  saving.value = true;
-  formError.value = null;
-  try {
-    const payload: Record<string, unknown> = { ...form.value, zone_id: form.value.zone_id || null };
-    if (editingId.value && !payload.password) delete payload.password;
+// useAsyncAction (mismo molde que las otras pantallas).
+const { loading: saving, error: formError, run: submitDevice } = useAsyncAction(async () => {
+  const payload: Record<string, unknown> = { ...form.value, zone_id: form.value.zone_id || null };
+  if (editingId.value && !payload.password) delete payload.password;
 
-    if (editingId.value) await oltStore.updateDevice(editingId.value, payload);
-    else await oltStore.createDevice(payload);
-    showModal.value = false;
-  } catch (e) {
-    formError.value = getErrorMessage(e, 'Error al guardar la OLT');
-  } finally {
-    saving.value = false;
-  }
+  if (editingId.value) await oltStore.updateDevice(editingId.value, payload);
+  else await oltStore.createDevice(payload);
+}, 'Error al guardar la OLT');
+
+async function handleSubmit() {
+  await submitDevice();
+  if (!formError.value) showModal.value = false;
 }
 
 async function handleDelete(device: OltDevice) {
