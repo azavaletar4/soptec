@@ -56,12 +56,28 @@ const duplicateClient = computed<Client | null>(() => {
   );
 });
 
+// Indice contratos-por-cliente: antes clientCodesOf/clientPrioritiesOf
+// recorrian TODOS los contratos por cada cliente (O(n_clientes x n_contratos)),
+// y como filteredClientsList llama a clientCodesOf por cada cliente en cada
+// letra tecleada en el buscador, con ~200+ clientes esto se sentia lento.
+// Este Map solo se reconstruye cuando cambian los contratos (no en cada
+// tecla), y cada lookup despues es O(1).
+const contractsByClient = computed(() => {
+  const map = new Map<string, typeof contractsStore.contracts>();
+  for (const ct of contractsStore.contracts) {
+    const arr = map.get(ct.client_id);
+    if (arr) arr.push(ct);
+    else map.set(ct.client_id, [ct]);
+  }
+  return map;
+});
+
 // El codigo de cliente ahora es por servicio (Fase 39, se edita desde la
 // pestaña "Contrato" de cada linea) — ya no se muestra aca, pero se sigue
 // pudiendo buscar por el.
 function clientCodesOf(clientId: string) {
-  return contractsStore.contracts
-    .filter((ct) => ct.client_id === clientId && ct.client_code)
+  return (contractsByClient.value.get(clientId) ?? [])
+    .filter((ct) => ct.client_code)
     .map((ct) => ct.client_code)
     .join(' ');
 }
@@ -79,7 +95,7 @@ const PRIORITY_CLASS: Record<ContractPriority, string> = {
   low: 'bg-slate-500/15 text-slate-600',
 };
 function clientPrioritiesOf(clientId: string): ContractPriority[] {
-  return contractsStore.contracts.filter((ct) => ct.client_id === clientId).map((ct) => ct.priority);
+  return (contractsByClient.value.get(clientId) ?? []).map((ct) => ct.priority);
 }
 
 const filteredClientsList = computed(() => {

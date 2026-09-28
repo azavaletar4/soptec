@@ -10,10 +10,6 @@ const route = useRoute();
 
 const SUPERADMIN_ROLES = ['SUPERADMIN'];
 const ADMIN_ROLES = ['SUPERADMIN', 'ADMIN'];
-// Modulos administrativos que TECNICO_RED no necesita ver (mismo criterio
-// que NOT_TECNICO en el router) — solo le quedan Instalaciones, los dos
-// Mapas (Red y Clientes) y Soporte.
-const HIDDEN_FROM_TECNICO = ['dashboard', 'clientes', 'zonas', 'planes', 'olt', 'mikrotik', 'tr069', 'inventario', 'reportes', 'cortes', 'flota', 'analitica'];
 
 const ROLE_LABEL: Record<string, string> = {
   SUPERADMIN: 'Super admin',
@@ -44,6 +40,7 @@ const ICONS: Record<string, string> = {
   inventario: 'M3 7l9-4 9 4-9 4-9-4Zm0 0v10l9 4 9-4V7M12 11v10',
   flota: 'M4 16V9l2-4h8l3 4h2l1 3v4h-2a2 2 0 1 1-4 0H10a2 2 0 1 1-4 0H4Zm3 0a1 1 0 1 0 2 0M15 16a1 1 0 1 0 2 0M4 12h16M8 9V5',
   tr069: 'M12 20v-6m0 0a4 4 0 0 0 4-4V7a4 4 0 0 0-8 0v3a4 4 0 0 0 4 4Zm-7 2h14M5 8H3m18 0h-2M5 4 3 2m16 2 2-2',
+  servidores: 'M4 4h16v6H4V4Zm0 10h16v6H4v-6ZM7.5 7h.01M7.5 17h.01M11 7h6M11 17h6',
   reportes: 'M4 19V10m6 9V5m6 14v-8m-13 8h16',
   usuarios: 'M17 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 5 18.5V20M9.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM21 8v6M18 11h6',
   'caja-chica': 'M4 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1h1a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Zm0 0v10M16 12.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0Z',
@@ -92,6 +89,7 @@ const GRUPOS: ModuloGrupo[] = [
       { key: 'mikrotik', label: 'MikroTik', to: '/mikrotik' },
       { key: 'analitica', label: 'Analítica de Tráfico', to: '/analitica', requiresAdmin: true },
       { key: 'tr069', label: 'TR-069', to: '/tr069' },
+      { key: 'servidores', label: 'Servidores', to: '/servidores', requiresAdmin: true },
     ],
   },
   {
@@ -126,11 +124,22 @@ const GRUPOS: ModuloGrupo[] = [
   },
 ];
 
+// Antes habia una lista aparte (HIDDEN_FROM_TECNICO) mantenida a mano,
+// separada de los roles reales del router (NOT_TECNICO en router/index.ts) —
+// si se agregaba un modulo nuevo y se olvidaba actualizar esa lista, un
+// tecnico podia ver un link roto (o perder acceso a algo que si debia ver).
+// Ahora se pregunta directo a la ruta real cuales roles admite.
+function isHiddenFromTecnico(mod: ModuloItem): boolean {
+  if (auth.role !== 'TECNICO_RED') return false;
+  const roles = router.resolve(mod.to).meta.roles as string[] | undefined;
+  return !!roles && !roles.includes('TECNICO_RED');
+}
+
 function isVisible(mod: ModuloItem) {
   return (
     (!mod.requiresSuperadmin || SUPERADMIN_ROLES.includes(auth.role ?? '')) &&
     (!mod.requiresAdmin || ADMIN_ROLES.includes(auth.role ?? '')) &&
-    !(auth.role === 'TECNICO_RED' && HIDDEN_FROM_TECNICO.includes(mod.key))
+    !isHiddenFromTecnico(mod)
   );
 }
 

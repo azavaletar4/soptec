@@ -13,13 +13,19 @@ const contractsStore = useContractsStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 
+const loading = ref(true);
 onMounted(async () => {
-  await Promise.all([
-    catalogs.fetchZones(),
-    contractsStore.fetchContracts(),
-    infraStore.fetchElementos(),
-    fibra.fetchTodosNapPuertos(),
-  ]);
+  loading.value = true;
+  try {
+    await Promise.all([
+      catalogs.fetchZones(),
+      contractsStore.fetchContracts(),
+      infraStore.fetchElementos(),
+      fibra.fetchTodosNapPuertos(),
+    ]);
+  } finally {
+    loading.value = false;
+  }
 });
 
 const search = ref('');
@@ -191,7 +197,10 @@ async function handleDelete(zone: Zone) {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="!zonesWithCount.length">
+          <tr v-if="loading">
+            <td colspan="4" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+          </tr>
+          <tr v-else-if="!zonesWithCount.length">
             <td colspan="4" class="px-4 py-6 text-center text-slate-500">No hay zonas registradas.</td>
           </tr>
           <template v-for="z in zonesWithCount" :key="z.zone.id">

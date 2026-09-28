@@ -63,7 +63,6 @@ const profiles = ref<{ tcontProfiles: string[]; trafficProfiles: string[] }>({ t
 const profilesLoading = ref(false);
 const profilesError = ref<string | null>(null);
 
-const signalLoadingId = ref<string | null>(null);
 const ontSearch = ref('');
 
 // Mismo umbral que server/src/routes/olt.ts (LOW_SIGNAL_THRESHOLD_DBM) — se
@@ -108,6 +107,11 @@ const STATUS_CLASS: Record<string, string> = {
   online: 'bg-green-500/15 text-green-600',
   offline: 'bg-red-500/15 text-red-600',
   unknown: 'bg-slate-500/15 text-slate-600',
+};
+const STATUS_LABEL: Record<string, string> = {
+  online: 'En línea',
+  offline: 'Sin conexión',
+  unknown: 'Desconocido',
 };
 
 interface OltSummary {
@@ -341,39 +345,47 @@ async function handleRegister() {
   }
 }
 
+const togglingId = ref<string | null>(null);
+const deletingId = ref<string | null>(null);
+
+// El backend ya serializa cualquier comando Telnet contra la misma OLT
+// (withOltLock), asi que nunca se van a chocar dos acciones entre si — pero
+// antes de esto no habia NINGUN indicador de "en curso" en Activar/
+// Desactivar/Eliminar, asi que un tecnico podia hacer doble clic sin
+// enterarse de que la primera peticion seguia en el aire. oltWriteBusy
+// tambien desactiva Sincronizar/Importar/Registrar mientras otra escritura
+// esta en curso, para que la fila de botones sea clara sobre que se puede
+// tocar en cada momento.
+const oltWriteBusy = computed(
+  () => syncing.value || importing.value || registering.value || !!togglingId.value || !!deletingId.value || tr069Saving.value,
+);
+
 async function handleToggle(ont: OltOnt) {
   const activate = ont.status !== 'online';
   const ok = confirm(`¿${activate ? 'Activar' : 'Desactivar'} la ONT ${ont.serial}?`);
   if (!ok) return;
+  togglingId.value = ont.id;
   try {
     await oltStore.toggleOnt(deviceId.value, ont.id, activate);
     await oltStore.fetchOnts(deviceId.value);
   } catch (e) {
     alert(getErrorMessage(e, 'Error al cambiar el estado de la ONT'));
+  } finally {
+    togglingId.value = null;
   }
 }
 
 async function handleDelete(ont: OltOnt) {
   const ok = confirm(`¿Eliminar la ONT ${ont.serial}? Esto tambien la borra de la OLT (comando "no onu").`);
   if (!ok) return;
+  deletingId.value = ont.id;
   try {
     await oltStore.deleteOnt(deviceId.value, ont.id);
     await oltStore.fetchOnts(deviceId.value);
   } catch (e) {
     alert(getErrorMessage(e, 'Error al eliminar la ONT'));
-  }
-}
-
-async function handleSignal(ont: OltOnt) {
-  signalLoadingId.value = ont.id;
-  try {
-    const info = await oltStore.getSignal(deviceId.value, ont.id);
-    alert(`Rx: ${info.rxPower ?? '—'} dBm\nTx: ${info.txPower ?? '—'} dBm`);
-    await oltStore.fetchOnts(deviceId.value);
-  } catch (e) {
-    alert(getErrorMessage(e, 'Error al leer la senal optica'));
   } finally {
-    signalLoadingId.value = null;
+    deletingId.value = null;
   }
 }
 
@@ -887,10 +899,10 @@ const gauges = computed(() => {
             <label class="block text-xs text-slate-600 mb-1">Puerto</label>
             <input v-model.number="port" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
           </div>
-          <button :disabled="syncing" class="btn-secondary" @click="handleSync">
+          <button :disabled="oltWriteBusy" class="btn-secondary" @click="handleSync">
             {{ syncing ? 'Sincronizando...' : 'Sincronizar desde la OLT' }}
           </button>
-          <button class="btn-primary" @click="openRegister()">
+          <button :disabled="oltWriteBusy" class="btn-primary" @click="openRegister()">
             + Registrar ONT
           </button>
         </div>
@@ -966,7 +978,7 @@ const gauges = computed(() => {
           Rx/Tx de todas. Esto solo lee la OLT (sin cambiar nada) y puede tardar varios minutos con
           cientos de ONTs — se puede repetir cuando quieras para refrescar todo.
         </p>
-        <button :disabled="importing" class="btn-secondary" @click="handleImportExisting">
+        <button :disabled="oltWriteBusy" class="btn-secondary" @click="handleImportExisting">
           {{ importing ? 'Importando...' : 'Importar / actualizar ONTs desde la OLT' }}
         </button>
         <p v-if="importMessage" class="text-xs text-slate-600 mt-3">{{ importMessage }}</p>
@@ -984,21 +996,35 @@ const gauges = computed(() => {
         placeholder="Buscar por serial, cliente o shelf/slot/port..."
         class="field-input mb-3"
       />
-      <div class="table-shell">
-        <table class="w-full text-sm min-w-[900px]">
-          <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+      <!-- max-h + overflow-y-auto: con cientos de ONTs la tabla podia ser mucho
+           mas alta que la pantalla, y la barra de scroll HORIZONTAL de
+           table-shell (que vive al pie de ese contenedor) quedaba miles de
+           pixeles mas abajo, practicamente inalcanzable. Con la altura
+           limitada, las dos barras de scroll quedan siempre a la vista aca
+           mismo. El encabezado queda fijo arriba mientras se baja. -->
+      <div class="table-shell max-h-[70vh] overflow-y-auto">
+        <!-- En celular se ocultan las columnas secundarias (quedan Serial/Cliente/
+             Estado/Señal/TR-069/Acciones) — antes las 11 columnas forzaban scroll
+             horizontal incluso para ver "Acciones". El detalle completo sigue
+             disponible al tocar la fila (openOntDetail). -->
+        <table class="w-full text-sm min-w-[480px] md:min-w-[760px]">
+          <thead class="bg-slate-100 text-slate-600 text-xs uppercase sticky top-0 z-10">
             <tr>
-              <th class="text-left px-4 py-3">Shelf/Slot/Port/ID</th>
-              <th class="text-left px-4 py-3">Serial</th>
-              <th class="text-left px-4 py-3">Cliente</th>
-              <th class="text-left px-4 py-3">Zona</th>
-              <th class="text-left px-4 py-3">Estado</th>
-              <th class="text-left px-4 py-3">Rx / Tx (dBm)</th>
-              <th class="text-left px-4 py-3">VLAN</th>
-              <th class="text-left px-4 py-3">Tipo</th>
-              <th class="text-left px-4 py-3">Autorizado</th>
-              <th class="text-left px-4 py-3">TR-069</th>
-              <th class="text-right px-4 py-3">Acciones</th>
+              <!-- Antes decia "Shelf/Slot/Port/ID": ese titulo largo obligaba a la
+                   columna a ser mas ancha que el dato real ("1/2/1:1", corto) —
+                   un titulo corto + whitespace-nowrap deja que la columna se
+                   achique al tamaño del dato en vez del titulo. -->
+              <th class="text-left px-2 py-3 hidden md:table-cell whitespace-nowrap" title="Shelf/Slot/Port:ID de la ONU">Posición</th>
+              <th class="text-left px-3 py-3">Serial</th>
+              <th class="text-left px-3 py-3">Cliente</th>
+              <th class="text-left px-3 py-3 hidden md:table-cell">Zona</th>
+              <th class="text-left px-3 py-3">Estado</th>
+              <th class="text-left px-3 py-3 whitespace-nowrap">Rx/Tx (dBm)</th>
+              <th class="text-left px-3 py-3 hidden md:table-cell">VLAN</th>
+              <th class="text-left px-3 py-3 hidden md:table-cell">Tipo</th>
+              <th class="text-left px-3 py-3 hidden md:table-cell">Alta</th>
+              <th class="text-left px-3 py-3">TR-069</th>
+              <th class="text-right px-3 py-3">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -1013,9 +1039,9 @@ const gauges = computed(() => {
               class="border-t border-slate-200 cursor-pointer hover:bg-slate-50"
               @click="openOntDetail(ont)"
             >
-              <td class="px-4 py-3 font-mono text-xs">{{ ont.frame }}/{{ ont.slot }}/{{ ont.port }}:{{ ont.ont_id }}</td>
-              <td class="px-4 py-3 font-mono text-xs">{{ ont.serial }}</td>
-              <td class="px-4 py-3 text-slate-600">
+              <td class="px-2 py-3 font-mono text-xs hidden md:table-cell whitespace-nowrap">{{ ont.frame }}/{{ ont.slot }}/{{ ont.port }}:{{ ont.ont_id }}</td>
+              <td class="px-3 py-3 font-mono text-xs">{{ ont.serial }}</td>
+              <td class="px-3 py-3 text-slate-600">
                 <template v-if="ont.clients">{{ ont.clients.first_name }} {{ ont.clients.last_name }}</template>
                 <template v-else-if="ont.description">
                   {{ ont.description }}
@@ -1023,32 +1049,46 @@ const gauges = computed(() => {
                 </template>
                 <template v-else>—</template>
               </td>
-              <td class="px-4 py-3 text-slate-600 text-xs">
+              <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">
                 <span v-if="ont.zones">{{ ont.zones.name }}</span>
                 <span v-else-if="ont.splitter">{{ ont.splitter }}<span v-if="ont.splitter_port"> / {{ ont.splitter_port }}</span></span>
                 <span v-else class="text-slate-400">—</span>
               </td>
-              <td class="px-4 py-3">
-                <span class="badge" :class="STATUS_CLASS[ont.status]">{{ ont.status }}</span>
+              <td class="px-3 py-3">
+                <span class="badge" :class="STATUS_CLASS[ont.status]">{{ STATUS_LABEL[ont.status] ?? ont.status }}</span>
               </td>
-              <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
-              <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.vlan ?? '—' }}</td>
-              <td class="px-4 py-3 text-slate-600 text-xs">{{ ont.onu_type ?? '—' }}</td>
-              <td class="px-4 py-3 text-slate-500 text-xs">{{ new Date(ont.created_at).toLocaleDateString('es-PE') }}</td>
-              <td class="px-4 py-3">
+              <td class="px-3 py-3 text-slate-600 text-xs whitespace-nowrap">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
+              <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">{{ ont.vlan ?? '—' }}</td>
+              <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">{{ ont.onu_type ?? '—' }}</td>
+              <td class="px-3 py-3 text-slate-500 text-xs hidden md:table-cell whitespace-nowrap">{{ new Date(ont.created_at).toLocaleDateString('es-PE') }}</td>
+              <td class="px-3 py-3">
                 <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-600">Activo</span>
                 <span v-else class="text-slate-500 text-xs">—</span>
               </td>
-              <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs" @click.stop>
-                <button class="text-sky-600 hover:underline" :disabled="signalLoadingId === ont.id" @click="handleSignal(ont)">
-                  {{ signalLoadingId === ont.id ? 'Leyendo...' : 'Senal' }}
+              <!-- "Señal"/"Zona"/"TR-069" se sacaron de la fila: son EXACTAMENTE lo
+                   mismo que ya ofrece el detalle (clic en la fila abre
+                   OntDetailModal, que tiene "Consultar señal"/"Editar zona"/
+                   "Gestionar TR-069") — tenerlos duplicados aca era lo que hacia
+                   esta columna tan ancha que la fila se desbordaba hacia la
+                   derecha sin forma practica de llegar a "Eliminar" en una tabla
+                   de cientos de filas (la barra de scroll horizontal queda al
+                   final de TODA la tabla). Solo quedan las 2 acciones que el
+                   modal de detalle no cubre. -->
+              <td class="px-3 py-3 text-right space-x-2 whitespace-nowrap text-xs" @click.stop>
+                <button
+                  class="text-slate-600 hover:text-slate-900 disabled:opacity-40"
+                  :disabled="oltWriteBusy && togglingId !== ont.id"
+                  @click="handleToggle(ont)"
+                >
+                  {{ togglingId === ont.id ? 'Aplicando...' : ont.status === 'online' ? 'Desactivar' : 'Activar' }}
                 </button>
-                <button class="text-slate-600 hover:text-slate-900" @click="openZoneEdit(ont)">Zona</button>
-                <button class="text-slate-600 hover:text-slate-900" @click="openTr069Modal(ont)">TR-069</button>
-                <button class="text-slate-600 hover:text-slate-900" @click="handleToggle(ont)">
-                  {{ ont.status === 'online' ? 'Desactivar' : 'Activar' }}
+                <button
+                  class="text-red-500/80 hover:text-red-600 disabled:opacity-40"
+                  :disabled="oltWriteBusy && deletingId !== ont.id"
+                  @click="handleDelete(ont)"
+                >
+                  {{ deletingId === ont.id ? 'Eliminando...' : 'Eliminar' }}
                 </button>
-                <button class="text-red-500/80 hover:text-red-600" @click="handleDelete(ont)">Eliminar</button>
               </td>
             </tr>
           </tbody>
