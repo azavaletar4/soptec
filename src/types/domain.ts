@@ -98,9 +98,13 @@ export interface ClientPhoto {
   created_at: string;
 }
 
+export type ContractServiceType = 'internet_combo' | 'solo_iptv';
+
 export interface ServiceContract {
   id: string;
   contract_number: string | null;
+  /** Internet/Combo (requiere ONT/TV Box) o Solo IPTV (Fase 45) — cliente ya tiene internet de otro proveedor, solo activa su cuenta IPTV. */
+  service_type: ContractServiceType;
   /** Codigo de cliente de ESTE servicio (Fase 39) — un titular puede tener varios, uno por linea; clients.client_code queda como dato heredado. */
   client_code: string | null;
   client_id: string;
@@ -200,19 +204,45 @@ export interface Installation {
   scheduled_time: string | null;
   assigned_to: string | null;
   notes: string | null;
+  /** Nota libre del tecnico para instalaciones "Solo IPTV" (Fase 45) — cuenta/usuario IPTV en el Smart TV del cliente. */
+  iptv_account_note: string | null;
   completed_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'address' | 'latitude' | 'longitude'> | null;
-  contracts?: Pick<ServiceContract, 'id' | 'contract_number'> | null;
+  contracts?: Pick<ServiceContract, 'id' | 'contract_number' | 'service_type'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+export interface InventoryCategory {
+  id: string;
+  slug: string;
+  name: string;
+  icon: string;
+  color: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+/** Fila del RPC inventory_get_albums (Fase 44) — un álbum real (por categoría) o el virtual "por_recoger". */
+export interface InventoryAlbumSummary {
+  album_slug: string;
+  album_name: string;
+  icon: string;
+  color: string;
+  sort_order: number;
+  item_count: number;
+  low_stock: number;
+  total_value: number;
 }
 
 export interface InventoryProduct {
   id: string;
   name: string;
+  /** Etiqueta heredada (texto libre, pre-Fase 44). Se conserva para no romper selects existentes; la UI nueva agrupa por category_id. */
   category: string | null;
+  category_id: string | null;
   unit: string;
   price: number;
   min_stock: number;
@@ -222,6 +252,7 @@ export interface InventoryProduct {
   purchase_date: string | null;
   created_at: string;
   updated_at: string;
+  inventory_categories?: Pick<InventoryCategory, 'id' | 'slug' | 'name' | 'icon' | 'color'> | null;
 }
 
 export interface InventoryUnit {

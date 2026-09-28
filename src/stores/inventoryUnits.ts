@@ -61,6 +61,26 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     return (data ?? []) as unknown as InventoryUnit[];
   }
 
+  /**
+   * Conteo de unidades 'in_stock' por producto (una sola consulta) — usado
+   * por la vista de álbum (Fase 44) para mostrar el "stock" de productos
+   * serializados, que no vive en inventory_products.current_stock (Fase 11c).
+   */
+  async function fetchInStockCounts(productIds: string[]) {
+    const counts: Record<string, number> = {};
+    if (!productIds.length) return counts;
+    const { data, error: err } = await supabase
+      .from('inventory_units')
+      .select('product_id')
+      .in('product_id', productIds)
+      .eq('status', 'in_stock');
+    if (err) throw err;
+    for (const row of (data ?? []) as { product_id: string }[]) {
+      counts[row.product_id] = (counts[row.product_id] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   async function fetchEvents(unitId: string) {
     const { data, error: err } = await supabase
       .from('inventory_unit_events')
@@ -217,6 +237,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     fetchUnitsByClient,
     fetchUnitsByContract,
     fetchUnitsByStatus,
+    fetchInStockCounts,
     fetchEvents,
     createUnit,
     updateUnit,

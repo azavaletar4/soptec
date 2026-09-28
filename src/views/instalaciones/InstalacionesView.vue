@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInstallationsStore } from '@/stores/installations';
@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type {
   ClientPhotoCategory,
+  ContractServiceType,
   Installation,
   InstallationStatus,
   ServiceContract,
@@ -138,6 +139,11 @@ async function openMaterialsModal(inst: Installation) {
   loadingMaterials.value = true;
   unitForm.value = { productId: '', unitId: '' };
   unitError.value = null;
+  serviceTypeError.value = null;
+  resetTemplateQuantities();
+  templateError.value = null;
+  iptvNoteDraft.value = inst.iptv_account_note ?? '';
+  iptvNoteError.value = null;
   try {
     const [mats, units] = await Promise.all([
       inventoryStore.fetchMovementsByInstallation(inst.id),
@@ -150,8 +156,143 @@ async function openMaterialsModal(inst: Installation) {
   }
 }
 
+// ---- Tipo de servicio de la instalacion (Fase 45) ----
+// Vive en el contrato (service_contracts.service_type), no en la
+// instalacion: es un atributo del servicio, no de una visita puntual — si el
+// mismo servicio se revisita el tipo no se pierde (ver plan Fase 45).
+const serviceTypeSaving = ref(false);
+const serviceTypeError = ref<string | null>(null);
+const materialsServiceType = computed<ContractServiceType>(
+  () => materialsInstallation.value?.contracts?.service_type ?? 'internet_combo',
+);
+const canChangeServiceType = computed(() => !!materialsInstallation.value?.contract_id);
+
+async function setServiceType(type: ContractServiceType) {
+  const inst = materialsInstallation.value;
+  const contractId = inst?.contract_id;
+  if (!inst || !contractId || materialsServiceType.value === type) return;
+  serviceTypeSaving.value = true;
+  serviceTypeError.value = null;
+  try {
+    await contractsStore.updateContract(contractId, { service_type: type });
+    if (inst.contracts) inst.contracts.service_type = type;
+  } catch (e) {
+    serviceTypeError.value = getErrorMessage(e, 'Error al cambiar el tipo de servicio');
+  } finally {
+    serviceTypeSaving.value = false;
+  }
+}
+
+// ---- Plantilla de materiales de ferreteria (Fase 45) — solo aplica en
+// Internet/Combo. Empareja por categoria (Fase 44: slug 'ferreteria') y
+// nombre contra el catalogo real; si un material esperado no existe todavia
+// en Inventario se avisa en vez de inventar el producto/precio.
+interface MaterialTemplateLine {
+  key: string;
+  label: string;
+  match: RegExp;
+  defaultQty: number;
+}
+const MATERIAL_TEMPLATE: MaterialTemplateLine[] = [
+  { key: 'drop', label: 'Cable Drop (metraje)', match: /drop/i, defaultQty: 0 },
+  { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 1 },
+  { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 1 },
+  { key: 'conector', label: 'Conector Óptico', match: /conector/i, defaultQty: 2 },
+];
+const ferreteriaProducts = computed(() =>
+  inventoryStore.products.filter((p) => p.is_active && p.inventory_categories?.slug === 'ferreteria'),
+);
+const templateRows = computed(() =>
+  MATERIAL_TEMPLATE.map((line) => ({
+    ...line,
+    product: ferreteriaProducts.value.find((p) => line.match.test(p.name)) ?? null,
+  })),
+);
+// El selector libre de "Otro material" es solo para consumibles por
+// cantidad que no cubre la plantilla de arriba — se excluyen los productos
+// serializados (ONT/TV Box/Mesh: esos se asignan por serie/MAC en "Equipos
+// asignados", no aqui) y los que ya tienen su propio input en la plantilla
+// (Roseta/Patchcord/Conector/Drop), para no duplicarlos.
+const templateProductIds = computed(() => new Set(templateRows.value.map((r) => r.product?.id).filter(Boolean)));
+const otherMaterialProducts = computed(() =>
+  inventoryStore.products.filter((p) => !p.is_serialized && !templateProductIds.value.has(p.id)),
+);
+const templateQuantities = ref<Record<string, number>>({});
+function resetTemplateQuantities() {
+  templateQuantities.value = Object.fromEntries(MATERIAL_TEMPLATE.map((l) => [l.key, l.defaultQty]));
+}
+const savingTemplate = ref(false);
+const templateError = ref<string | null>(null);
+
+async function handleRegisterTemplate() {
+  if (!materialsInstallation.value) return;
+  savingTemplate.value = true;
+  templateError.value = null;
+  const failures: string[] = [];
+  for (const row of templateRows.value) {
+    const qty = templateQuantities.value[row.key] ?? 0;
+    if (qty <= 0 || !row.product) continue;
+    try {
+      await inventoryStore.registerUsage({
+        productId: row.product.id,
+        quantity: qty,
+        installationId: materialsInstallation.value.id,
+        reason: `Instalación ${materialsInstallation.value.contracts?.contract_number ?? materialsInstallation.value.id} — plantilla`,
+      });
+    } catch (e) {
+      failures.push(`${row.label}: ${getErrorMessage(e)}`);
+    }
+  }
+  materials.value = await inventoryStore.fetchMovementsByInstallation(materialsInstallation.value.id);
+  resetTemplateQuantities();
+  templateError.value = failures.length ? failures.join(' · ') : null;
+  savingTemplate.value = false;
+}
+
+// ---- Nota de cuenta IPTV para instalaciones "Solo IPTV" (Fase 45) ----
+const iptvNoteDraft = ref('');
+const savingIptvNote = ref(false);
+const iptvNoteError = ref<string | null>(null);
+
+async function handleSaveIptvNote() {
+  if (!materialsInstallation.value) return;
+  savingIptvNote.value = true;
+  iptvNoteError.value = null;
+  try {
+    const updated = await installationsStore.updateInstallation(materialsInstallation.value.id, {
+      iptv_account_note: iptvNoteDraft.value.trim() || null,
+    });
+    materialsInstallation.value.iptv_account_note = updated.iptv_account_note;
+  } catch (e) {
+    iptvNoteError.value = getErrorMessage(e, 'Error al guardar la nota');
+  } finally {
+    savingIptvNote.value = false;
+  }
+}
+
 // ---- Equipos serializados asignados a la instalacion (control por serie/MAC) ----
 const serializedProducts = computed(() => inventoryStore.products.filter((p) => p.is_serialized));
+// En Solo IPTV el equipo NUNCA es obligatorio (la validacion de cierre solo
+// exige equipo en Internet/Combo), pero a veces igual hace falta entregar
+// uno: TV Box si el TV del cliente no es Smart, u ONT como puente si el
+// cliente no tiene internet de ningun proveedor (para poder llevarle la
+// señal IPTV). Se acota a esas dos categorias (Fase 44: 'onu'/'tvbox'), sin
+// incluir Mesh/Routers que no aplica a este caso.
+const soloIptvEquipmentProducts = computed(() =>
+  inventoryStore.products.filter(
+    (p) => p.is_serialized && (p.inventory_categories?.slug === 'onu' || p.inventory_categories?.slug === 'tvbox'),
+  ),
+);
+const equipmentProducts = computed(() => (materialsServiceType.value === 'solo_iptv' ? soloIptvEquipmentProducts.value : serializedProducts.value));
+
+// Si el tecnico cambia el tipo de servicio con un producto ya elegido en el
+// selector de equipo, ese producto puede dejar de estar en la lista vigente
+// (ej. paso de Internet/Combo con una ONU elegida a Solo IPTV, que solo
+// ofrece TV Box) — se limpia para no dejar una seleccion invalida.
+watch(materialsServiceType, () => {
+  unitForm.value = { productId: '', unitId: '' };
+  availableUnits.value = [];
+});
 const assignedUnits = ref<InventoryUnit[]>([]);
 const availableUnits = ref<InventoryUnit[]>([]);
 const loadingAvailableUnits = ref(false);
@@ -188,6 +329,49 @@ async function handleAssignUnit() {
     unitError.value = getErrorMessage(e, 'Error al asignar el equipo');
   } finally {
     savingUnit.value = false;
+  }
+}
+
+// ---- Quitar un equipo mal elegido (Fase 46) ----
+// En campo, mientras la instalacion sigue abierta, el tecnico puede corregir
+// un equipo asignado por error (vuelve a bodega 'in_stock', igual que
+// markRepaired, y queda libre para elegir el correcto). Una vez la orden
+// esta 'completed' solo SUPERADMIN/ADMIN pueden seguir corrigiendo — el
+// trigger apply_inventory_unit_event lo exige igual del lado de la BD, esto
+// solo evita mostrarle el boton a quien la BD igual va a rechazar. El
+// registro de cambios ya existe: cada correccion queda en
+// inventory_unit_events (quien, cuando, motivo).
+const removingUnitId = ref<string | null>(null);
+const canRemoveUnit = computed(() => {
+  const inst = materialsInstallation.value;
+  if (!inst) return false;
+  if (inst.status !== 'completed') return canEdit(inst);
+  return auth.role === 'SUPERADMIN' || auth.role === 'ADMIN';
+});
+
+async function handleUnassignUnit(unit: InventoryUnit) {
+  if (!materialsInstallation.value) return;
+  const isCompletedCorrection = materialsInstallation.value.status === 'completed';
+  let reason = 'Corrección en campo: equipo incorrecto retirado de la instalación';
+  if (isCompletedCorrection) {
+    const typed = prompt(
+      'Esta instalación ya está completada. Escribe el motivo de la corrección (queda registrado en el historial del equipo):',
+    );
+    if (!typed || !typed.trim()) return;
+    reason = typed.trim();
+  } else if (!confirm(`¿Quitar "${unit.product?.name ?? 'este equipo'}" de la instalación? Vuelve a bodega disponible.`)) {
+    return;
+  }
+  removingUnitId.value = unit.id;
+  unitError.value = null;
+  try {
+    await inventoryUnitsStore.markRepaired(unit.id, reason);
+    assignedUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(materialsInstallation.value.id);
+    await onUnitProductChange();
+  } catch (e) {
+    unitError.value = getErrorMessage(e, 'Error al quitar el equipo');
+  } finally {
+    removingUnitId.value = null;
   }
 }
 
@@ -327,11 +511,27 @@ function onCompletePhotoChange(category: ClientPhotoCategory, event: Event) {
   if (file) completePhotos.value[category] = file;
 }
 
+const MISSING_EQUIPMENT_MESSAGE = 'Para instalaciones de internet/combo debes asignar al menos un equipo por Serie/MAC';
+
 async function handleCompleteSubmit() {
   if (!completingInstallation.value) return;
   completeSaving.value = true;
   completeError.value = null;
   try {
+    // Aviso temprano en el frontend antes de subir GPS/fotos — la regla real
+    // (fuente de verdad) vive en el trigger trg_installations_validate_completion
+    // (Fase 45), que tambien protege el selector de estado directo de
+    // SUPERADMIN/ADMIN, que no pasa por este modal.
+    const svcType = completingInstallation.value.contracts?.service_type ?? 'internet_combo';
+    if (svcType === 'internet_combo') {
+      const units = await inventoryUnitsStore.fetchUnitsByInstallation(completingInstallation.value.id);
+      if (!units.length) {
+        completeError.value = MISSING_EQUIPMENT_MESSAGE;
+        completeSaving.value = false;
+        return;
+      }
+    }
+
     const clientId = completingInstallation.value.client_id;
     const contractId = completingInstallation.value.contract_id;
     if (completeGps.value.latitude != null && completeGps.value.longitude != null) {
@@ -565,64 +765,155 @@ function formatDate(value: string | null) {
 
     <Teleport to="body">
       <div v-if="showMaterialsModal" class="modal-overlay" @click.self="showMaterialsModal = false">
-        <div class="w-full max-w-md modal-panel">
+        <div class="w-full max-w-lg modal-panel max-h-[90vh] overflow-y-auto">
           <h2 class="text-lg font-semibold mb-1">Materiales usados</h2>
           <p class="text-xs text-slate-500 mb-4">
             {{ materialsInstallation?.clients ? `${materialsInstallation.clients.first_name} ${materialsInstallation.clients.last_name}` : '' }}
           </p>
 
-          <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
-          <template v-else>
-            <p v-if="!materials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en esta instalación.</p>
-            <ul v-else class="space-y-1.5 mb-4">
-              <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
-                <span>{{ m.product?.name ?? 'Producto' }}</span>
-                <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }}</span>
-              </li>
-            </ul>
+          <!-- Tipo de instalacion/servicio (Fase 45) -->
+          <div class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Tipo de instalación / servicio</label>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="flex-1 px-3 py-2 rounded-lg text-xs font-medium border"
+                :class="materialsServiceType === 'internet_combo' ? 'bg-sky-500 text-slate-950 border-sky-500' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'"
+                :disabled="serviceTypeSaving"
+                @click="setServiceType('internet_combo')"
+              >
+                🌐 Internet / Combo
+              </button>
+              <button
+                type="button"
+                class="flex-1 px-3 py-2 rounded-lg text-xs font-medium border"
+                :class="materialsServiceType === 'solo_iptv' ? 'bg-sky-500 text-slate-950 border-sky-500' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'"
+                :disabled="serviceTypeSaving || !canChangeServiceType"
+                @click="setServiceType('solo_iptv')"
+              >
+                📺 Solo IPTV (App Smart TV)
+              </button>
+            </div>
+            <p v-if="!canChangeServiceType" class="text-[11px] text-amber-600 mt-1">
+              Esta instalación no tiene un contrato/servicio vinculado — vincula uno para poder marcarla como Solo IPTV.
+            </p>
+            <p v-else class="text-[11px] text-slate-400 mt-1">Se guarda en el servicio del cliente y aplica a futuras visitas.</p>
+            <p v-if="serviceTypeError" class="text-xs text-red-600 mt-1">{{ serviceTypeError }}</p>
+          </div>
+
+          <template v-if="materialsServiceType === 'internet_combo'">
+            <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
+            <template v-else>
+              <p v-if="!materials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en esta instalación.</p>
+              <ul v-else class="space-y-1.5 mb-4">
+                <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
+                  <span>{{ m.product?.name ?? 'Producto' }}</span>
+                  <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }}</span>
+                </li>
+              </ul>
+            </template>
+
+            <!-- Plantilla de materiales precargados (Fase 45) -->
+            <div class="border border-slate-200 rounded-lg p-3 mb-4">
+              <h3 class="text-sm font-semibold mb-2">Plantilla de materiales</h3>
+              <div class="space-y-2">
+                <div v-for="row in templateRows" :key="row.key" class="flex items-center gap-2">
+                  <span class="flex-1 text-xs text-slate-700">{{ row.label }}</span>
+                  <template v-if="row.product">
+                    <input
+                      v-model.number="templateQuantities[row.key]"
+                      type="number"
+                      min="0"
+                      step="1"
+                      class="field-input w-20 py-1 text-xs"
+                    />
+                    <span class="text-[11px] text-slate-400 w-16">{{ row.product.unit }}</span>
+                  </template>
+                  <span v-else class="text-[11px] text-amber-600">
+                    Falta crear "{{ row.label }}" en
+                    <router-link to="/inventario/album/ferreteria" class="underline" @click="showMaterialsModal = false">Inventario</router-link>
+                  </span>
+                </div>
+              </div>
+              <div class="flex justify-end mt-3">
+                <button type="button" :disabled="savingTemplate" class="btn-secondary text-xs" @click="handleRegisterTemplate">
+                  {{ savingTemplate ? 'Registrando...' : 'Registrar plantilla' }}
+                </button>
+              </div>
+              <p v-if="templateError" class="text-xs text-red-600 mt-2">{{ templateError }}</p>
+            </div>
+
+            <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
+              <div class="flex-1 min-w-[160px]">
+                <label class="block text-xs text-slate-600 mb-1">Otro material</label>
+                <select v-model="materialForm.productId" required class="field-input">
+                  <option value="" disabled>Selecciona...</option>
+                  <option v-for="p in otherMaterialProducts" :key="p.id" :value="p.id">
+                    {{ p.name }} ({{ p.current_stock }} {{ p.unit }} disp.)
+                  </option>
+                </select>
+              </div>
+              <div class="w-24">
+                <label class="block text-xs text-slate-600 mb-1">Cantidad</label>
+                <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
+              </div>
+              <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
+                {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
+              </button>
+            </form>
+            <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
           </template>
 
-          <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
-            <div class="flex-1 min-w-[160px]">
-              <label class="block text-xs text-slate-600 mb-1">Producto</label>
-              <select v-model="materialForm.productId" required class="field-input">
-                <option value="" disabled>Selecciona...</option>
-                <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">
-                  {{ p.name }} ({{ p.current_stock }} {{ p.unit }} disp.)
-                </option>
-              </select>
-            </div>
-            <div class="w-24">
-              <label class="block text-xs text-slate-600 mb-1">Cantidad</label>
-              <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
-            </div>
-            <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
-              {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
-            </button>
-          </form>
-          <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
-
+          <!-- Equipos por serie/MAC: obligatorio en Internet/Combo (ONT/TV Box);
+               en Solo IPTV es siempre opcional (puede cerrarse con 0 equipos),
+               pero se deja agregar ONT (como puente, si el cliente no tiene
+               internet de nadie) o TV Box (si el TV no es Smart). -->
           <div class="border-t border-slate-200 mt-4 pt-4">
-            <h3 class="text-sm font-semibold mb-1">Equipos asignados (serie/MAC)</h3>
-            <p v-if="!serializedProducts.length" class="text-xs text-slate-500">No hay productos con control por serie/MAC configurados en Inventario.</p>
+            <h3 class="text-sm font-semibold mb-1">
+              Equipos asignados (serie/MAC)
+              <span v-if="materialsServiceType === 'internet_combo'" class="text-amber-600 font-normal">— obligatorio</span>
+              <span v-else class="text-slate-400 font-normal">— opcional: ONT como puente o TV Box si el TV no es Smart</span>
+            </h3>
+            <p v-if="!equipmentProducts.length" class="text-xs text-slate-500">
+              {{ materialsServiceType === 'solo_iptv'
+                ? 'No hay productos de ONT o TV Box configurados en Inventario.'
+                : 'No hay productos con control por serie/MAC configurados en Inventario.' }}
+            </p>
             <template v-else>
               <ul v-if="assignedUnits.length" class="space-y-1.5 mb-3">
                 <li v-for="u in assignedUnits" :key="u.id" class="text-xs">
-                  <div class="flex justify-between">
+                  <div class="flex justify-between items-center gap-2">
                     <span>{{ u.product?.name ?? 'Equipo' }} — {{ u.serial_number || u.mac_address }}</span>
-                    <span class="text-slate-500">{{ u.serial_number && u.mac_address ? u.mac_address : '' }}</span>
+                    <span class="flex items-center gap-2 shrink-0">
+                      <span class="text-slate-500">{{ u.serial_number && u.mac_address ? u.mac_address : '' }}</span>
+                      <button
+                        v-if="canRemoveUnit"
+                        type="button"
+                        :disabled="removingUnitId === u.id"
+                        class="text-red-500/80 hover:text-red-600"
+                        @click="handleUnassignUnit(u)"
+                      >
+                        {{ removingUnitId === u.id ? 'Quitando...' : 'Quitar' }}
+                      </button>
+                    </span>
                   </div>
                   <p v-if="u.notes" class="text-slate-500 mt-0.5">Notas: {{ u.notes }}</p>
                 </li>
               </ul>
-              <p v-else class="text-xs text-slate-500 mb-3">Sin equipos asignados a esta instalación todavía.</p>
+              <p
+                v-else
+                class="text-xs mb-3"
+                :class="materialsServiceType === 'internet_combo' ? 'text-amber-600' : 'text-slate-500'"
+              >
+                Sin equipos asignados a esta instalación todavía.
+              </p>
 
               <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAssignUnit">
                 <div class="flex-1 min-w-[160px]">
                   <label class="block text-xs text-slate-600 mb-1">Producto</label>
                   <select v-model="unitForm.productId" required class="field-input" @change="onUnitProductChange">
                     <option value="" disabled>Selecciona...</option>
-                    <option v-for="p in serializedProducts" :key="p.id" :value="p.id">{{ p.name }}</option>
+                    <option v-for="p in equipmentProducts" :key="p.id" :value="p.id">{{ p.name }}</option>
                   </select>
                 </div>
                 <div class="flex-1 min-w-[180px]">
@@ -641,6 +932,18 @@ function formatDate(value: string | null) {
               </form>
               <p v-if="unitError" class="text-xs text-red-600 mt-2">{{ unitError }}</p>
             </template>
+          </div>
+
+          <!-- Solo IPTV: sin materiales de ferreteria, solo la nota de cuenta -->
+          <div v-if="materialsServiceType === 'solo_iptv'" class="border border-slate-200 rounded-lg p-3 mt-4">
+            <label class="block text-xs text-slate-600 mb-1">Cuenta / usuario IPTV asignado (opcional)</label>
+            <textarea v-model="iptvNoteDraft" rows="2" class="field-input" placeholder="ej. Usuario X en Smart TV Samsung del cliente"></textarea>
+            <div class="flex justify-end mt-2">
+              <button type="button" :disabled="savingIptvNote" class="btn-secondary text-xs" @click="handleSaveIptvNote">
+                {{ savingIptvNote ? 'Guardando...' : 'Guardar nota' }}
+              </button>
+            </div>
+            <p v-if="iptvNoteError" class="text-xs text-red-600 mt-2">{{ iptvNoteError }}</p>
           </div>
 
           <div class="flex justify-end mt-4">

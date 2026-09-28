@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import type { Installation, InstallationStatus } from '@/types/domain';
 
 const INSTALLATION_SELECT =
-  '*, clients(id, first_name, last_name, phone, address, latitude, longitude), contracts:service_contracts(id, contract_number), assigned_profile:profiles!installations_assigned_to_fkey(id, full_name, email)';
+  '*, clients(id, first_name, last_name, phone, address, latitude, longitude), contracts:service_contracts(id, contract_number, service_type), assigned_profile:profiles!installations_assigned_to_fkey(id, full_name, email)';
 
 export const useInstallationsStore = defineStore('installations', () => {
   const installations = ref<Installation[]>([]);

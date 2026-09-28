@@ -119,6 +119,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: NOT_TECNICO },
     },
     {
+      path: '/inventario/album/:slug',
+      name: 'inventario-album',
+      component: () => import('@/views/inventario/InventarioAlbumView.vue'),
+      meta: { requiresAuth: true, roles: NOT_TECNICO },
+    },
+    {
       path: '/inventario/:id',
       name: 'inventario-detalle',
       component: () => import('@/views/inventario/InventarioProductoView.vue'),

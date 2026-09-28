@@ -1,38 +1,75 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import type { InventoryMovement, InventoryMovementType, InventoryProduct } from '@/types/domain';
+import type {
+  InventoryAlbumSummary,
+  InventoryCategory,
+  InventoryMovement,
+  InventoryMovementType,
+  InventoryProduct,
+} from '@/types/domain';
 
 const MOVEMENT_SELECT = '*, author:profiles!inventory_movements_created_by_fkey(id, full_name, email)';
 const MOVEMENT_WITH_PRODUCT_SELECT = `${MOVEMENT_SELECT}, product:inventory_products(id, name, unit)`;
+const PRODUCT_SELECT = '*, inventory_categories(id, slug, name, icon, color)';
 
 export const useInventoryStore = defineStore('inventory', () => {
   const products = ref<InventoryProduct[]>([]);
+  const categories = ref<InventoryCategory[]>([]);
+  const albums = ref<InventoryAlbumSummary[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
-  async function fetchProducts() {
+  /** `categoryId` filtra la vista de un álbum puntual (Fase 44); sin filtro trae todo el catálogo activo. */
+  async function fetchProducts(opts?: { categoryId?: string }) {
     loading.value = true;
     error.value = null;
-    const { data, error: err } = await supabase
-      .from('inventory_products')
-      .select('*')
-      .eq('is_active', true)
-      .order('name');
+    let query = supabase.from('inventory_products').select(PRODUCT_SELECT).eq('is_active', true);
+    if (opts?.categoryId) query = query.eq('category_id', opts.categoryId);
+    const { data, error: err } = await query.order('name');
     loading.value = false;
     if (err) {
       error.value = err.message;
       throw err;
     }
-    products.value = (data ?? []) as InventoryProduct[];
+    products.value = (data ?? []) as unknown as InventoryProduct[];
+  }
+
+  /** Taxonomía de álbumes (Fase 44) — catálogo casi estático, se carga una vez por sesión. */
+  async function fetchCategories() {
+    const { data, error: err } = await supabase
+      .from('inventory_categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order');
+    if (err) throw err;
+    categories.value = (data ?? []) as InventoryCategory[];
+  }
+
+  /** Contadores/valor total por álbum (RPC inventory_get_albums, Fase 44) — agregado en SQL, no trae todo el inventario al navegador. */
+  async function fetchAlbums() {
+    loading.value = true;
+    error.value = null;
+    const { data, error: err } = await supabase.rpc('inventory_get_albums');
+    loading.value = false;
+    if (err) {
+      error.value = err.message;
+      throw err;
+    }
+    albums.value = (data ?? []) as InventoryAlbumSummary[];
+  }
+
+  /** Mueve un producto (o toda una linea serializada) a otro álbum — solo cambia category_id, no toca inventory_units ni clientes. */
+  function updateProductCategory(productId: string, categoryId: string) {
+    return updateProduct(productId, { category_id: categoryId });
   }
 
   async function createProduct(payload: Partial<InventoryProduct>) {
-    const { data, error: err } = await supabase.from('inventory_products').insert(payload).select().single();
+    const { data, error: err } = await supabase.from('inventory_products').insert(payload).select(PRODUCT_SELECT).single();
     if (err) throw err;
-    products.value.push(data as InventoryProduct);
+    products.value.push(data as unknown as InventoryProduct);
     products.value.sort((a, b) => a.name.localeCompare(b.name));
-    return data as InventoryProduct;
+    return data as unknown as InventoryProduct;
   }
 
   async function updateProduct(id: string, payload: Partial<InventoryProduct>) {
@@ -40,12 +77,12 @@ export const useInventoryStore = defineStore('inventory', () => {
       .from('inventory_products')
       .update(payload)
       .eq('id', id)
-      .select()
+      .select(PRODUCT_SELECT)
       .single();
     if (err) throw err;
     const idx = products.value.findIndex((p) => p.id === id);
-    if (idx !== -1) products.value[idx] = data as InventoryProduct;
-    return data as InventoryProduct;
+    if (idx !== -1) products.value[idx] = data as unknown as InventoryProduct;
+    return data as unknown as InventoryProduct;
   }
 
   async function deactivateProduct(id: string) {
@@ -137,7 +174,12 @@ export const useInventoryStore = defineStore('inventory', () => {
     products,
     loading,
     error,
+    categories,
+    albums,
     fetchProducts,
+    fetchCategories,
+    fetchAlbums,
+    updateProductCategory,
     createProduct,
     updateProduct,
     deactivateProduct,

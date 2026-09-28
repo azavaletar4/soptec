@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import MoveAlbumMenu from '@/components/inventario/MoveAlbumMenu.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useClientsStore } from '@/stores/clients';
@@ -321,12 +322,26 @@ async function openHistory(unit: InventoryUnit) {
 
 onMounted(async () => {
   if (!inventoryStore.products.length) await inventoryStore.fetchProducts();
+  if (!inventoryStore.categories.length) await inventoryStore.fetchCategories();
   if (product.value?.is_serialized) {
     await loadUnits();
   } else {
     await loadMovements();
   }
 });
+
+// ---- Mover a otro álbum (Fase 44) — solo cambia category_id, no toca inventory_units ni clientes ----
+const showMoveMenu = ref(false);
+const moveError = ref<string | null>(null);
+async function moveToCategory(categoryId: string) {
+  if (!product.value) return;
+  try {
+    await inventoryStore.updateProductCategory(product.value.id, categoryId);
+    showMoveMenu.value = false;
+  } catch (e) {
+    moveError.value = getErrorMessage(e, 'Error al mover el producto de álbum');
+  }
+}
 
 function openEdit() {
   if (!product.value) return;
@@ -418,13 +433,17 @@ async function handleDeleteProduct() {
     <template v-else>
       <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
-          <h1 class="text-2xl font-semibold mb-1">{{ product.name }}</h1>
+          <h1 class="text-2xl font-semibold mb-1">
+            <span v-if="product.inventory_categories">{{ product.inventory_categories.icon }}</span> {{ product.name }}
+          </h1>
           <p class="text-slate-600 text-sm">
-            {{ product.category ?? 'Sin categoría' }} · {{ product.unit }} · S/ {{ Number(product.price).toFixed(2) }}
+            {{ product.inventory_categories?.name ?? product.category ?? 'Sin álbum' }} · {{ product.unit }} · S/ {{ Number(product.price).toFixed(2) }}
             <span v-if="product.purchase_date"> · Compra: {{ product.purchase_date }}</span>
           </p>
+          <p v-if="moveError" class="text-xs text-red-600 mt-1">{{ moveError }}</p>
         </div>
         <div class="flex gap-2">
+          <button class="btn-secondary" @click="showMoveMenu = true">🔀 Mover a otro álbum</button>
           <button class="btn-secondary" @click="openEdit">Editar producto</button>
           <button v-if="canDelete" class="px-3 py-1.5 rounded-lg text-sm text-red-600 hover:bg-red-500/10" @click="handleDeleteProduct">Eliminar</button>
         </div>
@@ -807,5 +826,14 @@ async function handleDeleteProduct() {
         </div>
       </div>
     </Teleport>
+
+    <MoveAlbumMenu
+      v-if="showMoveMenu && product"
+      mode="product"
+      :categories="inventoryStore.categories"
+      :current-category-id="product.category_id"
+      @close="showMoveMenu = false"
+      @move-category="moveToCategory"
+    />
   </AppLayout>
 </template>
