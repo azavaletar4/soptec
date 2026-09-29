@@ -17,6 +17,7 @@ services:
       - "443:443"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/rayconetworks-web:/srv/rayconetworks-web:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

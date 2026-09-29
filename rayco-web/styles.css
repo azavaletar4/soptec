@@ -1,0 +1,426 @@
+:root {
+  --azul-oscuro: #0b1f3a;
+  --azul: #145da0;
+  --azul-claro: #2e8bc0;
+  --acento: #25d366;
+  --gris-claro: #f4f7fb;
+  --gris-texto: #4a5568;
+  --blanco: #ffffff;
+  --radio: 14px;
+  --sombra: 0 10px 30px rgba(11, 31, 58, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif;
+  color: var(--azul-oscuro);
+  background: var(--blanco);
+  line-height: 1.6;
+}
+
+a { color: inherit; text-decoration: none; }
+
+img { max-width: 100%; display: block; }
+
+.contenedor {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* Header */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  max-width: 1140px;
+  margin: 0 auto;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--azul-oscuro);
+}
+
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--azul), var(--azul-claro));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 900;
+  font-size: 1rem;
+}
+
+nav.menu {
+  display: flex;
+  gap: 28px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+nav.menu a:hover { color: var(--azul); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primario {
+  background: var(--acento);
+  color: #05310f;
+}
+
+.btn-primario:hover { filter: brightness(1.05); }
+
+.btn-outline {
+  border: 2px solid var(--azul);
+  color: var(--azul);
+  background: transparent;
+}
+
+.menu-toggle { display: none; }
+
+/* Hero */
+.hero {
+  background: radial-gradient(1200px 500px at 80% -10%, #dceeff 0%, transparent 60%), var(--gris-claro);
+  padding: 80px 0 60px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.hero h1 {
+  font-size: 2.6rem;
+  line-height: 1.15;
+  margin: 0 0 18px;
+}
+
+.hero h1 span { color: var(--azul); }
+
+.hero p {
+  font-size: 1.1rem;
+  color: var(--gris-texto);
+  margin-bottom: 28px;
+  max-width: 42ch;
+}
+
+.hero-cta { display: flex; gap: 14px; flex-wrap: wrap; }
+
+.hero-visual {
+  background: linear-gradient(160deg, var(--azul-oscuro), var(--azul));
+  border-radius: 24px;
+  aspect-ratio: 4/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: var(--sombra);
+}
+
+.hero-visual-inner {
+  text-align: center;
+  padding: 20px;
+}
+
+.hero-visual-inner .num { font-size: 2.6rem; font-weight: 900; }
+.hero-visual-inner .lbl { opacity: .85; font-size: .95rem; }
+
+/* Secciones genericas */
+section { padding: 76px 0; }
+
+.section-tag {
+  color: var(--azul);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-size: .8rem;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.section-title {
+  font-size: 2rem;
+  margin: 0 0 14px;
+}
+
+.section-desc {
+  color: var(--gris-texto);
+  max-width: 60ch;
+  margin-bottom: 42px;
+}
+
+/* Planes */
+.planes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.plan-card {
+  background: var(--blanco);
+  border: 1px solid #e6ebf2;
+  border-radius: var(--radio);
+  padding: 32px 26px;
+  box-shadow: var(--sombra);
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-card.destacado {
+  border: 2px solid var(--azul);
+  transform: translateY(-6px);
+}
+
+.plan-badge {
+  align-self: flex-start;
+  background: var(--azul);
+  color: white;
+  font-size: .75rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+
+.plan-nombre { font-size: 1.15rem; font-weight: 800; margin-bottom: 6px; }
+
+.plan-precio {
+  font-size: 2.1rem;
+  font-weight: 900;
+  color: var(--azul-oscuro);
+  margin: 10px 0 4px;
+}
+
+.plan-precio small { font-size: 1rem; font-weight: 600; color: var(--gris-texto); }
+
+.plan-detalle { color: var(--gris-texto); font-size: .9rem; margin-bottom: 22px; }
+
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 26px;
+  flex-grow: 1;
+}
+
+.plan-features li {
+  padding: 8px 0;
+  border-top: 1px solid #eef1f6;
+  font-size: .92rem;
+  display: flex;
+  gap: 8px;
+}
+
+.plan-features li::before { content: '✓'; color: var(--acento); font-weight: 900; }
+
+.aviso-placeholder {
+  background: #fff8e1;
+  border: 1px dashed #e0c46b;
+  color: #6b5300;
+  font-size: .82rem;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-top: 34px;
+}
+
+/* Rayco TV */
+.tv-section { background: var(--gris-claro); }
+
+.tv-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.tv-visual {
+  background: linear-gradient(160deg, #1b2a4a, #0b1f3a);
+  border-radius: 24px;
+  aspect-ratio: 4/3;
+  box-shadow: var(--sombra);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  font-size: 1.4rem;
+}
+
+.tv-list { list-style: none; padding: 0; margin: 24px 0; }
+
+.tv-list li {
+  padding: 10px 0;
+  border-top: 1px solid #dfe6ef;
+  display: flex;
+  gap: 10px;
+}
+
+.tv-list li::before { content: '📺'; }
+
+/* Cobertura */
+.cobertura-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.zona-card {
+  background: var(--blanco);
+  border: 1px solid #e6ebf2;
+  border-radius: var(--radio);
+  padding: 20px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.zona-card small {
+  display: block;
+  font-weight: 400;
+  color: var(--gris-texto);
+  margin-top: 6px;
+  font-size: .82rem;
+}
+
+/* Contacto */
+.contacto-section { background: var(--azul-oscuro); color: white; }
+
+.contacto-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+.contacto-section .section-desc { color: #c7d3e6; }
+
+.contacto-card {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radio);
+  padding: 26px;
+}
+
+.contacto-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.contacto-item:first-child { border-top: none; }
+
+.contacto-icono {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+/* Footer */
+footer {
+  background: #081428;
+  color: #9fb0c9;
+  padding: 40px 0 24px;
+  font-size: .88rem;
+}
+
+.footer-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 20px;
+}
+
+.footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
+
+.footer-links a:hover { color: white; }
+
+/* Boton flotante de WhatsApp */
+.wa-float {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--acento);
+  color: #05310f;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  box-shadow: 0 8px 24px rgba(37, 211, 102, 0.45);
+  z-index: 200;
+}
+
+.wa-float:hover { filter: brightness(1.05); }
+
+/* Paginas legales */
+.legal-wrap {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 60px 20px 100px;
+}
+
+.legal-wrap h1 { font-size: 2rem; }
+.legal-wrap h2 { font-size: 1.3rem; margin-top: 36px; }
+.legal-wrap p, .legal-wrap li { color: var(--gris-texto); }
+.legal-wrap .fecha { color: #94a3b8; font-size: .85rem; margin-bottom: 40px; }
+
+.placeholder { background: #fff3cd; padding: 1px 6px; border-radius: 4px; }
+
+/* Responsive */
+@media (max-width: 860px) {
+  .hero-grid, .tv-grid, .contacto-grid { grid-template-columns: 1fr; }
+  .hero-visual, .tv-visual { order: -1; }
+  .planes-grid { grid-template-columns: 1fr; }
+  .plan-card.destacado { transform: none; }
+  nav.menu { display: none; }
+  .header-inner .btn-outline { display: none; }
+}
+
+@media (max-width: 480px) {
+  .hero h1 { font-size: 2rem; }
+  section { padding: 56px 0; }
+}

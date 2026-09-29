@@ -1,6 +1,12 @@
 # SmartRayco backend (Node + Hono, corrido con tsx). ARM64/AMD64.
 # Uso: docker compose -f docker-compose.onprem.yml up -d --build
-FROM node:20-slim
+#
+# Node 22+ obligatorio: @supabase/supabase-js instancia un RealtimeClient al
+# hacer createClient() (aunque la app no use canales realtime) y ese cliente
+# exige WebSocket nativo — en Node 20 lanza una excepcion no capturada que
+# tumba el proceso entero (visto en vivo: crash-loop del backend, Error 500
+# en toda la app cada vez que algo llamaba a supabaseAdmin).
+FROM node:22-slim
 
 # Toolchain para modulos nativos (ssh2 usa bindings nativos).
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
