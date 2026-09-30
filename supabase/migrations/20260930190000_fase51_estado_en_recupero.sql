@@ -1,0 +1,27 @@
+-- SmartRayco — Fase 51: separa "recojo pendiente por baja de servicio" de
+-- "averiado / en reparacion" en el modulo de Inventario.
+--
+-- Hasta ahora el boton "Devolucion" (Fase 11c) mezclaba tres situaciones bajo
+-- los mismos estados: baja de servicio (recojo pendiente, aun no se sabe en
+-- que estado llega el equipo), averia real, y devolucion en buen estado. Se
+-- agrega el estado 'en_recupero' para el primer caso, que entra a la misma
+-- bandeja virtual "Equipos por Recoger / En Recupero" (Fase 44) que ya
+-- agrupaba dañados/en reparacion/dados de baja.
+--
+-- No se tocan ni renombran los valores existentes del enum
+-- (in_stock/assigned/damaged/in_repair/retired): son identificadores
+-- internos, la UI ya los traduce a español via diccionarios de label — solo
+-- se agrega el valor nuevo.
+--
+-- IMPORTANTE: este archivo va SEPARADO de fase51b (que agrega las columnas y
+-- redefine las funciones que usan 'en_recupero') a proposito. Postgres no
+-- permite usar un valor de enum recien agregado dentro de la misma
+-- transaccion en que se creo ("unsafe use of new value ... must be
+-- committed before they can be used") — si se pegan ambos archivos juntos en
+-- el SQL Editor de Supabase y se corren de una sola vez, fallan. Hay que
+-- ejecutar este archivo primero, esperar a que termine (queda commiteado
+-- solo), y recien despues correr fase51b.
+--
+-- Idempotente: permite re-ejecutar sin error si ya se corrio antes.
+
+alter type public.inventory_unit_status add value if not exists 'en_recupero';

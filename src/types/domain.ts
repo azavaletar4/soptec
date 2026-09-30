@@ -25,7 +25,7 @@ export const AVERIA_TICKET_CATEGORIES: TicketCategory[] = ['no_service', 'slow_s
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled' | 'exonerada';
 export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
 export type InventoryMovementType = 'ingreso' | 'egreso';
-export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired';
+export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired' | 'en_recupero';
 export type InfraElementoTipo = 'caja_nap' | 'splitter' | 'manga' | 'armario' | 'poste' | 'camara' | 'otro';
 export type VehiculoTipo = 'auto' | 'moto';
 export type VehiculoEstado = 'activo' | 'mantenimiento' | 'inactivo';
@@ -286,12 +286,15 @@ export interface InventoryUnit {
   contract_id: string | null;
   installation_id: string | null;
   assigned_at: string | null;
+  /** Tecnico asignado a ir a recoger el equipo (Fase 51) — solo distinto de null mientras status = 'en_recupero'. */
+  pending_pickup_by: string | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
   product?: Pick<InventoryProduct, 'id' | 'name' | 'category'> | null;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
+  pending_pickup_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
 
 export interface InventoryUnitEvent {
@@ -301,11 +304,14 @@ export interface InventoryUnitEvent {
   to_status: InventoryUnitStatus;
   client_id: string | null;
   installation_id: string | null;
+  /** Tecnico responsable del recojo en este evento puntual (Fase 51). */
+  assigned_to: string | null;
   reason: string | null;
   created_by: string | null;
   created_at: string;
   author?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name'> | null;
+  assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
 
 export interface InventoryMovement {

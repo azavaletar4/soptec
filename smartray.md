@@ -192,6 +192,33 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
 
 ---
 
+## 2026-09-30
+
+### Inventario (Equipos por Recoger vs Averiados/En Reparación)
+- El álbum virtual único que antes mezclaba todo bajo **"Equipos por Recoger / Averiados"** se
+  separó en **dos tarjetas** en la vista principal de Inventario:
+  - **"Equipos por Recoger"** 🔄 (rosa): solo equipos con recojo pendiente por baja de servicio.
+  - **"Averiados / En Reparación"** 🛠️ (ámbar): equipos dañados, en reparación o dados de baja
+    (mismo grupo de antes, sin "Por Recoger" mezclado).
+- El botón único **"Devolución"** que aparecía sobre un equipo asignado a un cliente (en la ficha
+  del producto, en Devoluciones y en la ficha de servicio del cliente) se separó en dos acciones:
+  - **"🔁 Marcar para Recupero"**: abre un modal nuevo con Cliente origen (autocompletado, solo
+    lectura), Técnico asignado al recojo (selector, solo técnicos de red), Motivo (Baja de
+    servicio / Falta de pago / Migración de equipo) y Estado del equipo al recoger
+    (Funcional/Dañado). Al guardar, el equipo pasa al estado **"Por Recoger"** y entra
+    automáticamente a esa bandeja (separada de "Averiados / En Reparación").
+  - **"⚠ Averiado / Mantenimiento"**: mismo modal de siempre (ahora con ese título), para cuando el
+    equipo falló estando con el cliente — sigue soportando también "Buen estado (retorno directo a
+    bodega)" para devoluciones sin baja de servicio.
+- Nueva pestaña **"Por Recoger"** en Devoluciones (separada de "Dañados"/"En reparación"), y la
+  ficha de producto ahora tiene dos tarjetas KPI en vez de una: **"Por Recoger"** y **"Averiados /
+  En Reparación"**.
+- El selector "🔀 Cambiar estado" del álbum virtual y el historial (Kardex) de cada equipo también
+  reconocen el nuevo estado "Por Recoger", mostrando el técnico asignado al recojo cuando
+  corresponde.
+
+---
+
 ## Cómo se sigue actualizando este archivo
 
 Cada vez que se aplique un cambio visual nuevo (color, layout, componente, texto de interfaz,

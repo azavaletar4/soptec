@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientSectionCard from '@/components/clientes/ClientSectionCard.vue';
+import RecoveryModal from '@/components/inventario/RecoveryModal.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -621,6 +622,7 @@ const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   damaged: 'Dañado',
   in_repair: 'En reparación',
   retired: 'Dado de baja',
+  en_recupero: 'Por Recoger',
 };
 const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
@@ -628,17 +630,20 @@ const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   damaged: 'bg-red-500/15 text-red-600',
   in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-500/15 text-slate-600',
+  en_recupero: 'bg-rose-500/15 text-rose-700',
 };
+
+const technicians = computed(() => catalogs.staff.filter((s) => s.role === 'TECNICO_RED'));
 
 const showReturnModal = ref(false);
 const returnUnitTarget = ref<InventoryUnit | null>(null);
-const returnForm = ref({ condition: 'in_stock' as 'in_stock' | 'damaged' | 'in_repair', reason: '' });
+const returnForm = ref({ condition: 'damaged' as 'in_stock' | 'damaged' | 'in_repair', reason: '' });
 const returnSaving = ref(false);
 const returnError = ref<string | null>(null);
 
 function openReturn(unit: InventoryUnit) {
   returnUnitTarget.value = unit;
-  returnForm.value = { condition: 'in_stock', reason: '' };
+  returnForm.value = { condition: 'damaged', reason: '' };
   returnError.value = null;
   showReturnModal.value = true;
 }
@@ -648,13 +653,44 @@ async function handleReturn() {
   returnSaving.value = true;
   returnError.value = null;
   try {
-    await inventoryUnitsStore.returnUnit(returnUnitTarget.value.id, returnForm.value.condition, returnForm.value.reason || undefined);
+    await inventoryUnitsStore.returnUnit(
+      returnUnitTarget.value.id,
+      returnForm.value.condition,
+      returnForm.value.reason || undefined,
+      returnUnitTarget.value.client_id ?? undefined,
+    );
     showReturnModal.value = false;
     await loadUnits();
   } catch (e) {
-    returnError.value = getErrorMessage(e, 'Error al registrar la devolución');
+    returnError.value = getErrorMessage(e, 'Error al registrar el movimiento');
   } finally {
     returnSaving.value = false;
+  }
+}
+
+// ---- Marcar para Recupero (Fase 51): baja de servicio, recojo pendiente ----
+const showRecoveryModal = ref(false);
+const recoveryUnitTarget = ref<InventoryUnit | null>(null);
+const recoveryError = ref<string | null>(null);
+
+function openRecovery(unit: InventoryUnit) {
+  recoveryUnitTarget.value = unit;
+  recoveryError.value = null;
+  showRecoveryModal.value = true;
+}
+
+async function handleRecoveryConfirm(payload: { technicianId: string; reason: string }) {
+  if (!recoveryUnitTarget.value) return;
+  try {
+    await inventoryUnitsStore.markForRecovery(recoveryUnitTarget.value.id, {
+      clientId: recoveryUnitTarget.value.client_id ?? undefined,
+      technicianId: payload.technicianId,
+      reason: payload.reason,
+    });
+    showRecoveryModal.value = false;
+    await loadUnits();
+  } catch (e) {
+    recoveryError.value = getErrorMessage(e, 'Error al marcar el equipo para recupero');
   }
 }
 
@@ -1103,6 +1139,7 @@ onMounted(async () => {
   await Promise.all([
     catalogs.fetchPlans(),
     catalogs.fetchZones(),
+    catalogs.fetchStaff(),
     loadContract(),
     loadTickets(),
     loadInvoices(),
@@ -1538,6 +1575,7 @@ onMounted(async () => {
           <h3 class="text-sm font-semibold">Equipo de inventario (router/ONU)</h3>
           <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="openAddUnit">+ Agregar equipo</button>
         </div>
+        <p v-if="recoveryError" class="text-sm text-red-600 mb-2">{{ recoveryError }}</p>
         <p v-if="loadingUnits" class="text-sm text-slate-500">Cargando...</p>
         <template v-else>
           <div v-for="u in contractUnits" :key="u.id" class="flex items-center justify-between text-sm border border-slate-200 rounded-lg px-3 py-2 mb-2">
@@ -1547,8 +1585,11 @@ onMounted(async () => {
               <span class="badge ml-2" :class="UNIT_STATUS_CLASS[u.status]">{{ UNIT_STATUS_LABEL[u.status] }}</span>
             </div>
             <div class="flex items-center gap-2">
+              <button v-if="u.status === 'assigned'" type="button" class="text-xs text-rose-700 hover:text-rose-700" @click="openRecovery(u)">
+                🔁 Marcar para Recupero
+              </button>
               <button v-if="u.status === 'assigned'" type="button" class="text-xs text-amber-700 hover:text-amber-700" @click="openReturn(u)">
-                Devolución
+                ⚠ Averiado / Mantenimiento
               </button>
               <button type="button" class="text-xs text-red-600 hover:underline" :disabled="equipoTabSaving" @click="handleUnassignUnitFromContract(u)">
                 Quitar
@@ -1893,21 +1934,21 @@ onMounted(async () => {
     <Teleport to="body">
       <div v-if="showReturnModal" class="modal-overlay">
         <form class="w-full max-w-sm modal-panel" @submit.prevent="handleReturn">
-          <h2 class="text-lg font-semibold mb-1">Registrar devolución</h2>
+          <h2 class="text-lg font-semibold mb-1">Registrar avería / mantenimiento</h2>
           <p class="text-xs text-slate-500 mb-4 font-mono">{{ returnUnitTarget?.serial_number || returnUnitTarget?.mac_address }}</p>
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Condición del equipo</label>
             <select v-model="returnForm.condition" class="field-input">
-              <option value="in_stock">Buen estado — listo para reasignar</option>
               <option value="damaged">Dañado</option>
               <option value="in_repair">Enviar a reparación</option>
+              <option value="in_stock">Buen estado (retorno directo a bodega)</option>
             </select>
           </div>
 
           <div class="mb-4">
             <label class="block text-xs text-slate-600 mb-1">Motivo</label>
-            <input v-model="returnForm.reason" class="field-input" placeholder="ej. Baja del servicio, cambio de equipo..." />
+            <input v-model="returnForm.reason" class="field-input" placeholder="ej. Falla de hardware, upgrade de equipo..." />
           </div>
 
           <p v-if="returnError" class="text-sm text-red-600 mb-3">{{ returnError }}</p>
@@ -1915,12 +1956,20 @@ onMounted(async () => {
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showReturnModal = false">Cancelar</button>
             <button type="submit" :disabled="returnSaving" class="btn-primary">
-              {{ returnSaving ? 'Guardando...' : 'Registrar devolución' }}
+              {{ returnSaving ? 'Guardando...' : 'Registrar' }}
             </button>
           </div>
         </form>
       </div>
     </Teleport>
+
+    <RecoveryModal
+      v-if="showRecoveryModal && recoveryUnitTarget"
+      :unit="recoveryUnitTarget"
+      :technicians="technicians"
+      @close="showRecoveryModal = false"
+      @confirm="handleRecoveryConfirm"
+    />
 
     <Teleport to="body">
       <div v-if="showAddUnitModal" class="modal-overlay">

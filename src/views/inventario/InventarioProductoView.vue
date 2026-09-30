@@ -3,10 +3,12 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import MoveAlbumMenu from '@/components/inventario/MoveAlbumMenu.vue';
+import RecoveryModal from '@/components/inventario/RecoveryModal.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
+import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
 import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
@@ -25,7 +27,10 @@ const inventoryStore = useInventoryStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
+const catalogs = useCatalogsStore();
 const auth = useAuthStore();
+
+const technicians = computed(() => catalogs.staff.filter((s) => s.role === 'TECNICO_RED'));
 
 const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
@@ -69,6 +74,7 @@ const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   damaged: 'Dañado',
   in_repair: 'En reparación',
   retired: 'Dado de baja',
+  en_recupero: 'Por Recoger',
 };
 const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
@@ -76,6 +82,7 @@ const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   damaged: 'bg-red-500/15 text-red-600',
   in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-500/15 text-slate-600',
+  en_recupero: 'bg-rose-500/15 text-rose-700',
 };
 
 const unitKpis = computed(() => {
@@ -88,6 +95,7 @@ const unitKpis = computed(() => {
     damaged: counts.damaged ?? 0,
     in_repair: counts.in_repair ?? 0,
     retired: counts.retired ?? 0,
+    en_recupero: counts.en_recupero ?? 0,
   };
 });
 
@@ -239,7 +247,7 @@ async function handleAssign() {
   }
 }
 
-// ---- Devolucion / reparacion / baja ----
+// ---- Averiado / Mantenimiento / devolucion en buen estado ----
 const showReturnModal = ref(false);
 const returnUnitTarget = ref<InventoryUnit | null>(null);
 const returnForm = ref({ condition: 'in_stock' as 'in_stock' | 'damaged' | 'in_repair', reason: '' });
@@ -248,7 +256,7 @@ const returnError = ref<string | null>(null);
 
 function openReturn(unit: InventoryUnit) {
   returnUnitTarget.value = unit;
-  returnForm.value = { condition: 'in_stock', reason: '' };
+  returnForm.value = { condition: 'damaged', reason: '' };
   returnError.value = null;
   showReturnModal.value = true;
 }
@@ -258,13 +266,44 @@ async function handleReturn() {
   returnSaving.value = true;
   returnError.value = null;
   try {
-    await inventoryUnitsStore.returnUnit(returnUnitTarget.value.id, returnForm.value.condition, returnForm.value.reason || undefined);
+    await inventoryUnitsStore.returnUnit(
+      returnUnitTarget.value.id,
+      returnForm.value.condition,
+      returnForm.value.reason || undefined,
+      returnUnitTarget.value.client_id ?? undefined,
+    );
     showReturnModal.value = false;
     await loadUnits();
   } catch (e) {
-    returnError.value = getErrorMessage(e, 'Error al registrar la devolución');
+    returnError.value = getErrorMessage(e, 'Error al registrar el movimiento');
   } finally {
     returnSaving.value = false;
+  }
+}
+
+// ---- Marcar para Recupero (Fase 51): baja de servicio, recojo pendiente ----
+const showRecoveryModal = ref(false);
+const recoveryUnitTarget = ref<InventoryUnit | null>(null);
+const recoveryError = ref<string | null>(null);
+
+function openRecovery(unit: InventoryUnit) {
+  recoveryUnitTarget.value = unit;
+  recoveryError.value = null;
+  showRecoveryModal.value = true;
+}
+
+async function handleRecoveryConfirm(payload: { technicianId: string; reason: string }) {
+  if (!recoveryUnitTarget.value) return;
+  try {
+    await inventoryUnitsStore.markForRecovery(recoveryUnitTarget.value.id, {
+      clientId: recoveryUnitTarget.value.client_id ?? undefined,
+      technicianId: payload.technicianId,
+      reason: payload.reason,
+    });
+    showRecoveryModal.value = false;
+    await loadUnits();
+  } catch (e) {
+    recoveryError.value = getErrorMessage(e, 'Error al marcar el equipo para recupero');
   }
 }
 
@@ -320,6 +359,7 @@ async function openHistory(unit: InventoryUnit) {
 onMounted(async () => {
   if (!inventoryStore.products.length) await inventoryStore.fetchProducts();
   if (!inventoryStore.categories.length) await inventoryStore.fetchCategories();
+  await catalogs.fetchStaff();
   if (product.value?.is_serialized) {
     await loadUnits();
   } else {
@@ -514,8 +554,12 @@ async function handleDeleteProduct() {
             <div class="text-xs text-slate-500 mt-1">Asignados</div>
           </div>
           <div class="surface p-4">
+            <div class="text-2xl font-bold text-rose-600">{{ unitKpis.en_recupero }}</div>
+            <div class="text-xs text-slate-500 mt-1">Por Recoger</div>
+          </div>
+          <div class="surface p-4">
             <div class="text-2xl font-bold text-amber-600">{{ unitKpis.damaged + unitKpis.in_repair }}</div>
-            <div class="text-xs text-slate-500 mt-1">Dañados / en reparación</div>
+            <div class="text-xs text-slate-500 mt-1">Averiados / En Reparación</div>
           </div>
           <div class="surface p-4 flex items-center">
             <button class="btn-primary w-full" @click="openCreateUnit">+ Registrar equipo</button>
@@ -523,6 +567,7 @@ async function handleDeleteProduct() {
         </div>
 
         <p v-if="unitsError" class="text-sm text-red-600 mb-3">{{ unitsError }}</p>
+        <p v-if="recoveryError" class="text-sm text-red-600 mb-3">{{ recoveryError }}</p>
 
         <h2 class="text-lg font-semibold mb-3">Equipos (serie / MAC)</h2>
         <div class="table-shell">
@@ -562,9 +607,10 @@ async function handleDeleteProduct() {
                     <button class="text-xs text-slate-600 hover:text-slate-900" @click="openHistory(u)">Historial</button>
                     <button class="text-xs text-sky-700 hover:text-sky-700" @click="openEditUnit(u)">Editar</button>
                     <button v-if="u.status === 'in_stock'" class="text-xs text-sky-700 hover:text-sky-700" @click="openAssign(u)">Asignar</button>
-                    <button v-if="u.status === 'assigned'" class="text-xs text-amber-700 hover:text-amber-700" @click="openReturn(u)">Devolución</button>
+                    <button v-if="u.status === 'assigned'" class="text-xs text-rose-700 hover:text-rose-700" @click="openRecovery(u)">🔁 Marcar para Recupero</button>
+                    <button v-if="u.status === 'assigned'" class="text-xs text-amber-700 hover:text-amber-700" @click="openReturn(u)">⚠ Averiado / Mantenimiento</button>
                     <button v-if="u.status === 'in_repair'" class="text-xs text-green-600 hover:text-green-700" @click="handleMarkRepaired(u)">Marcar reparado</button>
-                    <button v-if="u.status === 'damaged' || u.status === 'in_repair'" class="text-xs text-red-600 hover:text-red-700" @click="handleRetire(u)">Dar de baja</button>
+                    <button v-if="u.status === 'damaged' || u.status === 'in_repair' || u.status === 'en_recupero'" class="text-xs text-red-600 hover:text-red-700" @click="handleRetire(u)">Dar de baja</button>
                     <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click="handleDeleteUnit(u)">Eliminar</button>
                   </div>
                 </td>
@@ -766,21 +812,21 @@ async function handleDeleteProduct() {
     <Teleport to="body">
       <div v-if="showReturnModal" class="modal-overlay">
         <form class="w-full max-w-sm modal-panel" @submit.prevent="handleReturn">
-          <h2 class="text-lg font-semibold mb-1">Registrar devolución</h2>
+          <h2 class="text-lg font-semibold mb-1">Registrar avería / mantenimiento</h2>
           <p class="text-xs text-slate-500 mb-4 font-mono">{{ returnUnitTarget?.serial_number || returnUnitTarget?.mac_address }}</p>
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Condición del equipo</label>
             <select v-model="returnForm.condition" class="field-input">
-              <option value="in_stock">Buen estado — listo para reasignar</option>
               <option value="damaged">Dañado</option>
               <option value="in_repair">Enviar a reparación</option>
+              <option value="in_stock">Buen estado (retorno directo a bodega)</option>
             </select>
           </div>
 
           <div class="mb-4">
             <label class="block text-xs text-slate-600 mb-1">Motivo</label>
-            <input v-model="returnForm.reason" class="field-input" placeholder="ej. Baja del servicio, cambio de equipo..." />
+            <input v-model="returnForm.reason" class="field-input" placeholder="ej. Falla de hardware, upgrade de equipo..." />
           </div>
 
           <p v-if="returnError" class="text-sm text-red-600 mb-3">{{ returnError }}</p>
@@ -788,12 +834,20 @@ async function handleDeleteProduct() {
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showReturnModal = false">Cancelar</button>
             <button type="submit" :disabled="returnSaving" class="btn-primary">
-              {{ returnSaving ? 'Guardando...' : 'Registrar devolución' }}
+              {{ returnSaving ? 'Guardando...' : 'Registrar' }}
             </button>
           </div>
         </form>
       </div>
     </Teleport>
+
+    <RecoveryModal
+      v-if="showRecoveryModal && recoveryUnitTarget"
+      :unit="recoveryUnitTarget"
+      :technicians="technicians"
+      @close="showRecoveryModal = false"
+      @confirm="handleRecoveryConfirm"
+    />
 
     <Teleport to="body">
       <div v-if="showHistoryModal" class="modal-overlay">
@@ -811,6 +865,7 @@ async function handleDeleteProduct() {
               </div>
               <p v-if="ev.reason" class="text-slate-600 mt-1">{{ ev.reason }}</p>
               <p v-if="ev.clients" class="text-slate-500 mt-0.5">Cliente: {{ ev.clients.first_name }} {{ ev.clients.last_name }}</p>
+              <p v-if="ev.assigned_profile" class="text-slate-500 mt-0.5">Técnico asignado al recojo: {{ ev.assigned_profile.full_name || ev.assigned_profile.email }}</p>
               <p class="text-slate-400 mt-0.5">{{ ev.author?.full_name || ev.author?.email || '—' }}</p>
             </li>
           </ul>

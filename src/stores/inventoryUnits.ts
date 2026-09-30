@@ -3,9 +3,10 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { InventoryUnit, InventoryUnitEvent, InventoryUnitStatus } from '@/types/domain';
 
-const UNIT_SELECT = '*, product:inventory_products(id, name, category), clients(id, first_name, last_name, document_number)';
+const UNIT_SELECT =
+  '*, product:inventory_products(id, name, category), clients(id, first_name, last_name, document_number), pending_pickup_profile:profiles!inventory_units_pending_pickup_by_fkey(id, full_name, email)';
 const EVENT_SELECT =
-  '*, author:profiles!inventory_unit_events_created_by_fkey(id, full_name, email), clients(id, first_name, last_name)';
+  '*, author:profiles!inventory_unit_events_created_by_fkey(id, full_name, email), clients(id, first_name, last_name), assigned_profile:profiles!inventory_unit_events_assigned_to_fkey(id, full_name, email)';
 
 export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
   const loading = ref(false);
@@ -131,6 +132,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     clientId?: string;
     contractId?: string;
     installationId?: string;
+    assignedTo?: string;
     reason?: string;
   }) {
     const { data, error: err } = await supabase
@@ -141,6 +143,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
         client_id: params.clientId || null,
         contract_id: params.contractId || null,
         installation_id: params.installationId || null,
+        assigned_to: params.assignedTo || null,
         reason: params.reason || null,
       })
       .select(EVENT_SELECT)
@@ -171,8 +174,25 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
   }
 
   /** Devolucion de un cliente: el equipo vuelve a bodega en buen estado, dañado o para reparar. */
-  function returnUnit(unitId: string, condition: 'in_stock' | 'damaged' | 'in_repair', reason?: string) {
-    return registerEvent({ unitId, toStatus: condition, reason: reason || 'Devolucion de cliente' });
+  function returnUnit(unitId: string, condition: 'in_stock' | 'damaged' | 'in_repair', reason?: string, clientId?: string) {
+    return registerEvent({ unitId, toStatus: condition, clientId, reason: reason || 'Devolucion de cliente' });
+  }
+
+  /**
+   * Marca el equipo para recojo (Fase 51): el cliente dio de baja el
+   * servicio, no pago, o migro de equipo — el tecnico indicado debe ir a
+   * retirarlo fisicamente. Entra a la bandeja "Equipos por Recoger / En
+   * Recupero" hasta que alguien registre su condicion real al recibirlo
+   * (Cambiar estado, ya en bodega).
+   */
+  function markForRecovery(unitId: string, params: { clientId?: string; technicianId?: string; reason: string }) {
+    return registerEvent({
+      unitId,
+      toStatus: 'en_recupero',
+      clientId: params.clientId,
+      assignedTo: params.technicianId,
+      reason: params.reason,
+    });
   }
 
   /** El equipo salio de reparacion y queda listo para volver a asignarse. */
@@ -245,6 +265,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     assignUnit,
     setUnitContract,
     returnUnit,
+    markForRecovery,
     markRepaired,
     retireUnit,
     deleteUnit,

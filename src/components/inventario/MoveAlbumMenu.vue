@@ -7,7 +7,8 @@ import type { InventoryCategory, InventoryUnitStatus } from '@/types/domain';
  * disparador propio: se abre con v-if desde donde haga falta "Mover").
  * - mode="product": cambia inventory_products.category_id (un UPDATE, no toca unidades ni clientes).
  * - mode="unit": registra un inventory_unit_events con el nuevo status (Fase 11c) — nunca toca category_id,
- *   así el álbum virtual "Equipos por Recoger / Averiados" nunca se confunde con una categoría real.
+ *   así los álbumes virtuales "Equipos por Recoger" / "Averiados / En Reparación" (Fase 51/51c)
+ *   nunca se confunden con una categoría real.
  */
 const props = defineProps<{
   mode: 'product' | 'unit';
@@ -26,6 +27,7 @@ const reason = ref('');
 
 const STATUS_OPTIONS: { value: InventoryUnitStatus; label: string }[] = [
   { value: 'in_stock', label: 'Disponible en bodega' },
+  { value: 'en_recupero', label: 'Por Recoger' },
   { value: 'damaged', label: 'Averiado' },
   { value: 'in_repair', label: 'En reparación' },
   { value: 'retired', label: 'Retirado (baja definitiva)' },

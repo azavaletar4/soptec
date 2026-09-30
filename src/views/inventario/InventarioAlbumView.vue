@@ -14,9 +14,19 @@ const router = useRouter();
 const inventoryStore = useInventoryStore();
 const unitsStore = useInventoryUnitsStore();
 
-const RECOVERY_SLUG = 'por_recoger';
+// Álbumes virtuales (Fase 44, separados en Fase 51c): no son filas de
+// inventory_categories, se arman agregando por status de inventory_units.
+// 'por_recoger' = recojo pendiente por baja de servicio (aun no se sabe en
+// que estado llega); 'averiados' = ya fallo / esta en reparacion / dado de
+// baja. Separados a proposito para no volver a mezclar lo que las acciones
+// "Marcar para Recupero" vs "Averiado / Mantenimiento" ya distinguen.
+const VIRTUAL_ALBUMS: Record<string, { title: string; icon: string; statuses: InventoryUnitStatus[] }> = {
+  por_recoger: { title: 'Equipos por Recoger', icon: '🔄', statuses: ['en_recupero'] },
+  averiados: { title: 'Averiados / En Reparación', icon: '🛠️', statuses: ['damaged', 'in_repair', 'retired'] },
+};
 const slug = computed(() => String(route.params.slug));
-const isRecoveryAlbum = computed(() => slug.value === RECOVERY_SLUG);
+const virtualAlbum = computed(() => VIRTUAL_ALBUMS[slug.value]);
+const isRecoveryAlbum = computed(() => !!virtualAlbum.value);
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -32,7 +42,7 @@ const filteredProducts = computed(() => {
   return products.value.filter((p) => p.name.toLowerCase().includes(q));
 });
 
-// --- Álbum virtual "Equipos por Recoger / Averiados" ---
+// --- Álbumes virtuales "Equipos por Recoger" / "Averiados / En Reparación" ---
 const recoveryUnits = ref<InventoryUnit[]>([]);
 const filteredUnits = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -42,8 +52,8 @@ const filteredUnits = computed(() => {
   );
 });
 
-const albumTitle = computed(() => (isRecoveryAlbum.value ? 'Equipos por Recoger / Averiados' : category.value?.name ?? 'Álbum'));
-const albumIcon = computed(() => (isRecoveryAlbum.value ? '🔄' : category.value?.icon ?? '📦'));
+const albumTitle = computed(() => virtualAlbum.value?.title ?? category.value?.name ?? 'Álbum');
+const albumIcon = computed(() => virtualAlbum.value?.icon ?? category.value?.icon ?? '📦');
 
 async function load() {
   loading.value = true;
@@ -51,8 +61,8 @@ async function load() {
   try {
     if (!inventoryStore.categories.length) await inventoryStore.fetchCategories();
 
-    if (isRecoveryAlbum.value) {
-      recoveryUnits.value = await unitsStore.fetchUnitsByStatus(['damaged', 'in_repair', 'retired']);
+    if (virtualAlbum.value) {
+      recoveryUnits.value = await unitsStore.fetchUnitsByStatus(virtualAlbum.value.statuses);
     } else {
       const cat = inventoryStore.categories.find((c) => c.slug === slug.value);
       if (!cat) throw new Error('Álbum no encontrado');
@@ -106,6 +116,7 @@ const STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   damaged: 'Averiado',
   in_repair: 'En reparación',
   retired: 'Retirado',
+  en_recupero: 'Por Recoger',
 };
 const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
@@ -113,6 +124,7 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
   damaged: 'bg-red-500/15 text-red-600',
   in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-200 text-slate-500',
+  en_recupero: 'bg-rose-500/15 text-rose-700',
 };
 </script>
 
@@ -145,7 +157,7 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
     <!-- Álbum virtual: equipos por recoger / averiados -->
     <template v-else-if="isRecoveryAlbum">
       <div v-if="!filteredUnits.length" class="surface p-8 text-center text-slate-500">
-        No hay equipos averiados, en reparación o retirados por ahora.
+        {{ slug === 'por_recoger' ? 'No hay equipos pendientes de recojo por ahora.' : 'No hay equipos averiados, en reparación o retirados por ahora.' }}
       </div>
       <div v-else class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))">
         <div v-for="u in filteredUnits" :key="u.id" class="surface p-4 flex flex-col gap-2">
