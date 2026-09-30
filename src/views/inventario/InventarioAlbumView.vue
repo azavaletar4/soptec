@@ -102,7 +102,12 @@ const movingUnit = ref<InventoryUnit | null>(null);
 async function moveUnitStatus(status: InventoryUnitStatus, reason: string) {
   if (!movingUnit.value) return;
   try {
-    await unitsStore.registerEvent({ unitId: movingUnit.value.id, toStatus: status, reason: reason || undefined });
+    await unitsStore.registerEvent({
+      unitId: movingUnit.value.id,
+      toStatus: status,
+      clientId: movingUnit.value.client_id ?? undefined,
+      reason: reason || undefined,
+    });
     movingUnit.value = null;
     await load();
   } catch (e) {
@@ -169,7 +174,15 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
             {{ u.serial_number ? `S/N ${u.serial_number}` : '' }}
             {{ u.mac_address ? `MAC ${u.mac_address}` : '' }}
           </p>
-          <p v-if="u.clients" class="text-xs text-slate-500">Último cliente: {{ u.clients.first_name }} {{ u.clients.last_name }}</p>
+          <p v-if="u.clients" class="text-xs text-slate-500">
+            Cliente:
+            <router-link :to="`/clientes/${u.clients.id}`" class="text-sky-600 hover:underline">
+              {{ u.clients.first_name }} {{ u.clients.last_name }}
+            </router-link>
+          </p>
+          <p v-if="u.pending_pickup_profile" class="text-xs text-slate-500">
+            Técnico asignado: {{ u.pending_pickup_profile.full_name || u.pending_pickup_profile.email }}
+          </p>
           <p v-if="u.notes" class="text-xs text-slate-400 italic">{{ u.notes }}</p>
           <div class="mt-auto pt-2 flex justify-end">
             <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="movingUnit = u">

@@ -216,6 +216,10 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
 - El selector "🔀 Cambiar estado" del álbum virtual y el historial (Kardex) de cada equipo también
   reconocen el nuevo estado "Por Recoger", mostrando el técnico asignado al recojo cuando
   corresponde.
+- En la bandeja **"Equipos por Recoger"**, cada tarjeta ahora muestra el **cliente enlazado**
+  (click lleva directo a su ficha) y el **técnico asignado al recojo** — antes el nombre del
+  cliente aparecía como texto plano y sin enlace, para que técnicos y administradores ubiquen más
+  rápido a quién le corresponde ir a recoger cada equipo.
 
 ---
 
