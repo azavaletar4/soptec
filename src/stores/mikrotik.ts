@@ -132,6 +132,15 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<PppSecret[]>(`/api/mikrotik-devices/${id}/ppp-secrets`);
   }
 
+  // Alta de un secreto PPPoE nuevo (antes solo se creaba a mano en Winbox) —
+  // usado por AuthorizeOnuModal.vue para activar el servicio del cliente.
+  function createPppSecret(id: string, payload: { name: string; password: string; profile: string; comment?: string }) {
+    return apiFetch<PppSecret>(`/api/mikrotik-devices/${id}/ppp-secrets`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   function togglePppSecret(id: string, secretId: string, disabled: boolean) {
     return apiFetch<PppSecret>(`/api/mikrotik-devices/${id}/ppp-secrets/${secretId}`, {
       method: 'PUT',
@@ -185,6 +194,7 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     testDevice,
     fetchResource,
     fetchPppSecrets,
+    createPppSecret,
     togglePppSecret,
     setPppSecretProfile,
     fetchPppProfiles,

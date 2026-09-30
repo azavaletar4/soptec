@@ -77,6 +77,7 @@ export interface OntMetaUpdate {
   latitude?: number | null;
   longitude?: number | null;
   client_id?: string | null;
+  contract_id?: string | null;
 }
 
 export interface UnlinkedOnt {

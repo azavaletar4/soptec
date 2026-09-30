@@ -10,6 +10,7 @@ import OntDetailModal from './OntDetailModal.vue';
 import OntZoneEditModal from './OntZoneEditModal.vue';
 import UnconfiguredOntsTab from './UnconfiguredOntsTab.vue';
 import DisabledOntsTab from './DisabledOntsTab.vue';
+import AuthorizeOnuModal from './AuthorizeOnuModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -48,22 +49,16 @@ const port = ref(1);
 const syncing = ref(false);
 const syncMessage = ref<string | null>(null);
 
-const showRegisterModal = ref(false);
-const registering = ref(false);
-const registerError = ref<string | null>(null);
-const registerForm = ref({
-  onuId: '' as number | '',
-  serial: '',
-  onuType: '',
-  description: '',
-  vlan: 100,
-  tcontProfile: '',
-  trafficProfile: '',
-});
-
-const profiles = ref<{ tcontProfiles: string[]; trafficProfiles: string[] }>({ tcontProfiles: [], trafficProfiles: [] });
-const profilesLoading = ref(false);
-const profilesError = ref<string | null>(null);
+const showAuthorizeModal = ref(false);
+const authorizePrefill = ref<{ serial: string; slot: number; port: number } | null>(null);
+function openAuthorize(prefill?: { serial: string; slot: number; port: number }) {
+  // Sin prefill real (boton "+ Registrar ONT"): igual se hereda el slot/port
+  // ya elegido en el selector PON de arriba, pero el serial queda vacio para
+  // escribirlo a mano (AuthorizeOnuModal solo bloquea Serial/Board/Port
+  // cuando el serial viene de una fila realmente escaneada).
+  authorizePrefill.value = prefill ?? { serial: '', slot: slot.value, port: port.value };
+  showAuthorizeModal.value = true;
+}
 
 const ontSearch = ref('');
 
@@ -369,57 +364,8 @@ async function handleImportExisting() {
   }
 }
 
-async function openRegister(prefill?: { serial: string; slot: number; port: number }) {
-  if (prefill) {
-    slot.value = prefill.slot;
-    port.value = prefill.port;
-  }
-  // onuId siempre vacio (= auto): el sufijo ":N" que trae "sin autorizar" NO
-  // es un id libre confiable (ver advertencia en GET /onts/unconfigured) —
-  // se deja que el backend lo calcule con un escaneo en vivo del puerto.
-  registerForm.value = { onuId: '', serial: prefill?.serial ?? '', onuType: '', description: '', vlan: 100, tcontProfile: '', trafficProfile: '' };
-  registerError.value = null;
-  showRegisterModal.value = true;
-
-  if (!profiles.value.tcontProfiles.length) {
-    profilesLoading.value = true;
-    profilesError.value = null;
-    try {
-      profiles.value = await oltStore.fetchProfiles(deviceId.value);
-    } catch (e) {
-      profilesError.value = getErrorMessage(e, 'Error al consultar los perfiles de ancho de banda de la OLT');
-    } finally {
-      profilesLoading.value = false;
-    }
-  }
-}
-
-async function handleRegister() {
-  if (!registerForm.value.tcontProfile || !registerForm.value.trafficProfile) {
-    registerError.value = 'Selecciona el perfil de subida y de bajada';
-    return;
-  }
-  registering.value = true;
-  registerError.value = null;
-  try {
-    await oltStore.registerOnt(deviceId.value, {
-      slot: slot.value,
-      port: port.value,
-      onuId: registerForm.value.onuId === '' ? undefined : registerForm.value.onuId,
-      serial: registerForm.value.serial,
-      onuType: registerForm.value.onuType,
-      description: registerForm.value.description,
-      vlan: registerForm.value.vlan,
-      tcontProfile: registerForm.value.tcontProfile,
-      trafficProfile: registerForm.value.trafficProfile,
-    });
-    showRegisterModal.value = false;
-    await Promise.all([oltStore.fetchOnts(deviceId.value), loadUnconfigured()]);
-  } catch (e) {
-    registerError.value = getErrorMessage(e, 'Error al registrar la ONT en la OLT');
-  } finally {
-    registering.value = false;
-  }
+async function handleAuthorized() {
+  await Promise.all([oltStore.fetchOnts(deviceId.value), loadUnconfigured(), loadDisabled(), loadSummary()]);
 }
 
 const togglingId = ref<string | null>(null);
@@ -434,7 +380,7 @@ const deletingId = ref<string | null>(null);
 // esta en curso, para que la fila de botones sea clara sobre que se puede
 // tocar en cada momento.
 const oltWriteBusy = computed(
-  () => syncing.value || importing.value || registering.value || !!togglingId.value || !!deletingId.value || tr069Saving.value,
+  () => syncing.value || importing.value || !!togglingId.value || !!deletingId.value || tr069Saving.value,
 );
 
 async function handleToggle(ont: OltOnt) {
@@ -1005,7 +951,7 @@ const gauges = computed(() => {
           <button v-else :disabled="oltWriteBusy" class="btn-secondary" @click="handlePortSync">
             {{ syncing ? 'Sincronizando...' : 'Sincronizar este puerto' }}
           </button>
-          <button :disabled="oltWriteBusy" class="btn-primary" @click="openRegister()">
+          <button :disabled="oltWriteBusy" class="btn-primary" @click="openAuthorize()">
             + Registrar ONT
           </button>
         </div>
@@ -1045,7 +991,7 @@ const gauges = computed(() => {
         :live="unconfiguredLive"
         @refresh="loadUnconfigured()"
         @refresh-live="loadUnconfigured({ live: true })"
-        @authorize="openRegister($event)"
+        @authorize="openAuthorize($event)"
       />
       <DisabledOntsTab
         v-else
@@ -1273,86 +1219,14 @@ const gauges = computed(() => {
       </div>
     </Teleport>
 
-    <Teleport to="body">
-      <div v-if="showRegisterModal" class="modal-overlay">
-        <form
-          class="w-full max-w-md modal-panel max-h-[90vh] overflow-y-auto"
-          @submit.prevent="handleRegister"
-        >
-          <h2 class="text-lg font-semibold mb-1">Registrar ONT</h2>
-          <p class="text-xs text-slate-500 mb-4">Puerto GPON 1/{{ slot }}/{{ port }} (shelf/slot/port)</p>
-
-          <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Serial de la ONU</label>
-            <input
-              v-model="registerForm.serial"
-              required
-              placeholder="ZTEGC1234567"
-              class="field-input font-mono"
-            />
-          </div>
-
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">ID de ONU (vacio = auto)</label>
-              <input v-model.number="registerForm.onuId" type="number" min="0" placeholder="auto" class="field-input" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">VLAN</label>
-              <input v-model.number="registerForm.vlan" type="number" class="field-input" />
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Tipo de ONU (perfil configurado en la OLT)</label>
-            <input
-              v-model="registerForm.onuType"
-              required
-              placeholder="ej. ZTE-F660"
-              class="field-input"
-            />
-          </div>
-
-          <div class="mb-4">
-            <label class="block text-xs text-slate-600 mb-1">Descripcion</label>
-            <input v-model="registerForm.description" placeholder="Nombre del cliente" class="field-input" />
-          </div>
-
-          <p v-if="profilesError" class="text-xs text-red-600 mb-3">{{ profilesError }}</p>
-          <div class="grid grid-cols-2 gap-3 mb-4">
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Perfil de subida (tcont)</label>
-              <select v-model="registerForm.tcontProfile" required class="field-input" :disabled="profilesLoading">
-                <option value="" disabled>{{ profilesLoading ? 'Cargando...' : 'Selecciona un plan' }}</option>
-                <option v-for="p in profiles.tcontProfiles" :key="p" :value="p">{{ p }}</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Perfil de bajada (traffic)</label>
-              <select v-model="registerForm.trafficProfile" required class="field-input" :disabled="profilesLoading">
-                <option value="" disabled>{{ profilesLoading ? 'Cargando...' : 'Selecciona un plan' }}</option>
-                <option v-for="p in profiles.trafficProfiles" :key="p" :value="p">{{ p }}</option>
-              </select>
-            </div>
-          </div>
-
-          <p v-if="registerError" class="text-sm text-red-600 mb-3">{{ registerError }}</p>
-          <p class="text-[11px] text-slate-400 mb-3">
-            Tras registrar, la app intenta asignar TR-069 automáticamente (si hay un ACS por defecto
-            configurado) y leer la señal inicial — puede tardar ~10-15s extra.
-          </p>
-
-          <div class="flex justify-end gap-2">
-            <button type="button" class="btn-ghost" @click="showRegisterModal = false">
-              Cancelar
-            </button>
-            <button type="submit" :disabled="registering" class="btn-primary">
-              {{ registering ? 'Registrando (puede tardar ~15s)...' : 'Registrar en la OLT' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </Teleport>
+    <AuthorizeOnuModal
+      v-if="showAuthorizeModal"
+      :device-id="deviceId"
+      :olt-name="device?.name ?? ''"
+      :prefill="authorizePrefill"
+      @close="showAuthorizeModal = false"
+      @authorized="handleAuthorized"
+    />
 
     <OntDetailModal
       v-if="detailOnt && device"

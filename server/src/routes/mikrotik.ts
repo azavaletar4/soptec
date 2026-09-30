@@ -181,6 +181,34 @@ mikrotikRoutes.put('/:id/ppp-secrets/:secretId', requireRole(...PPP_WRITE), asyn
   }
 });
 
+// Crea un secreto PPPoE nuevo (alta de credencial de cliente) — hasta ahora
+// esto solo se hacia a mano en Winbox; usado por AuthorizeOnuModal.vue para
+// activar el servicio en un solo paso junto con la ONU en la OLT.
+mikrotikRoutes.post('/:id/ppp-secrets', requireRole(...PPP_WRITE), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const body = await c.req.json();
+  const { name, password, profile, comment } = body;
+  if (!name || !password || !profile) {
+    return c.json({ error: 'name, password y profile son requeridos' }, 400);
+  }
+  try {
+    const data = await mikrotikRequest(targetFor(device), '/ppp/secret', {
+      method: 'POST',
+      body: {
+        name: String(name),
+        password: String(password),
+        profile: String(profile),
+        service: 'pppoe',
+        comment: comment ? String(comment) : undefined,
+      },
+    });
+    return c.json(data, 201);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al crear el secreto en el router' }, 502);
+  }
+});
+
 mikrotikRoutes.get('/:id/ppp-profiles', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
