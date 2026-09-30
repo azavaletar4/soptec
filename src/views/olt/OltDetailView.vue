@@ -9,6 +9,7 @@ import { getErrorMessage } from '@/lib/errors';
 import OntDetailModal from './OntDetailModal.vue';
 import OntZoneEditModal from './OntZoneEditModal.vue';
 import UnconfiguredOntsTab from './UnconfiguredOntsTab.vue';
+import ReconnectOntsTab from './ReconnectOntsTab.vue';
 import DisabledOntsTab from './DisabledOntsTab.vue';
 import AuthorizeOnuModal from './AuthorizeOnuModal.vue';
 
@@ -50,8 +51,8 @@ const syncing = ref(false);
 const syncMessage = ref<string | null>(null);
 
 const showAuthorizeModal = ref(false);
-const authorizePrefill = ref<{ serial: string; slot: number; port: number } | null>(null);
-function openAuthorize(prefill?: { serial: string; slot: number; port: number }) {
+const authorizePrefill = ref<{ serial: string; slot: number; port: number; clientId?: string; contractId?: string } | null>(null);
+function openAuthorize(prefill?: { serial: string; slot: number; port: number; clientId?: string; contractId?: string }) {
   // Sin prefill real (boton "+ Registrar ONT"): igual se hereda el slot/port
   // ya elegido en el selector PON de arriba, pero el serial queda vacio para
   // escribirlo a mano (AuthorizeOnuModal solo bloquea Serial/Board/Port
@@ -181,14 +182,23 @@ async function loadUnconfigured(opts: { live?: boolean } = {}) {
   }
 }
 
-// ---- Pestañas "Sin configurar" / "Deshabilitadas" (estilo SmartOLT) ----
-type OntTab = 'uncfg' | 'disabled';
+// ---- Pestañas "Nuevas" / "Por reconectar" / "Deshabilitadas" (estilo SmartOLT) ----
+type OntTab = 'uncfg' | 'reconnect' | 'disabled';
 const activeOntTab = ref<OntTab>('uncfg');
 const ontTabsEl = ref<HTMLElement | null>(null);
 function goToDisabledTab() {
   activeOntTab.value = 'disabled';
   ontTabsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+// "Sin configurar" mezcla dos cosas muy distintas: una ONU 100% nueva (nadie
+// la conoce todavia) y una ONU de un cliente YA existente que se desconfiguro
+// en la OLT (corte de deuda con el equipo anterior, reemplazo de ONT,
+// registro perdido) — separarlas evita que un tecnico tenga que adivinar
+// cual es cual, y deja reconectar sin volver a escribir los datos del
+// cliente.
+const newUnconfiguredOnts = computed(() => unconfiguredOnts.value.filter((o) => !o.existingClient));
+const reconnectOnts = computed(() => unconfiguredOnts.value.filter((o) => o.existingClient));
 
 const disabledOnts = ref<DisabledOnt[]>([]);
 const disabledLoading = ref(false);
@@ -980,7 +990,14 @@ const gauges = computed(() => {
           :class="activeOntTab === 'uncfg' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
           @click="activeOntTab = 'uncfg'"
         >
-          Sin Configurar / Por Autorizar ({{ unconfiguredOnts.length }})
+          Nuevas por Autorizar ({{ newUnconfiguredOnts.length }})
+        </button>
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-t-lg"
+          :class="activeOntTab === 'reconnect' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+          @click="activeOntTab = 'reconnect'"
+        >
+          Desconfiguradas / Por Reconectar ({{ reconnectOnts.length }})
         </button>
         <button
           class="px-4 py-2 text-sm font-medium rounded-t-lg"
@@ -993,7 +1010,7 @@ const gauges = computed(() => {
 
       <UnconfiguredOntsTab
         v-if="activeOntTab === 'uncfg'"
-        :onts="unconfiguredOnts"
+        :onts="newUnconfiguredOnts"
         :loading="unconfiguredLoading"
         :error="unconfiguredError"
         :checked-at="unconfiguredCheckedAt"
@@ -1001,6 +1018,17 @@ const gauges = computed(() => {
         @refresh="loadUnconfigured()"
         @refresh-live="loadUnconfigured({ live: true })"
         @authorize="openAuthorize($event)"
+      />
+      <ReconnectOntsTab
+        v-else-if="activeOntTab === 'reconnect'"
+        :onts="reconnectOnts"
+        :loading="unconfiguredLoading"
+        :error="unconfiguredError"
+        :checked-at="unconfiguredCheckedAt"
+        :live="unconfiguredLive"
+        @refresh="loadUnconfigured()"
+        @refresh-live="loadUnconfigured({ live: true })"
+        @reauthorize="openAuthorize($event)"
       />
       <DisabledOntsTab
         v-else

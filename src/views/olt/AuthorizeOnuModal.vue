@@ -13,7 +13,7 @@ import { getErrorMessage } from '@/lib/errors';
 const props = defineProps<{
   deviceId: string;
   oltName?: string;
-  prefill?: { serial: string; slot: number; port: number } | null;
+  prefill?: { serial: string; slot: number; port: number; clientId?: string; contractId?: string } | null;
 }>();
 const emit = defineEmits<{ close: []; authorized: [] }>();
 
@@ -468,13 +468,24 @@ async function handleAuthorize() {
   // reintentar vinculo).
 }
 
-onMounted(() => {
-  void clientsStore.fetchClients();
+onMounted(async () => {
   void catalogs.fetchZones();
   void mikrotikStore.fetchDevices();
   void infraStore.fetchElementos();
   void fibra.fetchTodosNapPuertos();
   void contractsStore.fetchContracts();
+  await clientsStore.fetchClients();
+
+  // Viene de "Desconfiguradas / Por Reconectar" (ReconnectOntsTab.vue): el
+  // cliente (y a veces el contrato exacto) ya se conocen de antes — se
+  // preseleccionan para no obligar al tecnico a volver a buscarlos/escribirlos.
+  if (props.prefill?.clientId) {
+    selectedClientId.value = props.prefill.clientId;
+    const client = clientsStore.clients.find((c) => c.id === props.prefill!.clientId);
+    if (client) clientFilter.value = client.document_number;
+    await onClientChange();
+    if (props.prefill.contractId) selectedContractId.value = props.prefill.contractId;
+  }
 });
 </script>
 

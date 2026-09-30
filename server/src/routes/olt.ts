@@ -384,6 +384,61 @@ oltRoutes.get('/:id/profiles', requireRole(...STAFF_READ), async (c) => {
  * registrar; debe dejarlo en blanco para que POST /onts lo calcule con un
  * escaneo en vivo (mismo mecanismo ya usado ahi).
  */
+/**
+ * Cruza cada serial "sin configurar" contra olt_onts de ESTA OLT — si ya
+ * existe (ej. un cliente real al que le borraron/perdieron la ONU de la OLT,
+ * o que SmartOLT desconfiguro por corte de deuda en el equipo anterior), se
+ * le agrega el cliente/contrato encontrado. El frontend usa esto para
+ * separar "Nuevas por Autorizar" (existing=null) de "Desconfiguradas / Por
+ * Reconectar" (existing!=null) — evita ademas el bug real de mostrar
+ * "+Autorizar" para un serial que YA esta en "ONTs registradas" pero que la
+ * cache de "sin configurar" (llenada por el sync cada 20 min) todavia no
+ * reflejo.
+ */
+async function enrichUnconfigured<T extends { serial: string }>(deviceId: string, items: T[]) {
+  const serials = [...new Set(items.map((i) => i.serial).filter(Boolean))];
+  if (!serials.length) return items.map((i) => ({ ...i, existingClient: null, existingContract: null }));
+
+  const { data: existingOnts } = await supabaseAdmin
+    .from('olt_onts')
+    .select('serial, client_id, contract_id, clients(id, first_name, last_name, document_number)')
+    .eq('olt_device_id', deviceId)
+    .in('serial', serials);
+  const ontBySerial = new Map((existingOnts ?? []).map((o) => [o.serial, o]));
+
+  const contractIds = [...new Set((existingOnts ?? []).map((o) => o.contract_id).filter((v): v is string => !!v))];
+  const clientIdsWithoutContract = [
+    ...new Set((existingOnts ?? []).filter((o) => !o.contract_id && o.client_id).map((o) => o.client_id as string)),
+  ];
+
+  const CONTRACT_FIELDS = 'id, client_id, contract_number, pppoe_username, installation_address, debt_hold_status, status';
+  const contractById = new Map<string, Record<string, unknown>>();
+  if (contractIds.length) {
+    const { data } = await supabaseAdmin.from('service_contracts').select(CONTRACT_FIELDS).in('id', contractIds);
+    for (const ct of data ?? []) contractById.set(ct.id as string, ct);
+  }
+  const contractByClientId = new Map<string, Record<string, unknown>>();
+  if (clientIdsWithoutContract.length) {
+    const { data } = await supabaseAdmin
+      .from('service_contracts')
+      .select(CONTRACT_FIELDS)
+      .in('client_id', clientIdsWithoutContract)
+      .order('created_at', { ascending: false });
+    for (const ct of data ?? []) if (!contractByClientId.has(ct.client_id as string)) contractByClientId.set(ct.client_id as string, ct);
+  }
+
+  return items.map((item) => {
+    const ont = ontBySerial.get(item.serial);
+    if (!ont) return { ...item, existingClient: null, existingContract: null };
+    const contract = ont.contract_id
+      ? (contractById.get(ont.contract_id) ?? null)
+      : ont.client_id
+        ? (contractByClientId.get(ont.client_id) ?? null)
+        : null;
+    return { ...item, existingClient: ont.clients ?? null, existingContract: contract };
+  });
+}
+
 oltRoutes.get('/:id/onts/unconfigured', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
@@ -395,11 +450,8 @@ oltRoutes.get('/:id/onts/unconfigured', requireRole(...STAFF_READ), async (c) =>
       .select('unconfigured_onts, checked_at')
       .eq('olt_device_id', device.id)
       .maybeSingle();
-    return c.json({
-      items: (cache?.unconfigured_onts as CachedUnconfiguredOnt[] | null) ?? [],
-      checkedAt: cache?.checked_at ?? null,
-      live: false,
-    });
+    const items = await enrichUnconfigured(device.id, (cache?.unconfigured_onts as CachedUnconfiguredOnt[] | null) ?? []);
+    return c.json({ items, checkedAt: cache?.checked_at ?? null, live: false });
   }
 
   try {
@@ -419,7 +471,8 @@ oltRoutes.get('/:id/onts/unconfigured', requireRole(...STAFF_READ), async (c) =>
         port: m ? Number(m[3]) : null,
       };
     });
-    return c.json({ items: withRef, checkedAt: new Date().toISOString(), live: true });
+    const items = await enrichUnconfigured(device.id, withRef);
+    return c.json({ items, checkedAt: new Date().toISOString(), live: true });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar ONUs sin autorizar' }, 502);
   }

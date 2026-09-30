@@ -115,12 +115,34 @@ export interface OltHealth {
   checkedAt: string;
 }
 
+export interface UnconfiguredOntExistingClient {
+  id: string;
+  first_name: string;
+  last_name: string;
+  document_number: string;
+}
+
+export interface UnconfiguredOntExistingContract {
+  id: string;
+  client_id: string;
+  contract_number: string | null;
+  pppoe_username: string | null;
+  installation_address: string | null;
+  debt_hold_status: 'none' | 'pending' | 'suspended';
+  status: string;
+}
+
 export interface UnconfiguredOnt {
   serial: string;
   interfaceRef: string;
   frame: number;
   slot: number | null;
   port: number | null;
+  // Si este serial YA existe en olt_onts (ej. un cliente real al que se le
+  // desconfiguro la ONU) — el frontend usa esto para separar "Nuevas por
+  // Autorizar" de "Desconfiguradas / Por Reconectar".
+  existingClient: UnconfiguredOntExistingClient | null;
+  existingContract: UnconfiguredOntExistingContract | null;
 }
 
 export interface UnconfiguredOntsResult {
