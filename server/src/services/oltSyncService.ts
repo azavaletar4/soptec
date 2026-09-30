@@ -36,6 +36,7 @@ export interface OltFullSyncResult {
   unconfigured: number;
   online: number;
   offline: number;
+  disabled: number;
   lowSignal: number;
   scanComplete: boolean;
   portsScanned: number;
@@ -106,6 +107,7 @@ interface KnownOnt {
   port: number;
   ont_id: number;
   status: string;
+  admin_state: string;
   rx_power: number | null;
   tx_power: number | null;
 }
@@ -113,6 +115,7 @@ interface KnownOnt {
 interface PendingUpdate {
   id: string;
   status?: 'online' | 'offline';
+  admin_state?: 'enable' | 'disable';
   rx_power?: number;
   tx_power?: number;
   last_synced_at: string;
@@ -146,7 +149,7 @@ async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult>
 
   const { data: knownRows } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, frame, slot, port, ont_id, status, rx_power, tx_power')
+    .select('id, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power')
     .eq('olt_device_id', device.id);
   const known = (knownRows ?? []) as KnownOnt[];
   const byPos = new Map(known.map((r) => [`${r.frame}/${r.slot}/${r.port}:${r.ont_id}`, r]));
@@ -154,17 +157,27 @@ async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult>
 
   let online = 0;
   let offline = 0;
+  let disabledCount = 0;
   if (scanComplete) {
     online = globalOnts.filter((o) => o.runState === 'working').length;
     offline = globalOnts.length - online;
+    disabledCount = globalOnts.filter((o) => o.adminState === 'disable').length;
 
     for (const o of globalOnts) {
       const row = byPos.get(`${o.frame}/${o.slot}/${o.port}:${o.onuId}`);
       if (!row) continue;
       const newStatus = o.runState === 'working' ? 'online' : 'offline';
+      const update: PendingUpdate = { id: row.id, last_synced_at: now };
+      let changed = false;
       if (newStatus !== row.status) {
-        updatesById.set(row.id, { id: row.id, status: newStatus, last_synced_at: now });
+        update.status = newStatus;
+        changed = true;
       }
+      if (o.adminState !== row.admin_state) {
+        update.admin_state = o.adminState;
+        changed = true;
+      }
+      if (changed) updatesById.set(row.id, update);
     }
   } else {
     // Respaldo: si el escaneo global falla (timeout, etc.), reportar lo ya
@@ -172,6 +185,7 @@ async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult>
     const rows = known;
     online = rows.filter((r) => r.status === 'online').length;
     offline = rows.filter((r) => r.status === 'offline').length;
+    disabledCount = rows.filter((r) => r.admin_state === 'disable').length;
   }
 
   // 3) Potencia optica Rx/Tx por puerto PON (solo si tenemos la lista de
@@ -252,6 +266,7 @@ async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult>
     unconfigured: unconfiguredList.length,
     online,
     offline,
+    disabled: disabledCount,
     low_signal: lowSignal,
     scan_complete: scanComplete,
     uptime_hours: uptimeHours,
@@ -267,6 +282,7 @@ async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult>
   return {
     unconfigured: unconfiguredList.length,
     online,
+    disabled: disabledCount,
     offline,
     lowSignal,
     scanComplete,

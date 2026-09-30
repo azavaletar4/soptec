@@ -212,7 +212,7 @@ oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
 
   const { data: cache } = await supabaseAdmin
     .from('olt_sync_cache')
-    .select('unconfigured, online, offline, low_signal, scan_complete, checked_at')
+    .select('unconfigured, online, offline, disabled, low_signal, scan_complete, checked_at')
     .eq('olt_device_id', device.id)
     .maybeSingle();
 
@@ -221,6 +221,7 @@ oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
       unconfigured: cache.unconfigured,
       online: cache.online,
       offline: cache.offline,
+      disabled: cache.disabled,
       lowSignal: cache.low_signal,
       scanComplete: cache.scan_complete,
       checkedAt: cache.checked_at,
@@ -229,12 +230,16 @@ oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
 
   // Todavia no corrio ningun sync para esta OLT (recien dada de alta) —
   // mientras tanto, contar lo que ya haya en olt_onts en vez de puros ceros.
-  const { data: onts } = await supabaseAdmin.from('olt_onts').select('status, rx_power').eq('olt_device_id', device.id);
+  const { data: onts } = await supabaseAdmin
+    .from('olt_onts')
+    .select('status, admin_state, rx_power')
+    .eq('olt_device_id', device.id);
   const rows = onts ?? [];
   return c.json({
     unconfigured: 0,
     online: rows.filter((r) => r.status === 'online').length,
     offline: rows.filter((r) => r.status === 'offline').length,
+    disabled: rows.filter((r) => r.admin_state === 'disable').length,
     lowSignal: rows.filter((r) => typeof r.rx_power === 'number' && r.rx_power < LOW_SIGNAL_THRESHOLD_DBM).length,
     scanComplete: false,
     checkedAt: null,
@@ -418,6 +423,62 @@ oltRoutes.get('/:id/onts/unconfigured', requireRole(...STAFF_READ), async (c) =>
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar ONUs sin autorizar' }, 502);
   }
+});
+
+/**
+ * ONTs deshabilitadas/cortadas — estilo "Disabled ONUs" de SmartOLT. Combina
+ * DOS motivos que en este sistema son mecanismos separados y no se unifican
+ * (decision tomada explicitamente): (a) admin-state=disable real en la OLT
+ * (desactivacion manual de soporte, via activate/deactivate o el sync en
+ * background), y (b) el cliente vinculado esta en corte por mora
+ * (service_contracts.debt_hold_status='suspended' — ver debtHoldService.ts,
+ * que solo reduce el ancho de banda via changeOntProfileCommands, NUNCA
+ * toca admin-state). El vinculo con el cliente es por client_id, misma
+ * limitacion ya conocida y aceptada que usa debtHoldService.ts.
+ *
+ * 100% lectura de Supabase (cache ya poblada por el sync de fondo o por
+ * activate/deactivate) — sin Telnet, sin withOltLock, instantaneo.
+ */
+oltRoutes.get('/:id/onts/disabled', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  const { data: manualRows } = await supabaseAdmin
+    .from('olt_onts')
+    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
+    .eq('olt_device_id', device.id)
+    .eq('admin_state', 'disable');
+
+  const { data: suspendedContracts } = await supabaseAdmin
+    .from('service_contracts')
+    .select('client_id')
+    .eq('debt_hold_status', 'suspended');
+  const suspendedClientIds = [...new Set((suspendedContracts ?? []).map((r) => r.client_id))];
+
+  let billingRows: NonNullable<typeof manualRows> = [];
+  if (suspendedClientIds.length) {
+    const { data } = await supabaseAdmin
+      .from('olt_onts')
+      .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
+      .eq('olt_device_id', device.id)
+      .in('client_id', suspendedClientIds);
+    billingRows = data ?? [];
+  }
+
+  const byId = new Map<string, Record<string, unknown> & { id: string; reasons: string[] }>();
+  for (const r of manualRows ?? []) byId.set(r.id, { ...r, reasons: ['manual'] });
+  for (const r of billingRows) {
+    const existing = byId.get(r.id);
+    if (existing) existing.reasons.push('billing');
+    else byId.set(r.id, { ...r, reasons: ['billing'] });
+  }
+
+  const items = [...byId.values()].map(({ reasons, ...r }) => ({
+    ...r,
+    reason: reasons.includes('manual') && reasons.includes('billing') ? 'both' : reasons.includes('manual') ? 'manual' : 'billing',
+  }));
+
+  return c.json({ items, checkedAt: new Date().toISOString() });
 });
 
 // ---- ONTs (cache local en olt_onts, sincronizada en background por Telnet) ----
@@ -647,6 +708,7 @@ oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) =
         .from('olt_onts')
         .update({
           status: ont.runState === 'working' ? 'online' : 'offline',
+          admin_state: ont.adminState,
           last_synced_at: new Date().toISOString(),
         })
         .eq('id', existing.id)
@@ -823,7 +885,7 @@ async function toggleActivation(c: Context, activate: boolean) {
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update({ status: activate ? 'online' : 'offline' })
+    .update({ status: activate ? 'online' : 'offline', admin_state: activate ? 'enable' : 'disable' })
     .eq('id', ont.id)
     .select()
     .single();

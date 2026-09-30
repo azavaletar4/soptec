@@ -37,6 +37,7 @@ export interface OltOnt {
   tr069_enabled: boolean;
   tr069_acs_url: string | null;
   status: 'online' | 'offline' | 'unknown';
+  admin_state: 'enable' | 'disable';
   rx_power: number | null;
   tx_power: number | null;
   last_synced_at: string | null;
@@ -130,6 +131,16 @@ export interface UnconfiguredOntsResult {
 export interface OltSyncStatus {
   running: boolean;
   lastFullSyncAt: string | null;
+}
+
+/** ONT en admin-state=disable ('manual'), con cliente en corte por mora ('billing'), o ambos ('both'). */
+export interface DisabledOnt extends OltOnt {
+  reason: 'manual' | 'billing' | 'both';
+}
+
+export interface DisabledOntsResult {
+  items: DisabledOnt[];
+  checkedAt: string;
 }
 
 export const useOltStore = defineStore('olt', () => {
@@ -245,6 +256,7 @@ export const useOltStore = defineStore('olt', () => {
       unconfigured: number;
       online: number;
       offline: number;
+      disabled: number;
       lowSignal: number;
       scanComplete: boolean;
       checkedAt: string;
@@ -264,6 +276,12 @@ export const useOltStore = defineStore('olt', () => {
   function fetchUnconfiguredOnts(deviceId: string, opts: { live?: boolean } = {}) {
     const query = opts.live ? '?live=1' : '';
     return apiFetch<UnconfiguredOntsResult>(`/api/olt-devices/${deviceId}/onts/unconfigured${query}`);
+  }
+
+  // ONTs deshabilitadas/cortadas (admin-state=disable y/o corte por mora) —
+  // 100% cache, instantaneo (ver GET /:id/onts/disabled en server/src/routes/olt.ts).
+  function fetchDisabledOnts(deviceId: string) {
+    return apiFetch<DisabledOntsResult>(`/api/olt-devices/${deviceId}/onts/disabled`);
   }
 
   // "Actualizar ahora": encola un sync completo en background (202
@@ -458,6 +476,7 @@ export const useOltStore = defineStore('olt', () => {
     fetchHealth,
     fetchProfiles,
     fetchUnconfiguredOnts,
+    fetchDisabledOnts,
     triggerFullSync,
     fetchSyncStatus,
     connectOltEvents,

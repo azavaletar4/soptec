@@ -8,6 +8,8 @@
 export interface ParsedOnt {
   onuId: number;
   runState: string;
+  /** Columna admin-state real de la OLT ("onu <id> admin-state enable|disable"). */
+  adminState: 'enable' | 'disable';
 }
 
 /**
@@ -16,6 +18,7 @@ export interface ParsedOnt {
  *   1/2/4:23    enable       enable      working      1(GPON)
  *   1/2/4:25    disable      disable     OffLine      1(GPON)
  *   ONU Number: 34/39
+ * Columnas: OnuIndex, AdminState, fase OMCC (se ignora), RunState, Tipo.
  */
 export function parseOntList(raw: string): ParsedOnt[] {
   const lines = raw
@@ -25,9 +28,13 @@ export function parseOntList(raw: string): ParsedOnt[] {
 
   const results: ParsedOnt[] = [];
   for (const line of lines) {
-    const match = line.match(/^\d+\/\d+\/\d+:(\d+)\s+\S+\s+\S+\s+(\S+)/);
+    const match = line.match(/^\d+\/\d+\/\d+:(\d+)\s+(\S+)\s+\S+\s+(\S+)/);
     if (match) {
-      results.push({ onuId: Number(match[1]), runState: match[2].toLowerCase() });
+      results.push({
+        onuId: Number(match[1]),
+        adminState: match[2].toLowerCase() as 'enable' | 'disable',
+        runState: match[3].toLowerCase(),
+      });
     }
   }
   return results;
@@ -39,6 +46,8 @@ export interface GlobalOnt {
   port: number;
   onuId: number;
   runState: string;
+  /** Columna admin-state real de la OLT ("onu <id> admin-state enable|disable"). */
+  adminState: 'enable' | 'disable';
 }
 
 /**
@@ -55,14 +64,15 @@ export function parseGlobalOntState(raw: string): GlobalOnt[] {
 
   const results: GlobalOnt[] = [];
   for (const line of lines) {
-    const match = line.match(/^(\d+)\/(\d+)\/(\d+):(\d+)\s+\S+\s+\S+\s+(\S+)/);
+    const match = line.match(/^(\d+)\/(\d+)\/(\d+):(\d+)\s+(\S+)\s+\S+\s+(\S+)/);
     if (match) {
       results.push({
         frame: Number(match[1]),
         slot: Number(match[2]),
         port: Number(match[3]),
         onuId: Number(match[4]),
-        runState: match[5].toLowerCase(),
+        adminState: match[5].toLowerCase() as 'enable' | 'disable',
+        runState: match[6].toLowerCase(),
       });
     }
   }

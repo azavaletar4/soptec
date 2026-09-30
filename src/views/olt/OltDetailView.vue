@@ -2,12 +2,14 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import { useOltStore, type OltOnt, type OltHealth, type UnconfiguredOnt } from '@/stores/olt';
+import { useOltStore, type OltOnt, type OltHealth, type UnconfiguredOnt, type DisabledOnt } from '@/stores/olt';
 import { useTr069Store } from '@/stores/tr069';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { getErrorMessage } from '@/lib/errors';
 import OntDetailModal from './OntDetailModal.vue';
 import OntZoneEditModal from './OntZoneEditModal.vue';
+import UnconfiguredOntsTab from './UnconfiguredOntsTab.vue';
+import DisabledOntsTab from './DisabledOntsTab.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -118,6 +120,7 @@ interface OltSummary {
   unconfigured: number;
   online: number;
   offline: number;
+  disabled: number;
   lowSignal: number;
   scanComplete: boolean;
   checkedAt: string;
@@ -183,6 +186,79 @@ async function loadUnconfigured(opts: { live?: boolean } = {}) {
   }
 }
 
+// ---- Pestañas "Sin configurar" / "Deshabilitadas" (estilo SmartOLT) ----
+type OntTab = 'uncfg' | 'disabled';
+const activeOntTab = ref<OntTab>('uncfg');
+const ontTabsEl = ref<HTMLElement | null>(null);
+function goToDisabledTab() {
+  activeOntTab.value = 'disabled';
+  ontTabsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+const disabledOnts = ref<DisabledOnt[]>([]);
+const disabledLoading = ref(false);
+const disabledError = ref<string | null>(null);
+const disabledCheckedAt = ref<string | null>(null);
+
+async function loadDisabled() {
+  disabledLoading.value = true;
+  disabledError.value = null;
+  try {
+    const res = await oltStore.fetchDisabledOnts(deviceId.value);
+    disabledOnts.value = res.items;
+    disabledCheckedAt.value = res.checkedAt;
+  } catch (e) {
+    disabledError.value = getErrorMessage(e, 'Error al consultar ONUs deshabilitadas');
+  } finally {
+    disabledLoading.value = false;
+  }
+}
+
+const enablingDisabledId = ref<string | null>(null);
+async function handleEnableService(ont: DisabledOnt) {
+  const ok = confirm(`¿Habilitar el servicio de la ONT ${ont.serial}?`);
+  if (!ok) return;
+  enablingDisabledId.value = ont.id;
+  try {
+    await oltStore.toggleOnt(deviceId.value, ont.id, true);
+    await Promise.all([loadDisabled(), oltStore.fetchOnts(deviceId.value), loadSummary()]);
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al habilitar el servicio de la ONT'));
+  } finally {
+    enablingDisabledId.value = null;
+  }
+}
+
+// ---- Selector de puerto PON con opcion "TODOS" ----
+interface PonPortOption {
+  slot: number;
+  port: number;
+  count: number;
+}
+const knownPorts = computed<PonPortOption[]>(() => {
+  const map = new Map<string, PonPortOption>();
+  for (const o of oltStore.onts) {
+    const key = `${o.slot}/${o.port}`;
+    const entry = map.get(key) ?? { slot: o.slot, port: o.port, count: 0 };
+    entry.count += 1;
+    map.set(key, entry);
+  }
+  return [...map.values()].sort((a, b) => a.slot - b.slot || a.port - b.port);
+});
+// 'all' = escanear todos los puertos conocidos (reusa "Actualizar ahora");
+// 'manual' = puerto recien cableado, aun sin ninguna ONT en olt_onts;
+// cualquier otro valor es "slot/port" de un puerto ya conocido.
+const portSelection = ref<'all' | 'manual' | string>('all');
+
+function handlePortSync() {
+  if (portSelection.value !== 'manual' && portSelection.value !== 'all') {
+    const [s, p] = portSelection.value.split('/').map(Number);
+    slot.value = s;
+    port.value = p;
+  }
+  return handleSync();
+}
+
 // "Actualizar ahora": ya no hace Telnet en vivo desde el navegador (Fase
 // 40) — encola un sync completo en el backend (202 inmediato) y espera a
 // que llegue por SSE (connectOltEvents) para refrescar summary/health/onts
@@ -208,7 +284,7 @@ async function handleTriggerFullSync() {
           clearInterval(syncStatusPoll);
           fullSyncing.value = false;
           fullSyncMessage.value = null;
-          await Promise.all([loadSummary(), loadHealth(), oltStore.fetchOnts(deviceId.value), loadUnconfigured()]);
+          await Promise.all([loadSummary(), loadHealth(), oltStore.fetchOnts(deviceId.value), loadUnconfigured(), loadDisabled()]);
         }
       } catch {
         // se reintenta en el proximo tick; si el SSE sigue vivo, tambien se
@@ -238,6 +314,7 @@ onMounted(async () => {
     loadHealth(),
     catalogsStore.fetchZones(),
     loadUnconfigured(),
+    loadDisabled(),
   ]);
 
   // Tiempo real: cuando el sync en background (o una accion manual desde
@@ -720,6 +797,17 @@ const gauges = computed(() => {
           </div>
           <span class="text-2xl">⚠</span>
         </button>
+        <button
+          class="rounded-xl p-5 flex items-start justify-between text-left"
+          style="background:#b91c1c"
+          @click="goToDisabledTab"
+        >
+          <div>
+            <div class="text-3xl font-bold text-white">{{ summaryLoading ? '—' : summary?.disabled ?? 0 }}</div>
+            <div class="text-sm text-white/90 mt-1">Deshabilitadas</div>
+          </div>
+          <span class="text-2xl">⏻</span>
+        </button>
       </div>
       <p class="text-xs text-slate-500 text-right mb-1">
         {{ summaryLoading ? 'Consultando...' : `Informacion valida a las ${checkedAtLabel}` }}
@@ -892,83 +980,83 @@ const gauges = computed(() => {
         <h2 class="text-sm font-semibold mb-3">Consultar puerto GPON</h2>
         <div class="flex flex-wrap items-end gap-3">
           <div>
-            <label class="block text-xs text-slate-600 mb-1">Slot</label>
-            <input v-model.number="slot" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
+            <label class="block text-xs text-slate-600 mb-1">Puerto PON</label>
+            <select v-model="portSelection" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+              <option value="all">TODOS los puertos</option>
+              <option v-for="p in knownPorts" :key="`${p.slot}/${p.port}`" :value="`${p.slot}/${p.port}`">
+                Slot {{ p.slot }} · Puerto {{ p.port }} ({{ p.count }})
+              </option>
+              <option value="manual">Otro puerto...</option>
+            </select>
           </div>
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Puerto</label>
-            <input v-model.number="port" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
-          </div>
-          <button :disabled="oltWriteBusy" class="btn-secondary" @click="handleSync">
-            {{ syncing ? 'Sincronizando...' : 'Sincronizar desde la OLT' }}
+          <template v-if="portSelection === 'manual'">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Slot</label>
+              <input v-model.number="slot" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Puerto</label>
+              <input v-model.number="port" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
+            </div>
+          </template>
+          <button v-if="portSelection === 'all'" :disabled="oltWriteBusy || fullSyncing" class="btn-secondary" @click="handleTriggerFullSync">
+            {{ fullSyncing ? 'Escaneando...' : 'Escanear todos los puertos' }}
+          </button>
+          <button v-else :disabled="oltWriteBusy" class="btn-secondary" @click="handlePortSync">
+            {{ syncing ? 'Sincronizando...' : 'Sincronizar este puerto' }}
           </button>
           <button :disabled="oltWriteBusy" class="btn-primary" @click="openRegister()">
             + Registrar ONT
           </button>
         </div>
+        <p v-if="portSelection === 'all' && fullSyncMessage" class="text-xs text-slate-600 mt-3">{{ fullSyncMessage }}</p>
         <p v-if="syncMessage" class="text-xs text-slate-600 mt-3">{{ syncMessage }}</p>
         <p class="text-xs text-slate-500 mt-3">
           Registrar / activar / desactivar / eliminar ya validados contra tu OLT real (ver reporte de la Fase 4).
-          Solo la lectura de señal óptica sigue sin probar.
+          Solo la lectura de señal óptica sigue sin probar. "TODOS" escanea en segundo plano (no bloquea la
+          pantalla) — el listado de puertos se arma con los que ya tienen alguna ONT registrada aquí; un puerto
+          recién cableado sin ninguna todavía usa "Otro puerto...".
         </p>
       </div>
 
-      <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-6">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-semibold">ONTs sin autorizar ({{ unconfiguredOnts.length }})</h2>
-          <div class="flex items-center gap-2">
-            <button class="text-xs text-sky-700 hover:underline" :disabled="unconfiguredLoading" @click="loadUnconfigured()">
-              {{ unconfiguredLoading ? 'Consultando...' : 'Actualizar' }}
-            </button>
-            <button
-              class="text-xs text-amber-700 hover:underline"
-              :disabled="unconfiguredLoading"
-              title="Escaneo Telnet en vivo — usar justo antes de registrar una ONT nueva, para el dato mas fresco posible"
-              @click="loadUnconfigured({ live: true })"
-            >
-              Escanear ahora
-            </button>
-          </div>
-        </div>
-        <p class="text-xs text-slate-500 mb-3">
-          {{ unconfiguredLive ? 'Escaneo en vivo' : 'Desde la última sincronización' }}
-          <template v-if="unconfiguredCheckedAt">— {{ new Date(unconfiguredCheckedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) }}</template>
-        </p>
-        <p v-if="unconfiguredError" class="text-xs text-red-600 mb-3">{{ unconfiguredError }}</p>
-        <p v-else-if="!unconfiguredLoading && !unconfiguredOnts.length" class="text-sm text-slate-500">
-          No hay ONUs detectadas sin autorizar en este momento.
-        </p>
-        <div v-else class="table-shell">
-          <table class="w-full text-sm min-w-[500px]">
-            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
-              <tr>
-                <th class="text-left px-4 py-2">Serial</th>
-                <th class="text-left px-4 py-2">Puerto detectado</th>
-                <th class="text-right px-4 py-2">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="u in unconfiguredOnts" :key="u.interfaceRef" class="border-t border-slate-200">
-                <td class="px-4 py-2 font-mono text-xs">{{ u.serial }}</td>
-                <td class="px-4 py-2 font-mono text-xs text-slate-600">{{ u.frame }}/{{ u.slot }}/{{ u.port }}</td>
-                <td class="px-4 py-2 text-right">
-                  <button
-                    class="text-sky-700 hover:underline text-xs"
-                    :disabled="u.slot === null || u.port === null"
-                    @click="openRegister({ serial: u.serial, slot: u.slot!, port: u.port! })"
-                  >
-                    Configurar
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="text-[11px] text-slate-400 mt-3">
-          El ID de ONU se calcula automáticamente al registrar (el número que muestra la OLT aquí no es
-          confiable como ID libre).
-        </p>
+      <div ref="ontTabsEl" class="flex gap-2 border-b border-slate-200 mb-4">
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-t-lg"
+          :class="activeOntTab === 'uncfg' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+          @click="activeOntTab = 'uncfg'"
+        >
+          Sin Configurar / Por Autorizar ({{ unconfiguredOnts.length }})
+        </button>
+        <button
+          class="px-4 py-2 text-sm font-medium rounded-t-lg"
+          :class="activeOntTab === 'disabled' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+          @click="activeOntTab = 'disabled'"
+        >
+          Deshabilitadas / Cortadas ({{ disabledOnts.length }})
+        </button>
       </div>
+
+      <UnconfiguredOntsTab
+        v-if="activeOntTab === 'uncfg'"
+        :onts="unconfiguredOnts"
+        :loading="unconfiguredLoading"
+        :error="unconfiguredError"
+        :checked-at="unconfiguredCheckedAt"
+        :live="unconfiguredLive"
+        @refresh="loadUnconfigured()"
+        @refresh-live="loadUnconfigured({ live: true })"
+        @authorize="openRegister($event)"
+      />
+      <DisabledOntsTab
+        v-else
+        :items="disabledOnts"
+        :loading="disabledLoading"
+        :error="disabledError"
+        :checked-at="disabledCheckedAt"
+        :enabling-id="enablingDisabledId"
+        @refresh="loadDisabled"
+        @enable-service="handleEnableService"
+      />
 
       <div class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4 mb-6">
         <h2 class="text-sm font-semibold mb-1">¿Ves menos ONTs de las que tienes, o sin nombre/señal?</h2>
