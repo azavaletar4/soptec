@@ -15,8 +15,8 @@ panel.rayconetworks.com {
 
 	reverse_proxy /api/* frontend:80 {
 		transport http {
-			read_timeout 120s
-			write_timeout 120s
+			read_timeout 200s
+			write_timeout 200s
 		}
 	}
 }
