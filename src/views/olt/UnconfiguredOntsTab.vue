@@ -27,7 +27,7 @@ const VENDOR_BY_PREFIX: Record<string, string> = {
   FHTT: 'FiberHome',
   ALCL: 'Alcatel/Nokia',
   CIGG: 'CIG',
-  MSTC: 'Mercury',
+  MSTC: 'MitraStar',
 };
 
 function vendorFromSerial(serial: string) {
