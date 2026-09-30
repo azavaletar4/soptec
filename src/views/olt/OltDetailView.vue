@@ -388,7 +388,12 @@ const oltWriteBusy = computed(
 );
 
 async function handleToggle(ont: OltOnt) {
-  const activate = ont.status !== 'online';
+  // OJO: se decide por admin_state (lo que este boton realmente cambia en la
+  // OLT), no por status (online/offline/unknown, que solo refleja el ultimo
+  // sync) — una ONU recien registrada queda admin_state='enable' pero
+  // status='unknown' hasta el proximo sync, y con status el boton mostraba
+  // "Activar" para una ONU que ya estaba habilitada.
+  const activate = ont.admin_state !== 'enable';
   const ok = confirm(`¿${activate ? 'Activar' : 'Desactivar'} la ONT ${ont.serial}?`);
   if (!ok) return;
   togglingId.value = ont.id;
@@ -1122,7 +1127,7 @@ const gauges = computed(() => {
                   :disabled="oltWriteBusy && togglingId !== ont.id"
                   @click="handleToggle(ont)"
                 >
-                  {{ togglingId === ont.id ? 'Aplicando...' : ont.status === 'online' ? 'Desactivar' : 'Activar' }}
+                  {{ togglingId === ont.id ? 'Aplicando...' : ont.admin_state === 'enable' ? 'Desactivar' : 'Activar' }}
                 </button>
                 <button
                   class="text-red-500/80 hover:text-red-600 disabled:opacity-40"
