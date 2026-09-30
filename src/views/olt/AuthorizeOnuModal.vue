@@ -54,8 +54,22 @@ const trafficProfile = ref('');
 const profiles = ref<{ tcontProfiles: string[]; trafficProfiles: string[] }>({ tcontProfiles: [], trafficProfiles: [] });
 const profilesLoading = ref(false);
 const profilesError = ref<string | null>(null);
+// true cuando tcont/traffic vienen fijos del plan contratado (caso normal) —
+// false obliga a elegir a mano, ya sea porque el plan no tiene perfiles OLT
+// configurados (ver Planes) o porque el tecnico pidio explicitamente usar
+// otro perfil ("avanzado"). Mantener el plan y la OLT sincronizados es el
+// objetivo: nunca se deja elegir un perfil "a ciegas" desconectado de lo que
+// el cliente realmente contrato.
+const manualProfiles = ref(false);
 
+// Antes esto se llamaba siempre al abrir el modal (un show gpon profile ...
+// por Telnet contra la OLT en vivo) — lento y, si la OLT esta ocupada con
+// el sync periodico (show running-config completo, ver
+// project_olt_bulk_import), podia tardar mas que el timeout del proxy y
+// devolver 504 incluso antes de llegar a elegir cliente/plan. Ahora solo se
+// llama bajo demanda (perfil "avanzado" o plan sin perfiles configurados).
 async function loadProfiles() {
+  if (profiles.value.tcontProfiles.length) return;
   profilesLoading.value = true;
   profilesError.value = null;
   try {
@@ -64,6 +78,17 @@ async function loadProfiles() {
     profilesError.value = getErrorMessage(e, 'Error al consultar los perfiles de ancho de banda de la OLT');
   } finally {
     profilesLoading.value = false;
+  }
+}
+
+function toggleManualProfiles() {
+  manualProfiles.value = !manualProfiles.value;
+  if (manualProfiles.value) {
+    void loadProfiles();
+  } else {
+    const plan = selectedContract.value?.plans;
+    tcontProfile.value = plan?.olt_tcont_profile ?? '';
+    trafficProfile.value = plan?.olt_traffic_profile ?? '';
   }
 }
 
@@ -100,9 +125,63 @@ async function onClientChange() {
   }
 }
 
-watch(selectedContractId, () => {
-  zoneId.value = selectedContract.value?.zone_id ?? '';
+// Busca la caja NAP donde YA esta ocupado un puerto por este contrato
+// (mismo criterio que findContractNapId en ClientServiceDetailView.vue) —
+// requiere fibra.napPuertosPorElemento cargado.
+function findContractNapId(contractId: string): string {
+  for (const puertos of Object.values(fibra.napPuertosPorElemento)) {
+    const found = puertos.find((p) => p.contract_id === contractId && p.estado === 'ocupado');
+    if (found) return found.infra_elemento_id;
+  }
+  return '';
+}
+
+// Al elegir el servicio/contrato (el "primer filtro", como en SmartOLT: el
+// contrato ya trae NAP/MikroTik/PPPoE cargados desde que se creo el cliente
+// — ver ClientServiceDetailView.vue) se jala todo lo que ya existe, para que
+// este modal sea solo "activar" y no repetir datos que el tecnico ya cargo
+// antes. Si algo no esta configurado en el contrato, se deja el campo
+// editable (ver "manualNap"/"manualMikrotik" en el template) como fallback.
+watch(selectedContractId, async () => {
+  const contract = selectedContract.value;
+  zoneId.value = contract?.zone_id ?? '';
+
+  const plan = contract?.plans;
+  if (plan?.olt_tcont_profile && plan?.olt_traffic_profile) {
+    tcontProfile.value = plan.olt_tcont_profile;
+    trafficProfile.value = plan.olt_traffic_profile;
+    manualProfiles.value = false;
+  } else {
+    tcontProfile.value = '';
+    trafficProfile.value = '';
+    manualProfiles.value = true;
+    void loadProfiles();
+  }
+
   napId.value = '';
+  manualNap.value = true;
+  if (contract) {
+    await fibra.fetchTodosNapPuertos();
+    const foundNapId = findContractNapId(contract.id);
+    if (foundNapId) {
+      napId.value = foundNapId;
+      manualNap.value = false;
+    }
+  }
+
+  if (contract?.mikrotik_device_id && contract?.pppoe_username) {
+    mikrotikDeviceId.value = contract.mikrotik_device_id;
+    secretMode.value = 'existing';
+    manualMikrotik.value = false;
+    await onMikrotikDeviceChange();
+    selectedSecretName.value = contract.pppoe_username;
+    mikrotikProfile.value = contract.mikrotik_profile || plan?.mikrotik_profile || '';
+  } else {
+    mikrotikDeviceId.value = '';
+    secretMode.value = 'create';
+    manualMikrotik.value = true;
+    mikrotikProfile.value = plan?.mikrotik_profile ?? '';
+  }
 });
 
 // ---- 5) Zona ----
@@ -130,6 +209,13 @@ async function handleCreateZone() {
 // ---- 6) Caja NAP (opcional) — mismo sistema real de capacidad que
 // ClientServiceDetailView.vue, no los campos de texto libre de olt_onts ----
 const napId = ref('');
+// true cuando no hay caja NAP ya asignada en el contrato (o el tecnico pidio
+// cambiarla) — mismo patron que manualProfiles.
+const manualNap = ref(true);
+function toggleManualNap() {
+  manualNap.value = !manualNap.value;
+  if (!manualNap.value) napId.value = findContractNapId(selectedContract.value?.id ?? '');
+}
 const napOptionsAll = computed(() =>
   infraStore.elementos
     .filter((e) => e.tipo === 'caja_nap')
@@ -147,6 +233,21 @@ const napOptions = computed(() => napOptionsAll.value.filter((n) => n.zoneId ===
 
 // ---- 8) MikroTik ----
 const mikrotikDeviceId = ref('');
+// true cuando el contrato NO trae ya router+usuario PPPoE (o el tecnico pidio
+// cambiarlo) — mismo patron que manualProfiles/manualNap: si el contrato ya
+// tiene todo, esta seccion solo se muestra como resumen de solo lectura.
+const manualMikrotik = ref(true);
+async function toggleManualMikrotik() {
+  manualMikrotik.value = !manualMikrotik.value;
+  if (manualMikrotik.value) return;
+  const contract = selectedContract.value;
+  if (!contract?.mikrotik_device_id) return;
+  mikrotikDeviceId.value = contract.mikrotik_device_id;
+  secretMode.value = contract.pppoe_username ? 'existing' : 'create';
+  await onMikrotikDeviceChange();
+  if (contract.pppoe_username) selectedSecretName.value = contract.pppoe_username;
+  mikrotikProfile.value = contract.mikrotik_profile || contract.plans?.mikrotik_profile || '';
+}
 const mikrotikRoutersForZone = computed(() => {
   if (!zoneId.value) return mikrotikStore.devices;
   const inZone = mikrotikStore.devices.filter((d) => d.zone_id === zoneId.value);
@@ -185,6 +286,10 @@ async function onMikrotikDeviceChange() {
   try {
     const list = await mikrotikStore.fetchPppProfiles(mikrotikDeviceId.value);
     mikrotikProfileNames.value = list.map((p) => p.name);
+    // Reaplica el perfil del plan contratado si este router tambien lo tiene
+    // configurado (mismo criterio que tcont/traffic: el plan manda).
+    const planProfile = selectedContract.value?.plans?.mikrotik_profile;
+    if (planProfile && mikrotikProfileNames.value.includes(planProfile)) mikrotikProfile.value = planProfile;
   } catch (e) {
     submitError.value = getErrorMessage(e, 'No se pudo leer los perfiles del router');
   } finally {
@@ -338,7 +443,6 @@ async function handleAuthorize() {
 }
 
 onMounted(() => {
-  void loadProfiles();
   void clientsStore.fetchClients();
   void catalogs.fetchZones();
   void mikrotikStore.fetchDevices();
@@ -430,13 +534,23 @@ onMounted(() => {
             </div>
           </div>
           <div>
-            <label class="block text-xs text-slate-600 mb-1">Caja NAP (opcional)</label>
-            <select v-model="napId" class="field-input" :disabled="!zoneId">
-              <option value="">Sin asignar</option>
-              <option v-for="n in napOptions" :key="n.id" :value="n.id">{{ n.name }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity ? ' (LLENA)' : '' }}</option>
-            </select>
-            <p v-if="!zoneId" class="text-xs text-slate-400 mt-1">Elige primero una zona para ver sus cajas NAP.</p>
-            <p v-else-if="!napOptions.length" class="text-xs text-slate-400 mt-1">Esa zona no tiene cajas NAP asignadas.</p>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs text-slate-600">Caja NAP</label>
+              <button v-if="!manualNap" type="button" class="text-xs text-sky-700 hover:underline" @click="toggleManualNap">
+                Cambiar
+              </button>
+            </div>
+            <div v-if="!manualNap" class="rounded-lg border border-slate-200 bg-slate-50 p-2 text-sm font-mono">
+              {{ napOptionsAll.find((n) => n.id === napId)?.name ?? napId }}
+            </div>
+            <template v-else>
+              <select v-model="napId" class="field-input" :disabled="!zoneId">
+                <option value="">Sin asignar</option>
+                <option v-for="n in napOptions" :key="n.id" :value="n.id">{{ n.name }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity ? ' (LLENA)' : '' }}</option>
+              </select>
+              <p v-if="!zoneId" class="text-xs text-slate-400 mt-1">Elige primero una zona para ver sus cajas NAP.</p>
+              <p v-else-if="!napOptions.length" class="text-xs text-slate-400 mt-1">Esa zona no tiene cajas NAP asignadas.</p>
+            </template>
           </div>
         </div>
 
@@ -469,65 +583,107 @@ onMounted(() => {
           <label class="block text-xs text-slate-600 mb-1">Descripción</label>
           <input v-model="description" placeholder="Nombre del cliente" class="field-input" />
         </div>
-        <p v-if="profilesError" class="text-xs text-red-600 mb-3">{{ profilesError }}</p>
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Perfil de subida (tcont)</label>
-            <select v-model="tcontProfile" required class="field-input" :disabled="profilesLoading">
-              <option value="" disabled>{{ profilesLoading ? 'Cargando...' : 'Selecciona un plan' }}</option>
-              <option v-for="p in profiles.tcontProfiles" :key="p" :value="p">{{ p }}</option>
-            </select>
+        <div class="mb-4">
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs text-slate-600">Velocidad OLT (segun el plan del contrato)</label>
+            <button
+              v-if="selectedContract?.plans?.olt_tcont_profile && selectedContract?.plans?.olt_traffic_profile"
+              type="button"
+              class="text-xs text-sky-700 hover:underline"
+              @click="toggleManualProfiles"
+            >
+              {{ manualProfiles ? 'Usar el perfil del plan' : 'Usar otro perfil (avanzado)' }}
+            </button>
           </div>
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Perfil de bajada (traffic)</label>
-            <select v-model="trafficProfile" required class="field-input" :disabled="profilesLoading">
-              <option value="" disabled>{{ profilesLoading ? 'Cargando...' : 'Selecciona un plan' }}</option>
-              <option v-for="p in profiles.trafficProfiles" :key="p" :value="p">{{ p }}</option>
-            </select>
+
+          <p v-if="!selectedContract" class="text-xs text-slate-400">
+            Selecciona primero el cliente y su servicio — el perfil de la OLT se toma de su plan contratado.
+          </p>
+
+          <div v-else-if="!manualProfiles" class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <p class="font-medium">{{ selectedContract.plans?.name }}</p>
+            <p class="text-xs text-slate-500 font-mono">{{ tcontProfile }} / {{ trafficProfile }}</p>
           </div>
+
+          <template v-else>
+            <p v-if="selectedContract && !selectedContract.plans?.olt_tcont_profile" class="text-xs text-amber-700 mb-2">
+              El plan "{{ selectedContract.plans?.name }}" no tiene perfiles OLT configurados (ver Planes) — elige uno manualmente.
+            </p>
+            <p v-if="profilesError" class="text-xs text-red-600 mb-2">{{ profilesError }}</p>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Perfil de subida (tcont)</label>
+                <select v-model="tcontProfile" required class="field-input" :disabled="profilesLoading">
+                  <option value="" disabled>{{ profilesLoading ? 'Cargando...' : 'Selecciona un plan' }}</option>
+                  <option v-for="p in profiles.tcontProfiles" :key="p" :value="p">{{ p }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Perfil de bajada (traffic)</label>
+                <select v-model="trafficProfile" required class="field-input" :disabled="profilesLoading">
+                  <option value="" disabled>{{ profilesLoading ? 'Cargando...' : 'Selecciona un plan' }}</option>
+                  <option v-for="p in profiles.trafficProfiles" :key="p" :value="p">{{ p }}</option>
+                </select>
+              </div>
+            </div>
+          </template>
         </div>
 
         <!-- 9) MikroTik -->
-        <h3 class="text-sm font-semibold mb-2 pt-3 border-t border-slate-200">Sincronización MikroTik</h3>
-        <div class="mb-3">
-          <label class="block text-xs text-slate-600 mb-1">Router MikroTik</label>
-          <select v-model="mikrotikDeviceId" required class="field-input" @change="onMikrotikDeviceChange">
-            <option value="" disabled>Selecciona un router</option>
-            <option v-for="d in mikrotikRoutersForZone" :key="d.id" :value="d.id">{{ d.name }}</option>
-          </select>
+        <div class="flex items-center justify-between mb-2 pt-3 border-t border-slate-200">
+          <h3 class="text-sm font-semibold">Sincronización MikroTik</h3>
+          <button v-if="!manualMikrotik" type="button" class="text-xs text-sky-700 hover:underline" @click="toggleManualMikrotik">
+            Cambiar
+          </button>
         </div>
-        <div class="flex gap-4 mb-3 text-sm">
-          <label class="flex items-center gap-1.5">
-            <input v-model="secretMode" type="radio" value="create" /> Crear credencial nueva
-          </label>
-          <label class="flex items-center gap-1.5">
-            <input v-model="secretMode" type="radio" value="existing" /> Vincular usuario PPPoE existente
-          </label>
+
+        <div v-if="!manualMikrotik" class="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+          <p><span class="text-slate-500">Router:</span> {{ mikrotikStore.devices.find((d) => d.id === mikrotikDeviceId)?.name ?? mikrotikDeviceId }}</p>
+          <p><span class="text-slate-500">Usuario PPPoE:</span> <span class="font-mono">{{ selectedSecretName }}</span></p>
+          <p><span class="text-slate-500">Perfil:</span> <span class="font-mono">{{ mikrotikProfile || '—' }}</span></p>
         </div>
-        <div v-if="secretMode === 'create'" class="grid grid-cols-2 gap-3 mb-3">
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE</label>
-            <input v-model="newSecretName" class="field-input" placeholder="usuario.pppoe" />
+
+        <template v-else>
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Router MikroTik</label>
+            <select v-model="mikrotikDeviceId" required class="field-input" @change="onMikrotikDeviceChange">
+              <option value="" disabled>Selecciona un router</option>
+              <option v-for="d in mikrotikRoutersForZone" :key="d.id" :value="d.id">{{ d.name }}</option>
+            </select>
           </div>
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Contraseña</label>
-            <input v-model="newSecretPassword" class="field-input" />
+          <div class="flex gap-4 mb-3 text-sm">
+            <label class="flex items-center gap-1.5">
+              <input v-model="secretMode" type="radio" value="create" /> Crear credencial nueva
+            </label>
+            <label class="flex items-center gap-1.5">
+              <input v-model="secretMode" type="radio" value="existing" /> Vincular usuario PPPoE existente
+            </label>
           </div>
-        </div>
-        <div v-else class="mb-3">
-          <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE existente</label>
-          <select v-model="selectedSecretName" class="field-input" :disabled="!mikrotikDeviceId || loadingSecrets">
-            <option value="" disabled>{{ loadingSecrets ? 'Cargando...' : 'Selecciona un secreto' }}</option>
-            <option v-for="s in availableSecrets" :key="s['.id']" :value="s.name">{{ s.name }}</option>
-          </select>
-        </div>
-        <div class="mb-4">
-          <label class="block text-xs text-slate-600 mb-1">Perfil PPPoE (MikroTik)</label>
-          <select v-model="mikrotikProfile" class="field-input" :disabled="!mikrotikDeviceId || loadingMikrotikProfiles">
-            <option value="" disabled>{{ loadingMikrotikProfiles ? 'Cargando...' : 'Selecciona un perfil' }}</option>
-            <option v-for="p in mikrotikProfileNames" :key="p" :value="p">{{ p }}</option>
-          </select>
-        </div>
+          <div v-if="secretMode === 'create'" class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE</label>
+              <input v-model="newSecretName" class="field-input" placeholder="usuario.pppoe" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Contraseña</label>
+              <input v-model="newSecretPassword" class="field-input" />
+            </div>
+          </div>
+          <div v-else class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE existente</label>
+            <select v-model="selectedSecretName" class="field-input" :disabled="!mikrotikDeviceId || loadingSecrets">
+              <option value="" disabled>{{ loadingSecrets ? 'Cargando...' : 'Selecciona un secreto' }}</option>
+              <option v-for="s in availableSecrets" :key="s['.id']" :value="s.name">{{ s.name }}</option>
+            </select>
+          </div>
+          <div class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Perfil PPPoE (MikroTik)</label>
+            <select v-model="mikrotikProfile" class="field-input" :disabled="!mikrotikDeviceId || loadingMikrotikProfiles">
+              <option value="" disabled>{{ loadingMikrotikProfiles ? 'Cargando...' : 'Selecciona un perfil' }}</option>
+              <option v-for="p in mikrotikProfileNames" :key="p" :value="p">{{ p }}</option>
+            </select>
+          </div>
+        </template>
 
         <p v-if="submitError" class="text-sm text-red-600 mb-3">{{ submitError }}</p>
         <div v-if="ontCreated && !submitWarnings.length" class="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3">

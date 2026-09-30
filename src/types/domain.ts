@@ -150,7 +150,10 @@ export interface ServiceContract {
   created_at: string;
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number' | 'phone'> | null;
-  plans?: Pick<Plan, 'id' | 'name' | 'download_speed' | 'upload_speed' | 'price'> | null;
+  plans?: Pick<
+    Plan,
+    'id' | 'name' | 'download_speed' | 'upload_speed' | 'price' | 'mikrotik_profile' | 'olt_tcont_profile' | 'olt_traffic_profile'
+  > | null;
   invoices?: Pick<Invoice, 'id' | 'invoice_number' | 'due_date' | 'amount'> | null;
 }
 
