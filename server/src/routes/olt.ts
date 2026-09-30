@@ -736,14 +736,6 @@ oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
   }
 
   const ref = { shelf, slot, port };
-  // Best-effort: asignar TR-069 automaticamente (perfil ACS por defecto de
-  // la OLT, si hay uno configurado) y leer la senal optica inicial. Nunca
-  // debe fallar el registro por esto — si algo sale mal aqui, la ONT ya
-  // quedo registrada y el usuario puede reintentar TR-069/senal a mano
-  // (botones "TR-069"/"Senal" en la tabla). Corre dentro del MISMO turno de
-  // lock que el registro (incluye la espera de 8s) para que el sync en
-  // background nunca pueda meterse a mitad de un registro.
-  const autoUpdate: Record<string, unknown> = {};
   let onuId: number;
 
   try {
@@ -775,39 +767,6 @@ oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
         telnetTargetFor(device),
         registerOntCommands({ ref, onuId: resolvedOnuId, serial, onuType, vlan, description, tcontProfile, trafficProfile }),
       );
-
-      try {
-        const { data: acsProfile } = await supabaseAdmin
-          .from('olt_tr069_acs_profiles')
-          .select('acs_url')
-          .eq('olt_device_id', device.id)
-          .eq('is_default', true)
-          .maybeSingle();
-
-        if (acsProfile?.acs_url) {
-          // El canal OMCI tarda unos segundos en quedar listo tras el
-          // registro — un intento inmediato puede hacer timeout (visto
-          // contra el equipo real).
-          await new Promise((resolve) => setTimeout(resolve, 8000));
-          await runTelnetCommands(telnetTargetFor(device), setTr069AcsCommands(ref, resolvedOnuId, 1, acsProfile.acs_url), {
-            timeoutMs: 25000,
-          });
-          autoUpdate.tr069_enabled = true;
-          autoUpdate.tr069_acs_url = acsProfile.acs_url;
-        }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[olt/register] No se pudo asignar TR-069 automaticamente:', e);
-      }
-
-      try {
-        const signal = await readOntSignal(device, ref, resolvedOnuId);
-        autoUpdate.rx_power = signal.rxPower;
-        autoUpdate.tx_power = signal.txPower;
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('[olt/register] No se pudo leer la senal inicial:', e);
-      }
 
       return resolvedOnuId;
     });
@@ -841,20 +800,64 @@ oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
 
   if (error) return c.json({ error: error.message }, 400);
 
-  if (Object.keys(autoUpdate).length === 0) {
-    oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
-    return c.json(data, 201);
-  }
+  oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
 
-  const { data: finalData } = await supabaseAdmin
-    .from('olt_onts')
-    .update(autoUpdate)
-    .eq('id', data.id)
-    .select()
-    .single();
+  // Best-effort, EN SEGUNDO PLANO (la ONT de arriba YA quedo registrada y la
+  // respuesta ya se mando): asignar TR-069 (si hay un ACS por defecto
+  // configurado) y leer la senal optica inicial. Antes esto corria adentro
+  // del mismo turno de lock que el registro (con una espera fija de 8s +
+  // hasta 55s mas de timeouts) y el tecnico se quedaba esperando esa parte
+  // opcional para recien ahi ver "Autorizado" — con una OLT real que a veces
+  // responde lento, eso solo hacia mas probable un 504 del proxy sin
+  // aportar nada al resultado (si falla, ya se puede reintentar a mano desde
+  // los botones "TR-069"/"Senal" de la tabla). Usa oltEvents (mismo bus SSE
+  // de siempre) para que la fila se actualice sola si el tecnico sigue
+  // mirando la pantalla cuando termine.
+  void (async () => {
+    const autoUpdate: Record<string, unknown> = {};
 
-  oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: finalData ?? data });
-  return c.json(finalData ?? data, 201);
+    try {
+      await withOltLock(device.id, async () => {
+        const { data: acsProfile } = await supabaseAdmin
+          .from('olt_tr069_acs_profiles')
+          .select('acs_url')
+          .eq('olt_device_id', device.id)
+          .eq('is_default', true)
+          .maybeSingle();
+
+        if (acsProfile?.acs_url) {
+          // El canal OMCI tarda unos segundos en quedar listo tras el
+          // registro — un intento inmediato puede hacer timeout (visto
+          // contra el equipo real).
+          await new Promise((resolve) => setTimeout(resolve, 8000));
+          await runTelnetCommands(telnetTargetFor(device), setTr069AcsCommands(ref, onuId, 1, acsProfile.acs_url), {
+            timeoutMs: 25000,
+          });
+          autoUpdate.tr069_enabled = true;
+          autoUpdate.tr069_acs_url = acsProfile.acs_url;
+        }
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[olt/register] No se pudo asignar TR-069 automaticamente:', e);
+    }
+
+    try {
+      const signal = await withOltLock(device.id, () => readOntSignal(device, ref, onuId));
+      autoUpdate.rx_power = signal.rxPower;
+      autoUpdate.tx_power = signal.txPower;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[olt/register] No se pudo leer la senal inicial:', e);
+    }
+
+    if (Object.keys(autoUpdate).length > 0) {
+      const { data: finalData } = await supabaseAdmin.from('olt_onts').update(autoUpdate).eq('id', data.id).select().single();
+      if (finalData) oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: finalData });
+    }
+  })();
+
+  return c.json(data, 201);
 });
 
 async function getOntOrNull(id: string | undefined) {
