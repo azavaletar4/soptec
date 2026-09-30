@@ -365,7 +365,11 @@ async function handleImportExisting() {
 }
 
 async function handleAuthorized() {
-  await Promise.all([oltStore.fetchOnts(deviceId.value), loadUnconfigured(), loadDisabled(), loadSummary()]);
+  // "live: true" fuerza un escaneo en vivo en vez de leer la cache del sync
+  // periodico (cada 20 min) — si no, la ONU recien autorizada sigue
+  // apareciendo en "Sin autorizar" hasta el proximo sync automatico, aunque
+  // el registro en la OLT ya haya salido exitoso.
+  await Promise.all([oltStore.fetchOnts(deviceId.value), loadUnconfigured({ live: true }), loadDisabled(), loadSummary()]);
 }
 
 const togglingId = ref<string | null>(null);

@@ -46,7 +46,33 @@ const ponUsed = computed(
 
 // ---- 2) Red / OLT ----
 const onuId = ref<number | ''>('');
-const onuType = ref('');
+// El "tipo de ONU" no es la marca del equipo (ej. "huawei") sino un
+// perfil OMCI que YA debe existir configurado en la OLT — si se escribe uno
+// que la OLT no reconoce, el comando "onu <id> type <tipo> sn <serial>" se
+// ignora en silencio: la ONU nunca queda realmente creada (no sale en "show
+// gpon onu state"), pero como runTelnetCommands no valida cada comando, el
+// registro se guarda igual como "online" en la base — visto en vivo
+// 2026-09-30 con un serial Huawei real registrado como tipo "huawei"
+// (inexistente en esta OLT: de 706 ONTs reales, 703 usan "GPT-2741GNAC").
+// Por eso se precarga con el tipo mas usado en ESTA OLT en vez de dejarlo en
+// blanco — sigue editable para el caso real de un modelo distinto.
+function mostCommonOnuType(): string {
+  const counts = new Map<string, number>();
+  for (const o of oltStore.onts) {
+    if (o.olt_device_id !== props.deviceId || !o.onu_type) continue;
+    counts.set(o.onu_type, (counts.get(o.onu_type) ?? 0) + 1);
+  }
+  let best = '';
+  let bestCount = 0;
+  for (const [type, count] of counts) {
+    if (count > bestCount) {
+      best = type;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+const onuType = ref(mostCommonOnuType());
 const description = ref('');
 const vlan = ref(100);
 const tcontProfile = ref('');
@@ -576,7 +602,10 @@ onMounted(() => {
           </div>
           <div>
             <label class="block text-xs text-slate-600 mb-1">Perfil OMCI / Tipo de ONU</label>
-            <input v-model="onuType" required placeholder="ej. ZTE-F660" class="field-input" />
+            <input v-model="onuType" required placeholder="ej. GPT-2741GNAC" class="field-input" />
+            <p class="text-[11px] text-slate-400 mt-1">
+              Debe ser un tipo YA configurado en esta OLT (no la marca del equipo) — se precarga con el mas usado aqui.
+            </p>
           </div>
         </div>
         <div class="mb-3">
