@@ -50,6 +50,19 @@ function canEdit(inst: Installation) {
   return auth.role === 'TECNICO_RED' && inst.assigned_to === auth.user?.id;
 }
 
+// Una vez 'completed', el tecnico ya no modifica nada de esa instalacion
+// (ni materiales ni equipos) — solo queda viendo la lista, igual que el
+// resto del staff de solo lectura. El candado real vive en la BD (Fase 46
+// para equipos, Fase 69 para consumibles); esto solo evita mostrarle el
+// boton a quien la BD igual va a rechazar. Si de verdad falto algo, el
+// camino es que un ADMIN/SUPERADMIN regrese el estado (selector de estado,
+// solo visible para ellos) a 'scheduled' para reabrirla, el tecnico
+// corrige, y se vuelve a completar.
+function canEditMaterials(inst: Installation) {
+  if (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') return true;
+  return canEdit(inst) && inst.status !== 'completed';
+}
+
 const showModal = ref(false);
 const saving = ref(false);
 const formError = ref<string | null>(null);
@@ -739,7 +752,10 @@ function formatDate(value: string | null) {
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
               <template v-if="canEdit(inst)">
-                <button class="text-sky-600 hover:underline" @click="openMaterialsModal(inst)">Materiales</button>
+                <button v-if="canEditMaterials(inst)" class="text-sky-600 hover:underline" @click="openMaterialsModal(inst)">
+                  Materiales
+                </button>
+                <span v-else class="text-slate-400">Materiales (solo admin)</span>
                 <button
                   v-if="inst.status !== 'completed' && inst.status !== 'cancelled'"
                   class="text-green-600 hover:underline"
