@@ -201,13 +201,17 @@ interface MaterialTemplateLine {
 // le vuelve a dar "Registrar plantilla" — duplica el consumo (y el stock
 // queda mal). El tecnico escribe a mano lo que realmente uso en cada visita.
 //
-// "Cable Drop" se compra y se cuenta por ROLLO de 100m (inventory_products.
-// unit lo deja claro, Fase 62) — la cantidad que se registra aqui es
-// numero de rollos usados (puede ser fraccionario, ej. 0.3 = 30m de un
-// rollo), nunca metros sueltos. Antes decia "(metraje)", lo que llevaba a
-// escribir los metros directo (ej. 100) y descontar 100 ROLLOS de stock.
+// "Cable Drop" NO es una bobina que se corta a medida: son cables ya
+// armados de largo fijo (drop 50/100/220/300 metros, cada uno su propio
+// producto en Inventario) — Fase 63 cambia `match` para encontrar TODAS las
+// variantes de una familia (antes tomaba la primera que matcheaba nomas, lo
+// que impedia elegir cual largo se uso realmente). Cada linea ademas suma
+// "Cliente regresa" (reconexion: reutiliza lo que ya tenia en la pared) para
+// marcar explicitamente que esa linea no consume nada — si todas quedan asi
+// (o simplemente no se llena nada), no hace falta "Registrar plantilla" y
+// se pasa directo a Equipos asignados (ej. solo cambiar el ONT).
 const MATERIAL_TEMPLATE: MaterialTemplateLine[] = [
-  { key: 'drop', label: 'Cable Drop (en rollos de 100m)', match: /drop/i, defaultQty: 0 },
+  { key: 'drop', label: 'Cable Drop', match: /drop/i, defaultQty: 0 },
   { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 0 },
   { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 0 },
   { key: 'conector', label: 'Conector Óptico', match: /conector/i, defaultQty: 0 },
@@ -215,31 +219,44 @@ const MATERIAL_TEMPLATE: MaterialTemplateLine[] = [
 const ferreteriaProducts = computed(() =>
   inventoryStore.products.filter((p) => p.is_active && p.inventory_categories?.slug === 'ferreteria'),
 );
+// Si una familia matchea mas de un producto (ej. "drop" -> 4 largos), el
+// tecnico elige cual con templateProductChoice; si matchea uno solo, se usa
+// ese directo (mismo comportamiento de siempre para Roseta/Patchcord/Conector).
+const templateProductChoice = ref<Record<string, string>>({});
 const templateRows = computed(() =>
-  MATERIAL_TEMPLATE.map((line) => ({
-    ...line,
-    product: ferreteriaProducts.value.find((p) => line.match.test(p.name)) ?? null,
-  })),
+  MATERIAL_TEMPLATE.map((line) => {
+    const matches = ferreteriaProducts.value.filter((p) => line.match.test(p.name));
+    const chosenId = matches.length > 1 ? templateProductChoice.value[line.key] : matches[0]?.id;
+    return { ...line, matches, product: matches.find((p) => p.id === chosenId) ?? null };
+  }),
 );
 // El selector libre de "Otro material" es solo para consumibles por
 // cantidad que no cubre la plantilla de arriba — se excluyen los productos
 // serializados (ONT/TV Box/Mesh: esos se asignan por serie/MAC en "Equipos
 // asignados", no aqui) y los que ya tienen su propio input en la plantilla
-// (Roseta/Patchcord/Conector/Drop), para no duplicarlos.
-const templateProductIds = computed(() => new Set(templateRows.value.map((r) => r.product?.id).filter(Boolean)));
+// (Roseta/Patchcord/Conector/Drop, CUALQUIER variante), para no duplicarlos.
+const templateProductIds = computed(() => new Set(templateRows.value.flatMap((r) => r.matches.map((p) => p.id))));
 const otherMaterialProducts = computed(() =>
   inventoryStore.products.filter((p) => !p.is_serialized && !templateProductIds.value.has(p.id)),
 );
 const templateQuantities = ref<Record<string, number>>({});
+// "Cliente regresa" por linea: reconexion que reutiliza ese material puntual
+// (ej. el drop ya esta tendido, pero igual se cambio la roseta). Marcar
+// todas equivale a "no hay materiales que registrar esta visita".
+const templateReuse = ref<Record<string, boolean>>({});
 function resetTemplateQuantities() {
   templateQuantities.value = Object.fromEntries(MATERIAL_TEMPLATE.map((l) => [l.key, l.defaultQty]));
+  templateProductChoice.value = {};
+  templateReuse.value = {};
 }
 const savingTemplate = ref(false);
 const templateError = ref<string | null>(null);
 
 async function handleRegisterTemplate() {
   if (!materialsInstallation.value) return;
-  const rowsToRegister = templateRows.value.filter((row) => (templateQuantities.value[row.key] ?? 0) > 0 && row.product);
+  const rowsToRegister = templateRows.value.filter(
+    (row) => !templateReuse.value[row.key] && (templateQuantities.value[row.key] ?? 0) > 0 && row.product,
+  );
   if (!rowsToRegister.length) {
     toast.info('No hay cantidades para registrar — escribe lo que usaste en cada material.');
     return;
@@ -840,26 +857,47 @@ function formatDate(value: string | null) {
               </ul>
             </template>
 
-            <!-- Plantilla de materiales precargados (Fase 45) -->
+            <!-- Plantilla de materiales precargados (Fase 45/63) -->
             <div class="border border-slate-200 rounded-lg p-3 mb-4">
-              <h3 class="text-sm font-semibold mb-2">Plantilla de materiales</h3>
-              <div class="space-y-2">
-                <div v-for="row in templateRows" :key="row.key" class="flex items-center gap-2">
-                  <span class="flex-1 text-xs text-slate-700">{{ row.label }}</span>
-                  <template v-if="row.product">
-                    <input
-                      v-model.number="templateQuantities[row.key]"
-                      type="number"
-                      min="0"
-                      step="1"
-                      class="field-input w-20 py-1 text-xs"
-                    />
-                    <span class="text-[11px] text-slate-400 w-16">{{ row.product.unit }}</span>
+              <h3 class="text-sm font-semibold mb-1">Plantilla de materiales</h3>
+              <p class="text-[11px] text-slate-400 mb-2">
+                Si el cliente regresa y reutiliza lo que ya tenía (ej. el drop tendido), marca esa línea en vez de
+                registrar cantidad — si quedan todas así, no hace falta esta sección: solo Equipos asignados.
+              </p>
+              <div class="divide-y divide-slate-100">
+                <div v-for="row in templateRows" :key="row.key" class="py-2 first:pt-0 last:pb-0">
+                  <div class="flex items-center gap-2">
+                    <span class="flex-1 text-xs text-slate-700">{{ row.label }}</span>
+                    <label class="flex items-center gap-1 text-[11px] text-slate-500 whitespace-nowrap">
+                      <input type="checkbox" v-model="templateReuse[row.key]" />
+                      Cliente regresa
+                    </label>
+                  </div>
+                  <template v-if="!templateReuse[row.key]">
+                    <select
+                      v-if="row.matches.length > 1"
+                      v-model="templateProductChoice[row.key]"
+                      class="field-input w-full py-1 text-xs mt-1.5"
+                    >
+                      <option value="">Selecciona la medida usada...</option>
+                      <option v-for="p in row.matches" :key="p.id" :value="p.id">{{ p.name }}</option>
+                    </select>
+                    <div v-if="row.product" class="flex items-center gap-2 mt-1.5">
+                      <span class="flex-1 text-[11px] text-slate-400">Cantidad</span>
+                      <input
+                        v-model.number="templateQuantities[row.key]"
+                        type="number"
+                        min="0"
+                        step="1"
+                        class="field-input w-20 py-1 text-xs"
+                      />
+                      <span class="text-[11px] text-slate-400 w-16">{{ row.product.unit }}</span>
+                    </div>
+                    <p v-else-if="!row.matches.length" class="text-[11px] text-amber-700 mt-1">
+                      Falta crear "{{ row.label }}" en
+                      <router-link to="/inventario/album/ferreteria" class="underline" @click="showMaterialsModal = false">Inventario</router-link>
+                    </p>
                   </template>
-                  <span v-else class="text-[11px] text-amber-700">
-                    Falta crear "{{ row.label }}" en
-                    <router-link to="/inventario/album/ferreteria" class="underline" @click="showMaterialsModal = false">Inventario</router-link>
-                  </span>
                 </div>
               </div>
               <div class="flex justify-end mt-3">
