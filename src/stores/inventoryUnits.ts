@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import type { InventoryUnit, InventoryUnitEvent, InventoryUnitStatus } from '@/types/domain';
 
 const UNIT_SELECT =
-  '*, product:inventory_products(id, name, category), clients(id, first_name, last_name, document_number), pending_pickup_profile:profiles!inventory_units_pending_pickup_by_fkey(id, full_name, email)';
+  '*, product:inventory_products(id, name, category, inventory_categories(slug)), clients(id, first_name, last_name, document_number), pending_pickup_profile:profiles!inventory_units_pending_pickup_by_fkey(id, full_name, email)';
 const EVENT_SELECT =
   '*, author:profiles!inventory_unit_events_created_by_fkey(id, full_name, email), clients(id, first_name, last_name), assigned_profile:profiles!inventory_unit_events_assigned_to_fkey(id, full_name, email)';
 

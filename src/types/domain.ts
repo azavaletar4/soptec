@@ -295,7 +295,10 @@ export interface InventoryUnit {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  product?: Pick<InventoryProduct, 'id' | 'name' | 'category'> | null;
+  /** inventory_categories.slug (ej. 'onu') viaja anidado para distinguir Modem/ONT de TV Box/Mesh sin otro round-trip (Fase 71). */
+  product?:
+    | (Pick<InventoryProduct, 'id' | 'name' | 'category'> & { inventory_categories?: Pick<InventoryCategory, 'slug'> | null })
+    | null;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
   pending_pickup_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }

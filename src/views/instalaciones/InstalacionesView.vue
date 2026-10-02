@@ -338,7 +338,17 @@ const soloIptvEquipmentProducts = computed(() =>
     (p) => p.is_serialized && (p.inventory_categories?.slug === 'onu' || p.inventory_categories?.slug === 'tvbox'),
   ),
 );
-const equipmentProducts = computed(() => (materialsServiceType.value === 'solo_iptv' ? soloIptvEquipmentProducts.value : serializedProducts.value));
+// Maximo 1 Modem/ONT/Router principal (categoria 'onu') por instalacion —
+// Fase 71. TV Box y Mesh no tienen este limite (una casa puede necesitar 2+
+// TV Box, o un repetidor ademas del modem). Una vez asignado, se saca la
+// categoria 'onu' del selector de producto para que no se pueda ni elegir
+// otro por error — el candado real (por si se llama a la API directo)
+// vive en apply_inventory_unit_event (ver migracion Fase 71).
+const assignedOntUnit = computed(() => assignedUnits.value.find((u) => u.product?.inventory_categories?.slug === 'onu'));
+const equipmentProducts = computed(() => {
+  const base = materialsServiceType.value === 'solo_iptv' ? soloIptvEquipmentProducts.value : serializedProducts.value;
+  return assignedOntUnit.value ? base.filter((p) => p.inventory_categories?.slug !== 'onu') : base;
+});
 
 // Si el tecnico cambia el tipo de servicio con un producto ya elegido en el
 // selector de equipo, ese producto puede dejar de estar en la lista vigente
@@ -1004,6 +1014,12 @@ function formatDate(value: string | null) {
                 :class="materialsServiceType === 'internet_combo' ? 'text-amber-600' : 'text-slate-500'"
               >
                 Sin equipos asignados a esta instalación todavía.
+              </p>
+
+              <p v-if="assignedOntUnit" class="text-xs text-slate-500 mb-3">
+                Ya tiene un Módem/ONT asignado ({{ assignedOntUnit.serial_number || assignedOntUnit.mac_address }}) — solo se
+                permite 1 por instalación. Si te equivocaste de serie, presiona "Quitar" en el equipo actual antes de
+                agregar uno nuevo. (TV Box y repetidores sí pueden ser más de uno.)
               </p>
 
               <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAssignUnit">
