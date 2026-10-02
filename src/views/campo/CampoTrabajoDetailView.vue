@@ -83,7 +83,7 @@ const PHOTO_LABEL: Record<ClientPhotoCategory, string> = {
   service_sheet: 'Hoja de servicio',
   modem_position: 'Posición del módem',
   nap_box: 'Caja NAP',
-  pon_power: 'Potencia PON',
+  pon_power: 'Potencia Óptica Recibida',
 };
 const existingPhotos = ref<ClientPhotoWithUrl[]>([]);
 const loadingPhotos = ref(false);
@@ -259,7 +259,7 @@ const INSTALL_PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] 
   { value: 'facade', label: 'Fachada' },
   { value: 'nap_box', label: 'Caja NAP' },
   { value: 'modem_position', label: 'Posición del módem' },
-  { value: 'pon_power', label: 'Potencia PON (medidor)' },
+  { value: 'pon_power', label: 'Potencia Óptica Recibida' },
 ];
 const TICKET_PHOTO_CATEGORIES = [
   { value: 'evidencia_1', label: 'Evidencia 1' },

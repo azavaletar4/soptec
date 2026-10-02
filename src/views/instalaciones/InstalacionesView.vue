@@ -518,6 +518,7 @@ const COMPLETE_PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[]
   { value: 'facade', label: 'Fachada' },
   { value: 'nap_box', label: 'Caja NAP' },
   { value: 'modem_position', label: 'Posición del módem' },
+  { value: 'pon_power', label: 'Potencia Óptica Recibida' },
 ];
 
 function openCompleteModal(inst: Installation) {

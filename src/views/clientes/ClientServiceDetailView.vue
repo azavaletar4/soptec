@@ -822,6 +822,7 @@ const PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] = [
   { value: 'service_sheet', label: 'Hoja de servicio' },
   { value: 'modem_position', label: 'Posicion del modem' },
   { value: 'nap_box', label: 'Caja NAP' },
+  { value: 'pon_power', label: 'Potencia Óptica Recibida' },
 ];
 const photos = ref<Partial<Record<ClientPhotoCategory, ClientPhotoWithUrl>>>({});
 const loadingPhotos = ref(true);
