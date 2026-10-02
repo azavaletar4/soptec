@@ -200,8 +200,14 @@ interface MaterialTemplateLine {
 // antes y despues de registrar, y un tecnico que no nota que ya se guardo
 // le vuelve a dar "Registrar plantilla" — duplica el consumo (y el stock
 // queda mal). El tecnico escribe a mano lo que realmente uso en cada visita.
+//
+// "Cable Drop" se compra y se cuenta por ROLLO de 100m (inventory_products.
+// unit lo deja claro, Fase 62) — la cantidad que se registra aqui es
+// numero de rollos usados (puede ser fraccionario, ej. 0.3 = 30m de un
+// rollo), nunca metros sueltos. Antes decia "(metraje)", lo que llevaba a
+// escribir los metros directo (ej. 100) y descontar 100 ROLLOS de stock.
 const MATERIAL_TEMPLATE: MaterialTemplateLine[] = [
-  { key: 'drop', label: 'Cable Drop (metraje)', match: /drop/i, defaultQty: 0 },
+  { key: 'drop', label: 'Cable Drop (en rollos de 100m)', match: /drop/i, defaultQty: 0 },
   { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 0 },
   { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 0 },
   { key: 'conector', label: 'Conector Óptico', match: /conector/i, defaultQty: 0 },
