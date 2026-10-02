@@ -29,7 +29,10 @@ async function runTick() {
     // simple y predecible mientras el proyecto tenga una sola OLT real.
     for (const device of devices) {
       try {
-        const result = await runOltFullSync(device);
+        // 'background': cede el turno a cualquier accion de un tecnico entre
+        // paso y paso (ver oltTelnetLock.ts / oltSyncService.ts, Fase 77) en
+        // vez de acaparar la sesion Telnet ~6 minutos seguidos.
+        const result = await runOltFullSync(device, 'background');
         if (result) {
           // eslint-disable-next-line no-console
           console.log(

@@ -7,20 +7,75 @@
 // activar, leer senal...) puede caer justo cuando el sync automatico esta
 // a mitad de un escaneo. `withOltLock` encola ambas cosas para el mismo
 // device y las corre en orden, nunca en paralelo.
+//
+// Fase 77 — dos colas por prioridad en vez de una sola FIFO: el sync
+// automatico (background) antes mantenia la sesion ocupada ~6 minutos
+// seguidos (20 puertos en UN SOLO withOltLock), y cualquier accion de un
+// tecnico quedaba atras esperando eso entero. Ahora oltSyncService.ts pide
+// el lock UNA VEZ POR CADA PASO chico (puerto por puerto) en vez de una vez
+// para todo el sync — entre paso y paso, si hay algo 'interactive' esperando
+// (un tecnico activo en el panel), se cuela antes de que el sync siga con
+// el siguiente paso. Nunca interrumpe un comando Telnet YA EN VUELO (eso
+// seguiria siendo peligroso contra este equipo) — solo decide que arranca
+// DESPUES de que el actual termine.
+export type OltLockPriority = 'interactive' | 'background';
+type Priority = OltLockPriority;
 
-const queues = new Map<string, Promise<unknown>>();
+interface QueueItem {
+  fn: () => Promise<unknown>;
+  resolve: (value: unknown) => void;
+  reject: (reason: unknown) => void;
+}
 
-export function withOltLock<T>(deviceId: string, fn: () => Promise<T>): Promise<T> {
-  const previous = queues.get(deviceId) ?? Promise.resolve();
-  const run = previous.then(fn, fn);
-  // Se guarda sin importar si fn() termino bien o mal, para que un fallo no
-  // deje la cola trabada esperando una promesa rechazada para siempre.
-  queues.set(
-    deviceId,
-    run.then(
-      () => undefined,
-      () => undefined,
-    ),
-  );
-  return run;
+interface DeviceQueue {
+  running: boolean;
+  interactive: QueueItem[];
+  background: QueueItem[];
+}
+
+const queues = new Map<string, DeviceQueue>();
+
+function getQueue(deviceId: string): DeviceQueue {
+  let q = queues.get(deviceId);
+  if (!q) {
+    q = { running: false, interactive: [], background: [] };
+    queues.set(deviceId, q);
+  }
+  return q;
+}
+
+function runNext(deviceId: string) {
+  const q = getQueue(deviceId);
+  if (q.running) return;
+  // Interactive siempre primero, aunque haya llegado despues — es lo que
+  // resuelve el problema real: un tecnico esperando en el panel no debe
+  // hacer cola detras de 20 puertos de un sync que nadie esta mirando.
+  const next = q.interactive.shift() ?? q.background.shift();
+  if (!next) return;
+
+  q.running = true;
+  next
+    .fn()
+    .then(
+      (v) => next.resolve(v),
+      (e) => next.reject(e),
+    )
+    .finally(() => {
+      q.running = false;
+      runNext(deviceId);
+    });
+}
+
+export function withOltLock<T>(
+  deviceId: string,
+  fn: () => Promise<T>,
+  opts: { priority?: Priority } = {},
+): Promise<T> {
+  const priority = opts.priority ?? 'interactive';
+  return new Promise<T>((resolve, reject) => {
+    const q = getQueue(deviceId);
+    const item: QueueItem = { fn: fn as () => Promise<unknown>, resolve: resolve as (v: unknown) => void, reject };
+    (priority === 'interactive' ? q.interactive : q.background).push(item);
+    runNext(deviceId);
+  });
 }

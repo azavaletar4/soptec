@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { runTelnetCommands } from '../telnet/client';
-import { withOltLock } from './oltTelnetLock';
+import { withOltLock, type OltLockPriority } from './oltTelnetLock';
 import { oltEvents } from './oltEvents';
 import { type OltDeviceRow, telnetTargetFor } from '../lib/oltDevice';
 import {
@@ -63,14 +63,24 @@ export function isOltSyncRunning(deviceId: string): boolean {
  * terminar, deja todo en cache (olt_onts + olt_sync_cache); nunca se sirve
  * directo al frontend en vivo.
  *
+ * `priority` decide como hace cola cada paso contra el resto del trafico
+ * Telnet de esta OLT (ver oltTelnetLock.ts): 'background' (el scheduler
+ * automatico, oltSyncScheduler.ts) cede el turno a cualquier accion
+ * 'interactive' entre paso y paso — ya no acapara la sesion ~6 minutos
+ * seguidos. El boton manual "Escanear todos los puertos" sigue pidiendo
+ * 'interactive' (default), porque ahi si hay alguien esperando en el panel.
+ *
  * Devuelve null sin hacer nada si ya hay un sync en curso para esta OLT
  * (evita encolar un segundo escaneo completo redundante).
  */
-export async function runOltFullSync(device: OltDeviceRow): Promise<OltFullSyncResult | null> {
+export async function runOltFullSync(
+  device: OltDeviceRow,
+  priority: OltLockPriority = 'interactive',
+): Promise<OltFullSyncResult | null> {
   if (runningDeviceIds.has(device.id)) return null;
   runningDeviceIds.add(device.id);
   try {
-    return await withOltLock(device.id, () => performFullSync(device));
+    return await performFullSync(device, priority);
   } finally {
     runningDeviceIds.delete(device.id);
   }
@@ -121,14 +131,24 @@ interface PendingUpdate {
   last_synced_at: string;
 }
 
-async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult> {
+async function performFullSync(device: OltDeviceRow, priority: OltLockPriority): Promise<OltFullSyncResult> {
   const now = new Date().toISOString();
   const target = telnetTargetFor(device);
+
+  // Cada paso pide el lock POR SEPARADO (en vez de uno solo envolviendo todo
+  // el sync) — asi, entre paso y paso, una accion 'interactive' en espera
+  // puede colarse antes de que este sync siga con el siguiente (ver
+  // oltTelnetLock.ts). Nunca corta un comando ya en vuelo, solo decide que
+  // arranca cuando la sesion vuelve a quedar libre.
 
   // 1) ONUs detectadas pero sin autorizar todavia.
   let unconfiguredList: CachedUnconfiguredOnt[] = [];
   try {
-    const outputs = await runTelnetCommands(target, listUnconfiguredOntsCommands(), { timeoutMs: 20000 });
+    const outputs = await withOltLock(
+      device.id,
+      () => runTelnetCommands(target, listUnconfiguredOntsCommands(), { timeoutMs: 20000 }),
+      { priority },
+    );
     unconfiguredList = mapUnconfigured(parseUnconfiguredOnts(outputs.join('\n')));
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -139,7 +159,11 @@ async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult>
   let globalOnts: GlobalOnt[] = [];
   let scanComplete = false;
   try {
-    const outputs = await runTelnetCommands(target, listAllOntsCommands(), { timeoutMs: 45000 });
+    const outputs = await withOltLock(
+      device.id,
+      () => runTelnetCommands(target, listAllOntsCommands(), { timeoutMs: 45000 }),
+      { priority },
+    );
     globalOnts = parseGlobalOntState(outputs.join('\n'));
     scanComplete = true;
   } catch (e) {
@@ -197,8 +221,19 @@ async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult>
   for (const ref of ports) {
     const portKey = `${ref.shelf}/${ref.slot}/${ref.port}`;
     try {
-      const rxOut = await runTelnetCommands(target, bulkOnuRxCommands(ref), { timeoutMs: 30000 });
-      const txOut = await runTelnetCommands(target, bulkOnuTxCommands(ref), { timeoutMs: 30000 });
+      // rx+tx de ESTE puerto quedan bajo UN solo turno de lock (son dos
+      // comandos chicos y seguidos para el mismo puerto) — el punto de cesion
+      // real para una accion 'interactive' en espera es ENTRE puertos, no
+      // en medio de este par.
+      const [rxOut, txOut] = await withOltLock(
+        device.id,
+        async () => {
+          const rx = await runTelnetCommands(target, bulkOnuRxCommands(ref), { timeoutMs: 30000 });
+          const tx = await runTelnetCommands(target, bulkOnuTxCommands(ref), { timeoutMs: 30000 });
+          return [rx, tx] as const;
+        },
+        { priority },
+      );
       const rxByOnu = parseBulkPower(rxOut[1] ?? '');
       const txByOnu = parseBulkPower(txOut[1] ?? '');
 
@@ -242,7 +277,7 @@ async function performFullSync(device: OltDeviceRow): Promise<OltFullSyncResult>
   let temperature: unknown[] = [];
   let load: unknown[] = [];
   try {
-    const outputs = await runTelnetCommands(target, oltHealthCommands());
+    const outputs = await withOltLock(device.id, () => runTelnetCommands(target, oltHealthCommands()), { priority });
     const uptime = parseUptime(outputs[1] ?? '');
     uptimeHours = uptime?.totalHours ?? null;
     uptimeRaw = uptime?.raw ?? null;

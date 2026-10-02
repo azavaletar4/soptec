@@ -157,11 +157,16 @@ async function applyOltPlanToClientOnts(clientId: string, tcontProfile: string, 
       // Mismo candado que usan las rutas de olt.ts: evita que un corte/reactivacion
       // por deuda choque con el sync automatico o una accion manual de un tecnico
       // corriendo Telnet contra la misma OLT al mismo tiempo (ver oltTelnetLock.ts).
-      await withOltLock(device.id, () =>
-        runTelnetCommands(
-          { host: device.host, port: device.telnet_port, username: device.username, password: device.password },
-          changeOntProfileCommands(ref, ont.ont_id, tcontProfile, trafficProfile),
-        ),
+      // 'background' (Fase 77): esto corre solo, sin nadie esperando en el panel —
+      // si un tecnico necesita la OLT mientras tanto, pasa primero.
+      await withOltLock(
+        device.id,
+        () =>
+          runTelnetCommands(
+            { host: device.host, port: device.telnet_port, username: device.username, password: device.password },
+            changeOntProfileCommands(ref, ont.ont_id, tcontProfile, trafficProfile),
+          ),
+        { priority: 'background' },
       );
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'Error al cambiar el plan en la OLT' };
