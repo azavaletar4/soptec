@@ -453,7 +453,17 @@ async function loadUnits() {
 const contractOnts = computed(() => clientOnts.value.filter((o) => o.contract_id === contract.value?.id));
 const contractOtherOnts = computed(() => clientOnts.value.filter((o) => o.contract_id !== contract.value?.id));
 const contractUnits = computed(() => assignedUnits.value.filter((u) => u.contract_id === contract.value?.id));
-const contractOtherUnits = computed(() => assignedUnits.value.filter((u) => u.contract_id !== contract.value?.id));
+// Maximo 1 Modem/ONT/Router principal (categoria 'onu') por CONTRATO/linea
+// (Fase 71 lo hizo por instalacion; Fase 72 extiende lo mismo aca) — un
+// cliente con varios contratos si puede tener un ONT por cada uno, nunca 2
+// en la misma linea. TV Box/Mesh sin este limite.
+const hasOntForContract = computed(() => contractUnits.value.some((u) => u.product?.inventory_categories?.slug === 'onu'));
+const contractOtherUnits = computed(() => {
+  const others = assignedUnits.value.filter((u) => u.contract_id !== contract.value?.id);
+  // Si esta linea ya tiene su Modem/ONT, no ofrecer vincular OTRO (de otra
+  // linea del mismo cliente) en el selector de reasignacion.
+  return hasOntForContract.value ? others.filter((u) => u.product?.inventory_categories?.slug !== 'onu') : others;
+});
 
 const reassignOntId = ref('');
 const reassignUnitId = ref('');
@@ -528,7 +538,10 @@ async function handleUnassignUnitFromContract(unit: InventoryUnit) {
 // este flujo para ONT (OLT); para el resto del inventario solo se podia
 // reasignar equipo que YA fuera de este mismo cliente, o crear uno nuevo
 // a mano — sin forma de tomar algo que ya estaba en bodega.
-const stockProducts = computed(() => inventoryStore.products.filter((p) => p.is_serialized));
+const stockProducts = computed(() => {
+  const base = inventoryStore.products.filter((p) => p.is_serialized);
+  return hasOntForContract.value ? base.filter((p) => p.inventory_categories?.slug !== 'onu') : base;
+});
 const stockProductId = ref('');
 const stockAvailableUnits = ref<InventoryUnit[]>([]);
 const loadingStockUnits = ref(false);
@@ -743,9 +756,15 @@ const showAddUnitModal = ref(false);
 const addUnitForm = ref({ product_id: '', serial_number: '', mac_address: '' });
 const addUnitSaving = ref(false);
 const addUnitError = ref<string | null>(null);
+// Mismo limite de 1 ONU por contrato (Fase 72) aplicado al registro manual
+// de un equipo nuevo — si esta linea ya tiene su Modem/ONT, no se puede ni
+// elegir otro de esa categoria aca.
+const addUnitProductOptions = computed(() =>
+  hasOntForContract.value ? inventoryStore.products.filter((p) => p.inventory_categories?.slug !== 'onu') : inventoryStore.products,
+);
 
 function openAddUnit() {
-  addUnitForm.value = { product_id: inventoryStore.products[0]?.id ?? '', serial_number: '', mac_address: '' };
+  addUnitForm.value = { product_id: addUnitProductOptions.value[0]?.id ?? '', serial_number: '', mac_address: '' };
   addUnitError.value = null;
   showAddUnitModal.value = true;
 }
@@ -1643,6 +1662,11 @@ onMounted(async () => {
             </div>
           </div>
           <p v-if="!contractUnits.length" class="text-sm text-slate-500 mb-2">Sin equipo de inventario vinculado a esta línea.</p>
+          <p v-if="hasOntForContract" class="text-xs text-slate-500 mb-2">
+            Esta línea ya tiene su Módem/ONT — solo se permite 1 por línea (otro contrato del mismo cliente sí puede
+            tener el suyo). Si te equivocaste, usa "Quitar" antes de vincular uno nuevo. TV Box y repetidores sí
+            pueden ser más de uno.
+          </p>
 
           <div v-if="contractOtherUnits.length" class="flex gap-2">
             <select v-model="reassignUnitId" class="field-input">
@@ -2053,7 +2077,7 @@ onMounted(async () => {
             <label class="block text-xs text-slate-600 mb-1">Modelo</label>
             <select v-model="addUnitForm.product_id" class="field-input">
               <option value="" disabled>Selecciona un modelo</option>
-              <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">{{ p.name }}</option>
+              <option v-for="p in addUnitProductOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
           </div>
 
