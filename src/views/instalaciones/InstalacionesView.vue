@@ -595,32 +595,32 @@ function formatDate(value: string | null) {
 
 <template>
   <AppLayout>
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">Instalaciones</h1>
         <p class="text-slate-600 text-sm mt-1">{{ installationsStore.installations.length }} órdenes registradas</p>
+        <SoporteModeTabs active="instalaciones" class="mt-3" />
       </div>
       <button v-if="auth.role !== 'TECNICO_RED'" class="btn-primary" @click="openCreate">+ Nueva instalación</button>
     </div>
 
-    <SoporteModeTabs active="instalaciones" />
-
-    <input
-      v-model="searchQuery"
-      placeholder="Buscar por cliente o número de contrato..."
-      class="field-input mb-4"
-    />
-
-    <div class="flex flex-wrap gap-2 mb-4">
-      <button
-        v-for="tab in STATUS_TABS"
-        :key="tab.value"
-        class="px-3 py-1.5 rounded-lg text-xs font-medium"
-        :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
-        @click="statusFilter = tab.value"
-      >
-        {{ tab.label }}
-      </button>
+    <div class="surface flex flex-col gap-3 p-3 mb-4 sm:flex-row sm:items-center">
+      <input
+        v-model="searchQuery"
+        placeholder="Buscar por cliente o número de contrato..."
+        class="field-input sm:max-w-xs"
+      />
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-for="tab in STATUS_TABS"
+          :key="tab.value"
+          class="px-3 py-1.5 rounded-lg text-xs font-medium"
+          :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+          @click="statusFilter = tab.value"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
     </div>
 
     <p v-if="installationsStore.error" class="mb-4 text-sm text-red-600">{{ installationsStore.error }}</p>

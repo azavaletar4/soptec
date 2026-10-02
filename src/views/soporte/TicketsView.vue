@@ -202,10 +202,11 @@ function formatDate(value: string) {
 
 <template>
   <AppLayout>
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">Soporte</h1>
         <p class="text-slate-600 text-sm mt-1">{{ ticketsStore.tickets.length }} tickets registrados</p>
+        <SoporteModeTabs active="tickets" class="mt-3" />
       </div>
       <div class="flex gap-2">
         <button v-if="canOpenCampo" class="btn-ghost" @click="router.push('/campo')">📱 App de Campo</button>
@@ -216,24 +217,23 @@ function formatDate(value: string) {
       </div>
     </div>
 
-    <SoporteModeTabs active="tickets" />
-
-    <input
-      v-model="searchQuery"
-      placeholder="Buscar por titulo, numero de ticket o cliente..."
-      class="field-input mb-4"
-    />
-
-    <div class="flex flex-wrap gap-2 mb-4">
-      <button
-        v-for="tab in STATUS_TABS"
-        :key="tab.value"
-        class="px-3 py-1.5 rounded-lg text-xs font-medium"
-        :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
-        @click="statusFilter = tab.value"
-      >
-        {{ tab.label }}
-      </button>
+    <div class="surface flex flex-col gap-3 p-3 mb-4 sm:flex-row sm:items-center">
+      <input
+        v-model="searchQuery"
+        placeholder="Buscar por titulo, numero de ticket o cliente..."
+        class="field-input sm:max-w-xs"
+      />
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-for="tab in STATUS_TABS"
+          :key="tab.value"
+          class="px-3 py-1.5 rounded-lg text-xs font-medium"
+          :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+          @click="statusFilter = tab.value"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
     </div>
 
     <p v-if="ticketsStore.error" class="mb-4 text-sm text-red-600">{{ ticketsStore.error }}</p>
