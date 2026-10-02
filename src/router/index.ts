@@ -64,17 +64,22 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Antes vivia en "Operaciones" como /instalaciones: se mudo bajo
+      // Soporte para unir el flujo operativo de tecnicos (altas nuevas +
+      // tickets/averias) en un solo lugar. /instalaciones redirige aqui
+      // para no romper enlaces viejos (favoritos, historial, etc).
+      path: '/soporte/instalaciones',
+      name: 'instalaciones',
+      component: () => import('@/views/instalaciones/InstalacionesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/soporte/:id',
       name: 'soporte-detalle',
       component: () => import('@/views/soporte/TicketDetailView.vue'),
       meta: { requiresAuth: true },
     },
-    {
-      path: '/instalaciones',
-      name: 'instalaciones',
-      component: () => import('@/views/instalaciones/InstalacionesView.vue'),
-      meta: { requiresAuth: true },
-    },
+    { path: '/instalaciones', redirect: '/soporte/instalaciones' },
     {
       path: '/campo',
       name: 'campo',

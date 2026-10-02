@@ -109,7 +109,6 @@ const GRUPOS: ModuloGrupo[] = [
     label: 'Operaciones',
     items: [
       { key: 'zonas', label: 'Zonas', to: '/zonas' },
-      { key: 'instalaciones', label: 'Instalaciones', to: '/instalaciones' },
       { key: 'mapa-red', label: 'Mapa de Red', to: '/mapa/red' },
       { key: 'mapa-clientes', label: 'Mapa de Clientes', to: '/mapa/clientes' },
       { key: 'flota', label: 'Flota vehicular', to: '/flota' },

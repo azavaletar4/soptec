@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
 import { useInstallationsStore } from '@/stores/installations';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
@@ -594,13 +595,15 @@ function formatDate(value: string | null) {
 
 <template>
   <AppLayout>
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">Instalaciones</h1>
         <p class="text-slate-600 text-sm mt-1">{{ installationsStore.installations.length }} órdenes registradas</p>
       </div>
       <button v-if="auth.role !== 'TECNICO_RED'" class="btn-primary" @click="openCreate">+ Nueva instalación</button>
     </div>
+
+    <SoporteModeTabs active="instalaciones" />
 
     <input
       v-model="searchQuery"

@@ -86,7 +86,7 @@ function renderInstallationMarkers() {
         <b>${inst.clients?.first_name} ${inst.clients?.last_name}</b> <span style="color:#64748b">(${ct?.contract_number ?? ''})</span><br/>
         Instalación: <b>${inst.status === 'scheduled' ? 'Programada' : 'Pendiente'}</b><br/>
         ${inst.scheduled_date ? `Fecha: ${inst.scheduled_date}` : 'Sin fecha programada'}<br/>
-        <a href="/instalaciones" style="color:#38bdf8">Ver instalaciones →</a>
+        <a href="/soporte/instalaciones" style="color:#38bdf8">Ver instalaciones →</a>
       </div>`,
     );
     marker.addTo(installationLayer);
@@ -241,7 +241,7 @@ function handlePuertosClose() {
         >
           🔧 Instalaciones ({{ pendingInstallations.length }})
         </button>
-        <button class="btn-secondary text-xs" @click="goTo('/instalaciones')">Ver lista →</button>
+        <button class="btn-secondary text-xs" @click="goTo('/soporte/instalaciones')">Ver lista →</button>
       </div>
     </div>
 

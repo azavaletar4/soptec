@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
@@ -201,7 +202,7 @@ function formatDate(value: string) {
 
 <template>
   <AppLayout>
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">Soporte</h1>
         <p class="text-slate-600 text-sm mt-1">{{ ticketsStore.tickets.length }} tickets registrados</p>
@@ -214,6 +215,8 @@ function formatDate(value: string) {
         </button>
       </div>
     </div>
+
+    <SoporteModeTabs active="tickets" />
 
     <input
       v-model="searchQuery"
