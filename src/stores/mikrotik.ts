@@ -48,6 +48,14 @@ export interface DhcpLease {
   status: string;
 }
 
+export interface IpAddress {
+  '.id': string;
+  address: string;
+  network: string;
+  interface: string;
+  disabled: string; // "true" | "false", tal cual lo devuelve RouterOS
+}
+
 export interface RouterResource {
   'cpu-load': string;
   'free-memory': string;
@@ -175,6 +183,10 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<DhcpLease[]>(`/api/mikrotik-devices/${id}/dhcp-leases`);
   }
 
+  function fetchIpAddresses(id: string) {
+    return apiFetch<IpAddress[]>(`/api/mikrotik-devices/${id}/ip-addresses`);
+  }
+
   function fetchReconcileReport() {
     return apiFetch<ReconcileReport | null>('/api/mikrotik-devices/reconcile/report');
   }
@@ -201,6 +213,7 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     fetchPppActive,
     disconnectPppActive,
     fetchDhcpLeases,
+    fetchIpAddresses,
     fetchReconcileReport,
     runReconcileNow,
   };

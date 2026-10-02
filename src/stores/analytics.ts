@@ -49,6 +49,22 @@ export interface Anomaly {
   last_seen: string;
 }
 
+export interface TrafficSampleReport {
+  ranAt: string;
+  runId: string;
+  devicesChecked: number;
+  contractsChecked: number;
+  samplesInserted: number;
+  baselinesInitialized: number;
+  errors: { deviceName: string; message: string }[];
+}
+
+export interface ClientDailyTotal {
+  day: string;
+  download_bytes: number;
+  upload_bytes: number;
+}
+
 export const useAnalyticsStore = defineStore('analytics', () => {
   const kpis = ref<TrafficKpis | null>(null);
   const monthly = ref<MonthlyTotal[]>([]);
@@ -58,6 +74,18 @@ export const useAnalyticsStore = defineStore('analytics', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const lastUpdated = ref<Date | null>(null);
+
+  function fetchSampleReport() {
+    return apiFetch<TrafficSampleReport | null>('/api/analytics/traffic/sample-report');
+  }
+
+  function runSampleNow() {
+    return apiFetch<TrafficSampleReport>('/api/analytics/traffic/sample-now', { method: 'POST' });
+  }
+
+  function fetchClientDaily(contractId: string, days = 30) {
+    return apiFetch<ClientDailyTotal[]>(`/api/analytics/traffic/clients/${contractId}/daily?days=${days}`);
+  }
 
   async function fetchAll() {
     loading.value = true;
@@ -84,5 +112,18 @@ export const useAnalyticsStore = defineStore('analytics', () => {
     }
   }
 
-  return { kpis, monthly, topClients, bottlenecks, anomalies, loading, error, lastUpdated, fetchAll };
+  return {
+    kpis,
+    monthly,
+    topClients,
+    bottlenecks,
+    anomalies,
+    loading,
+    error,
+    lastUpdated,
+    fetchAll,
+    fetchSampleReport,
+    runSampleNow,
+    fetchClientDaily,
+  };
 });

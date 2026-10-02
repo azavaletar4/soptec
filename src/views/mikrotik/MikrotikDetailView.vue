@@ -5,6 +5,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import {
   useMikrotikStore,
   type DhcpLease,
+  type IpAddress,
   type PppActive,
   type PppSecret,
   type RouterResource,
@@ -24,6 +25,7 @@ const resource = ref<RouterResource | null>(null);
 const secrets = ref<PppSecret[]>([]);
 const active = ref<PppActive[]>([]);
 const leases = ref<DhcpLease[]>([]);
+const ipAddresses = ref<IpAddress[]>([]);
 
 const activeByName = computed(() => new Set(active.value.map((a) => a.name)));
 
@@ -46,16 +48,18 @@ async function loadAll() {
   loading.value = true;
   loadError.value = null;
   try {
-    const [res, sec, act, lea] = await Promise.all([
+    const [res, sec, act, lea, ips] = await Promise.all([
       mikrotikStore.fetchResource(deviceId.value),
       mikrotikStore.fetchPppSecrets(deviceId.value),
       mikrotikStore.fetchPppActive(deviceId.value),
       mikrotikStore.fetchDhcpLeases(deviceId.value),
+      mikrotikStore.fetchIpAddresses(deviceId.value),
     ]);
     resource.value = res;
     secrets.value = sec;
     active.value = act;
     leases.value = lea;
+    ipAddresses.value = ips;
   } catch (e) {
     loadError.value = getErrorMessage(e, 'Error al consultar el router');
   } finally {
@@ -198,6 +202,33 @@ async function handleToggleSecret(secret: PppSecret) {
             </tbody>
           </table>
         </div>
+        <h2 class="text-lg font-semibold mt-8 mb-3">Direcciones IP del router ({{ ipAddresses.length }})</h2>
+        <div class="table-shell">
+          <table class="w-full text-sm min-w-[480px]">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+              <tr>
+                <th class="text-left px-4 py-3">IP / Red</th>
+                <th class="text-left px-4 py-3">Interfaz</th>
+                <th class="text-left px-4 py-3">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!ipAddresses.length">
+                <td colspan="3" class="px-4 py-6 text-center text-slate-500">Sin direcciones IP configuradas.</td>
+              </tr>
+              <tr v-for="ip in ipAddresses" :key="ip['.id']" class="border-t border-slate-200">
+                <td class="px-4 py-3 font-mono text-xs">{{ ip.address }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ ip.interface }}</td>
+                <td class="px-4 py-3">
+                  <span class="badge" :class="ip.disabled === 'true' ? 'bg-slate-500/15 text-slate-600' : 'bg-green-500/15 text-green-600'">
+                    {{ ip.disabled === 'true' ? 'Deshabilitada' : 'Activa' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         <p class="text-xs text-slate-500 mt-3">
           Nota: el cruce automatico ONT ↔ IP (por MAC de WAN) llega cuando se valide el comando de
           "wan-info" contra la OLT real (ver Fase 4). Por ahora, la MAC se puede buscar aqui manualmente.
