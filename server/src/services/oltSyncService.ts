@@ -70,17 +70,24 @@ export function isOltSyncRunning(deviceId: string): boolean {
  * seguidos. El boton manual "Escanear todos los puertos" sigue pidiendo
  * 'interactive' (default), porque ahi si hay alguien esperando en el panel.
  *
+ * `includeSignal` (default true) decide si este ciclo pide la señal Rx/Tx de
+ * cada puerto (~40 comandos, la parte cara) o se salta esa parte y solo
+ * actualiza online/offline (barato, un escaneo global). Ver
+ * OLT_SYNC_SIGNAL_EVERY_N_RUNS en oltSyncScheduler.ts — pensado para cuando
+ * una herramienta externa (ej. SmartOLT) tambien usa la misma OLT en
+ * paralelo y conviene que SmartRayco ocupe menos la sesion Telnet.
+ *
  * Devuelve null sin hacer nada si ya hay un sync en curso para esta OLT
  * (evita encolar un segundo escaneo completo redundante).
  */
 export async function runOltFullSync(
   device: OltDeviceRow,
-  priority: OltLockPriority = 'interactive',
+  opts: { priority?: OltLockPriority; includeSignal?: boolean } = {},
 ): Promise<OltFullSyncResult | null> {
   if (runningDeviceIds.has(device.id)) return null;
   runningDeviceIds.add(device.id);
   try {
-    return await performFullSync(device, priority);
+    return await performFullSync(device, opts.priority ?? 'interactive', opts.includeSignal ?? true);
   } finally {
     runningDeviceIds.delete(device.id);
   }
@@ -131,7 +138,11 @@ interface PendingUpdate {
   last_synced_at: string;
 }
 
-async function performFullSync(device: OltDeviceRow, priority: OltLockPriority): Promise<OltFullSyncResult> {
+async function performFullSync(
+  device: OltDeviceRow,
+  priority: OltLockPriority,
+  includeSignal: boolean,
+): Promise<OltFullSyncResult> {
   const now = new Date().toISOString();
   const target = telnetTargetFor(device);
 
@@ -215,10 +226,13 @@ async function performFullSync(device: OltDeviceRow, priority: OltLockPriority):
   // 3) Potencia optica Rx/Tx por puerto PON (solo si tenemos la lista de
   // puertos reales del escaneo global). Secuencial y NUNCA rx+tx en la misma
   // conexion: el equipo real se cuelga sin devolver el prompt si se
-  // encadenan (ver advertencia en zteCommands.ts).
+  // encadenan (ver advertencia en zteCommands.ts). Es la parte mas cara del
+  // sync (~2 comandos por puerto) — se salta entera cuando includeSignal es
+  // false (ver OLT_SYNC_SIGNAL_EVERY_N_RUNS), dejando online/offline (ya
+  // resuelto arriba) como lo unico que se actualiza ese ciclo.
   const ports = scanComplete ? uniquePorts(globalOnts) : [];
   const failedPorts: string[] = [];
-  for (const ref of ports) {
+  for (const ref of includeSignal ? ports : []) {
     const portKey = `${ref.shelf}/${ref.slot}/${ref.port}`;
     try {
       // rx+tx de ESTE puerto quedan bajo UN solo turno de lock (son dos
@@ -321,7 +335,7 @@ async function performFullSync(device: OltDeviceRow, priority: OltLockPriority):
     offline,
     lowSignal,
     scanComplete,
-    portsScanned: ports.length,
+    portsScanned: includeSignal ? ports.length : 0,
     failedPorts,
     updatedOnts: updates.length,
   };

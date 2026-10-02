@@ -10,6 +10,18 @@ const SYNC_INTERVAL_MS = Number(process.env.OLT_SYNC_INTERVAL_MINUTES ?? 20) * 6
 // Antes del primer tick, para no pisarse con el arranque del server.
 const INITIAL_DELAY_MS = 30_000;
 
+// Fase 78 — si se usa SmartOLT (u otra herramienta) en paralelo contra la
+// misma OLT, cada ciclo de este scheduler igual compite por la UNICA sesion
+// Telnet que el equipo tolera (ver oltTelnetLock.ts). La parte cara de cada
+// ciclo es la señal Rx/Tx puerto por puerto (~40 comandos de los 20 puertos);
+// el estado online/offline sale de un solo escaneo global, barato. Por
+// default se pide señal SIEMPRE (compatibilidad con el comportamiento de
+// siempre); configurar OLT_SYNC_SIGNAL_EVERY_N_RUNS > 1 para pedirla solo
+// cada N ciclos (ej. 3 = cada ~1h con el intervalo default de 20 min) y
+// dejarle mas lugar a herramientas externas el resto de los ciclos.
+const SIGNAL_EVERY_N_RUNS = Math.max(1, Number(process.env.OLT_SYNC_SIGNAL_EVERY_N_RUNS ?? 1));
+let runCount = 0;
+
 let tickRunning = false;
 
 async function runTick() {
@@ -24,6 +36,8 @@ async function runTick() {
     }
 
     const devices = (data ?? []) as OltDeviceRow[];
+    runCount += 1;
+    const includeSignal = runCount % SIGNAL_EVERY_N_RUNS === 0;
     // Secuencial entre OLTs tambien (no Promise.all): son equipos fisicos
     // distintos asi que en teoria no chocarian entre si, pero se mantiene
     // simple y predecible mientras el proyecto tenga una sola OLT real.
@@ -31,8 +45,9 @@ async function runTick() {
       try {
         // 'background': cede el turno a cualquier accion de un tecnico entre
         // paso y paso (ver oltTelnetLock.ts / oltSyncService.ts, Fase 77) en
-        // vez de acaparar la sesion Telnet ~6 minutos seguidos.
-        const result = await runOltFullSync(device, 'background');
+        // vez de acaparar la sesion Telnet ~6 minutos seguidos. includeSignal
+        // en false salta la parte cara (Rx/Tx de los 20 puertos) este ciclo.
+        const result = await runOltFullSync(device, { priority: 'background', includeSignal });
         if (result) {
           // eslint-disable-next-line no-console
           console.log(
@@ -62,7 +77,10 @@ export function startOltSyncScheduler() {
     return;
   }
   // eslint-disable-next-line no-console
-  console.log(`[olt-sync-scheduler] activo: sync completo cada ${SYNC_INTERVAL_MS / 60_000} min`);
+  console.log(
+    `[olt-sync-scheduler] activo: sync completo cada ${SYNC_INTERVAL_MS / 60_000} min` +
+      (SIGNAL_EVERY_N_RUNS > 1 ? ` (señal Rx/Tx cada ${SIGNAL_EVERY_N_RUNS} ciclos)` : ''),
+  );
   setTimeout(() => void runTick(), INITIAL_DELAY_MS);
   setInterval(() => void runTick(), SYNC_INTERVAL_MS);
 }
