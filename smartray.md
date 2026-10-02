@@ -223,6 +223,22 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
 
 ---
 
+## 2026-10-02
+
+### Instalaciones (modal "Completar instalación")
+- Nuevo bloque **"Datos de red / Planta externa"** agregado justo encima de "Fotos de
+  instalación", marcado como obligatorio (`* (obligatorio)`): dos selectores en grid de 2
+  columnas (1 en móvil) — **"Zona / Sector"** (todas las zonas registradas) y **"Caja NAP"**
+  (se habilita solo tras elegir Zona, filtrada a las cajas de esa zona, mostrando ocupación
+  `usados/capacidad` y "(LLENA)" cuando corresponde).
+- Si el contrato del cliente ya tenía Zona/NAP asignada (por administración), el modal la
+  precarga en ambos selectores — quedan editables por si el técnico tuvo que mover al cliente a
+  otra caja NAP. Si estaban en blanco, el técnico debe elegirlas ahí mismo: sin ambas, el botón
+  "Completar" rechaza el guardado (mensaje de error en rojo bajo el formulario, mismo estilo que
+  el aviso de equipo faltante).
+
+---
+
 ## Cómo se sigue actualizando este archivo
 
 Cada vez que se aplique un cambio visual nuevo (color, layout, componente, texto de interfaz,

@@ -10,17 +10,20 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useClientPhotosStore } from '@/stores/clientPhotos';
+import { useInfraElementosStore } from '@/stores/infraElementos';
+import { useFoFibraStore } from '@/stores/foFibra';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
-import type {
-  ClientPhotoCategory,
-  ContractServiceType,
-  Installation,
-  InstallationStatus,
-  ServiceContract,
-  InventoryMovement,
-  InventoryUnit,
+import {
+  NAP_CLIENT_LIMIT,
+  type ClientPhotoCategory,
+  type ContractServiceType,
+  type Installation,
+  type InstallationStatus,
+  type ServiceContract,
+  type InventoryMovement,
+  type InventoryUnit,
 } from '@/types/domain';
 
 const router = useRouter();
@@ -31,6 +34,8 @@ const catalogsStore = useCatalogsStore();
 const inventoryStore = useInventoryStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
 const clientPhotosStore = useClientPhotosStore();
+const infraStore = useInfraElementosStore();
+const fibra = useFoFibraStore();
 const auth = useAuthStore();
 const toast = useToast();
 
@@ -134,7 +139,10 @@ onMounted(async () => {
     clientsStore.fetchClients(),
     contractsStore.fetchContracts(),
     catalogsStore.fetchStaff(),
+    catalogsStore.fetchZones(),
     inventoryStore.fetchProducts(),
+    infraStore.fetchElementos(),
+    fibra.fetchTodosNapPuertos(),
   ]);
 });
 
@@ -541,6 +549,40 @@ const gettingLocation = ref(false);
 const completeGps = ref<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
 const completePhotos = ref<Partial<Record<ClientPhotoCategory, File>>>({});
 
+// ---- Zona + Caja NAP (Fase 73): la administracion puede dejarlas ya
+// asignadas en el contrato (Fase 38) — aqui se cargan como default editable
+// (el tecnico pudo tener que mover al cliente a otra NAP). Si quedaron en
+// blanco, el tecnico esta obligado a elegirlas aqui mismo: es la unica forma
+// de garantizar que ningun cliente quede sin su NAP mapeada en la red real.
+const completeZoneId = ref('');
+const completeNapId = ref('');
+
+const napOptionsAll = computed(() =>
+  infraStore.elementos
+    .filter((e) => e.tipo === 'caja_nap')
+    .map((e) => {
+      const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
+      const used = puertos.filter((p) => p.estado === 'ocupado').length;
+      const capacity = e.puertos_total ?? NAP_CLIENT_LIMIT;
+      return { id: e.id, name: e.name, used, capacity, zoneId: e.zone_id };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)),
+);
+const napOptions = computed(() => napOptionsAll.value.filter((n) => n.zoneId === completeZoneId.value));
+
+/** Busca si ESTE contrato ya tiene un puerto NAP ocupado, en cualquier caja (mismo criterio que ClientServiceDetailView.vue). */
+function findContractNapId(contractId: string): string {
+  for (const puertos of Object.values(fibra.napPuertosPorElemento)) {
+    const found = puertos.find((p) => p.contract_id === contractId && p.estado === 'ocupado');
+    if (found) return found.infra_elemento_id;
+  }
+  return '';
+}
+
+function onCompleteZoneChange() {
+  if (completeNapId.value && !napOptions.value.some((n) => n.id === completeNapId.value)) completeNapId.value = '';
+}
+
 const COMPLETE_PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] = [
   { value: 'facade', label: 'Fachada' },
   { value: 'service_sheet', label: 'Hoja de servicio' },
@@ -554,6 +596,9 @@ function openCompleteModal(inst: Installation) {
   completeGps.value = { latitude: inst.clients?.latitude ?? null, longitude: inst.clients?.longitude ?? null };
   completePhotos.value = {};
   completeError.value = null;
+  const contract = contractsStore.contracts.find((c) => c.id === inst.contract_id);
+  completeZoneId.value = contract?.zone_id ?? '';
+  completeNapId.value = inst.contract_id ? findContractNapId(inst.contract_id) : '';
   showCompleteModal.value = true;
 }
 
@@ -594,6 +639,8 @@ function onCompletePhotoChange(category: ClientPhotoCategory, event: Event) {
 }
 
 const MISSING_EQUIPMENT_MESSAGE = 'Para instalaciones de internet/combo debes asignar al menos un equipo por Serie/MAC';
+const MISSING_CONTRACT_MESSAGE = 'Esta instalación no tiene un contrato vinculado — pide a un administrador que lo asocie antes de completarla (se necesita para mapear la Zona y la Caja NAP).';
+const MISSING_ZONE_NAP_MESSAGE = 'Debes asignar la Zona y la Caja NAP antes de completar la instalación.';
 
 async function handleCompleteSubmit() {
   if (!completingInstallation.value) return;
@@ -602,7 +649,7 @@ async function handleCompleteSubmit() {
   try {
     // Aviso temprano en el frontend antes de subir GPS/fotos — la regla real
     // (fuente de verdad) vive en el trigger trg_installations_validate_completion
-    // (Fase 45), que tambien protege el selector de estado directo de
+    // (Fase 45/73), que tambien protege el selector de estado directo de
     // SUPERADMIN/ADMIN, que no pasa por este modal.
     const svcType = completingInstallation.value.contracts?.service_type ?? 'internet_combo';
     if (svcType === 'internet_combo') {
@@ -616,6 +663,24 @@ async function handleCompleteSubmit() {
 
     const clientId = completingInstallation.value.client_id;
     const contractId = completingInstallation.value.contract_id;
+
+    // Zona + Caja NAP (Fase 73): obligatorio para cualquier instalacion,
+    // tenga o no equipo — es la planta externa real del cliente, no algo que
+    // dependa del tipo de servicio.
+    if (!contractId) {
+      completeError.value = MISSING_CONTRACT_MESSAGE;
+      completeSaving.value = false;
+      return;
+    }
+    if (!completeZoneId.value || !completeNapId.value) {
+      completeError.value = MISSING_ZONE_NAP_MESSAGE;
+      completeSaving.value = false;
+      return;
+    }
+    await contractsStore.updateContract(contractId, { zone_id: completeZoneId.value });
+    const nap = napOptionsAll.value.find((n) => n.id === completeNapId.value);
+    await fibra.assignContractToNap(completeNapId.value, contractId, clientId, nap?.capacity ?? NAP_CLIENT_LIMIT);
+
     if (completeGps.value.latitude != null && completeGps.value.longitude != null) {
       await clientsStore.updateClient(clientId, {
         latitude: completeGps.value.latitude,
@@ -1107,6 +1172,31 @@ function formatDate(value: string | null) {
             Si el GPS no lee bien, abre Maps, mantén presionado el punto exacto y copia las coordenadas que
             aparecen abajo — pégalas en Latitud/Longitud de arriba.
           </p>
+
+          <h3 class="text-sm font-semibold mb-2">
+            Datos de red / Planta externa<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
+          </h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Zona / Sector</label>
+              <select v-model="completeZoneId" required class="field-input" @change="onCompleteZoneChange">
+                <option value="" disabled>Selecciona...</option>
+                <option v-for="z in catalogsStore.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Caja NAP</label>
+              <select v-model="completeNapId" required class="field-input" :disabled="!completeZoneId">
+                <option value="" disabled>{{ completeZoneId ? 'Selecciona...' : 'Elige primero una zona' }}</option>
+                <option v-for="n in napOptions" :key="n.id" :value="n.id">
+                  {{ n.name }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity && n.id !== completeNapId ? ' (LLENA)' : '' }}
+                </option>
+              </select>
+              <p v-if="completeZoneId && !napOptions.length" class="text-xs text-amber-700 mt-1">
+                Esa zona no tiene cajas NAP registradas — pide a un administrador que cree una en el Mapa de Red.
+              </p>
+            </div>
+          </div>
 
           <h3 class="text-sm font-semibold mb-2">Fotos de instalación</h3>
           <div class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))">
