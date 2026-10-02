@@ -328,6 +328,8 @@ export interface InventoryMovement {
   installation_id: string | null;
   created_by: string | null;
   created_at: string;
+  /** Si no es null, este movimiento es la reversion de otro (Fase 58) — referencia al original. */
+  reverses_movement_id: string | null;
   author?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
   product?: Pick<InventoryProduct, 'id' | 'name' | 'unit'> | null;
 }

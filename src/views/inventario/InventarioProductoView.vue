@@ -11,6 +11,7 @@ import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
 import { useAsyncAction } from '@/composables/useAsyncAction';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import type {
   InventoryMovement,
@@ -29,10 +30,14 @@ const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const catalogs = useCatalogsStore();
 const auth = useAuthStore();
+const { confirmDialog } = useConfirm();
 
 const technicians = computed(() => catalogs.staff.filter((s) => s.role === 'TECNICO_RED'));
 
-const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+// Fase 58: eliminar productos/unidades y revertir el Kardex queda acotado a
+// SUPERADMIN — ADMIN y el resto del staff conservan crear/editar productos
+// y registrar movimientos (+Ingreso/-Egreso), pero ya no eliminan nada.
+const canDelete = computed(() => auth.isSuperAdmin);
 
 const productId = computed(() => route.params.id as string);
 const product = computed(() => inventoryStore.products.find((p) => p.id === productId.value));
@@ -61,6 +66,36 @@ async function loadMovements() {
     movements.value = await inventoryStore.fetchMovements(productId.value);
   } finally {
     movementsLoading.value = false;
+  }
+}
+
+// ---- Revertir un movimiento del Kardex (Fase 58, solo SUPERADMIN) ----
+// El Kardex es insert-only (no se borra ninguna fila): "eliminar" un
+// movimiento en realidad inserta el movimiento opuesto, que recalcula el
+// stock solo (mismo trigger de siempre). La fila original se conserva
+// tachada para auditoria.
+const revertingId = ref<string | null>(null);
+const revertError = ref<string | null>(null);
+const revertedSourceIds = computed(() => new Set(movements.value.map((m) => m.reverses_movement_id).filter((id): id is string => !!id)));
+
+async function handleRevertMovement(m: InventoryMovement) {
+  if (!canDelete.value) return;
+  const ok = await confirmDialog({
+    title: 'Revertir movimiento del Kardex',
+    message:
+      '¿Revertir este movimiento? Se registrará un movimiento inverso y el stock actual se recalculará automáticamente. El registro original se conserva (tachado) para auditoría.',
+    danger: true,
+  });
+  if (!ok) return;
+  revertingId.value = m.id;
+  revertError.value = null;
+  try {
+    await inventoryStore.revertMovement(m);
+    await loadMovements();
+  } catch (e) {
+    revertError.value = getErrorMessage(e, 'Error al revertir el movimiento');
+  } finally {
+    revertingId.value = null;
   }
 }
 
@@ -505,6 +540,7 @@ async function handleDeleteProduct() {
         <p v-if="isLowStock" class="text-sm text-amber-600 mb-4">⚠ El stock está en o por debajo del mínimo configurado.</p>
 
         <h2 class="text-lg font-semibold mb-3">Kardex</h2>
+        <p v-if="revertError" class="text-sm text-red-600 mb-2">{{ revertError }}</p>
         <div class="table-shell">
           <table class="w-full text-sm min-w-[680px]">
             <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
@@ -515,24 +551,46 @@ async function handleDeleteProduct() {
                 <th class="text-right px-4 py-3">Saldo</th>
                 <th class="text-left px-4 py-3">Motivo</th>
                 <th class="text-left px-4 py-3">Usuario</th>
+                <th v-if="canDelete" class="text-right px-4 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="movementsLoading">
-                <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+                <td :colspan="canDelete ? 7 : 6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
               </tr>
               <tr v-else-if="!movements.length">
-                <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin movimientos todavía.</td>
+                <td :colspan="canDelete ? 7 : 6" class="px-4 py-6 text-center text-slate-500">Sin movimientos todavía.</td>
               </tr>
-              <tr v-for="m in movements" :key="m.id" class="border-t border-slate-200">
+              <tr
+                v-for="m in movements"
+                :key="m.id"
+                class="border-t border-slate-200"
+                :class="{ 'opacity-50': revertedSourceIds.has(m.id) }"
+              >
                 <td class="px-4 py-3 text-slate-500 text-xs">{{ formatDate(m.created_at) }}</td>
                 <td class="px-4 py-3">
                   <span class="badge" :class="MOVEMENT_CLASS[m.movement_type]">{{ MOVEMENT_LABEL[m.movement_type] }}</span>
+                  <span v-if="m.reverses_movement_id" class="badge ml-1 bg-slate-500/15 text-slate-600">reversión</span>
                 </td>
-                <td class="px-4 py-3 text-right font-mono">{{ m.movement_type === 'ingreso' ? '+' : '−' }}{{ m.quantity }}</td>
+                <td class="px-4 py-3 text-right font-mono" :class="{ 'line-through': revertedSourceIds.has(m.id) }">
+                  {{ m.movement_type === 'ingreso' ? '+' : '−' }}{{ m.quantity }}
+                </td>
                 <td class="px-4 py-3 text-right font-mono text-slate-900">{{ m.balance_after }}</td>
                 <td class="px-4 py-3 text-slate-600">{{ m.reason ?? '—' }}</td>
                 <td class="px-4 py-3 text-slate-600 text-xs">{{ m.author?.full_name || m.author?.email || '—' }}</td>
+                <td v-if="canDelete" class="px-4 py-3 text-right">
+                  <span v-if="revertedSourceIds.has(m.id)" class="text-xs text-slate-400">Ya revertido</span>
+                  <button
+                    v-else
+                    type="button"
+                    class="text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                    :disabled="revertingId === m.id"
+                    title="Revertir este movimiento"
+                    @click="handleRevertMovement(m)"
+                  >
+                    🗑️
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>

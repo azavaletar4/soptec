@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -9,6 +9,11 @@ export const useAuthStore = defineStore('auth', () => {
   const role = ref<string | null>(null);
   const loading = ref(true);
   let initialized = false;
+
+  // Control total (eliminar productos/unidades, revertir Kardex, etc.) —
+  // ver Fase 58. Getter centralizado para no repetir `role === 'SUPERADMIN'`
+  // suelto en cada vista que necesite esta misma puerta.
+  const isSuperAdmin = computed(() => role.value === 'SUPERADMIN');
 
   async function loadRole(userId: string) {
     const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
@@ -50,5 +55,5 @@ export const useAuthStore = defineStore('auth', () => {
     await supabase.auth.signOut();
   }
 
-  return { user, session, role, loading, init, signIn, signOut };
+  return { user, session, role, loading, isSuperAdmin, init, signIn, signOut };
 });

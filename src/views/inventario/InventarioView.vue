@@ -13,7 +13,8 @@ const router = useRouter();
 const inventoryStore = useInventoryStore();
 const auth = useAuthStore();
 
-const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+// Fase 58: eliminar productos queda acotado a SUPERADMIN (antes tambien ADMIN).
+const canDelete = computed(() => auth.isSuperAdmin);
 
 const showModal = ref(false);
 const searchQuery = ref('');

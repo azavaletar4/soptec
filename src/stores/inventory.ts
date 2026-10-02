@@ -107,6 +107,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     reason?: string;
     ticketId?: string;
     installationId?: string;
+    reversesMovementId?: string;
   }) {
     const { data, error: err } = await supabase
       .from('inventory_movements')
@@ -117,6 +118,7 @@ export const useInventoryStore = defineStore('inventory', () => {
         reason: params.reason || null,
         ticket_id: params.ticketId || null,
         installation_id: params.installationId || null,
+        reverses_movement_id: params.reversesMovementId || null,
       })
       .select(MOVEMENT_SELECT)
       .single();
@@ -128,6 +130,24 @@ export const useInventoryStore = defineStore('inventory', () => {
     const idx = products.value.findIndex((p) => p.id === params.productId);
     if (idx !== -1) products.value[idx].current_stock = movement.balance_after;
     return movement;
+  }
+
+  /**
+   * Revierte un movimiento del Kardex (Fase 58): el Kardex es insert-only
+   * (ver Fase 11) — en vez de borrar la fila, que dejaria mal el
+   * balance_after de todo lo posterior, inserta el movimiento opuesto y lo
+   * enlaza via reverses_movement_id. Restringir esto a SUPERADMIN es
+   * decision de UI (ver InventarioProductoView.vue): el insert en si ya lo
+   * permite la policy existente para todo el staff.
+   */
+  function revertMovement(movement: InventoryMovement) {
+    return registerMovement({
+      productId: movement.product_id,
+      type: movement.movement_type === 'ingreso' ? 'egreso' : 'ingreso',
+      quantity: movement.quantity,
+      reason: `Reversión del movimiento del ${new Date(movement.created_at).toLocaleString('es-PE')}${movement.reason ? ` ("${movement.reason}")` : ''}`,
+      reversesMovementId: movement.id,
+    });
   }
 
   /** Materiales usados en un ticket de soporte (Fase 11b). */
@@ -185,6 +205,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     deactivateProduct,
     fetchMovements,
     registerMovement,
+    revertMovement,
     fetchMovementsByTicket,
     fetchMovementsByInstallation,
     registerUsage,
