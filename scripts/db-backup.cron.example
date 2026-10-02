@@ -1,0 +1,11 @@
+# SmartRayco — cron del respaldo diario de la base de datos.
+#
+# Instalar con: crontab -e   (como root, mismo usuario que corre deploy/update.sh)
+# Copia la linea de abajo (sin el "#" inicial) y ajusta la ruta si el repo
+# no vive en /opt/smartrayco.
+#
+# Corre todos los dias a las 11:59pm. Requiere SUPABASE_DB_URL ya puesto en
+# /opt/smartrayco/.env (ver comentario en scripts/db-backup.sh) y pg_dump
+# instalado (apt install -y postgresql-client).
+
+59 23 * * * /opt/smartrayco/scripts/db-backup.sh >> /var/log/smartrayco-db-backup.log 2>&1
