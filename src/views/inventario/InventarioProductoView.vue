@@ -361,6 +361,27 @@ async function handleRetire(unit: InventoryUnit) {
   }
 }
 
+// Correccion manual de emergencia (Fase 59, solo SUPERADMIN): por si un
+// equipo quedo trabado en un estado que no es "en bodega" por un error (ej.
+// una instalacion eliminada antes de que existiera la devolucion
+// automatica) y necesita volver a disponible ya, sin pasar por el flujo de
+// devolucion/reparacion normal. Reusa markRepaired (mismo destino: in_stock).
+async function handleForceAvailable(unit: InventoryUnit) {
+  if (!canDelete.value) return;
+  const ok = await confirmDialog({
+    title: 'Marcar equipo disponible',
+    message: '¿Forzar este equipo a "Disponible / en bodega"? Úsalo solo para corregir un estado que quedó mal por error.',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await inventoryUnitsStore.markRepaired(unit.id, 'Corrección manual de SUPERADMIN: marcado disponible');
+    await loadUnits();
+  } catch (e) {
+    unitsError.value = getErrorMessage(e, 'Error al marcar el equipo disponible');
+  }
+}
+
 // Borrado real (no "dar de baja"): para limpiar equipos de prueba, no
 // bajas reales — esas van por handleRetire, que conserva el historial.
 async function handleDeleteUnit(unit: InventoryUnit) {
@@ -669,6 +690,14 @@ async function handleDeleteProduct() {
                     <button v-if="u.status === 'assigned'" class="text-xs text-amber-700 hover:text-amber-700" @click="openReturn(u)">⚠ Averiado / Mantenimiento</button>
                     <button v-if="u.status === 'in_repair'" class="text-xs text-green-600 hover:text-green-700" @click="handleMarkRepaired(u)">Marcar reparado</button>
                     <button v-if="u.status === 'damaged' || u.status === 'in_repair' || u.status === 'en_recupero'" class="text-xs text-red-600 hover:text-red-700" @click="handleRetire(u)">Dar de baja</button>
+                    <button
+                      v-if="canDelete && u.status !== 'in_stock' && u.status !== 'retired'"
+                      class="text-xs text-emerald-700 hover:text-emerald-800"
+                      title="Corrección manual: forzar a disponible"
+                      @click="handleForceAvailable(u)"
+                    >
+                      ✅ Marcar Disponible
+                    </button>
                     <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click="handleDeleteUnit(u)">Eliminar</button>
                   </div>
                 </td>
