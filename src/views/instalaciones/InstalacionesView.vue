@@ -11,6 +11,7 @@ import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useClientPhotosStore } from '@/stores/clientPhotos';
 import { useAuthStore } from '@/stores/auth';
+import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import type {
   ClientPhotoCategory,
@@ -31,6 +32,7 @@ const inventoryStore = useInventoryStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
 const clientPhotosStore = useClientPhotosStore();
 const auth = useAuthStore();
+const toast = useToast();
 
 // Solo SUPERADMIN/ADMIN o el TECNICO_RED encargado (assigned_to) pueden
 // editar una instalacion — SOPORTE/FACTURACION siguen viendo la lista,
@@ -194,11 +196,15 @@ interface MaterialTemplateLine {
   match: RegExp;
   defaultQty: number;
 }
+// Sin cantidades por defecto (Fase 60): un valor ya puesto se ve igual
+// antes y despues de registrar, y un tecnico que no nota que ya se guardo
+// le vuelve a dar "Registrar plantilla" — duplica el consumo (y el stock
+// queda mal). El tecnico escribe a mano lo que realmente uso en cada visita.
 const MATERIAL_TEMPLATE: MaterialTemplateLine[] = [
   { key: 'drop', label: 'Cable Drop (metraje)', match: /drop/i, defaultQty: 0 },
-  { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 1 },
-  { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 1 },
-  { key: 'conector', label: 'Conector Óptico', match: /conector/i, defaultQty: 2 },
+  { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 0 },
+  { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 0 },
+  { key: 'conector', label: 'Conector Óptico', match: /conector/i, defaultQty: 0 },
 ];
 const ferreteriaProducts = computed(() =>
   inventoryStore.products.filter((p) => p.is_active && p.inventory_categories?.slug === 'ferreteria'),
@@ -227,15 +233,19 @@ const templateError = ref<string | null>(null);
 
 async function handleRegisterTemplate() {
   if (!materialsInstallation.value) return;
+  const rowsToRegister = templateRows.value.filter((row) => (templateQuantities.value[row.key] ?? 0) > 0 && row.product);
+  if (!rowsToRegister.length) {
+    toast.info('No hay cantidades para registrar — escribe lo que usaste en cada material.');
+    return;
+  }
   savingTemplate.value = true;
   templateError.value = null;
   const failures: string[] = [];
-  for (const row of templateRows.value) {
+  for (const row of rowsToRegister) {
     const qty = templateQuantities.value[row.key] ?? 0;
-    if (qty <= 0 || !row.product) continue;
     try {
       await inventoryStore.registerUsage({
-        productId: row.product.id,
+        productId: row.product!.id,
         quantity: qty,
         installationId: materialsInstallation.value.id,
         reason: `Instalación ${materialsInstallation.value.contracts?.contract_number ?? materialsInstallation.value.id} — plantilla`,
@@ -246,6 +256,14 @@ async function handleRegisterTemplate() {
   }
   materials.value = await inventoryStore.fetchMovementsByInstallation(materialsInstallation.value.id);
   resetTemplateQuantities();
+  // Confirmacion explicita (Fase 60): sin esto, el formulario queda vacio
+  // en 0 igual que antes de registrar — sin un aviso claro, un tecnico podria
+  // pensar que no paso nada y volver a escribir/registrar lo mismo.
+  if (failures.length) {
+    toast.error(`No se pudo registrar: ${failures.join(' · ')}`);
+  } else {
+    toast.success(`Materiales registrados: ${rowsToRegister.map((r) => r.label).join(', ')}.`);
+  }
   templateError.value = failures.length ? failures.join(' · ') : null;
   savingTemplate.value = false;
 }
