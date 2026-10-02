@@ -18,6 +18,7 @@ import {
   listAllOntsCommands,
   listUnconfiguredOntsCommands,
   registerOntCommands,
+  configureWanPppoeCommands,
   changeOntProfileCommands,
   setAdminStateCommands,
   deleteOntCommands,
@@ -1005,6 +1006,59 @@ oltRoutes.post('/:id/onts/:ontDbId/resync', requireRole(...ONT_WRITE), async (c)
     );
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al reaplicar la configuracion en la OLT' }, 502);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('olt_onts')
+    .update({ last_synced_at: new Date().toISOString() })
+    .eq('id', ont.id)
+    .select()
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+  oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
+  return c.json(data);
+});
+
+/**
+ * EXPERIMENTAL — ver advertencia en configureWanPppoeCommands (Fase 75). NO
+ * tocar en clientes reales todavia: solo probar en una ONT de baja
+ * criticidad hasta confirmar que la sintaxis es correcta contra el equipo
+ * real. No persiste username/password en ningun lado (se piden en el
+ * formulario cada vez) — a diferencia de otras rutas, esta NO actualiza
+ * olt_onts salvo last_synced_at, porque la credencial no es dato nuestro.
+ */
+oltRoutes.post('/:id/onts/:ontDbId/wan-pppoe', requireRole(...ONT_WRITE), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
+
+  const body = await c.req.json();
+  const { username, password, vlanProfile, gemport, wanId, host } = body;
+  if (!username || !password || !vlanProfile) {
+    return c.json({ error: 'username, password y vlanProfile son requeridos (el vlan-profile debe existir ya en la OLT)' }, 400);
+  }
+
+  try {
+    await withOltLock(device.id, () =>
+      runTelnetCommands(
+        telnetTargetFor(device),
+        configureWanPppoeCommands({
+          ref: { shelf: ont.frame, slot: ont.slot, port: ont.port },
+          onuId: ont.ont_id,
+          vlan: ont.vlan,
+          username,
+          password,
+          vlanProfile,
+          gemport,
+          wanId,
+          host,
+        }),
+        { timeoutMs: 20000 },
+      ),
+    );
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al configurar el WAN/PPPoE en la OLT' }, 502);
   }
 
   const { data, error } = await supabaseAdmin

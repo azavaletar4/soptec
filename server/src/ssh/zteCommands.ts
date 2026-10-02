@@ -82,6 +82,20 @@ function sanitizeAcsUrl(value: string): string {
   return v;
 }
 
+// Un solo token de CLI (usuario/clave PPPoE, nombre de vlan-profile): nada de
+// espacios/control/comillas que puedan cortar el comando o inyectar otro.
+// Mas permisivo que sanitizeIdentifier (una clave real puede traer simbolos),
+// pero sigue sin aceptar nada que separe argumentos.
+function sanitizeCliToken(value: string, fieldName: string, maxLen = 64): string {
+  const v = String(value);
+  if (!v) throw new Error(`${fieldName} no puede estar vacio`);
+  if (v.length > maxLen) throw new Error(`${fieldName} es demasiado largo (maximo ${maxLen} caracteres)`);
+  if (/[\s"'\r\n\t\x00-\x1f\x7f]/.test(v)) {
+    throw new Error(`${fieldName} no puede tener espacios, comillas ni saltos de linea`);
+  }
+  return v;
+}
+
 function safeRef({ shelf, slot, port }: ZteInterfaceRef): ZteInterfaceRef {
   return {
     shelf: sanitizeInt(shelf, 'shelf', { min: 0, max: 31 }),
@@ -168,6 +182,51 @@ export function disableTr069Commands(ref: ZteInterfaceRef, onuId: number, veip: 
     'configure terminal',
     `pon-onu-mng ${onuInterface(ref, safeOnuId)}`,
     `tr069-mgmt ${safeVeip} state lock`,
+    'exit',
+  ];
+}
+
+/**
+ * EXPERIMENTAL — NO VALIDADO contra el equipo real todavia. Sintaxis sacada
+ * de documentacion de campo de terceros para ZTE C300/C320 (no el manual
+ * oficial ZTE), ver Fase 75. Hipotesis: para una ONT router/HGU (ej.
+ * GPT-2741GNAC) que hace su propio PPPoE, el `service-port` normal
+ * (registerOntCommands) solo declara el servicio GPON del lado OLT, pero el
+ * ONT nunca arma su WAN si nadie le manda el `wan-ip` por OMCI — aunque el
+ * tecnico ya haya puesto las mismas credenciales a mano en la pagina web
+ * local del equipo. `vlanProfile` tiene que ser un perfil YA EXISTENTE en
+ * esta OLT (ver "show gpon onu profile vlan" o preguntar en SmartOLT que
+ * nombre usa su "Configuration Preset") — este comando no lo crea.
+ *
+ * PROBAR PRIMERO EN LA ONT DE PRUEBA. Si el formato real de esta OLT difiere
+ * (los "?"/autocompletado del CLI real mandan), corregir aca.
+ */
+export function configureWanPppoeCommands(params: {
+  ref: ZteInterfaceRef;
+  onuId: number;
+  gemport?: number;
+  vlan: number;
+  username: string;
+  password: string;
+  vlanProfile: string;
+  wanId?: number;
+  host?: number;
+}): string[] {
+  const { ref, onuId, vlan, username, password, vlanProfile } = params;
+  const safeOnuId = sanitizeInt(onuId, 'onuId', { min: 0, max: 127 });
+  const safeGemport = sanitizeInt(params.gemport ?? 1, 'gemport', { min: 1, max: 8 });
+  const safeVlan = sanitizeInt(vlan, 'vlan', { min: 1, max: 4094 });
+  const safeUsername = sanitizeCliToken(username, 'username', 64);
+  const safePassword = sanitizeCliToken(password, 'password', 64);
+  const safeVlanProfile = sanitizeIdentifier(vlanProfile, 'vlanProfile', 64);
+  const safeWanId = sanitizeInt(params.wanId ?? 1, 'wanId', { min: 1, max: 8 });
+  const safeHost = sanitizeInt(params.host ?? 1, 'host', { min: 1, max: 8 });
+  return [
+    'enable',
+    'configure terminal',
+    `pon-onu-mng ${onuInterface(ref, safeOnuId)}`,
+    `service ${safeWanId} gemport ${safeGemport} vlan ${safeVlan}`,
+    `wan-ip ${safeWanId} mode pppoe username ${safeUsername} password ${safePassword} vlan-profile ${safeVlanProfile} host ${safeHost}`,
     'exit',
   ];
 }

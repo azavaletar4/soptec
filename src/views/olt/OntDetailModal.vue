@@ -23,6 +23,16 @@ const resyncing = ref(false);
 const resyncError = ref<string | null>(null);
 const resyncOk = ref(false);
 
+// ---- WAN/PPPoE experimental (Fase 75) — ver advertencia en zteCommands.ts
+// configureWanPppoeCommands. Oculto detras de un toggle: no es para uso
+// normal, solo para probar en una ONT de baja criticidad mientras se
+// confirma la sintaxis real contra la OLT. No persiste username/password. ----
+const wanPppoeOpen = ref(false);
+const wanPppoeForm = ref({ username: '', password: '', vlanProfile: '' });
+const wanPppoeSaving = ref(false);
+const wanPppoeError = ref<string | null>(null);
+const wanPppoeOk = ref(false);
+
 const configOpen = ref(false);
 const configLoading = ref(false);
 const configError = ref<string | null>(null);
@@ -91,6 +101,21 @@ async function resyncConfig() {
     resyncError.value = getErrorMessage(e, 'Error al reaplicar la configuración en la OLT');
   } finally {
     resyncing.value = false;
+  }
+}
+
+async function submitWanPppoe() {
+  wanPppoeSaving.value = true;
+  wanPppoeError.value = null;
+  wanPppoeOk.value = false;
+  try {
+    await oltStore.configureWanPppoe(props.device.id, props.ont.id, { ...wanPppoeForm.value });
+    await oltStore.fetchOnts(props.device.id);
+    wanPppoeOk.value = true;
+  } catch (e) {
+    wanPppoeError.value = getErrorMessage(e, 'Error al configurar el WAN/PPPoE en la OLT');
+  } finally {
+    wanPppoeSaving.value = false;
   }
 }
 
@@ -227,6 +252,43 @@ async function toggleConfig() {
         <p v-if="resyncOk" class="text-xs text-emerald-600 mt-2">
           Configuración reenviada a la OLT. Si el equipo no navegaba por esto, debería empezar en 1-2 minutos.
         </p>
+
+        <div class="mt-4 pt-3 border-t border-slate-200">
+          <button class="text-xs text-amber-700 hover:underline" @click="wanPppoeOpen = !wanPppoeOpen">
+            {{ wanPppoeOpen ? 'Ocultar' : '⚠ Configurar WAN/PPPoE desde la OLT (experimental)' }}
+          </button>
+          <div v-if="wanPppoeOpen" class="mt-3 surface p-4 border border-amber-300">
+            <p class="text-xs text-amber-700 mb-3">
+              Sin validar contra el equipo real todavía — probar solo en esta ONT de prueba, nunca en un cliente
+              real. Empuja el WAN/PPPoE por OMCI (<code>pon-onu-mng</code> / <code>wan-ip</code>) en vez de que el
+              técnico lo configure a mano en la página web local del equipo. El VLAN-profile debe existir YA creado
+              en la OLT.
+            </p>
+            <form class="grid sm:grid-cols-3 gap-3" @submit.prevent="submitWanPppoe">
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE</label>
+                <input v-model="wanPppoeForm.username" required class="field-input text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Clave PPPoE</label>
+                <input v-model="wanPppoeForm.password" required class="field-input text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">VLAN-profile (ya existente en la OLT)</label>
+                <input v-model="wanPppoeForm.vlanProfile" required class="field-input text-sm" placeholder="ej. V120" />
+              </div>
+              <div class="sm:col-span-3">
+                <button type="submit" :disabled="wanPppoeSaving" class="btn-secondary text-sm">
+                  {{ wanPppoeSaving ? 'Configurando...' : 'Enviar a la OLT' }}
+                </button>
+              </div>
+            </form>
+            <p v-if="wanPppoeError" class="text-xs text-red-600 mt-2">{{ wanPppoeError }}</p>
+            <p v-if="wanPppoeOk" class="text-xs text-emerald-600 mt-2">
+              Comando enviado a la OLT. Revisá si el equipo ya empieza a navegar.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   </Teleport>

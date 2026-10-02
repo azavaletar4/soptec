@@ -269,6 +269,18 @@ export const useOltStore = defineStore('olt', () => {
     return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/resync`, { method: 'POST' });
   }
 
+  /** EXPERIMENTAL (Fase 75) — ver advertencia en la ruta backend /wan-pppoe. Solo probar en ONTs de baja criticidad. */
+  async function configureWanPppoe(
+    deviceId: string,
+    ontDbId: string,
+    payload: { username: string; password: string; vlanProfile: string },
+  ) {
+    return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/wan-pppoe`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async function deleteOnt(deviceId: string, ontDbId: string) {
     await apiFetch(`/api/olt-devices/${deviceId}/onts/${ontDbId}`, { method: 'DELETE' });
   }
@@ -499,6 +511,7 @@ export const useOltStore = defineStore('olt', () => {
     registerOnt,
     toggleOnt,
     resyncOnt,
+    configureWanPppoe,
     deleteOnt,
     getSignal,
     fetchSummary,
