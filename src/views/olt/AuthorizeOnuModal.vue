@@ -254,8 +254,19 @@ const napOptionsAll = computed(() =>
 );
 const napOptions = computed(() => napOptionsAll.value.filter((n) => n.zoneId === zoneId.value));
 
-// ---- 7) Modo ONU — solo Bridging por ahora (ver plan: no hay ni un comando
-// OMCI de servicio implementado en este proyecto) ----
+// ---- 7) Modo ONU — los equipos reales de esta red (ej. GPT-2741GNAC) son
+// router/HGU operando en Routing, no en Bridging: el ONT marca su propio
+// PPPoE por su WAN (VLAN de servicio) y reparte LAN/NAT el mismo, como
+// confirma SmartOLT en cada equipo real ("ONU mode: Routing", "WAN setup
+// mode: Setup via ONU webpage"). SmartRayco NO configura eso — ni este
+// proyecto ni el equipo real tienen implementado un comando OMCI que
+// empuje la config de WAN/PPPoE al ONT (confirmado: ni los clientes reales
+// ni el de prueba muestran "TR069 Profile" activo). Ese paso lo hace el
+// tecnico a mano, entrando a la pagina web local del equipo (normalmente
+// 192.168.1.1 desde su puerto LAN) despues de autorizarlo aqui — lo unico
+// que este modal provisiona es el servicio GPON (gemport/tcont/VLAN) mas
+// abajo, igual sea bridge o routing. Automatizar ese paso via TR-069 (como
+// ya funciona con el ONT F670L) queda pendiente como mejora aparte.
 
 // ---- 8) MikroTik ----
 const mikrotikDeviceId = ref('');
@@ -597,9 +608,11 @@ onMounted(async () => {
           <div>
             <label class="block text-xs text-slate-600 mb-1">Modo ONU</label>
             <select disabled class="field-input opacity-60">
-              <option>Bridging</option>
+              <option>Routing (router/HGU)</option>
             </select>
-            <p class="text-[11px] text-slate-400 mt-1">Routing próximamente</p>
+            <p class="text-[11px] text-slate-400 mt-1">
+              El WAN/PPPoE se configura a mano en la página web local del equipo — SmartRayco solo autoriza el servicio GPON.
+            </p>
           </div>
           <div v-if="!isLocked">
             <label class="block text-xs text-slate-600 mb-1">ID de ONU (vacío = auto)</label>

@@ -264,6 +264,11 @@ export const useOltStore = defineStore('olt', () => {
     });
   }
 
+  /** Reenvia la misma config de servicio (tcont/gemport/service-port+VLAN) ya guardada — ver comentario en la ruta backend. */
+  async function resyncOnt(deviceId: string, ontDbId: string) {
+    return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/resync`, { method: 'POST' });
+  }
+
   async function deleteOnt(deviceId: string, ontDbId: string) {
     await apiFetch(`/api/olt-devices/${deviceId}/onts/${ontDbId}`, { method: 'DELETE' });
   }
@@ -493,6 +498,7 @@ export const useOltStore = defineStore('olt', () => {
     syncOnts,
     registerOnt,
     toggleOnt,
+    resyncOnt,
     deleteOnt,
     getSignal,
     fetchSummary,

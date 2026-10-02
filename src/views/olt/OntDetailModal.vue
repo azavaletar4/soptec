@@ -19,6 +19,10 @@ const oltStore = useOltStore();
 const signalLoading = ref(false);
 const signalError = ref<string | null>(null);
 
+const resyncing = ref(false);
+const resyncError = ref<string | null>(null);
+const resyncOk = ref(false);
+
 const configOpen = ref(false);
 const configLoading = ref(false);
 const configError = ref<string | null>(null);
@@ -68,6 +72,25 @@ async function refreshSignal() {
     signalError.value = getErrorMessage(e, 'Error al leer la señal óptica');
   } finally {
     signalLoading.value = false;
+  }
+}
+
+// Reenvia la misma config de servicio ya guardada (ver comentario en la ruta
+// backend /resync) — para ONTs que quedan autorizadas pero sin que el OMCI
+// realmente les haya llegado (señal/VLAN se ven bien pero el equipo no
+// levanta su WAN/PPPoE). Mismo efecto que "Resync config" en SmartOLT.
+async function resyncConfig() {
+  resyncing.value = true;
+  resyncError.value = null;
+  resyncOk.value = false;
+  try {
+    await oltStore.resyncOnt(props.device.id, props.ont.id);
+    await oltStore.fetchOnts(props.device.id);
+    resyncOk.value = true;
+  } catch (e) {
+    resyncError.value = getErrorMessage(e, 'Error al reaplicar la configuración en la OLT');
+  } finally {
+    resyncing.value = false;
   }
 }
 
@@ -194,9 +217,16 @@ async function toggleConfig() {
           <button class="btn-secondary" @click="toggleConfig">
             {{ configOpen ? 'Ocultar running-config' : 'Ver running-config' }}
           </button>
+          <button class="btn-secondary" :disabled="resyncing" @click="resyncConfig" title="Reenvía tcont/gemport/service-port+VLAN a la OLT, mismos valores ya guardados">
+            {{ resyncing ? 'Reaplicando...' : 'Reaplicar configuración' }}
+          </button>
           <button class="btn-primary" @click="emit('openTr069', ont)">Gestionar TR-069</button>
           <button class="btn-ghost ml-auto" @click="emit('close')">Cerrar</button>
         </div>
+        <p v-if="resyncError" class="text-xs text-red-600 mt-2">{{ resyncError }}</p>
+        <p v-if="resyncOk" class="text-xs text-emerald-600 mt-2">
+          Configuración reenviada a la OLT. Si el equipo no navegaba por esto, debería empezar en 1-2 minutos.
+        </p>
       </div>
     </div>
   </Teleport>
