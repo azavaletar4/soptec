@@ -35,6 +35,17 @@ const jobType = route.params.tipo as JobType;
 const jobId = route.params.id as string;
 
 const trabajo = computed(() => campoStore.trabajos.find((t) => t.jobType === jobType && t.id === jobId));
+
+// Una instalacion 'completed' queda cerrada para el tecnico (Fase 69, lo
+// mismo que ya rige "Materiales" en InstalacionesView.vue) — pero esta
+// pantalla (app de campo) tenia el mismo formulario de cierre (fotos, GPS,
+// firma) sin ningun candado: un tecnico podia reabrir un trabajo ya
+// completado y volver a "completarlo", pisando las fotos/GPS ya guardados.
+// Se oculta Materiales y Cierre de trabajo para el tecnico cuando el
+// trabajo ya esta 'completado'; admin/super lo siguen viendo siempre.
+const isLockedForTecnico = computed(
+  () => jobType === 'installation' && auth.role === 'TECNICO_RED' && trabajo.value?.estadoUi === 'completado',
+);
 const trabajoDescripcion = computed(() => {
   const raw = trabajo.value?.raw;
   if (!raw) return null;
@@ -568,88 +579,98 @@ async function handleCloseSubmit() {
       </section>
 
       <!-- Materiales -->
-      <section class="surface p-3.5 mb-3">
-        <h2 class="text-sm font-semibold mb-2">Materiales usados</h2>
-        <ul v-if="materials.length" class="space-y-1 mb-2.5 text-xs">
-          <li v-for="m in materials" :key="m.id" class="flex justify-between">
-            <span>{{ m.product?.name ?? 'Producto' }}</span>
-            <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }}</span>
-          </li>
-        </ul>
-        <form class="flex gap-2" @submit.prevent="handleAddMaterial">
-          <select v-model="materialForm.productId" required class="field-input text-sm flex-1">
-            <option value="" disabled>Producto...</option>
-            <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">{{ p.name }} ({{ p.current_stock }})</option>
-          </select>
-          <input v-model.number="materialForm.quantity" type="number" min="1" class="field-input text-sm w-16" />
-          <button type="submit" :disabled="savingMaterial" class="btn-secondary text-xs shrink-0">+</button>
-        </form>
-        <p v-if="materialError" class="text-xs text-red-600 mt-1.5">{{ materialError }}</p>
-      </section>
-
-      <!-- Cierre de trabajo -->
-      <section class="surface p-3.5 mb-3">
-        <h2 class="text-sm font-semibold mb-2">Cierre de trabajo</h2>
-
-        <button type="button" :disabled="gettingLocation" class="text-xs text-sky-700 mb-2.5 block" @click="useCurrentLocation">
-          {{ gettingLocation ? 'Obteniendo ubicación...' : `📍 ${closureForm.latitude ? 'Ubicación capturada' : 'Usar mi ubicación actual'}` }}
-        </button>
-
-        <div class="grid grid-cols-2 gap-2 mb-3">
-          <div v-for="cat in jobType === 'installation' ? INSTALL_PHOTO_CATEGORIES : TICKET_PHOTO_CATEGORIES" :key="cat.value">
-            <label class="block text-center px-2 py-2 rounded-lg bg-slate-100 text-[11px] cursor-pointer truncate">
-              {{ closurePhotos[cat.value] ? '✓ ' + cat.label : cat.label }}
-              <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPhotoChange(cat.value, $event)" />
-            </label>
-          </div>
-        </div>
-
-        <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
-
-        <template v-if="jobType !== 'installation'">
-          <label class="block text-xs text-slate-600 mb-1">
-            Motivo de la avería<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
-          </label>
-          <select v-model="closureForm.motivoAveria" class="field-input text-sm mb-3">
-            <option value="" disabled>Selecciona el motivo...</option>
-            <option v-for="m in MOTIVO_AVERIA_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
-          </select>
-
-          <template v-if="requiresJustification">
-            <label class="block text-xs text-slate-600 mb-1">
-              Justificación<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria, no cuenta contra tus puntos)</span></span>
-            </label>
-            <textarea
-              v-model="closureForm.justificacion"
-              rows="2"
-              placeholder="Explica qué pasó..."
-              class="field-input text-sm mb-1"
-              :class="justificacionMissing ? 'border-red-400' : ''"
-            ></textarea>
-            <p class="text-[11px] text-slate-500 mb-3">Agrega también una foto de evidencia arriba (Evidencia 1 o 2).</p>
-          </template>
-        </template>
-
-        <label class="block text-xs text-slate-600 mb-1">
-          Firma del cliente<span v-if="jobType === 'installation'" class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria)</span></span>
-        </label>
-        <SignaturePad
-          ref="signaturePadRef"
-          :required="jobType === 'installation'"
-          :invalid="signatureMissing"
-          @change="(b) => { signatureBlob = b; if (b) signatureMissing = false; }"
-        />
-
-        <p v-if="closeError" class="text-sm text-red-600 mt-3">{{ closeError }}</p>
-        <p v-if="closeResult === 'queued'" class="text-sm text-amber-600 mt-3">
-          Sin señal: el cierre quedó guardado en el dispositivo y se sincronizará automáticamente.
+      <section v-if="isLockedForTecnico" class="surface p-3.5 mb-3 bg-slate-50">
+        <h2 class="text-sm font-semibold mb-1">✅ Instalación completada</h2>
+        <p class="text-xs text-slate-500">
+          Esta instalación ya fue completada — materiales, fotos, GPS y firma quedan cerrados para técnicos. Si
+          falta corregir algo, pide a un administrador que la regrese a "Programada" para poder editarla de nuevo.
         </p>
-        <p v-if="closeResult === 'ok'" class="text-sm text-green-600 mt-3">Trabajo cerrado correctamente.</p>
-
-        <button type="button" :disabled="closing" class="btn-primary w-full text-sm mt-3" @click="handleCloseSubmit">
-          {{ closing ? 'Guardando...' : jobType === 'installation' ? 'Completar instalación' : 'Resolver avería' }}
-        </button>
       </section>
+
+      <template v-else>
+        <section class="surface p-3.5 mb-3">
+          <h2 class="text-sm font-semibold mb-2">Materiales usados</h2>
+          <ul v-if="materials.length" class="space-y-1 mb-2.5 text-xs">
+            <li v-for="m in materials" :key="m.id" class="flex justify-between">
+              <span>{{ m.product?.name ?? 'Producto' }}</span>
+              <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }}</span>
+            </li>
+          </ul>
+          <form class="flex gap-2" @submit.prevent="handleAddMaterial">
+            <select v-model="materialForm.productId" required class="field-input text-sm flex-1">
+              <option value="" disabled>Producto...</option>
+              <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">{{ p.name }} ({{ p.current_stock }})</option>
+            </select>
+            <input v-model.number="materialForm.quantity" type="number" min="1" class="field-input text-sm w-16" />
+            <button type="submit" :disabled="savingMaterial" class="btn-secondary text-xs shrink-0">+</button>
+          </form>
+          <p v-if="materialError" class="text-xs text-red-600 mt-1.5">{{ materialError }}</p>
+        </section>
+
+        <!-- Cierre de trabajo -->
+        <section class="surface p-3.5 mb-3">
+          <h2 class="text-sm font-semibold mb-2">Cierre de trabajo</h2>
+
+          <button type="button" :disabled="gettingLocation" class="text-xs text-sky-700 mb-2.5 block" @click="useCurrentLocation">
+            {{ gettingLocation ? 'Obteniendo ubicación...' : `📍 ${closureForm.latitude ? 'Ubicación capturada' : 'Usar mi ubicación actual'}` }}
+          </button>
+
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <div v-for="cat in jobType === 'installation' ? INSTALL_PHOTO_CATEGORIES : TICKET_PHOTO_CATEGORIES" :key="cat.value">
+              <label class="block text-center px-2 py-2 rounded-lg bg-slate-100 text-[11px] cursor-pointer truncate">
+                {{ closurePhotos[cat.value] ? '✓ ' + cat.label : cat.label }}
+                <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPhotoChange(cat.value, $event)" />
+              </label>
+            </div>
+          </div>
+
+          <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
+
+          <template v-if="jobType !== 'installation'">
+            <label class="block text-xs text-slate-600 mb-1">
+              Motivo de la avería<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
+            </label>
+            <select v-model="closureForm.motivoAveria" class="field-input text-sm mb-3">
+              <option value="" disabled>Selecciona el motivo...</option>
+              <option v-for="m in MOTIVO_AVERIA_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
+            </select>
+
+            <template v-if="requiresJustification">
+              <label class="block text-xs text-slate-600 mb-1">
+                Justificación<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria, no cuenta contra tus puntos)</span></span>
+              </label>
+              <textarea
+                v-model="closureForm.justificacion"
+                rows="2"
+                placeholder="Explica qué pasó..."
+                class="field-input text-sm mb-1"
+                :class="justificacionMissing ? 'border-red-400' : ''"
+              ></textarea>
+              <p class="text-[11px] text-slate-500 mb-3">Agrega también una foto de evidencia arriba (Evidencia 1 o 2).</p>
+            </template>
+          </template>
+
+          <label class="block text-xs text-slate-600 mb-1">
+            Firma del cliente<span v-if="jobType === 'installation'" class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria)</span></span>
+          </label>
+          <SignaturePad
+            ref="signaturePadRef"
+            :required="jobType === 'installation'"
+            :invalid="signatureMissing"
+            @change="(b) => { signatureBlob = b; if (b) signatureMissing = false; }"
+          />
+
+          <p v-if="closeError" class="text-sm text-red-600 mt-3">{{ closeError }}</p>
+          <p v-if="closeResult === 'queued'" class="text-sm text-amber-600 mt-3">
+            Sin señal: el cierre quedó guardado en el dispositivo y se sincronizará automáticamente.
+          </p>
+          <p v-if="closeResult === 'ok'" class="text-sm text-green-600 mt-3">Trabajo cerrado correctamente.</p>
+
+          <button type="button" :disabled="closing" class="btn-primary w-full text-sm mt-3" @click="handleCloseSubmit">
+            {{ closing ? 'Guardando...' : jobType === 'installation' ? 'Completar instalación' : 'Resolver avería' }}
+          </button>
+        </section>
+      </template>
     </template>
 
     <QrScannerModal :open="qrOpen" @close="qrOpen = false" @scan="onQrScan" />
