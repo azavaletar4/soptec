@@ -154,17 +154,19 @@ function signalClass(rx: number | null) {
   return 'text-green-600';
 }
 
-// ---- Escaner QR compartido (provisionamiento y cierre) ----
+// ---- Escaner QR del serial al provisionar en la OLT ----
+// Antes tambien alimentaba un campo "Serial de la ONT" suelto en el cierre
+// de trabajo, que quedaba guardado aparte (work_order_closures.ont_serial)
+// sin conectarse nunca con el equipo serializado real (inventory_units) que
+// ya registra "Equipos asignados" — duplicaba el dato sin ningun uso
+// posterior, se quito (Fase 66).
 const qrOpen = ref(false);
-const qrTarget = ref<'provision' | 'closure' | null>(null);
 
-function openQr(target: 'provision' | 'closure') {
-  qrTarget.value = target;
+function openQr() {
   qrOpen.value = true;
 }
 function onQrScan(value: string) {
-  if (qrTarget.value === 'provision') provisionForm.value.serial = value;
-  if (qrTarget.value === 'closure') closureForm.value.ontSerial = value;
+  provisionForm.value.serial = value;
 }
 
 // ---- Provisionamiento en OLT (solo instalaciones) ----
@@ -218,7 +220,6 @@ async function handleProvision() {
       clientId: trabajo.value.clientId,
     });
     provisionResult.value = { rxPower: result.rx_power, txPower: result.tx_power };
-    closureForm.value.ontSerial = provisionForm.value.serial;
   } catch (e) {
     provisionError.value = isNetworkError(e)
       ? 'Sin señal por ahora — el registro en la OLT necesita conexión en el momento, no se puede dejar pendiente. Revisa tu señal y toca "Registrar" de nuevo.'
@@ -291,7 +292,6 @@ const MOTIVOS_EXIMEN_TECNICO: TicketMotivoAveria[] = ['client_damage', 'external
 const closureForm = ref({
   latitude: null as number | null,
   longitude: null as number | null,
-  ontSerial: '',
   closureNotes: '',
   motivoAveria: '' as TicketMotivoAveria | '',
   justificacion: '',
@@ -387,7 +387,7 @@ async function handleCloseSubmit() {
       targetStatus: jobType === 'installation' ? 'completed' : 'resolved',
       latitude: closureForm.value.latitude,
       longitude: closureForm.value.longitude,
-      ontSerial: closureForm.value.ontSerial || null,
+      ontSerial: null,
       closureNotes: closureForm.value.closureNotes || null,
       photos,
       signatureBlob: signatureBlob.value,
@@ -540,7 +540,7 @@ async function handleCloseSubmit() {
 
           <div class="flex gap-2">
             <input v-model="provisionForm.serial" required placeholder="Serial de la ONT" class="field-input text-sm font-mono flex-1" />
-            <button type="button" class="btn-secondary text-xs shrink-0" @click="openQr('provision')">📷 QR</button>
+            <button type="button" class="btn-secondary text-xs shrink-0" @click="openQr()">📷 QR</button>
           </div>
 
           <input v-model="provisionForm.onuType" required placeholder="Tipo de ONU (ej. ZTE-F660)" class="field-input text-sm" />
@@ -590,11 +590,6 @@ async function handleCloseSubmit() {
       <!-- Cierre de trabajo -->
       <section class="surface p-3.5 mb-3">
         <h2 class="text-sm font-semibold mb-2">Cierre de trabajo</h2>
-
-        <div class="flex gap-2 mb-2.5">
-          <input v-model="closureForm.ontSerial" placeholder="Serial de la ONT" class="field-input text-sm font-mono flex-1" />
-          <button type="button" class="btn-secondary text-xs shrink-0" @click="openQr('closure')">📷 QR</button>
-        </div>
 
         <button type="button" :disabled="gettingLocation" class="text-xs text-sky-700 mb-2.5 block" @click="useCurrentLocation">
           {{ gettingLocation ? 'Obteniendo ubicación...' : `📍 ${closureForm.latitude ? 'Ubicación capturada' : 'Usar mi ubicación actual'}` }}
