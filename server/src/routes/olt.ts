@@ -46,9 +46,14 @@ const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
 // Gestionar el registro de la OLT (alta/edicion/baja del equipo) es tarea de
 // administracion, no del tecnico de campo.
 const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
-// Gestionar ONTs (registrar, activar/desactivar, eliminar, senal) si es
+// Gestionar ONTs (activar/desactivar, eliminar, autorizar, TR-069) si es
 // trabajo del tecnico de campo con el equipo ya dado de alta.
 const ONT_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
+// Dar de alta una ONT DESDE CERO en la OLT (slot/puerto/serial/perfiles a
+// mano, el formulario "Provisionar en OLT") es aprovisionamiento de red —
+// solo administracion. El tecnico de campo sigue autorizando/activando
+// equipo que ya este visible en la OLT (eso usa ONT_WRITE, no esto).
+const ONT_PROVISION = ['SUPERADMIN', 'ADMIN'] as const;
 
 const DEVICE_PUBLIC_FIELDS = 'id, name, host, brand, telnet_port, username, zone_id, is_active, created_at';
 // extra_params solo se pide en el listado para sacar lat/lng (capa OLT del
@@ -777,7 +782,7 @@ oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) =
   }
 });
 
-oltRoutes.post('/:id/onts', requireRole(...ONT_WRITE), async (c) => {
+oltRoutes.post('/:id/onts', requireRole(...ONT_PROVISION), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 

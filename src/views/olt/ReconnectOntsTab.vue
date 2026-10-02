@@ -1,5 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { UnconfiguredOnt } from '@/stores/olt';
+import { useAuthStore } from '@/stores/auth';
+
+const auth = useAuthStore();
+// Registrar/autorizar una ONT en la OLT es aprovisionamiento de red — solo
+// administracion (mismo criterio que ONT_PROVISION en el backend, olt.ts).
+const canAuthorize = computed(() => ['SUPERADMIN', 'ADMIN'].includes(auth.role ?? ''));
 
 defineProps<{
   onts: UnconfiguredOnt[];
@@ -83,6 +90,7 @@ const DEBT_HOLD_LABEL: Record<string, string> = {
             </td>
             <td class="px-4 py-2 text-right">
               <button
+                v-if="canAuthorize"
                 class="text-sky-700 hover:underline text-xs"
                 :disabled="u.slot === null || u.port === null || !u.existingClient"
                 @click="
@@ -97,6 +105,7 @@ const DEBT_HOLD_LABEL: Record<string, string> = {
               >
                 Re-autorizar a {{ u.existingClient?.first_name }}
               </button>
+              <span v-else class="text-xs text-slate-400">Solo admin</span>
             </td>
           </tr>
         </tbody>

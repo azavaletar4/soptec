@@ -10,6 +10,7 @@ import { useInventoryStore } from '@/stores/inventory';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
 import type { Client, ClientPhotoCategory, Installation, InventoryMovement, JobType, ServiceContract, Ticket, TicketMotivoAveria } from '@/types/domain';
@@ -22,6 +23,13 @@ const inventoryStore = useInventoryStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const clientPhotosStore = useClientPhotosStore();
+const auth = useAuthStore();
+
+// Provisionar (dar de alta desde cero) una ONT en la OLT es tarea de
+// administracion, no del tecnico de campo — el backend ya lo exige
+// (olt.ts, ONT_PROVISION); esto solo evita mostrarle el formulario a quien
+// la API igual va a rechazar.
+const canProvisionOnt = computed(() => auth.role !== 'TECNICO_RED');
 
 const jobType = route.params.tipo as JobType;
 const jobId = route.params.id as string;
@@ -515,8 +523,8 @@ async function handleCloseSubmit() {
         </div>
       </section>
 
-      <!-- Provisionamiento OLT (solo instalaciones) -->
-      <section v-if="jobType === 'installation'" class="surface p-3.5 mb-3">
+      <!-- Provisionamiento OLT (solo instalaciones, solo admin/super) -->
+      <section v-if="jobType === 'installation' && canProvisionOnt" class="surface p-3.5 mb-3">
         <h2 class="text-sm font-semibold mb-2">Provisionar en OLT</h2>
         <form class="space-y-2.5" @submit.prevent="handleProvision">
           <select v-model="provisionForm.oltDeviceId" required class="field-input text-sm">

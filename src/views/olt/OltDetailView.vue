@@ -5,6 +5,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useOltStore, type OltOnt, type OltHealth, type UnconfiguredOnt, type DisabledOnt } from '@/stores/olt';
 import { useTr069Store } from '@/stores/tr069';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import OntDetailModal from './OntDetailModal.vue';
 import OntZoneEditModal from './OntZoneEditModal.vue';
@@ -18,6 +19,11 @@ const router = useRouter();
 const oltStore = useOltStore();
 const tr069Store = useTr069Store();
 const catalogsStore = useCatalogsStore();
+const auth = useAuthStore();
+
+// Registrar una ONT en la OLT es aprovisionamiento de red — solo
+// administracion (mismo criterio que ONT_PROVISION en el backend, olt.ts).
+const canAuthorizeOnt = computed(() => ['SUPERADMIN', 'ADMIN'].includes(auth.role ?? ''));
 
 const deviceId = computed(() => route.params.id as string);
 const device = computed(() => oltStore.devices.find((d) => d.id === deviceId.value));
@@ -970,7 +976,7 @@ const gauges = computed(() => {
           <button v-else :disabled="oltWriteBusy" class="btn-secondary" @click="handlePortSync">
             {{ syncing ? 'Sincronizando...' : 'Sincronizar este puerto' }}
           </button>
-          <button :disabled="oltWriteBusy" class="btn-primary" @click="openAuthorize()">
+          <button v-if="canAuthorizeOnt" :disabled="oltWriteBusy" class="btn-primary" @click="openAuthorize()">
             + Registrar ONT
           </button>
         </div>
