@@ -503,9 +503,13 @@ async function handleStatusChange(inst: Installation, status: InstallationStatus
   }
 }
 
-// ---- Completar instalación: GPS + fotos del cliente (fachada, caja NAP,
-// posición del módem) quedan registradas en el mismo momento, para que se
-// actualicen junto con el cliente en la sección Clientes. ----
+// ---- Completar instalación: GPS + las 5 fotos (fachada, hoja de servicio,
+// caja NAP, posición del módem, potencia óptica recibida) quedan registradas
+// en el mismo momento, para que se actualicen junto con el cliente en la
+// sección Clientes. Es la UNICA via que tiene un TECNICO_RED para subir
+// estas fotos — no tiene acceso a la ficha de servicio del cliente
+// (ClientServiceDetailView.vue, bloqueada por rol), asi que todo tiene que
+// poder completarse aqui mismo (Fase 64b). ----
 const showCompleteModal = ref(false);
 const completingInstallation = ref<Installation | null>(null);
 const completeSaving = ref(false);
@@ -516,6 +520,7 @@ const completePhotos = ref<Partial<Record<ClientPhotoCategory, File>>>({});
 
 const COMPLETE_PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] = [
   { value: 'facade', label: 'Fachada' },
+  { value: 'service_sheet', label: 'Hoja de servicio' },
   { value: 'nap_box', label: 'Caja NAP' },
   { value: 'modem_position', label: 'Posición del módem' },
   { value: 'pon_power', label: 'Potencia Óptica Recibida' },

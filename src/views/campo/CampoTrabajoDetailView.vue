@@ -257,6 +257,7 @@ async function handleAddMaterial() {
 // ---- Cierre de trabajo ----
 const INSTALL_PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] = [
   { value: 'facade', label: 'Fachada' },
+  { value: 'service_sheet', label: 'Hoja de servicio' },
   { value: 'nap_box', label: 'Caja NAP' },
   { value: 'modem_position', label: 'Posición del módem' },
   { value: 'pon_power', label: 'Potencia Óptica Recibida' },
