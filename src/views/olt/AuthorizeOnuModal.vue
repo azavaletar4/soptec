@@ -470,6 +470,29 @@ async function handleAuthorize() {
     }
   }
 
+  // PASO 6 — WAN/PPPoE por OMCI (Fase 75, experimental: validado una vez en
+  // una ONT de prueba, 2026-10-02, vlan-profile = el mismo numero de VLAN
+  // como texto, ej. "120"). Solo cuando se creo credencial nueva: es el
+  // unico caso en que esta pantalla tiene la clave en texto plano a mano —
+  // un secreto PPPoE "existente" no expone su clave, asi que ahi se deja
+  // para el boton manual en la ficha de la ONT (OntDetailModal.vue).
+  if (pppoeUsername && secretMode.value === 'create') {
+    try {
+      await oltStore.configureWanPppoe(props.deviceId, ontRow.id, {
+        username: pppoeUsername,
+        password: newSecretPassword.value,
+        vlanProfile: String(vlan.value),
+      });
+    } catch (e) {
+      submitWarnings.value.push(
+        getErrorMessage(
+          e,
+          'Todo lo demas quedo listo, pero no se pudo configurar el WAN/PPPoE del equipo por OMCI — usa el boton "Configurar WAN/PPPoE" en la ficha de la ONT, o configuralo a mano en la pagina web local.',
+        ),
+      );
+    }
+  }
+
   submitting.value = false;
   emit('authorized');
   // El modal se queda abierto mostrando el resultado (exito o avisos) — el

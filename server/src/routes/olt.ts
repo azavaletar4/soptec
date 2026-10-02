@@ -1020,12 +1020,15 @@ oltRoutes.post('/:id/onts/:ontDbId/resync', requireRole(...ONT_WRITE), async (c)
 });
 
 /**
- * EXPERIMENTAL — ver advertencia en configureWanPppoeCommands (Fase 75). NO
- * tocar en clientes reales todavia: solo probar en una ONT de baja
- * criticidad hasta confirmar que la sintaxis es correcta contra el equipo
- * real. No persiste username/password en ningun lado (se piden en el
- * formulario cada vez) — a diferencia de otras rutas, esta NO actualiza
- * olt_onts salvo last_synced_at, porque la credencial no es dato nuestro.
+ * Validado una vez contra el equipo real (2026-10-02) — ver advertencia en
+ * configureWanPppoeCommands (Fase 75), ahora tambien integrado al PASO 6 de
+ * handleAuthorize en AuthorizeOnuModal.vue (solo cuando se crea credencial
+ * PPPoE nueva). Este endpoint sigue existiendo aparte para configurarlo a
+ * mano (boton "Configurar WAN/PPPoE" en la ficha de la ONT) cuando ese paso
+ * automatico fallo o la credencial ya existia de antes. No persiste
+ * username/password en ningun lado (se piden en el formulario cada vez) — a
+ * diferencia de otras rutas, esta NO actualiza olt_onts salvo last_synced_at,
+ * porque la credencial no es dato nuestro.
  */
 oltRoutes.post('/:id/onts/:ontDbId/wan-pppoe', requireRole(...ONT_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));

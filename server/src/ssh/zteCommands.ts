@@ -187,19 +187,23 @@ export function disableTr069Commands(ref: ZteInterfaceRef, onuId: number, veip: 
 }
 
 /**
- * EXPERIMENTAL — NO VALIDADO contra el equipo real todavia. Sintaxis sacada
- * de documentacion de campo de terceros para ZTE C300/C320 (no el manual
- * oficial ZTE), ver Fase 75. Hipotesis: para una ONT router/HGU (ej.
- * GPT-2741GNAC) que hace su propio PPPoE, el `service-port` normal
- * (registerOntCommands) solo declara el servicio GPON del lado OLT, pero el
- * ONT nunca arma su WAN si nadie le manda el `wan-ip` por OMCI — aunque el
- * tecnico ya haya puesto las mismas credenciales a mano en la pagina web
- * local del equipo. `vlanProfile` tiene que ser un perfil YA EXISTENTE en
- * esta OLT (ver "show gpon onu profile vlan" o preguntar en SmartOLT que
- * nombre usa su "Configuration Preset") — este comando no lo crea.
+ * VALIDADO contra el equipo real una vez (2026-10-02, ONT de prueba
+ * HWTCB5AE49B4, gpon-onu_1/2/2:50, vlanProfile="120" — el nombre del perfil
+ * resulto ser el mismo numero de VLAN como texto, ya existente en esta OLT).
+ * Sintaxis sacada de documentacion de campo de terceros para ZTE C300/C320
+ * (no el manual oficial ZTE), ver Fase 75. Confirma la hipotesis: para una
+ * ONT router/HGU (ej. GPT-2741GNAC) que hace su propio PPPoE, el
+ * `service-port` normal (registerOntCommands) solo declara el servicio GPON
+ * del lado OLT, pero el ONT nunca arma su WAN si nadie le manda el `wan-ip`
+ * por OMCI — aunque el tecnico ya haya puesto las mismas credenciales a mano
+ * en la pagina web local del equipo. `vlanProfile` tiene que ser un perfil
+ * YA EXISTENTE en esta OLT — este comando no lo crea; probar primero con
+ * `String(vlan)` (funciono para VLAN 120) antes de inventar otro nombre.
  *
- * PROBAR PRIMERO EN LA ONT DE PRUEBA. Si el formato real de esta OLT difiere
- * (los "?"/autocompletado del CLI real mandan), corregir aca.
+ * Una sola confirmacion real no es "siempre funciona" — seguir probando en
+ * instalaciones nuevas (ahora integrado al PASO 6 de handleAuthorize en
+ * AuthorizeOnuModal.vue) antes de asumirlo 100% confiable en todas las
+ * zonas/VLANs.
  */
 export function configureWanPppoeCommands(params: {
   ref: ZteInterfaceRef;
