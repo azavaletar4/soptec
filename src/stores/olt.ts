@@ -264,12 +264,7 @@ export const useOltStore = defineStore('olt', () => {
     });
   }
 
-  /** Reenvia la misma config de servicio (tcont/gemport/service-port+VLAN) ya guardada — ver comentario en la ruta backend. */
-  async function resyncOnt(deviceId: string, ontDbId: string) {
-    return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/resync`, { method: 'POST' });
-  }
-
-  /** EXPERIMENTAL (Fase 75) — ver advertencia en la ruta backend /wan-pppoe. Solo probar en ONTs de baja criticidad. */
+  /** Empuja el WAN/PPPoE por OMCI (pon-onu-mng/wan-ip) — ver advertencia en la ruta backend /wan-pppoe. */
   async function configureWanPppoe(
     deviceId: string,
     ontDbId: string,
@@ -510,7 +505,6 @@ export const useOltStore = defineStore('olt', () => {
     syncOnts,
     registerOnt,
     toggleOnt,
-    resyncOnt,
     configureWanPppoe,
     deleteOnt,
     getSignal,

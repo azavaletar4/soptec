@@ -300,6 +300,12 @@ const loadingMikrotikProfiles = ref(false);
 const existingSecrets = ref<PppSecret[]>([]);
 const loadingSecrets = ref(false);
 const selectedSecretName = ref('');
+// Clave del secreto PPPoE YA EXISTENTE — MikroTik nunca devuelve la clave en
+// texto plano de un secreto ya creado, asi que si el tecnico la sabe la
+// escribe aca para que el PASO 6 (WAN/PPPoE por OMCI) pueda armarse solo.
+// Si se deja vacio, ese paso se salta (el equipo queda sin WAN configurada,
+// igual que antes de la Fase 75).
+const existingSecretPassword = ref('');
 
 // Excluye secretos ya vinculados a OTRO contrato del mismo router (mismo
 // criterio que ClientServiceDetailView.vue) — requiere el listado completo
@@ -470,17 +476,19 @@ async function handleAuthorize() {
     }
   }
 
-  // PASO 6 — WAN/PPPoE por OMCI (Fase 75, experimental: validado una vez en
-  // una ONT de prueba, 2026-10-02, vlan-profile = el mismo numero de VLAN
-  // como texto, ej. "120"). Solo cuando se creo credencial nueva: es el
-  // unico caso en que esta pantalla tiene la clave en texto plano a mano —
-  // un secreto PPPoE "existente" no expone su clave, asi que ahi se deja
-  // para el boton manual en la ficha de la ONT (OntDetailModal.vue).
-  if (pppoeUsername && secretMode.value === 'create') {
+  // PASO 6 — WAN/PPPoE por OMCI (Fase 75/76: confirmado contra el equipo
+  // real, vlan-profile = el mismo numero de VLAN como texto, ej. "120").
+  // Necesita la clave en texto plano: si se creo credencial nueva ya la
+  // tenemos (newSecretPassword); si es un secreto existente, MikroTik nunca
+  // devuelve su clave, asi que se usa la que el tecnico haya escrito a mano
+  // en existingSecretPassword (opcional — si la dejo vacia, este paso se
+  // salta y queda pendiente el boton manual en la ficha de la ONT).
+  const wanPassword = secretMode.value === 'create' ? newSecretPassword.value : existingSecretPassword.value;
+  if (pppoeUsername && wanPassword) {
     try {
       await oltStore.configureWanPppoe(props.deviceId, ontRow.id, {
         username: pppoeUsername,
-        password: newSecretPassword.value,
+        password: wanPassword,
         vlanProfile: String(vlan.value),
       });
     } catch (e) {
@@ -745,12 +753,22 @@ onMounted(async () => {
               <input v-model="newSecretPassword" class="field-input" />
             </div>
           </div>
-          <div v-else class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE existente</label>
-            <select v-model="selectedSecretName" class="field-input" :disabled="!mikrotikDeviceId || loadingSecrets">
-              <option value="" disabled>{{ loadingSecrets ? 'Cargando...' : 'Selecciona un secreto' }}</option>
-              <option v-for="s in availableSecrets" :key="s['.id']" :value="s.name">{{ s.name }}</option>
-            </select>
+          <div v-else class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE existente</label>
+              <select v-model="selectedSecretName" class="field-input" :disabled="!mikrotikDeviceId || loadingSecrets">
+                <option value="" disabled>{{ loadingSecrets ? 'Cargando...' : 'Selecciona un secreto' }}</option>
+                <option v-for="s in availableSecrets" :key="s['.id']" :value="s.name">{{ s.name }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Clave de ese secreto (opcional)</label>
+              <input v-model="existingSecretPassword" class="field-input" placeholder="Para configurar el WAN del equipo" />
+              <p class="text-[11px] text-slate-400 mt-1">
+                MikroTik no la expone — si la sabés, escribila para que SmartRayco arme el WAN/PPPoE del equipo solo.
+                Si la dejás vacía, lo configurás después a mano.
+              </p>
+            </div>
           </div>
           <div class="mb-4">
             <label class="block text-xs text-slate-600 mb-1">Perfil PPPoE (MikroTik)</label>

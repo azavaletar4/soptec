@@ -19,14 +19,12 @@ const oltStore = useOltStore();
 const signalLoading = ref(false);
 const signalError = ref<string | null>(null);
 
-const resyncing = ref(false);
-const resyncError = ref<string | null>(null);
-const resyncOk = ref(false);
-
-// ---- WAN/PPPoE experimental (Fase 75) — ver advertencia en zteCommands.ts
-// configureWanPppoeCommands. Oculto detras de un toggle: no es para uso
-// normal, solo para probar en una ONT de baja criticidad mientras se
-// confirma la sintaxis real contra la OLT. No persiste username/password. ----
+// ---- WAN/PPPoE por OMCI (Fase 75/76) — ver zteCommands.ts
+// configureWanPppoeCommands. "Autorizar ONU" ya lo hace solo cuando tiene la
+// clave en texto plano (credencial nueva, o existente si el tecnico la
+// escribio ahi); este boton manual queda para el resto de los casos (ej.
+// secreto existente sin clave a mano, o si el paso automatico fallo). No
+// persiste username/password en ningun lado. ----
 const wanPppoeOpen = ref(false);
 const wanPppoeForm = ref({ username: '', password: '', vlanProfile: '' });
 const wanPppoeSaving = ref(false);
@@ -82,25 +80,6 @@ async function refreshSignal() {
     signalError.value = getErrorMessage(e, 'Error al leer la señal óptica');
   } finally {
     signalLoading.value = false;
-  }
-}
-
-// Reenvia la misma config de servicio ya guardada (ver comentario en la ruta
-// backend /resync) — para ONTs que quedan autorizadas pero sin que el OMCI
-// realmente les haya llegado (señal/VLAN se ven bien pero el equipo no
-// levanta su WAN/PPPoE). Mismo efecto que "Resync config" en SmartOLT.
-async function resyncConfig() {
-  resyncing.value = true;
-  resyncError.value = null;
-  resyncOk.value = false;
-  try {
-    await oltStore.resyncOnt(props.device.id, props.ont.id);
-    await oltStore.fetchOnts(props.device.id);
-    resyncOk.value = true;
-  } catch (e) {
-    resyncError.value = getErrorMessage(e, 'Error al reaplicar la configuración en la OLT');
-  } finally {
-    resyncing.value = false;
   }
 }
 
@@ -242,27 +221,20 @@ async function toggleConfig() {
           <button class="btn-secondary" @click="toggleConfig">
             {{ configOpen ? 'Ocultar running-config' : 'Ver running-config' }}
           </button>
-          <button class="btn-secondary" :disabled="resyncing" @click="resyncConfig" title="Reenvía tcont/gemport/service-port+VLAN a la OLT, mismos valores ya guardados">
-            {{ resyncing ? 'Reaplicando...' : 'Reaplicar configuración' }}
-          </button>
           <button class="btn-primary" @click="emit('openTr069', ont)">Gestionar TR-069</button>
           <button class="btn-ghost ml-auto" @click="emit('close')">Cerrar</button>
         </div>
-        <p v-if="resyncError" class="text-xs text-red-600 mt-2">{{ resyncError }}</p>
-        <p v-if="resyncOk" class="text-xs text-emerald-600 mt-2">
-          Configuración reenviada a la OLT. Si el equipo no navegaba por esto, debería empezar en 1-2 minutos.
-        </p>
 
         <div class="mt-4 pt-3 border-t border-slate-200">
           <button class="text-xs text-amber-700 hover:underline" @click="wanPppoeOpen = !wanPppoeOpen">
-            {{ wanPppoeOpen ? 'Ocultar' : '⚠ Configurar WAN/PPPoE desde la OLT (experimental)' }}
+            {{ wanPppoeOpen ? 'Ocultar' : 'Configurar WAN/PPPoE desde la OLT' }}
           </button>
           <div v-if="wanPppoeOpen" class="mt-3 surface p-4 border border-amber-300">
             <p class="text-xs text-amber-700 mb-3">
-              Sin validar contra el equipo real todavía — probar solo en esta ONT de prueba, nunca en un cliente
-              real. Empuja el WAN/PPPoE por OMCI (<code>pon-onu-mng</code> / <code>wan-ip</code>) en vez de que el
-              técnico lo configure a mano en la página web local del equipo. El VLAN-profile debe existir YA creado
-              en la OLT.
+              Empuja el WAN/PPPoE por OMCI (<code>pon-onu-mng</code> / <code>wan-ip</code>) en vez de que el técnico
+              lo configure a mano en la página web local del equipo — "Autorizar ONU" ya hace esto solo cuando tiene
+              la clave a mano; usá este botón para el resto de los casos. El VLAN-profile debe existir YA creado en
+              la OLT.
             </p>
             <form class="grid sm:grid-cols-3 gap-3" @submit.prevent="submitWanPppoe">
               <div>

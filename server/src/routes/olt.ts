@@ -968,67 +968,16 @@ oltRoutes.put('/:id/onts/:ontDbId/plan', requireRole(...ONT_WRITE), async (c) =>
 });
 
 /**
- * Reaplica la configuracion de servicio (tcont/gemport/service-port+VLAN) de
- * una ONT YA REGISTRADA, con los mismos valores que ya tiene guardados en
- * olt_onts — ningun dato nuevo, es re-declarar lo mismo. Equivalente a lo
- * que hace "Resync config" en SmartOLT: la OLT puede guardar la config en su
- * CLI (se ve bien en "show running-config") sin que el canal OMCI llegue a
- * aplicarla de verdad en el ONT la primera vez — casos reales vistos: una
- * ONT recien autorizada que no levanta su WAN/PPPoE y se queda asi HORAS,
- * hasta que se le reenvia la misma config, ahi arranca. Usa
- * registerOntCommands (el mismo comando ya validado de "Autorizar ONU"), no
- * inventa sintaxis OMCI nueva.
- */
-oltRoutes.post('/:id/onts/:ontDbId/resync', requireRole(...ONT_WRITE), async (c) => {
-  const device = await getDeviceOrNull(c.req.param('id'));
-  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
-  const ont = await getOntOrNull(c.req.param('ontDbId'));
-  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
-  if (!ont.tcont_profile || !ont.traffic_profile) {
-    return c.json({ error: 'Esta ONT no tiene perfil tcont/traffic guardado — no se puede reaplicar.' }, 400);
-  }
-
-  try {
-    await withOltLock(device.id, () =>
-      runTelnetCommands(
-        telnetTargetFor(device),
-        registerOntCommands({
-          ref: { shelf: ont.frame, slot: ont.slot, port: ont.port },
-          onuId: ont.ont_id,
-          serial: ont.serial,
-          onuType: ont.onu_type,
-          vlan: ont.vlan,
-          description: ont.description ?? '',
-          tcontProfile: ont.tcont_profile,
-          trafficProfile: ont.traffic_profile,
-        }),
-      ),
-    );
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : 'Error al reaplicar la configuracion en la OLT' }, 502);
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from('olt_onts')
-    .update({ last_synced_at: new Date().toISOString() })
-    .eq('id', ont.id)
-    .select()
-    .single();
-  if (error) return c.json({ error: error.message }, 400);
-  oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
-  return c.json(data);
-});
-
-/**
- * Validado una vez contra el equipo real (2026-10-02) — ver advertencia en
- * configureWanPppoeCommands (Fase 75), ahora tambien integrado al PASO 6 de
- * handleAuthorize en AuthorizeOnuModal.vue (solo cuando se crea credencial
- * PPPoE nueva). Este endpoint sigue existiendo aparte para configurarlo a
- * mano (boton "Configurar WAN/PPPoE" en la ficha de la ONT) cuando ese paso
- * automatico fallo o la credencial ya existia de antes. No persiste
- * username/password en ningun lado (se piden en el formulario cada vez) — a
- * diferencia de otras rutas, esta NO actualiza olt_onts salvo last_synced_at,
- * porque la credencial no es dato nuestro.
+ * Validado contra el equipo real (2026-10-02) — ver advertencia en
+ * configureWanPppoeCommands (Fase 75/76). "Autorizar ONU" ya llama esto solo
+ * (PASO 6 de handleAuthorize en AuthorizeOnuModal.vue) cuando tiene la clave
+ * en texto plano a mano — credencial nueva, o existente si el tecnico la
+ * escribio en el formulario. Este endpoint sigue existiendo aparte para el
+ * boton manual "Configurar WAN/PPPoE" en la ficha de la ONT, para cuando ese
+ * paso automatico no corrio (secreto existente sin clave a mano) o fallo. No
+ * persiste username/password en ningun lado (se piden en el formulario cada
+ * vez) — a diferencia de otras rutas, esta NO actualiza olt_onts salvo
+ * last_synced_at, porque la credencial no es dato nuestro.
  */
 oltRoutes.post('/:id/onts/:ontDbId/wan-pppoe', requireRole(...ONT_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
