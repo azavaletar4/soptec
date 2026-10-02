@@ -36,7 +36,6 @@ const ICONS: Record<string, string> = {
   analitica: 'M4 19V10m6 9V5m6 14v-8m4 8H2M4 10l4-4 4 3 4-5',
   facturacion: 'M7 4h10a1 1 0 0 1 1 1v15l-3-2-2 2-2-2-2 2-3-2V5a1 1 0 0 1 1-1Zm2 5h6M9 12h6M9 15h3',
   cortes: 'M12 2v6M12 2 8 6m4-4 4 4M5.6 8.6a8 8 0 1 0 12.8 0',
-  instalaciones: 'M12 21s7-6.5 7-11.5A7 7 0 0 0 5 9.5C5 14.5 12 21 12 21ZM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
   'mapa-red': 'M4 17 9 7l5 7 3-4 3 6M4 20h16M9 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM17 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z',
   'mapa-clientes': 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14M15 6v14',
   inventario: 'M3 7l9-4 9 4-9 4-9-4Zm0 0v10l9 4 9-4V7M12 11v10',
