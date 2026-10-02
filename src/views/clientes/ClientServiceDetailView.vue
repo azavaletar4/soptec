@@ -522,6 +522,51 @@ async function handleUnassignUnitFromContract(unit: InventoryUnit) {
   }
 }
 
+// ---- Buscar un equipo en bodega (stock) por modelo y asignarlo directo a
+// esta linea: cubre router/ONU/TV Box/Mesh ya registrados en inventario
+// (ej. de un import masivo) que todavia no tienen cliente. Antes solo existia
+// este flujo para ONT (OLT); para el resto del inventario solo se podia
+// reasignar equipo que YA fuera de este mismo cliente, o crear uno nuevo
+// a mano — sin forma de tomar algo que ya estaba en bodega.
+const stockProducts = computed(() => inventoryStore.products.filter((p) => p.is_serialized));
+const stockProductId = ref('');
+const stockAvailableUnits = ref<InventoryUnit[]>([]);
+const loadingStockUnits = ref(false);
+const stockUnitId = ref('');
+
+async function handleStockProductChange() {
+  stockUnitId.value = '';
+  stockAvailableUnits.value = [];
+  if (!stockProductId.value) return;
+  loadingStockUnits.value = true;
+  try {
+    const units = await inventoryUnitsStore.fetchUnitsByProduct(stockProductId.value);
+    stockAvailableUnits.value = units.filter((u) => u.status === 'in_stock');
+  } finally {
+    loadingStockUnits.value = false;
+  }
+}
+
+async function handleAssignStockUnitToContract() {
+  if (!stockUnitId.value || !contract.value) return;
+  equipoTabSaving.value = true;
+  equipoTabError.value = null;
+  try {
+    await inventoryUnitsStore.assignUnit(stockUnitId.value, clientId.value, {
+      contractId: contract.value.id,
+      reason: 'Asignacion desde ficha de servicio (equipo en bodega)',
+    });
+    stockProductId.value = '';
+    stockUnitId.value = '';
+    stockAvailableUnits.value = [];
+    await loadUnits();
+  } catch (e) {
+    equipoTabError.value = getErrorMessage(e, 'Error al asignar el equipo');
+  } finally {
+    equipoTabSaving.value = false;
+  }
+}
+
 const ontSearchQuery = ref('');
 const ontSearchResults = ref<UnlinkedOnt[]>([]);
 const searchingOnt = ref(false);
@@ -1572,7 +1617,7 @@ onMounted(async () => {
         </template>
 
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-semibold">Equipo de inventario (router/ONU)</h3>
+          <h3 class="text-sm font-semibold">Equipo de inventario (router/ONU/TV Box)</h3>
           <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="openAddUnit">+ Agregar equipo</button>
         </div>
         <p v-if="recoveryError" class="text-sm text-red-600 mb-2">{{ recoveryError }}</p>
@@ -1608,6 +1653,33 @@ onMounted(async () => {
             <button type="button" class="btn-ghost whitespace-nowrap" :disabled="!reassignUnitId || equipoTabSaving" @click="handleAssignUnitToContract">
               Asignar
             </button>
+          </div>
+
+          <div class="mt-2">
+            <p class="text-xs text-slate-500 mb-2">
+              O busca un equipo nuevo ya registrado en inventario (la mayoría vienen de un import masivo sin cliente asignado):
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <select v-model="stockProductId" class="field-input" @change="handleStockProductChange">
+                <option value="">Selecciona el modelo...</option>
+                <option v-for="p in stockProducts" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+              <select v-model="stockUnitId" class="field-input" :disabled="!stockProductId || loadingStockUnits">
+                <option value="">{{ loadingStockUnits ? 'Cargando...' : 'Equipo disponible...' }}</option>
+                <option v-for="u in stockAvailableUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
+              </select>
+              <button
+                type="button"
+                class="btn-ghost whitespace-nowrap"
+                :disabled="!stockUnitId || equipoTabSaving"
+                @click="handleAssignStockUnitToContract"
+              >
+                Asignar
+              </button>
+            </div>
+            <p v-if="stockProductId && !loadingStockUnits && !stockAvailableUnits.length" class="text-xs text-amber-700 mt-1">
+              No hay unidades de este modelo disponibles en bodega.
+            </p>
           </div>
         </template>
       </div>
