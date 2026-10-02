@@ -553,6 +553,17 @@ function useCurrentLocation() {
   );
 }
 
+// Respaldo manual (Fase 67): si el GPS del celular no lee o da una posicion
+// imprecisa, se abre Google Maps para que el tecnico ubique el punto el
+// mismo — mantener presionado el pin en Maps muestra las coordenadas, listas
+// para copiar y pegar en Latitud/Longitud de aca arriba.
+const gpsMapsLink = computed(() => {
+  const { latitude, longitude } = completeGps.value;
+  return latitude != null && longitude != null
+    ? `https://www.google.com/maps/@${latitude},${longitude},18z`
+    : 'https://www.google.com/maps';
+});
+
 function onCompletePhotoChange(category: ClientPhotoCategory, event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -1040,21 +1051,30 @@ function formatDate(value: string | null) {
           <div class="grid grid-cols-2 gap-3 mb-2">
             <div>
               <label class="block text-xs text-slate-600 mb-1">Latitud</label>
-              <input v-model.number="completeGps.latitude" type="number" step="0.000001" class="field-input" />
+              <input v-model.number="completeGps.latitude" type="number" step="any" class="field-input" />
             </div>
             <div>
               <label class="block text-xs text-slate-600 mb-1">Longitud</label>
-              <input v-model.number="completeGps.longitude" type="number" step="0.000001" class="field-input" />
+              <input v-model.number="completeGps.longitude" type="number" step="any" class="field-input" />
             </div>
           </div>
-          <button
-            type="button"
-            :disabled="gettingLocation"
-            class="text-xs text-sky-700 hover:text-sky-700 mb-4"
-            @click="useCurrentLocation"
-          >
-            {{ gettingLocation ? 'Obteniendo ubicación...' : '📍 Usar mi ubicación actual' }}
-          </button>
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <button
+              type="button"
+              :disabled="gettingLocation"
+              class="text-xs text-sky-700 hover:text-sky-700"
+              @click="useCurrentLocation"
+            >
+              {{ gettingLocation ? 'Obteniendo ubicación...' : '📍 Usar mi ubicación actual' }}
+            </button>
+            <a :href="gpsMapsLink" target="_blank" rel="noopener" class="text-xs text-sky-700 hover:underline">
+              🗺️ Ubicar en Google Maps
+            </a>
+          </div>
+          <p class="text-[11px] text-slate-400 -mt-3 mb-4">
+            Si el GPS no lee bien, abre Maps, mantén presionado el punto exacto y copia las coordenadas que
+            aparecen abajo — pégalas en Latitud/Longitud de arriba.
+          </p>
 
           <h3 class="text-sm font-semibold mb-2">Fotos de instalación</h3>
           <div class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))">
