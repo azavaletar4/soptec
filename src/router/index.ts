@@ -236,7 +236,12 @@ const router = createRouter({
 // de aterrizaje tras login, o cuando intenta entrar a algo que no le toca,
 // es Instalaciones en vez de Dashboard.
 function homeFor(role: string | null) {
-  return role === 'TECNICO_RED' ? { name: 'campo' } : { name: 'dashboard' };
+  // Debe coincidir con el destino post-login de LoginView.vue (Instalaciones,
+  // no Campo) — si no, el boton "Inicio" de la app movil (que simplemente
+  // carga la raiz del panel) termina en una pantalla distinta a la que ve el
+  // tecnico justo despues de loguearse, que es la que de hecho considera "el
+  // inicio".
+  return role === 'TECNICO_RED' ? { name: 'instalaciones' } : { name: 'dashboard' };
 }
 
 router.beforeEach(async (to) => {
