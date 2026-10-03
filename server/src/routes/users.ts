@@ -216,8 +216,12 @@ usersRoutes.delete('/:id', requireRole(...MANAGE), async (c) => {
     // profiles sin ON DELETE CASCADE (por diseno, para no perder historial)
     // — si el usuario tiene actividad registrada, Postgres rechaza el
     // delete con una violacion de FK. Se explica en vez de mostrar el error
-    // crudo de Postgres.
-    const message = /foreign key|violat/i.test(error.message)
+    // crudo. Supabase Auth no siempre deja pasar el texto real de Postgres:
+    // cuando el DELETE de auth.users cascadea a profiles y ahi choca con la
+    // FK, GoTrue lo envuelve en el mensaje generico "Database error deleting
+    // user" — en este esquema esa es, en la practica, siempre la misma causa
+    // (historial asociado), asi que tambien se traduce.
+    const message = /foreign key|violat|database error/i.test(error.message)
       ? 'No se puede eliminar: este usuario tiene historial asociado (tickets, instalaciones, movimientos de inventario, etc.). Desactívalo en su lugar.'
       : error.message;
     return c.json({ error: message }, 400);
