@@ -26,7 +26,7 @@ async function handleSubmit() {
       return;
     }
     await auth.signIn(email, password.value);
-    router.push(auth.role === 'TECNICO_RED' ? '/soporte/instalaciones' : '/dashboard');
+    router.push(auth.role === 'TECNICO_RED' ? '/soporte' : '/dashboard');
   } catch (e) {
     error.value = getErrorMessage(e, 'Error al iniciar sesion');
   } finally {
