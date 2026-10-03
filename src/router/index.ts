@@ -13,6 +13,16 @@ const router = createRouter({
     { path: '/', redirect: '/login' },
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
     {
+      // Fase 80: pantalla de cambio de contraseña — propia vision y tambien
+      // destino forzado cuando auth.mustChangePassword esta en true (ver
+      // beforeEach abajo). Sin restriccion de roles: cualquier cuenta de
+      // staff autenticada puede entrar aqui.
+      path: '/cambiar-password',
+      name: 'cambiar-password',
+      component: () => import('@/views/auth/CambiarPasswordView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('@/views/DashboardView.vue'),
@@ -235,6 +245,12 @@ router.beforeEach(async (to) => {
 
   if (to.meta.requiresAuth && !auth.user) {
     return { name: 'login' };
+  }
+  // Clave reseteada por un SUPERADMIN (Fase 80): bloquea cualquier otra
+  // pantalla hasta que elija una propia. Va antes del chequeo de roles
+  // porque /cambiar-password no tiene roles y debe ganarle a todo lo demas.
+  if (auth.user && auth.mustChangePassword && to.name !== 'cambiar-password') {
+    return { name: 'cambiar-password' };
   }
   const roles = to.meta.roles as string[] | undefined;
   if (roles && !roles.includes(auth.role ?? '')) {

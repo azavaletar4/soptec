@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { createClient } from '@supabase/supabase-js';
 import { requireAuth, requireRole, invalidateProfileCache } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import type { Role } from '../types';
@@ -14,10 +15,51 @@ const MANAGE = ['SUPERADMIN'] as const;
 // administradores).
 const ASSIGNABLE_ROLES: Role[] = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE', 'FACTURACION'];
 
-const PROFILE_FIELDS = 'id, email, username, full_name, phone, role, active, created_at';
+const PROFILE_FIELDS = 'id, email, username, full_name, phone, role, active, must_change_password, created_at';
 const USERNAME_RE = /^[a-zA-Z0-9._-]{3,32}$/;
 
+// Clave a la que un SUPERADMIN resetea la cuenta de alguien que olvido la
+// suya (Fase 80) — junto con must_change_password=true, bloquea al usuario
+// en /cambiar-password hasta que elija una propia.
+const DEFAULT_RESET_PASSWORD = '12345678';
+
 usersRoutes.use('*', requireAuth);
+
+// Cambio de contraseña por el propio usuario (cualquier rol de staff, no solo
+// SUPERADMIN) — por eso va ANTES de /:id/reset-password: con 2 segmentos
+// ambas rutas podrian calzar con "me" como :id si esta se registrara despues.
+// Pide la contraseña actual (verificada contra Auth con la anon key, nunca
+// con la service_role) en vez de confiar en que la sesion siga activa.
+usersRoutes.post('/me/change-password', async (c) => {
+  const currentUser = c.get('user');
+  if (!currentUser.email) return c.json({ error: 'No se pudo verificar la cuenta' }, 400);
+
+  const body = await c.req.json();
+  const currentPassword = typeof body.current_password === 'string' ? body.current_password : '';
+  const newPassword = typeof body.new_password === 'string' ? body.new_password : '';
+
+  if (!currentPassword) return c.json({ error: 'Ingresa tu contraseña actual' }, 400);
+  if (newPassword.length < 8) return c.json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' }, 400);
+  if (newPassword === currentPassword) {
+    return c.json({ error: 'La nueva contraseña debe ser distinta a la actual' }, 400);
+  }
+
+  const supabaseUrl = process.env.VITE_SUPABASE_URL ?? '';
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? '';
+  const anonClient = createClient(supabaseUrl, anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { error: verifyErr } = await anonClient.auth.signInWithPassword({
+    email: currentUser.email,
+    password: currentPassword,
+  });
+  if (verifyErr) return c.json({ error: 'La contraseña actual no es correcta' }, 400);
+
+  const { error: pwErr } = await supabaseAdmin.auth.admin.updateUserById(currentUser.id, { password: newPassword });
+  if (pwErr) return c.json({ error: pwErr.message }, 400);
+
+  await supabaseAdmin.from('profiles').update({ must_change_password: false }).eq('id', currentUser.id);
+
+  return c.json({ ok: true });
+});
 
 usersRoutes.get('/', requireRole(...MANAGE), async (c) => {
   const { data, error } = await supabaseAdmin
@@ -137,6 +179,28 @@ usersRoutes.patch('/:id', requireRole(...MANAGE), async (c) => {
 
   const { data, error: readErr } = await supabaseAdmin.from('profiles').select(PROFILE_FIELDS).eq('id', id).single();
   if (readErr) return c.json({ error: readErr.message }, 400);
+  return c.json(data);
+});
+
+// Resetea la clave a un valor por defecto conocido (cuando un usuario olvido
+// la suya) y lo obliga a cambiarla en su proximo ingreso — a diferencia del
+// campo "password" del PATCH de arriba (clave elegida por el admin, sin
+// forzar cambio), esta accion es explicitamente el flujo de "se me olvido".
+usersRoutes.post('/:id/reset-password', requireRole(...MANAGE), async (c) => {
+  const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Falta el id' }, 400);
+
+  const { error: pwErr } = await supabaseAdmin.auth.admin.updateUserById(id, { password: DEFAULT_RESET_PASSWORD });
+  if (pwErr) return c.json({ error: pwErr.message }, 400);
+
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .update({ must_change_password: true })
+    .eq('id', id)
+    .select(PROFILE_FIELDS)
+    .single();
+  if (error) return c.json({ error: error.message }, 400);
+
   return c.json(data);
 });
 

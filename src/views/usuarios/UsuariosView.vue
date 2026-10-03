@@ -104,6 +104,20 @@ async function handleToggleActive(u: UserAccount) {
   }
 }
 
+async function handleResetPassword(u: UserAccount) {
+  const ok = await confirmDialog({
+    title: 'Restablecer contraseña',
+    message: `La contraseña de ${u.full_name ?? u.email} quedará en "12345678" y deberá cambiarla al iniciar sesión. ¿Continuar?`,
+  });
+  if (!ok) return;
+  try {
+    await usersStore.resetPassword(u.id);
+    toast.success('Contraseña restablecida a la clave por defecto');
+  } catch (e) {
+    toast.error(getErrorMessage(e, 'Error al restablecer la contraseña'));
+  }
+}
+
 async function handleDelete(u: UserAccount) {
   const ok = await confirmDialog({
     title: 'Eliminar usuario',
@@ -172,9 +186,13 @@ async function handleDelete(u: UserAccount) {
               <span class="badge" :class="u.active ? 'bg-green-500/15 text-green-600' : 'bg-slate-500/15 text-slate-600'">
                 {{ u.active ? 'Activo' : 'Desactivado' }}
               </span>
+              <span v-if="u.must_change_password" class="badge bg-amber-500/15 text-amber-700 ml-1">
+                Pendiente cambio clave
+              </span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
               <button class="text-slate-600 hover:text-slate-900" @click="openEdit(u)">Editar</button>
+              <button class="text-sky-600 hover:text-sky-700" @click="handleResetPassword(u)">Resetear clave</button>
               <button
                 v-if="u.id !== auth.user?.id"
                 class="text-amber-600 hover:text-amber-700"

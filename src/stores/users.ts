@@ -49,5 +49,15 @@ export const useUsersStore = defineStore('users', () => {
     users.value = users.value.filter((u) => u.id !== id);
   }
 
-  return { users, loading, error, fetchUsers, createUser, updateUser, deleteUser };
+  // Resetea a la clave por defecto y marca must_change_password=true (Fase 80)
+  // — distinto de updateUser({ password }), que deja una clave elegida por el
+  // admin sin forzar cambio.
+  async function resetPassword(id: string) {
+    const updated = await apiFetch<UserAccount>(`/api/users/${id}/reset-password`, { method: 'POST' });
+    const idx = users.value.findIndex((u) => u.id === id);
+    if (idx !== -1) users.value[idx] = updated;
+    return updated;
+  }
+
+  return { users, loading, error, fetchUsers, createUser, updateUser, deleteUser, resetPassword };
 });

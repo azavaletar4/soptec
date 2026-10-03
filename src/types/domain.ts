@@ -186,6 +186,7 @@ export interface UserAccount {
   phone: string | null;
   role: StaffRole;
   active: boolean;
+  must_change_password: boolean;
   created_at: string;
 }
 

@@ -70,6 +70,20 @@ onBeforeUnmount(() => {
       </span>
 
       <button
+        class="p-2 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
+        aria-label="Cambiar contraseña"
+        title="Cambiar contraseña"
+        @click="router.push('/cambiar-password')"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path
+            d="M15 7a4 4 0 1 0-3.874 4.997L7 16.123V19h2.877l4.126-4.126A4 4 0 0 0 15 7Zm0 0h.01M16.5 15.5 19 18"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+      <button
         class="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-500/10 transition-colors"
         aria-label="Cerrar sesión"
         @click="handleLogout"
