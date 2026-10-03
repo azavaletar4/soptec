@@ -1,9 +1,10 @@
-/** Normaliza numeros ecuatorianos (celular con 0 inicial o ya con 593) a
- *  formato E.164 sin '+' para enlaces de WhatsApp (wa.me) y tel:. */
+/** Normaliza celulares peruanos (9 digitos, ej. 987654321) a formato E.164
+ *  sin '+' para enlaces de WhatsApp (wa.me) y tel:. Sin el codigo de pais
+ *  (51) wa.me no resuelve el contacto correcto. */
 export function toWhatsappNumber(phone: string): string {
   const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('593')) return digits;
-  if (digits.startsWith('0')) return `593${digits.slice(1)}`;
+  if (digits.startsWith('51') && digits.length > 9) return digits;
+  if (digits.length === 9) return `51${digits}`;
   return digits;
 }
 

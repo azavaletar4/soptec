@@ -7,6 +7,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
+import { waLink } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
 import type { Ticket, TicketComment, TicketPriority, TicketStatus, TicketMotivoAveria, InventoryMovement } from '@/types/domain';
@@ -311,9 +312,20 @@ async function handleDelete() {
             · {{ ticket.clients?.phone || 'sin telefono' }} · {{ CATEGORY_LABEL[ticket.category] }}
           </p>
         </div>
-        <button v-if="canDelete" class="btn-ghost text-red-500/80 hover:text-red-600 text-sm" :disabled="deleting" @click="handleDelete">
-          {{ deleting ? 'Eliminando...' : 'Eliminar ticket' }}
-        </button>
+        <div class="flex items-center gap-2">
+          <a
+            v-if="ticket.clients?.phone"
+            :href="waLink(ticket.clients.phone)"
+            target="_blank"
+            rel="noopener"
+            class="btn-secondary text-sm"
+          >
+            💬 WhatsApp
+          </a>
+          <button v-if="canDelete" class="btn-ghost text-red-500/80 hover:text-red-600 text-sm" :disabled="deleting" @click="handleDelete">
+            {{ deleting ? 'Eliminando...' : 'Eliminar ticket' }}
+          </button>
+        </div>
       </div>
 
       <p v-if="actionError" class="mb-4 text-sm text-red-600">{{ actionError }}</p>
