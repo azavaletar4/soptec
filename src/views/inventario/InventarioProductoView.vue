@@ -682,7 +682,7 @@ async function handleDeleteProduct() {
                 </td>
                 <td class="px-4 py-3 text-slate-600 text-xs max-w-[220px] truncate" :title="u.notes ?? ''">{{ u.notes || '—' }}</td>
                 <td class="px-4 py-3 text-right">
-                  <div class="flex justify-end gap-1.5 flex-wrap">
+                  <div class="flex justify-end flex-wrap gap-x-4 gap-y-2">
                     <button class="text-xs text-slate-600 hover:text-slate-900" @click="openHistory(u)">Historial</button>
                     <button class="text-xs text-sky-700 hover:text-sky-700" @click="openEditUnit(u)">Editar</button>
                     <button v-if="u.status === 'in_stock'" class="text-xs text-sky-700 hover:text-sky-700" @click="openAssign(u)">Asignar</button>
