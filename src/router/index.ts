@@ -97,13 +97,13 @@ const router = createRouter({
       path: '/mapa/red',
       name: 'mapa-red',
       component: () => import('@/views/mapa/RedMapView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, roles: NOT_TECNICO },
     },
     {
       path: '/mapa/clientes',
       name: 'mapa-clientes',
       component: () => import('@/views/mapa/ClientesMapView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, roles: NOT_TECNICO },
     },
     {
       path: '/mapa/importar',
