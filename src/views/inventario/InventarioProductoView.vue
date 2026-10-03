@@ -412,6 +412,41 @@ async function openHistory(unit: InventoryUnit) {
   }
 }
 
+// ---- Menu de acciones por fila (Fase 83) ----
+// Antes cada fila mostraba todos sus botones sueltos en la celda: con varios
+// estados a la vez (Recupero, Averiado, Marcar Disponible...) quedaba
+// amontonado. Se reemplaza por un solo boton "⋮" que abre un menu, teleportado
+// a <body> y posicionado con las coordenadas reales del boton (no con
+// absolute dentro de la celda) para que no lo recorte el overflow-x-auto de
+// .table-shell.
+const actionsMenuUnit = ref<InventoryUnit | null>(null);
+const actionsMenuStyle = ref({ top: '0px', left: '0px' });
+
+function toggleActionsMenu(unit: InventoryUnit, event: MouseEvent) {
+  if (actionsMenuUnit.value?.id === unit.id) {
+    actionsMenuUnit.value = null;
+    return;
+  }
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const MENU_WIDTH = 220;
+  const MENU_HEIGHT_ESTIMATE = 260;
+  const openUpwards = rect.bottom + MENU_HEIGHT_ESTIMATE > window.innerHeight;
+  actionsMenuStyle.value = {
+    left: `${Math.max(8, rect.right - MENU_WIDTH)}px`,
+    top: openUpwards ? `${rect.top - MENU_HEIGHT_ESTIMATE}px` : `${rect.bottom + 4}px`,
+  };
+  actionsMenuUnit.value = unit;
+}
+
+function closeActionsMenu() {
+  actionsMenuUnit.value = null;
+}
+
+function runUnitAction(action: (unit: InventoryUnit) => void, unit: InventoryUnit) {
+  closeActionsMenu();
+  action(unit);
+}
+
 onMounted(async () => {
   if (!inventoryStore.products.length) await inventoryStore.fetchProducts();
   if (!inventoryStore.categories.length) await inventoryStore.fetchCategories();
@@ -658,7 +693,7 @@ async function handleDeleteProduct() {
                 <th class="text-left px-4 py-3">Estado</th>
                 <th class="text-left px-4 py-3">Cliente</th>
                 <th class="text-left px-4 py-3">Notas</th>
-                <th class="text-right px-4 py-3">Acciones</th>
+                <th class="text-center px-4 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -670,7 +705,7 @@ async function handleDeleteProduct() {
               </tr>
               <tr v-for="u in units" :key="u.id" class="border-t border-slate-200">
                 <td class="px-4 py-3 font-mono text-xs">{{ u.serial_number || '—' }}</td>
-                <td class="px-4 py-3 font-mono text-xs">{{ u.mac_address || '—' }}</td>
+                <td class="px-4 py-3 font-mono text-xs whitespace-nowrap">{{ u.mac_address || '—' }}</td>
                 <td class="px-4 py-3">
                   <span class="badge" :class="UNIT_STATUS_CLASS[u.status]">{{ UNIT_STATUS_LABEL[u.status] }}</span>
                 </td>
@@ -681,30 +716,90 @@ async function handleDeleteProduct() {
                   <span v-else>—</span>
                 </td>
                 <td class="px-4 py-3 text-slate-600 text-xs max-w-[220px] truncate" :title="u.notes ?? ''">{{ u.notes || '—' }}</td>
-                <td class="px-4 py-3 text-right">
-                  <div class="flex justify-end flex-wrap gap-x-4 gap-y-2">
-                    <button class="text-xs text-slate-600 hover:text-slate-900" @click="openHistory(u)">Historial</button>
-                    <button class="text-xs text-sky-700 hover:text-sky-700" @click="openEditUnit(u)">Editar</button>
-                    <button v-if="u.status === 'in_stock'" class="text-xs text-sky-700 hover:text-sky-700" @click="openAssign(u)">Asignar</button>
-                    <button v-if="u.status === 'assigned'" class="text-xs text-rose-700 hover:text-rose-700" @click="openRecovery(u)">🔁 Marcar para Recupero</button>
-                    <button v-if="u.status === 'assigned'" class="text-xs text-amber-700 hover:text-amber-700" @click="openReturn(u)">⚠ Averiado / Mantenimiento</button>
-                    <button v-if="u.status === 'in_repair'" class="text-xs text-green-600 hover:text-green-700" @click="handleMarkRepaired(u)">Marcar reparado</button>
-                    <button v-if="u.status === 'damaged' || u.status === 'in_repair' || u.status === 'en_recupero'" class="text-xs text-red-600 hover:text-red-700" @click="handleRetire(u)">Dar de baja</button>
-                    <button
-                      v-if="canDelete && u.status !== 'in_stock' && u.status !== 'retired'"
-                      class="text-xs text-emerald-700 hover:text-emerald-800"
-                      title="Corrección manual: forzar a disponible"
-                      @click="handleForceAvailable(u)"
-                    >
-                      ✅ Marcar Disponible
-                    </button>
-                    <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click="handleDeleteUnit(u)">Eliminar</button>
-                  </div>
+                <td class="px-4 py-3 text-center">
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                    aria-label="Acciones del equipo"
+                    @click="toggleActionsMenu(u, $event)"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="5" r="1.8" />
+                      <circle cx="12" cy="12" r="1.8" />
+                      <circle cx="12" cy="19" r="1.8" />
+                    </svg>
+                  </button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+
+        <Teleport to="body">
+          <div v-if="actionsMenuUnit" class="fixed inset-0 z-40" @click="closeActionsMenu"></div>
+          <div
+            v-if="actionsMenuUnit"
+            class="fixed z-50 w-[220px] rounded-xl border border-slate-200 bg-white shadow-lg py-1.5 flex flex-col"
+            :style="actionsMenuStyle"
+          >
+            <button class="text-left text-sm px-3 py-2 text-slate-600 hover:bg-slate-100" @click="runUnitAction(openHistory, actionsMenuUnit)">
+              Historial
+            </button>
+            <button class="text-left text-sm px-3 py-2 text-sky-700 hover:bg-slate-100" @click="runUnitAction(openEditUnit, actionsMenuUnit)">
+              Editar
+            </button>
+            <button
+              v-if="actionsMenuUnit.status === 'in_stock'"
+              class="text-left text-sm px-3 py-2 text-sky-700 hover:bg-slate-100"
+              @click="runUnitAction(openAssign, actionsMenuUnit)"
+            >
+              Asignar
+            </button>
+            <button
+              v-if="actionsMenuUnit.status === 'assigned'"
+              class="text-left text-sm px-3 py-2 text-rose-700 hover:bg-slate-100"
+              @click="runUnitAction(openRecovery, actionsMenuUnit)"
+            >
+              🔁 Marcar para Recupero
+            </button>
+            <button
+              v-if="actionsMenuUnit.status === 'assigned'"
+              class="text-left text-sm px-3 py-2 text-amber-700 hover:bg-slate-100"
+              @click="runUnitAction(openReturn, actionsMenuUnit)"
+            >
+              ⚠ Averiado / Mantenimiento
+            </button>
+            <button
+              v-if="actionsMenuUnit.status === 'in_repair'"
+              class="text-left text-sm px-3 py-2 text-green-600 hover:bg-slate-100"
+              @click="runUnitAction(handleMarkRepaired, actionsMenuUnit)"
+            >
+              Marcar reparado
+            </button>
+            <button
+              v-if="actionsMenuUnit.status === 'damaged' || actionsMenuUnit.status === 'in_repair' || actionsMenuUnit.status === 'en_recupero'"
+              class="text-left text-sm px-3 py-2 text-red-600 hover:bg-slate-100"
+              @click="runUnitAction(handleRetire, actionsMenuUnit)"
+            >
+              Dar de baja
+            </button>
+            <button
+              v-if="canDelete && actionsMenuUnit.status !== 'in_stock' && actionsMenuUnit.status !== 'retired'"
+              class="text-left text-sm px-3 py-2 text-emerald-700 hover:bg-slate-100"
+              title="Corrección manual: forzar a disponible"
+              @click="runUnitAction(handleForceAvailable, actionsMenuUnit)"
+            >
+              ✅ Marcar Disponible
+            </button>
+            <button
+              v-if="canDelete"
+              class="text-left text-sm px-3 py-2 text-red-600 hover:bg-slate-100"
+              @click="runUnitAction(handleDeleteUnit, actionsMenuUnit)"
+            >
+              Eliminar
+            </button>
+          </div>
+        </Teleport>
       </template>
     </template>
 
