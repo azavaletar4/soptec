@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import VueApexCharts from 'vue3-apexcharts';
+import type ApexCharts from 'apexcharts';
+import type { ApexChartEventOpts } from 'apexcharts';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useAnalyticsStore, type ClientDailyTotal, type TrafficSampleReport } from '@/stores/analytics';
 import { useAsyncAction } from '@/composables/useAsyncAction';
@@ -128,8 +130,9 @@ const topClientsOptions = computed(() => ({
     foreColor: '#64748b',
     background: 'transparent',
     events: {
-      dataPointSelection: (_e: unknown, _ctx: unknown, config: { dataPointIndex: number }) => {
-        const c = analytics.topClients[config.dataPointIndex];
+      dataPointSelection: (_e: MouseEvent, _chart?: ApexCharts, opts?: ApexChartEventOpts) => {
+        if (!opts) return;
+        const c = analytics.topClients[opts.dataPointIndex];
         if (c) openClientDaily(c.contract_id, c.client_name);
       },
     },
