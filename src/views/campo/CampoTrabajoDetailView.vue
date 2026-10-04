@@ -165,6 +165,13 @@ onMounted(async () => {
   if (!campoStore.trabajos.length) await campoStore.fetchAll();
   oltStore.fetchDevices().catch(() => {});
   inventoryStore.fetchProducts().catch(() => {});
+  // Pre-carga del Diagnostico express: se dispara apenas el tecnico ABRE
+  // esta orden puntual (una sola, la que esta viendo — no todo su listado),
+  // en paralelo, sin bloquear el resto de la pantalla. Para cuando
+  // efectivamente toque "Ejecutar" (leyo la ficha, llamo al cliente...) la
+  // respuesta de la OLT frecuentemente ya esta lista o casi, en vez de
+  // recien arrancar los ~20-60s que tarda leer RX+TX por Telnet.
+  runDiagnostico();
   await loadMaterials();
   if (trabajo.value) {
     await Promise.all([loadClientInfo(trabajo.value.clientId), loadExistingPhotos(trabajo.value.contractId)]);
@@ -177,27 +184,43 @@ onMounted(async () => {
 });
 
 // ---- Diagnostico express ----
+// Se dispara SOLO una por técnico-trabajo a la vez: la OLT real solo
+// tolera 1 sesion Telnet (Fase 77) y leer la señal de una ONU ya son 2
+// comandos secuenciales (~hasta 60s en el peor caso) — lanzar una segunda
+// consulta en paralelo mientras la primera sigue en vuelo seria tanto un
+// desperdicio como el mismo riesgo que withOltLock existe para evitar.
 const diagnostico = ref<DiagnosticoResult | null>(null);
 const diagLoading = ref(false);
 const diagError = ref<string | null>(null);
+let diagInFlight: Promise<void> | null = null;
 
-async function runDiagnostico() {
-  if (!trabajo.value) return;
+function runDiagnostico(): Promise<void> {
+  if (!trabajo.value) return Promise.resolve();
+  // Ya hay una consulta en curso (manual o la pre-carga automatica de
+  // abajo) — el tecnico se "sube" a esa misma respuesta en vez de pedir
+  // otra. Si ya habia terminado, esto es null y arranca una nueva (permite
+  // refrescar la lectura a mano cuando el tecnico quiera).
+  if (diagInFlight) return diagInFlight;
+
   diagLoading.value = true;
   diagError.value = null;
-  try {
-    diagnostico.value = await campoStore.runDiagnostico(trabajo.value.clientId, trabajo.value.contractId);
-  } catch (e) {
-    // A diferencia del cierre de trabajo, esto necesita hablar con la OLT en
-    // vivo — no se puede "guardar para mas tarde" como las fotos. Lo minimo
-    // que si se puede hacer es distinguir "sin señal, reintenta" de un error
-    // real, para no mandar al tecnico a buscar un problema que no existe.
-    diagError.value = isNetworkError(e)
-      ? 'Sin señal por ahora — revisa tu conexión y toca "Diagnóstico express" de nuevo.'
-      : getErrorMessage(e, 'No se pudo ejecutar el diagnóstico');
-  } finally {
-    diagLoading.value = false;
-  }
+  diagInFlight = (async () => {
+    try {
+      diagnostico.value = await campoStore.runDiagnostico(trabajo.value!.clientId, trabajo.value!.contractId);
+    } catch (e) {
+      // A diferencia del cierre de trabajo, esto necesita hablar con la OLT en
+      // vivo — no se puede "guardar para mas tarde" como las fotos. Lo minimo
+      // que si se puede hacer es distinguir "sin señal, reintenta" de un error
+      // real, para no mandar al tecnico a buscar un problema que no existe.
+      diagError.value = isNetworkError(e)
+        ? 'Sin señal por ahora — revisa tu conexión y toca "Diagnóstico express" de nuevo.'
+        : getErrorMessage(e, 'No se pudo ejecutar el diagnóstico');
+    } finally {
+      diagLoading.value = false;
+      diagInFlight = null;
+    }
+  })();
+  return diagInFlight;
 }
 
 function signalClass(rx: number | null) {
@@ -342,7 +365,7 @@ async function loadEquipos() {
   }
 }
 
-const outgoingForm = ref({ unitId: '', condition: 'in_repair' as 'damaged' | 'in_repair', reason: '' });
+const outgoingForm = ref({ unitId: '', condition: 'in_stock' as 'in_stock' | 'damaged' | 'in_repair', reason: '' });
 const savingOutgoing = ref(false);
 const outgoingError = ref<string | null>(null);
 
@@ -358,7 +381,7 @@ async function handleOutgoingUnit() {
       trabajo.value.clientId,
       jobId,
     );
-    outgoingForm.value = { unitId: '', condition: 'in_repair', reason: '' };
+    outgoingForm.value = { unitId: '', condition: 'in_stock', reason: '' };
     await loadEquipos();
   } catch (e) {
     outgoingError.value = getErrorMessage(e, 'Error al retirar el equipo');
@@ -812,6 +835,7 @@ async function handleCloseSubmit() {
                 </select>
                 <div class="flex gap-2">
                   <select v-model="outgoingForm.condition" class="field-input text-sm flex-1">
+                    <option value="in_stock">Volver a bodega (buen estado)</option>
                     <option value="in_repair">Enviar a garantía/reparación</option>
                     <option value="damaged">Dar de baja (dañado)</option>
                   </select>

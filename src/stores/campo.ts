@@ -216,7 +216,14 @@ export const useCampoStore = defineStore('campo', () => {
         const onts = await withTimeout(oltStore.fetchOntsByClient(clientId), 10000, 'Búsqueda de ONT');
         const ont = onts.find((o) => o.status === 'online') ?? onts[0];
         if (!ont) return;
-        const signal = await withTimeout(oltStore.getSignal(ont.olt_device_id, ont.id), 20000, 'Lectura de señal OLT');
+        // El backend lee RX y TX con 2 comandos Telnet SECUENCIALES, 30s de
+        // tope CADA UNO (readOntSignal en server/src/routes/olt.ts) — hasta
+        // 60s en el peor caso, mas lo que tarde en salir de la cola del
+        // mutex de la OLT (withOltLock) si el sync automatico esta activo.
+        // Con 20s aca, el frontend se rendia ANTES de que el backend
+        // terminara (o incluso antes de que fallara con su propio error
+        // real) — por eso "siempre" se veia timeout/502 sin detalle.
+        const signal = await withTimeout(oltStore.getSignal(ont.olt_device_id, ont.id), 65000, 'Lectura de señal OLT');
         result.ont = { found: true, rxPower: signal.rxPower, txPower: signal.txPower, status: ont.status };
       } catch (e) {
         result.ont.error = e instanceof Error ? e.message : 'Error al leer la OLT';
