@@ -119,6 +119,18 @@ const filteredClients = computed(() => {
     .slice(0, 30);
 });
 
+// Orden automatico (Fase 90): pendientes/programadas siempre arriba,
+// completadas/canceladas al fondo; como ultimo criterio, las mas recientes
+// primero. Instalaciones no tiene prioridad (a diferencia de Tickets), asi
+// que solo son 2 niveles. Reactivo: updateStatus reemplaza la instalacion en
+// el store, asi que este computed se reordena solo, sin recargar la pagina.
+const STATUS_SORT_TIER: Record<InstallationStatus, number> = {
+  pending: 0,
+  scheduled: 0,
+  completed: 1,
+  cancelled: 1,
+};
+
 const filteredInstallations = computed(() => {
   let list = installationsStore.installations;
   if (statusFilter.value !== 'all') list = list.filter((i) => i.status === statusFilter.value);
@@ -130,7 +142,11 @@ const filteredInstallations = computed(() => {
         .includes(q),
     );
   }
-  return list;
+  return [...list].sort((a, b) => {
+    const tierDiff = STATUS_SORT_TIER[a.status] - STATUS_SORT_TIER[b.status];
+    if (tierDiff !== 0) return tierDiff;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 });
 
 onMounted(async () => {

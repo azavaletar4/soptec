@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
+import TicketFlowGuide from '@/components/soporte/TicketFlowGuide.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
@@ -86,6 +87,25 @@ const STATUS_TABS: { value: TicketStatus | 'all'; label: string }[] = [
   { value: 'closed', label: 'Cerrados' },
 ];
 
+// Orden automatico (Fase 90): los activos (abierto/en progreso) siempre
+// arriba, resueltos/cerrados al fondo; dentro de los activos, por urgencia
+// (urgente > alta > media > baja); y como ultimo criterio, los mas
+// recientes primero. Es reactivo: como updateTicketStatus reemplaza el
+// ticket en ticketsStore.tickets, este computed se re-ordena solo en
+// cuanto cambia el estado, sin recargar la pagina.
+const STATUS_SORT_TIER: Record<TicketStatus, number> = {
+  open: 0,
+  in_progress: 0,
+  resolved: 1,
+  closed: 1,
+};
+const PRIORITY_SORT_RANK: Record<TicketPriority, number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
 const filteredTickets = computed(() => {
   let list = ticketsStore.tickets;
   if (statusFilter.value !== 'all') list = list.filter((t) => t.status === statusFilter.value);
@@ -97,7 +117,13 @@ const filteredTickets = computed(() => {
         .includes(q),
     );
   }
-  return list;
+  return [...list].sort((a, b) => {
+    const tierDiff = STATUS_SORT_TIER[a.status] - STATUS_SORT_TIER[b.status];
+    if (tierDiff !== 0) return tierDiff;
+    const priorityDiff = PRIORITY_SORT_RANK[a.priority] - PRIORITY_SORT_RANK[b.priority];
+    if (priorityDiff !== 0) return priorityDiff;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 });
 
 const filteredClients = computed(() => {
@@ -216,6 +242,8 @@ function formatDate(value: string) {
         </button>
       </div>
     </div>
+
+    <TicketFlowGuide />
 
     <div class="surface flex flex-col gap-3 p-3 mb-4 sm:flex-row sm:items-center">
       <input
