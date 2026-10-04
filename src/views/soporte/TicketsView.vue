@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
 import TicketFlowGuide from '@/components/soporte/TicketFlowGuide.vue';
+import TechnicianStatusBar from '@/components/soporte/TechnicianStatusBar.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
+import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
+import { formatElapsedTime } from '@/lib/elapsedTime';
 import type { ServiceContract, Ticket, TicketCategory, TicketPriority, TicketStatus } from '@/types/domain';
 
 const route = useRoute();
@@ -16,7 +19,42 @@ const router = useRouter();
 const ticketsStore = useTicketsStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
+const catalogsStore = useCatalogsStore();
 const auth = useAuthStore();
+
+const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
+
+// Reloj compartido para los cronometros en vivo (barra de tecnicos + chip
+// "en progreso" de cada ticket) — un solo interval para toda la vista.
+const now = ref(Date.now());
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+  clockTimer = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
+});
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer);
+});
+
+// Mismo criterio que TicketDetailView.vue: TECNICO_RED solo actua sobre lo
+// que tiene asignado; el resto del staff puede actuar sobre cualquier ticket.
+function canActOn(t: Ticket): boolean {
+  if (auth.role !== 'TECNICO_RED') return true;
+  return t.assigned_to === auth.user?.id;
+}
+
+const startingId = ref<string | null>(null);
+async function handleQuickStart(t: Ticket) {
+  startingId.value = t.id;
+  try {
+    await ticketsStore.updateTicketStatus(t.id, 'in_progress');
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al iniciar la orden'));
+  } finally {
+    startingId.value = null;
+  }
+}
 
 // Crear tickets es solo para ADMIN/SUPERADMIN; TECNICO_RED y SOPORTE
 // pueden ver/atender los que ya existen.
@@ -136,7 +174,7 @@ const filteredClients = computed(() => {
 });
 
 onMounted(async () => {
-  await Promise.all([ticketsStore.fetchTickets(), clientsStore.fetchClients()]);
+  await Promise.all([ticketsStore.fetchTickets(), clientsStore.fetchClients(), catalogsStore.fetchStaff()]);
   // Deep link desde la ficha de un servicio puntual (Fase 37):
   // /soporte?client_id=..&contract_id=.. abre el modal ya precargado, para
   // que el ticket quede asociado a ESA linea y no solo al cliente.
@@ -245,6 +283,8 @@ function formatDate(value: string) {
 
     <TicketFlowGuide />
 
+    <TechnicianStatusBar :technicians="technicians" :tickets="ticketsStore.tickets" :now="now" />
+
     <div class="surface flex flex-col gap-3 p-3 mb-4 sm:flex-row sm:items-center">
       <input
         v-model="searchQuery"
@@ -266,68 +306,127 @@ function formatDate(value: string) {
 
     <p v-if="ticketsStore.error" class="mb-4 text-sm text-red-600">{{ ticketsStore.error }}</p>
 
-    <div class="table-shell">
-      <table class="w-full text-sm min-w-[820px]">
-        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
-          <tr>
-            <th class="text-left px-4 py-3">Ticket</th>
-            <th class="text-left px-4 py-3">Cliente</th>
-            <th class="text-left px-4 py-3">Categoría</th>
-            <th class="text-left px-4 py-3">Prioridad</th>
-            <th class="text-left px-4 py-3">Estado</th>
-            <th class="text-left px-4 py-3">Asignado</th>
-            <th class="text-left px-4 py-3">Puntos</th>
-            <th class="text-left px-4 py-3">Creado</th>
-            <th v-if="canCreateTickets" class="text-right px-4 py-3">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="ticketsStore.loading">
-            <td :colspan="canCreateTickets ? 9 : 8" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
-          </tr>
-          <tr v-else-if="!filteredTickets.length">
-            <td :colspan="canCreateTickets ? 9 : 8" class="px-4 py-6 text-center text-slate-500">No hay tickets en este filtro.</td>
-          </tr>
-          <tr
-            v-for="t in filteredTickets"
-            :key="t.id"
-            class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
-            @click="goToDetail(t)"
-          >
-            <td class="px-4 py-3">
-              <div class="font-mono text-xs text-slate-500">{{ t.ticket_number }}</div>
-              <div class="text-slate-900">{{ t.title }}</div>
-            </td>
-            <td class="px-4 py-3 text-slate-600">
-              {{ t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : '—' }}
-            </td>
-            <td class="px-4 py-3 text-slate-600">{{ CATEGORY_LABEL[t.category] }}</td>
-            <td class="px-4 py-3">
-              <span class="badge" :class="PRIORITY_CLASS[t.priority]">
-                {{ PRIORITY_LABEL[t.priority] }}
-              </span>
-            </td>
-            <td class="px-4 py-3">
-              <span class="badge" :class="STATUS_CLASS[t.status]">
-                {{ STATUS_LABEL[t.status] }}
-              </span>
-            </td>
-            <td class="px-4 py-3 text-slate-600">{{ t.assigned_profile?.full_name || t.assigned_profile?.email || 'Sin asignar' }}</td>
-            <td class="px-4 py-3 text-slate-600">{{ t.points != null ? t.points : '—' }}</td>
-            <td class="px-4 py-3 text-slate-500 text-xs">{{ formatDate(t.created_at) }}</td>
-            <td v-if="canCreateTickets" class="px-4 py-3 text-right" @click.stop>
-              <button
-                class="text-xs text-red-500/80 hover:text-red-600"
-                :disabled="deletingId === t.id"
-                @click="handleDelete(t)"
-              >
-                {{ deletingId === t.id ? 'Eliminando...' : 'Eliminar' }}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <p v-if="ticketsStore.loading" class="text-center text-slate-500 py-6">Cargando...</p>
+    <p v-else-if="!filteredTickets.length" class="text-center text-slate-500 py-6">No hay tickets en este filtro.</p>
+
+    <template v-else>
+      <!-- Movil: cards (asi operan los tecnicos en campo) -->
+      <div class="flex flex-col gap-3 sm:hidden">
+        <div
+          v-for="t in filteredTickets"
+          :key="t.id"
+          class="surface p-3 cursor-pointer"
+          @click="goToDetail(t)"
+        >
+          <div class="flex items-start justify-between gap-2 mb-1.5">
+            <span class="font-mono text-xs text-slate-500" :title="formatDate(t.created_at)">{{ t.ticket_number }}</span>
+            <div class="flex gap-1.5 shrink-0">
+              <span class="badge text-[10px]" :class="STATUS_CLASS[t.status]">{{ STATUS_LABEL[t.status] }}</span>
+              <span class="badge text-[10px]" :class="PRIORITY_CLASS[t.priority]">{{ PRIORITY_LABEL[t.priority] }}</span>
+            </div>
+          </div>
+          <div class="text-slate-900 font-medium mb-1">
+            {{ t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : t.title }}
+          </div>
+          <div class="text-xs text-slate-500 mb-3">
+            {{ CATEGORY_LABEL[t.category] }} · {{ t.assigned_profile?.full_name || t.assigned_profile?.email || 'Sin asignar' }}
+          </div>
+
+          <div class="flex items-center justify-between gap-2" @click.stop>
+            <button
+              v-if="t.status === 'open' && t.assigned_to && canActOn(t)"
+              class="btn-primary flex-1 text-sm py-2"
+              :disabled="startingId === t.id"
+              @click="handleQuickStart(t)"
+            >
+              {{ startingId === t.id ? 'Iniciando...' : '▶ Iniciar orden' }}
+            </button>
+            <button
+              v-else-if="t.status === 'in_progress'"
+              class="btn-secondary flex-1 text-sm py-2"
+              @click="goToDetail(t)"
+            >
+              ⏱️ {{ formatElapsedTime(t.updated_at, now) }} · Finalizar
+            </button>
+            <button v-else class="btn-ghost flex-1 text-sm py-2" @click="goToDetail(t)">Ver detalle</button>
+            <button
+              v-if="canCreateTickets"
+              class="text-xs text-red-500/80 hover:text-red-600 shrink-0"
+              :disabled="deletingId === t.id"
+              @click="handleDelete(t)"
+            >
+              {{ deletingId === t.id ? '...' : 'Eliminar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desktop: tabla compacta (Puntos/fecha completa viven en el detalle) -->
+      <div class="table-shell hidden sm:block">
+        <table class="w-full text-sm min-w-[720px]">
+          <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+            <tr>
+              <th class="text-left px-4 py-3">Ticket</th>
+              <th class="text-left px-4 py-3">Cliente</th>
+              <th class="text-left px-4 py-3">Categoría</th>
+              <th class="text-left px-4 py-3">Prioridad</th>
+              <th class="text-left px-4 py-3">Estado</th>
+              <th class="text-left px-4 py-3">Asignado</th>
+              <th class="text-right px-4 py-3">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="t in filteredTickets"
+              :key="t.id"
+              class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
+              @click="goToDetail(t)"
+            >
+              <td class="px-4 py-3">
+                <div class="font-mono text-xs text-slate-500" :title="formatDate(t.created_at)">{{ t.ticket_number }}</div>
+                <div class="text-slate-900">{{ t.title }}</div>
+              </td>
+              <td class="px-4 py-3 text-slate-600">
+                {{ t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : '—' }}
+              </td>
+              <td class="px-4 py-3 text-slate-600">{{ CATEGORY_LABEL[t.category] }}</td>
+              <td class="px-4 py-3">
+                <span class="badge" :class="PRIORITY_CLASS[t.priority]">
+                  {{ PRIORITY_LABEL[t.priority] }}
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                <span class="badge" :class="STATUS_CLASS[t.status]">
+                  {{ STATUS_LABEL[t.status] }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-slate-600">{{ t.assigned_profile?.full_name || t.assigned_profile?.email || 'Sin asignar' }}</td>
+              <td class="px-4 py-3 text-right whitespace-nowrap" @click.stop>
+                <button
+                  v-if="t.status === 'open' && t.assigned_to && canActOn(t)"
+                  class="text-xs text-sky-700 hover:text-sky-800 font-medium mr-3"
+                  :disabled="startingId === t.id"
+                  @click="handleQuickStart(t)"
+                >
+                  {{ startingId === t.id ? 'Iniciando...' : '▶ Iniciar' }}
+                </button>
+                <span v-else-if="t.status === 'in_progress'" class="text-xs text-sky-700 mr-3">
+                  ⏱️ {{ formatElapsedTime(t.updated_at, now) }}
+                </span>
+                <button
+                  v-if="canCreateTickets"
+                  class="text-xs text-red-500/80 hover:text-red-600"
+                  :disabled="deletingId === t.id"
+                  @click="handleDelete(t)"
+                >
+                  {{ deletingId === t.id ? 'Eliminando...' : 'Eliminar' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
     <Teleport to="body">
       <div v-if="showModal" class="modal-overlay">
