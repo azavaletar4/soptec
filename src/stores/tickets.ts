@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import type { Ticket, TicketComment, TicketPriority, TicketStatus } from '@/types/domain';
 
 const TICKET_SELECT =
-  '*, clients(id, first_name, last_name, phone), assigned_profile:profiles!tickets_assigned_to_fkey(id, full_name, email)';
+  '*, clients(id, first_name, last_name, phone, latitude, longitude), assigned_profile:profiles!tickets_assigned_to_fkey(id, full_name, email)';
 
 const COMMENT_SELECT = '*, author:profiles!ticket_comments_author_id_fkey(id, full_name, email)';
 
@@ -77,14 +77,6 @@ export const useTicketsStore = defineStore('tickets', () => {
     return updateTicket(id, { priority });
   }
 
-  async function assignTicket(id: string, assignedTo: string | null) {
-    return updateTicket(id, { assigned_to: assignedTo });
-  }
-
-  async function assignTechnician(id: string, assignedTo: string | null, points: number | null) {
-    return updateTicket(id, { assigned_to: assignedTo, points });
-  }
-
   /**
    * Borra un ticket (limpieza de tickets de prueba). Si tenia materiales
    * (egresos de inventory_movements) registrados, primero los devuelve a
@@ -151,8 +143,6 @@ export const useTicketsStore = defineStore('tickets', () => {
     deleteTicket,
     updateTicketStatus,
     updateTicketPriority,
-    assignTicket,
-    assignTechnician,
     fetchComments,
     addComment,
   };

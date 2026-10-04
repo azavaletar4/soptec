@@ -2,21 +2,24 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import CrewAssignEditor from '@/components/soporte/CrewAssignEditor.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
+import { useTicketApprovalsStore, type PendingPhotoWithUrl } from '@/stores/ticketApprovals';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { waLink } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
-import type { Ticket, TicketComment, TicketPriority, TicketStatus, TicketMotivoAveria, InventoryMovement } from '@/types/domain';
+import type { Ticket, TicketComment, TicketPriority, TicketStatus, TicketMotivoAveria, InventoryMovement, InventoryUnit } from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
 const ticketsStore = useTicketsStore();
 const catalogs = useCatalogsStore();
 const inventoryStore = useInventoryStore();
+const ticketApprovalsStore = useTicketApprovalsStore();
 const auth = useAuthStore();
 
 // TECNICO_RED ve todos los tickets pero solo puede editar (estado,
@@ -52,6 +55,18 @@ const availableStatuses = computed(() => {
 // ejecuta, no puede subirse o bajarse la urgencia de lo que le tocó.
 const canChangePriority = computed(() => canEdit.value && auth.role !== 'TECNICO_RED');
 
+// Armar la cuadrilla (Fase 94) y fijar el puntaje manual es una decision de
+// despacho — mismo grupo de roles que puede escribir en job_assignees via
+// RLS (ver migracion); el tecnico asignado ejecuta pero no se auto-asigna
+// apoyo ni se pone puntaje.
+const canEditCrew = computed(() => ['SUPERADMIN', 'ADMIN', 'SOPORTE'].includes(auth.role ?? ''));
+
+const gpsMapsLink = computed(() => {
+  const lat = ticket.value?.clients?.latitude;
+  const lng = ticket.value?.clients?.longitude;
+  return lat != null && lng != null ? `https://www.google.com/maps/@${lat},${lng},18z` : null;
+});
+
 const ticketId = computed(() => route.params.id as string);
 const ticket = ref<Ticket | null>(null);
 const loading = ref(true);
@@ -63,10 +78,9 @@ const savingComment = ref(false);
 const updating = ref(false);
 const actionError = ref<string | null>(null);
 
-const showAssignModal = ref(false);
-const assignForm = ref({ assignedTo: '', points: null as number | null });
-const savingAssign = ref(false);
-const assignError = ref<string | null>(null);
+const pointsDraft = ref<number | null>(null);
+const savingPoints = ref(false);
+const pointsError = ref<string | null>(null);
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: 'Abierto',
@@ -120,6 +134,7 @@ async function loadTicket() {
     const found = ticketsStore.tickets.find((t) => t.id === ticketId.value);
     ticket.value = found ?? null;
     notFound.value = !found;
+    pointsDraft.value = found?.points ?? null;
   } finally {
     loading.value = false;
   }
@@ -167,8 +182,85 @@ async function handleAddMaterial() {
   }
 }
 
+// ---- Fotos y equipos del censo pendientes de aprobacion (Fase 95) ----
+const pendingPhotos = ref<PendingPhotoWithUrl[]>([]);
+const pendingEquipment = ref<InventoryUnit[]>([]);
+const loadingApprovals = ref(true);
+const approvalBusyId = ref<string | null>(null);
+const approvalError = ref<string | null>(null);
+
+async function loadApprovals() {
+  loadingApprovals.value = true;
+  try {
+    const [photos, equipment] = await Promise.all([
+      ticketApprovalsStore.fetchPendingPhotos(ticketId.value),
+      ticketApprovalsStore.fetchPendingEquipment(ticketId.value),
+    ]);
+    pendingPhotos.value = photos;
+    pendingEquipment.value = equipment;
+  } finally {
+    loadingApprovals.value = false;
+  }
+}
+
+async function handleApprovePhoto(photo: PendingPhotoWithUrl) {
+  if (!ticket.value?.contract_id) {
+    approvalError.value = 'Este ticket no tiene un servicio/línea asociado — no se puede aplicar a la ficha del cliente.';
+    return;
+  }
+  approvalBusyId.value = photo.id;
+  approvalError.value = null;
+  try {
+    await ticketApprovalsStore.approvePhoto(photo, ticket.value.client_id, ticket.value.contract_id);
+    await loadApprovals();
+  } catch (e) {
+    approvalError.value = getErrorMessage(e, 'Error al aprobar la foto');
+  } finally {
+    approvalBusyId.value = null;
+  }
+}
+
+async function handleRejectPhoto(photo: PendingPhotoWithUrl) {
+  approvalBusyId.value = photo.id;
+  approvalError.value = null;
+  try {
+    await ticketApprovalsStore.rejectPhoto(photo);
+    await loadApprovals();
+  } catch (e) {
+    approvalError.value = getErrorMessage(e, 'Error al rechazar la foto');
+  } finally {
+    approvalBusyId.value = null;
+  }
+}
+
+async function handleApproveEquipment(unit: InventoryUnit) {
+  approvalBusyId.value = unit.id;
+  approvalError.value = null;
+  try {
+    await ticketApprovalsStore.approveEquipment(unit);
+    await loadApprovals();
+  } catch (e) {
+    approvalError.value = getErrorMessage(e, 'Error al aprobar el equipo');
+  } finally {
+    approvalBusyId.value = null;
+  }
+}
+
+async function handleRejectEquipment(unit: InventoryUnit) {
+  approvalBusyId.value = unit.id;
+  approvalError.value = null;
+  try {
+    await ticketApprovalsStore.rejectEquipment(unit);
+    await loadApprovals();
+  } catch (e) {
+    approvalError.value = getErrorMessage(e, 'Error al rechazar el equipo');
+  } finally {
+    approvalBusyId.value = null;
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadTicket(), loadComments(), loadMaterials(), catalogs.fetchStaff(), inventoryStore.fetchProducts()]);
+  await Promise.all([loadTicket(), loadComments(), loadMaterials(), catalogs.fetchStaff(), inventoryStore.fetchProducts(), loadApprovals()]);
 });
 
 async function handleStatusChange(status: TicketStatus) {
@@ -255,28 +347,16 @@ async function handlePriorityChange(priority: TicketPriority) {
   }
 }
 
-function openAssignModal() {
+async function handleSavePoints() {
   if (!ticket.value) return;
-  assignForm.value = { assignedTo: ticket.value.assigned_to ?? '', points: ticket.value.points };
-  assignError.value = null;
-  showAssignModal.value = true;
-}
-
-async function handleAssignSubmit() {
-  if (!ticket.value) return;
-  savingAssign.value = true;
-  assignError.value = null;
+  savingPoints.value = true;
+  pointsError.value = null;
   try {
-    ticket.value = await ticketsStore.assignTechnician(
-      ticket.value.id,
-      assignForm.value.assignedTo || null,
-      assignForm.value.points,
-    );
-    showAssignModal.value = false;
+    ticket.value = await ticketsStore.updateTicket(ticket.value.id, { points: pointsDraft.value });
   } catch (e) {
-    assignError.value = getErrorMessage(e, 'Error al asignar el técnico');
+    pointsError.value = getErrorMessage(e, 'Error al guardar el puntaje');
   } finally {
-    savingAssign.value = false;
+    savingPoints.value = false;
   }
 }
 
@@ -349,6 +429,9 @@ async function handleDelete() {
           >
             💬 WhatsApp
           </a>
+          <a v-if="gpsMapsLink" :href="gpsMapsLink" target="_blank" rel="noopener" class="btn-secondary text-sm">
+            📍 Ver ubicación
+          </a>
           <button v-if="canDelete" class="btn-ghost text-red-500/80 hover:text-red-600 text-sm" :disabled="deleting" @click="handleDelete">
             {{ deleting ? 'Eliminando...' : 'Eliminar ticket' }}
           </button>
@@ -357,177 +440,232 @@ async function handleDelete() {
 
       <p v-if="actionError" class="mb-4 text-sm text-red-600">{{ actionError }}</p>
 
-      <div class="grid gap-4 mb-8 text-sm" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
-        <div class="surface p-4">
-          <div class="text-slate-500 text-xs mb-2">Estado</div>
-          <select
-            :value="ticket.status"
-            :disabled="updating || !canEdit"
-            class="field-input"
-            @change="handleStatusChange(($event.target as HTMLSelectElement).value as TicketStatus)"
-          >
-            <option v-for="[value, label] in availableStatuses" :key="value" :value="value">{{ label }}</option>
-          </select>
-        </div>
-        <div class="surface p-4">
-          <div class="text-slate-500 text-xs mb-2">Prioridad</div>
-          <select
-            :value="ticket.priority"
-            :disabled="updating || !canChangePriority"
-            class="field-input"
-            @change="handlePriorityChange(($event.target as HTMLSelectElement).value as TicketPriority)"
-          >
-            <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
-          </select>
-        </div>
-        <div class="surface p-4">
-          <div class="flex items-center justify-between mb-2">
-            <div class="text-slate-500 text-xs">Técnico designado</div>
-            <button v-if="canEdit" class="text-xs text-sky-700 hover:text-sky-700" @click="openAssignModal">
-              {{ ticket.assigned_to ? 'Editar' : 'Asignar' }}
-            </button>
-          </div>
-          <div class="font-medium">
-            {{ ticket.assigned_profile?.full_name || ticket.assigned_profile?.email || 'Sin asignar' }}
-          </div>
-          <div class="text-xs text-slate-500 mt-1">
-            {{ ticket.points != null ? `${ticket.points} puntos` : 'Sin puntaje' }}
-          </div>
-        </div>
-      </div>
-
-      <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-8 text-sm">
-        <div class="text-slate-500 text-xs mb-2">Descripción</div>
-        <p class="whitespace-pre-wrap">{{ ticket.description || 'Sin descripción.' }}</p>
-      </div>
-
-      <div v-if="ticket.motivo_averia" class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-8 text-sm">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-slate-500 text-xs">Motivo de cierre</div>
-          <span
-            class="badge text-[10px]"
-            :class="ticket.imputable_a_tecnico ? 'bg-amber-500/15 text-amber-700' : 'bg-emerald-500/15 text-emerald-700'"
-          >
-            {{ ticket.imputable_a_tecnico ? 'Imputable al técnico' : 'No imputable al técnico' }}
-          </span>
-        </div>
-        <p class="font-medium">{{ MOTIVO_LABEL[ticket.motivo_averia] }}</p>
-        <p v-if="ticket.observacion_cierre" class="text-slate-700 whitespace-pre-wrap mt-2">{{ ticket.observacion_cierre }}</p>
-        <button
-          v-if="ticket.evidencia_url"
-          type="button"
-          class="text-xs text-sky-700 hover:text-sky-700 mt-2"
-          :disabled="evidenciaLoading"
-          @click="openEvidencia"
-        >
-          {{ evidenciaLoading ? 'Abriendo...' : '📷 Ver evidencia' }}
-        </button>
-      </div>
-
-      <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-8 text-sm">
-        <h2 class="text-sm font-semibold mb-3">Materiales usados</h2>
-        <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
-        <template v-else>
-          <p v-if="!materials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en este ticket.</p>
-          <ul v-else class="space-y-1.5 mb-3">
-            <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
-              <span>{{ m.product?.name ?? 'Producto' }}</span>
-              <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }} · {{ formatDate(m.created_at) }}</span>
-            </li>
-          </ul>
-        </template>
-
-        <form v-if="canEdit" class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
-          <div class="flex-1 min-w-[160px]">
-            <label class="block text-xs text-slate-600 mb-1">Producto</label>
-            <select v-model="materialForm.productId" required class="field-input">
-              <option value="" disabled>Selecciona...</option>
-              <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">
-                {{ p.name }} ({{ p.current_stock }} {{ p.unit }} disp.)
-              </option>
-            </select>
-          </div>
-          <div class="w-24">
-            <label class="block text-xs text-slate-600 mb-1">Cantidad</label>
-            <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
-          </div>
-          <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
-            {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
-          </button>
-        </form>
-        <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
-      </div>
-
-      <h2 class="text-lg font-semibold mb-3">Seguimiento</h2>
-      <p v-if="loadingComments" class="text-slate-500 text-sm">Cargando...</p>
-      <div v-else class="space-y-3 mb-4">
-        <p v-if="!comments.length" class="text-slate-500 text-sm">Sin comentarios todavía.</p>
-        <div v-for="c in comments" :key="c.id" class="rounded-xl border border-slate-200 bg-slate-100 p-4 text-sm">
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-medium text-slate-800">{{ c.author?.full_name || c.author?.email || 'Usuario' }}</span>
-            <span class="text-xs text-slate-500">{{ formatDate(c.created_at) }}</span>
-          </div>
-          <p class="text-slate-700 whitespace-pre-wrap">{{ c.body }}</p>
-        </div>
-      </div>
-
-      <form v-if="canEdit" class="flex gap-2" @submit.prevent="handleAddComment">
-        <input
-          v-model="newComment"
-          placeholder="Agregar una nota de seguimiento..."
-          class="flex-1 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
-        />
-        <button
-          type="submit"
-          :disabled="savingComment || !newComment.trim()"
-          class="btn-primary"
-        >
-          {{ savingComment ? 'Enviando...' : 'Comentar' }}
-        </button>
-      </form>
-      <p v-else class="text-xs text-slate-400">Este ticket no está asignado a ti — solo puedes verlo.</p>
-    </template>
-
-    <Teleport to="body">
-      <div v-if="showAssignModal" class="modal-overlay">
-        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleAssignSubmit">
-          <h2 class="text-lg font-semibold mb-4">Asignar técnico</h2>
-
-          <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Técnico</label>
-            <select
-              v-model="assignForm.assignedTo"
-              class="field-input"
+      <div class="grid gap-4 lg:grid-cols-2">
+        <!-- Columna izquierda: cliente, descripcion, estado/prioridad -->
+        <div class="flex flex-col gap-4">
+          <div class="surface p-4 text-sm">
+            <div class="text-slate-500 text-xs mb-2">Cliente</div>
+            <router-link :to="`/clientes/${ticket.client_id}`" class="font-medium text-slate-900 hover:text-sky-600">
+              {{ ticket.clients ? `${ticket.clients.first_name} ${ticket.clients.last_name}` : 'Cliente' }}
+            </router-link>
+            <a
+              v-if="ticket.clients?.phone"
+              :href="waLink(ticket.clients.phone)"
+              target="_blank"
+              rel="noopener"
+              class="block text-sky-700 hover:underline mt-1"
             >
-              <option value="">Sin asignar</option>
-              <option v-for="s in catalogs.staff" :key="s.id" :value="s.id">{{ s.full_name || s.email }}</option>
-            </select>
+              💬 {{ ticket.clients.phone }}
+            </a>
+            <p v-else class="text-slate-500 mt-1">Sin teléfono</p>
+            <p class="text-slate-500 text-xs mt-2">{{ CATEGORY_LABEL[ticket.category] }}</p>
           </div>
 
-          <div class="mb-4">
-            <label class="block text-xs text-slate-600 mb-1">Puntos por este ticket</label>
-            <input
-              v-model.number="assignForm.points"
-              type="number"
-              step="1"
-              placeholder="Sin puntaje"
-              class="field-input"
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="surface p-4">
+              <div class="text-slate-500 text-xs mb-2">Estado</div>
+              <select
+                :value="ticket.status"
+                :disabled="updating || !canEdit"
+                class="field-input"
+                @change="handleStatusChange(($event.target as HTMLSelectElement).value as TicketStatus)"
+              >
+                <option v-for="[value, label] in availableStatuses" :key="value" :value="value">{{ label }}</option>
+              </select>
+            </div>
+            <div class="surface p-4">
+              <div class="text-slate-500 text-xs mb-2">Prioridad</div>
+              <select
+                :value="ticket.priority"
+                :disabled="updating || !canChangePriority"
+                class="field-input"
+                @change="handlePriorityChange(($event.target as HTMLSelectElement).value as TicketPriority)"
+              >
+                <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="surface p-4 text-sm">
+            <div class="text-slate-500 text-xs mb-2">Descripción</div>
+            <p class="whitespace-pre-wrap">{{ ticket.description || 'Sin descripción.' }}</p>
+          </div>
+
+          <div v-if="ticket.motivo_averia" class="surface p-4 text-sm">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-slate-500 text-xs">Motivo de cierre</div>
+              <span
+                class="badge text-[10px]"
+                :class="ticket.imputable_a_tecnico ? 'bg-amber-500/15 text-amber-700' : 'bg-emerald-500/15 text-emerald-700'"
+              >
+                {{ ticket.imputable_a_tecnico ? 'Imputable al técnico' : 'No imputable al técnico' }}
+              </span>
+            </div>
+            <p class="font-medium">{{ MOTIVO_LABEL[ticket.motivo_averia] }}</p>
+            <p v-if="ticket.observacion_cierre" class="text-slate-700 whitespace-pre-wrap mt-2">{{ ticket.observacion_cierre }}</p>
+            <button
+              v-if="ticket.evidencia_url"
+              type="button"
+              class="text-xs text-sky-700 hover:text-sky-700 mt-2"
+              :disabled="evidenciaLoading"
+              @click="openEvidencia"
+            >
+              {{ evidenciaLoading ? 'Abriendo...' : '📷 Ver evidencia' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Columna derecha: cuadrilla, materiales, seguimiento -->
+        <div class="flex flex-col gap-4">
+          <div
+            v-if="canEditCrew && (loadingApprovals || pendingPhotos.length || pendingEquipment.length)"
+            class="surface p-4 text-sm border-amber-300"
+          >
+            <div class="text-amber-700 text-xs font-medium mb-2">⏳ Pendientes de aprobación (censo de avería)</div>
+            <p v-if="loadingApprovals" class="text-xs text-slate-400">Cargando...</p>
+            <template v-else>
+              <div v-if="pendingPhotos.length" class="mb-3">
+                <p class="text-xs text-slate-500 mb-1.5">Fotos</p>
+                <div class="grid grid-cols-2 gap-2">
+                  <div v-for="p in pendingPhotos" :key="p.id" class="rounded-lg border border-slate-200 overflow-hidden">
+                    <img :src="p.url ?? undefined" class="w-full h-24 object-cover" />
+                    <div class="p-1.5">
+                      <p class="text-[11px] text-slate-600 truncate">{{ p.category }}</p>
+                      <div class="flex gap-1 mt-1">
+                        <button
+                          class="flex-1 text-[11px] text-green-700 bg-green-50 rounded px-1.5 py-0.5"
+                          :disabled="approvalBusyId === p.id"
+                          @click="handleApprovePhoto(p)"
+                        >
+                          ✓ Aprobar
+                        </button>
+                        <button
+                          class="flex-1 text-[11px] text-red-600 bg-red-50 rounded px-1.5 py-0.5"
+                          :disabled="approvalBusyId === p.id"
+                          @click="handleRejectPhoto(p)"
+                        >
+                          ✕ Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="pendingEquipment.length">
+                <p class="text-xs text-slate-500 mb-1.5">Equipos</p>
+                <div v-for="u in pendingEquipment" :key="u.id" class="flex items-center justify-between gap-2 text-xs py-1">
+                  <span class="truncate">{{ u.product?.name ?? 'Equipo' }} — {{ u.serial_number || u.mac_address }}</span>
+                  <span class="flex gap-1 shrink-0">
+                    <button
+                      class="text-[11px] text-green-700 bg-green-50 rounded px-1.5 py-0.5"
+                      :disabled="approvalBusyId === u.id"
+                      @click="handleApproveEquipment(u)"
+                    >
+                      ✓ Aprobar
+                    </button>
+                    <button
+                      class="text-[11px] text-red-600 bg-red-50 rounded px-1.5 py-0.5"
+                      :disabled="approvalBusyId === u.id"
+                      @click="handleRejectEquipment(u)"
+                    >
+                      ✕ Rechazar
+                    </button>
+                  </span>
+                </div>
+              </div>
+            </template>
+            <p v-if="approvalError" class="text-xs text-red-600 mt-2">{{ approvalError }}</p>
+          </div>
+
+          <div class="surface p-4 text-sm">
+            <div class="text-slate-500 text-xs mb-2">Cuadrilla asignada</div>
+            <CrewAssignEditor
+              job-type="ticket"
+              :job-id="ticket.id"
+              :technicians="catalogs.staff.filter((s) => s.role === 'TECNICO_RED')"
+              :readonly="!canEditCrew"
             />
+            <div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+              <label class="text-xs text-slate-500 shrink-0">Puntaje de la orden</label>
+              <input
+                v-model.number="pointsDraft"
+                type="number"
+                step="1"
+                placeholder="Automático (5/3)"
+                class="field-input py-1.5 text-xs w-28"
+                :disabled="!canEditCrew"
+                @blur="handleSavePoints"
+              />
+              <span v-if="savingPoints" class="text-[11px] text-slate-400">Guardando...</span>
+            </div>
+            <p v-if="pointsError" class="text-xs text-red-600 mt-1">{{ pointsError }}</p>
+            <p class="text-[11px] text-slate-400 mt-1">Se reparte en partes iguales entre los integrantes de la cuadrilla.</p>
           </div>
 
-          <p v-if="assignError" class="text-sm text-red-600 mb-3">{{ assignError }}</p>
+          <div class="surface p-4 text-sm">
+            <h2 class="text-sm font-semibold mb-3">Materiales usados</h2>
+            <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
+            <template v-else>
+              <p v-if="!materials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en este ticket.</p>
+              <ul v-else class="space-y-1.5 mb-3">
+                <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
+                  <span>{{ m.product?.name ?? 'Producto' }}</span>
+                  <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }} · {{ formatDate(m.created_at) }}</span>
+                </li>
+              </ul>
+            </template>
 
-          <div class="flex justify-end gap-2">
-            <button type="button" class="btn-ghost" @click="showAssignModal = false">
-              Cancelar
-            </button>
-            <button type="submit" :disabled="savingAssign" class="btn-primary">
-              {{ savingAssign ? 'Guardando...' : 'Guardar' }}
-            </button>
+            <form v-if="canEdit" class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
+              <div class="flex-1 min-w-[160px]">
+                <label class="block text-xs text-slate-600 mb-1">Producto</label>
+                <select v-model="materialForm.productId" required class="field-input">
+                  <option value="" disabled>Selecciona...</option>
+                  <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">
+                    {{ p.name }} ({{ p.current_stock }} {{ p.unit }} disp.)
+                  </option>
+                </select>
+              </div>
+              <div class="w-24">
+                <label class="block text-xs text-slate-600 mb-1">Cantidad</label>
+                <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
+              </div>
+              <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
+                {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
+              </button>
+            </form>
+            <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
           </div>
-        </form>
+
+          <div class="surface p-4 text-sm">
+            <h2 class="text-sm font-semibold mb-3">Seguimiento</h2>
+            <p v-if="loadingComments" class="text-slate-500 text-xs">Cargando...</p>
+            <div v-else class="space-y-3 mb-3">
+              <p v-if="!comments.length" class="text-slate-500 text-xs">Sin comentarios todavía.</p>
+              <div v-for="c in comments" :key="c.id" class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-medium text-slate-800 text-xs">{{ c.author?.full_name || c.author?.email || 'Usuario' }}</span>
+                  <span class="text-[11px] text-slate-500">{{ formatDate(c.created_at) }}</span>
+                </div>
+                <p class="text-slate-700 whitespace-pre-wrap text-xs">{{ c.body }}</p>
+              </div>
+            </div>
+
+            <form v-if="canEdit" class="flex gap-2" @submit.prevent="handleAddComment">
+              <input
+                v-model="newComment"
+                placeholder="Agregar una nota de seguimiento..."
+                class="field-input flex-1 text-xs"
+              />
+              <button type="submit" :disabled="savingComment || !newComment.trim()" class="btn-primary text-xs px-3">
+                {{ savingComment ? 'Enviando...' : 'Comentar' }}
+              </button>
+            </form>
+            <p v-else class="text-xs text-slate-400">Este ticket no está asignado a ti — solo puedes verlo.</p>
+          </div>
+        </div>
       </div>
-    </Teleport>
+    </template>
 
     <Teleport to="body">
       <div v-if="showCloseAveriaModal" class="modal-overlay">

@@ -36,6 +36,7 @@ const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   in_repair: 'En reparación',
   retired: 'Dado de baja',
   en_recupero: 'Por Recoger',
+  pending_approval: 'Pendiente de aprobación',
 };
 const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
@@ -44,6 +45,7 @@ const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-500/15 text-slate-600',
   en_recupero: 'bg-rose-500/15 text-rose-700',
+  pending_approval: 'bg-orange-500/15 text-orange-700',
 };
 
 const filteredUnits = computed(() => {

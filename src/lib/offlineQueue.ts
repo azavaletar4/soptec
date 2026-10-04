@@ -28,8 +28,14 @@ export interface QueuedClosure {
   photos: QueuedPhoto[];
   signatureBlob: Blob | null;
   clientPhotoCategories: string[]; // categorias que ademas deben reflejarse en client_photos (instalaciones)
+  /** Fase 95 — categorias del censo fotografico de una averia que quedan 'pending_approval' (no se aplican a client_photos hasta que un admin las apruebe). */
+  pendingApprovalCategories: string[];
   motivoAveria: string | null; // Fase 49 — solo aplica a tickets, no a instalaciones
   justificacionCierre: string | null;
+  /** Lectura manual de potencia optica (dBm) si la averia exigio recablear (Fase 95) — solo tickets. */
+  potenciaDbm: number | null;
+  /** Caja NAP nueva si hubo cambio de puerto (Fase 95) — solo tickets. */
+  napElementoId: string | null;
   lastError?: string;
 }
 

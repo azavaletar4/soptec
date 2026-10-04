@@ -25,7 +25,8 @@ export const AVERIA_TICKET_CATEGORIES: TicketCategory[] = ['no_service', 'slow_s
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled' | 'exonerada';
 export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
 export type InventoryMovementType = 'ingreso' | 'egreso';
-export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired' | 'en_recupero';
+export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired' | 'en_recupero' | 'pending_approval';
+export type WorkOrderPhotoStatus = 'pending_approval' | 'approved' | 'rejected';
 export type InfraElementoTipo = 'caja_nap' | 'splitter' | 'manga' | 'armario' | 'poste' | 'camara' | 'otro';
 export type VehiculoTipo = 'auto' | 'moto';
 export type VehiculoEstado = 'activo' | 'mantenimiento' | 'inactivo';
@@ -94,7 +95,7 @@ export interface Client {
   zones?: Pick<Zone, 'id' | 'name'> | null;
 }
 
-export type ClientPhotoCategory = 'facade' | 'service_sheet' | 'modem_position' | 'nap_box' | 'pon_power';
+export type ClientPhotoCategory = 'facade' | 'service_sheet' | 'modem_position' | 'nap_box' | 'pon_power' | 'equipment_sticker';
 
 export interface ClientPhoto {
   id: string;
@@ -215,7 +216,7 @@ export interface Ticket {
   observacion_cierre: string | null;
   /** Ruta dentro del bucket privado work-evidence (no una URL publica lista para usar). */
   evidencia_url: string | null;
-  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone'> | null;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'latitude' | 'longitude'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
 
@@ -289,6 +290,8 @@ export interface InventoryUnit {
   /** A que servicio/linea del cliente esta asignado este equipo (Fase 37) — null en clientes con un solo contrato historico (backfill automatico) o pendiente de asignar a mano. */
   contract_id: string | null;
   installation_id: string | null;
+  /** Averia que origino la asignacion (Fase 95) — null si vino de una instalacion o de la ficha del cliente directo. */
+  ticket_id: string | null;
   assigned_at: string | null;
   /** Tecnico asignado a ir a recoger el equipo (Fase 51) — solo distinto de null mientras status = 'en_recupero'. */
   pending_pickup_by: string | null;
@@ -311,6 +314,7 @@ export interface InventoryUnitEvent {
   to_status: InventoryUnitStatus;
   client_id: string | null;
   installation_id: string | null;
+  ticket_id: string | null;
   /** Tecnico responsable del recojo en este evento puntual (Fase 51). */
   assigned_to: string | null;
   reason: string | null;
@@ -641,6 +645,8 @@ export interface WorkOrderClosure {
   ont_serial: string | null;
   closure_notes: string | null;
   signature_path: string | null;
+  /** Lectura manual de potencia optica (dBm) si la averia exigio recablear/revisar la fibra (Fase 95) — opcional, aparte del diagnostico en vivo. */
+  potencia_dbm: number | null;
   closed_by: string | null;
   created_at: string;
 }
@@ -654,8 +660,27 @@ export interface WorkOrderPhoto {
   job_id: string;
   category: string;
   storage_path: string;
+  /** Solo relevante para fotos de fachada/modem capturadas en una averia (Fase 95) — el resto queda 'approved' por defecto. */
+  status: WorkOrderPhotoStatus;
   uploaded_by: string | null;
   created_at: string;
+}
+
+export type JobAssigneeRole = 'leader' | 'support';
+
+/** Un integrante de la cuadrilla de un ticket/instalacion (Fase 94) — mismo
+ *  patron polimorfico (job_type/job_id) que WorkOrderPhoto/WorkOrderClosure.
+ *  Maximo 1 'leader' por orden (constraint en BD); el resto son 'support'.
+ *  tickets.assigned_to / installations.assigned_to quedan sincronizados con
+ *  el 'leader' via trigger, para no romper RLS/reportes que dependen de esa
+ *  columna — esta tabla es la fuente de verdad de la cuadrilla completa. */
+export interface JobAssignee {
+  job_type: JobType;
+  job_id: string;
+  technician_id: string;
+  role: JobAssigneeRole;
+  created_at: string;
+  profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
 
 export interface MantenimientoHistorial {

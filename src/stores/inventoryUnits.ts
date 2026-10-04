@@ -32,6 +32,17 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     return (data ?? []) as unknown as InventoryUnit[];
   }
 
+  /** Equipos vinculados a UNA averia puntual (Fase 95) — tipicamente el/los entrante(s) registrados en ese ticket. */
+  async function fetchUnitsByTicket(ticketId: string) {
+    const { data, error: err } = await supabase
+      .from('inventory_units')
+      .select(UNIT_SELECT)
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: false });
+    if (err) throw err;
+    return (data ?? []) as unknown as InventoryUnit[];
+  }
+
   async function fetchUnitsByClient(clientId: string) {
     const { data, error: err } = await supabase
       .from('inventory_units')
@@ -132,6 +143,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     clientId?: string;
     contractId?: string;
     installationId?: string;
+    ticketId?: string;
     assignedTo?: string;
     reason?: string;
   }) {
@@ -143,6 +155,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
         client_id: params.clientId || null,
         contract_id: params.contractId || null,
         installation_id: params.installationId || null,
+        ticket_id: params.ticketId || null,
         assigned_to: params.assignedTo || null,
         reason: params.reason || null,
       })
@@ -161,7 +174,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
   function assignUnit(
     unitId: string,
     clientId: string,
-    opts?: { installationId?: string; contractId?: string; reason?: string },
+    opts?: { installationId?: string; contractId?: string; ticketId?: string; reason?: string },
   ) {
     return registerEvent({
       unitId,
@@ -169,13 +182,56 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
       clientId,
       installationId: opts?.installationId,
       contractId: opts?.contractId,
+      ticketId: opts?.ticketId,
       reason: opts?.reason || 'Asignacion a cliente',
     });
   }
 
+  /**
+   * Equipo entrante registrado en una averia (Fase 95): queda
+   * 'pending_approval' (NO oficial todavia) hasta que un admin lo apruebe
+   * con approveUnit — la BD ya rechaza que un TECNICO_RED salte este paso e
+   * inserte 'assigned' directo cuando el evento trae ticketId.
+   */
+  function stageUnitFromTicket(unitId: string, clientId: string, opts: { contractId?: string; ticketId: string; reason?: string }) {
+    return registerEvent({
+      unitId,
+      toStatus: 'pending_approval',
+      clientId,
+      contractId: opts.contractId,
+      ticketId: opts.ticketId,
+      reason: opts.reason || 'Equipo entrante registrado en averia — pendiente de aprobacion',
+    });
+  }
+
+  /** Aprueba un equipo 'pending_approval': lo deja 'assigned' de verdad, con el mismo cliente/contrato/ticket que ya tenia. */
+  function approveUnit(unit: InventoryUnit, reason?: string) {
+    if (!unit.client_id) throw new Error('El equipo pendiente no tiene cliente asociado');
+    return registerEvent({
+      unitId: unit.id,
+      toStatus: 'assigned',
+      clientId: unit.client_id,
+      contractId: unit.contract_id ?? undefined,
+      installationId: unit.installation_id ?? undefined,
+      ticketId: unit.ticket_id ?? undefined,
+      reason: reason || 'Aprobado por administracion',
+    });
+  }
+
+  /** Rechaza un equipo 'pending_approval': vuelve a bodega, libre para reasignar. */
+  function rejectUnit(unitId: string, reason?: string) {
+    return registerEvent({ unitId, toStatus: 'in_stock', reason: reason || 'Rechazado por administracion' });
+  }
+
   /** Devolucion de un cliente: el equipo vuelve a bodega en buen estado, dañado o para reparar. */
-  function returnUnit(unitId: string, condition: 'in_stock' | 'damaged' | 'in_repair', reason?: string, clientId?: string) {
-    return registerEvent({ unitId, toStatus: condition, clientId, reason: reason || 'Devolucion de cliente' });
+  function returnUnit(
+    unitId: string,
+    condition: 'in_stock' | 'damaged' | 'in_repair',
+    reason?: string,
+    clientId?: string,
+    ticketId?: string,
+  ) {
+    return registerEvent({ unitId, toStatus: condition, clientId, ticketId, reason: reason || 'Devolucion de cliente' });
   }
 
   /**
@@ -254,6 +310,7 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     error,
     fetchUnitsByProduct,
     fetchUnitsByInstallation,
+    fetchUnitsByTicket,
     fetchUnitsByClient,
     fetchUnitsByContract,
     fetchUnitsByStatus,
@@ -263,6 +320,9 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
     updateUnit,
     registerEvent,
     assignUnit,
+    stageUnitFromTicket,
+    approveUnit,
+    rejectUnit,
     setUnitContract,
     returnUnit,
     markForRecovery,

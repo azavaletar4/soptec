@@ -3,7 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
+import CrewAssignEditor from '@/components/soporte/CrewAssignEditor.vue';
 import { useInstallationsStore } from '@/stores/installations';
+import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -28,6 +30,7 @@ import {
 
 const router = useRouter();
 const installationsStore = useInstallationsStore();
+const jobAssigneesStore = useJobAssigneesStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
@@ -49,6 +52,12 @@ const toast = useToast();
 function canDelete(inst: Installation) {
   return inst.status === 'cancelled' && auth.role !== 'TECNICO_RED';
 }
+
+// Armar la cuadrilla (Fase 94) es una decision de despacho — mismo grupo de
+// roles que puede escribir en job_assignees via RLS (ver migracion); el
+// tecnico asignado puede ver quien mas esta en la cuadrilla pero no
+// agregarse/quitarse el mismo.
+const canEditCrew = computed(() => ['SUPERADMIN', 'ADMIN', 'SOPORTE'].includes(auth.role ?? ''));
 
 function canEdit(inst: Installation) {
   if (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') return true;
@@ -512,7 +521,7 @@ async function handleSubmit() {
   saving.value = true;
   formError.value = null;
   try {
-    await installationsStore.createInstallation({
+    const created = await installationsStore.createInstallation({
       client_id: form.value.client_id,
       contract_id: form.value.contract_id || null,
       scheduled_date: form.value.scheduled_date || null,
@@ -521,6 +530,12 @@ async function handleSubmit() {
       notes: form.value.notes || null,
       status: form.value.scheduled_date ? 'scheduled' : 'pending',
     });
+    // job_assignees es la fuente de verdad de la cuadrilla (Fase 94) — el
+    // insert de arriba solo deja el "espejo" assigned_to, asi que si se
+    // eligio tecnico al crear, se registra aqui como lider de su cuadrilla.
+    if (form.value.assigned_to) {
+      await jobAssigneesStore.addAssignee('installation', created.id, form.value.assigned_to, []);
+    }
     showModal.value = false;
   } catch (e) {
     formError.value = getErrorMessage(e, 'Error al crear la instalación');
@@ -529,12 +544,12 @@ async function handleSubmit() {
   }
 }
 
-async function handleAssign(inst: Installation, technicianId: string) {
-  try {
-    await installationsStore.updateInstallation(inst.id, { assigned_to: technicianId || null });
-  } catch (e) {
-    alert(getErrorMessage(e, 'Error al asignar el técnico'));
-  }
+// ---- Cuadrilla (Fase 94): reemplaza el viejo selector de "1 solo tecnico" ----
+const showCrewModal = ref(false);
+const crewInstallation = ref<Installation | null>(null);
+function openCrewModal(inst: Installation) {
+  crewInstallation.value = inst;
+  showCrewModal.value = true;
 }
 
 // Edicion directa del estado (correccion administrativa) — solo
@@ -828,18 +843,9 @@ function formatDate(value: string | null) {
               <span v-else class="badge" :class="STATUS_CLASS[inst.status]">{{ STATUS_LABEL[inst.status] }}</span>
             </td>
             <td class="px-4 py-3">
-              <select
-                v-if="canEdit(inst)"
-                class="field-input py-1.5 text-xs"
-                :value="inst.assigned_to ?? ''"
-                @change="handleAssign(inst, ($event.target as HTMLSelectElement).value)"
-              >
-                <option value="">Sin asignar</option>
-                <option v-for="t in technicians" :key="t.id" :value="t.id">{{ t.full_name || t.email }}</option>
-              </select>
-              <span v-else class="text-xs text-slate-600">
-                {{ technicians.find((t) => t.id === inst.assigned_to)?.full_name || (inst.assigned_to ? 'Técnico' : 'Sin asignar') }}
-              </span>
+              <button type="button" class="text-xs text-sky-700 hover:underline" @click="openCrewModal(inst)">
+                👷 {{ technicians.find((t) => t.id === inst.assigned_to)?.full_name || (inst.assigned_to ? 'Técnico' : 'Sin asignar') }}
+              </button>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs">
               <template v-if="canEdit(inst)">
@@ -1236,6 +1242,27 @@ function formatDate(value: string | null) {
             </button>
           </div>
         </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showCrewModal" class="modal-overlay" @click.self="showCrewModal = false">
+        <div class="w-full max-w-sm modal-panel">
+          <h2 class="text-lg font-semibold mb-1">Cuadrilla asignada</h2>
+          <p class="text-xs text-slate-500 mb-4">
+            {{ crewInstallation?.clients ? `${crewInstallation.clients.first_name} ${crewInstallation.clients.last_name}` : '' }}
+          </p>
+          <CrewAssignEditor
+            v-if="crewInstallation"
+            job-type="installation"
+            :job-id="crewInstallation.id"
+            :technicians="technicians"
+            :readonly="!canEditCrew"
+          />
+          <div class="flex justify-end mt-4">
+            <button class="btn-ghost" @click="showCrewModal = false">Cerrar</button>
+          </div>
+        </div>
       </div>
     </Teleport>
   </AppLayout>

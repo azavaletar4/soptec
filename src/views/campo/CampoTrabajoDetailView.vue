@@ -7,19 +7,36 @@ import QrScannerModal from '@/components/campo/QrScannerModal.vue';
 import { useCampoStore, isNetworkError, type DiagnosticoResult } from '@/stores/campo';
 import { useOltStore } from '@/stores/olt';
 import { useInventoryStore } from '@/stores/inventory';
+import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
+import { useInfraElementosStore } from '@/stores/infraElementos';
+import { useFoFibraStore } from '@/stores/foFibra';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
-import type { Client, ClientPhotoCategory, Installation, InventoryMovement, JobType, ServiceContract, Ticket, TicketMotivoAveria } from '@/types/domain';
+import {
+  NAP_CLIENT_LIMIT,
+  type Client,
+  type ClientPhotoCategory,
+  type Installation,
+  type InventoryMovement,
+  type InventoryUnit,
+  type JobType,
+  type ServiceContract,
+  type Ticket,
+  type TicketMotivoAveria,
+} from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
 const campoStore = useCampoStore();
 const oltStore = useOltStore();
 const inventoryStore = useInventoryStore();
+const inventoryUnitsStore = useInventoryUnitsStore();
+const infraStore = useInfraElementosStore();
+const fibra = useFoFibraStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const clientPhotosStore = useClientPhotosStore();
@@ -103,6 +120,7 @@ const PHOTO_LABEL: Record<ClientPhotoCategory, string> = {
   modem_position: 'Posición del módem',
   nap_box: 'Caja NAP',
   pon_power: 'Potencia Óptica Recibida',
+  equipment_sticker: 'Sticker Serie/MAC',
 };
 const existingPhotos = ref<ClientPhotoWithUrl[]>([]);
 const loadingPhotos = ref(false);
@@ -122,6 +140,25 @@ async function loadExistingPhotos(contractId: string | null) {
   }
 }
 
+// ---- Censo fotografico de una averia (Fase 95): las 5 categorias de la
+// ficha tecnica del cliente. Si ya existe una foto de esa categoria se
+// ofrece "Actualizar" (reemplazo/historico); si el cliente es antiguo y
+// nunca se le tomo, se marca "Pendiente de registro" para que el tecnico
+// aproveche la visita. Nunca se aplican directo — quedan 'pending_approval'
+// hasta que un admin las apruebe (a diferencia de una instalacion nueva).
+const CENSO_CATEGORIES: { value: ClientPhotoCategory; label: string; icon: string }[] = [
+  { value: 'facade', label: 'Fachada de la vivienda', icon: '🏠' },
+  { value: 'modem_position', label: 'Ubicación del módem/ONU/Mesh', icon: '📶' },
+  { value: 'nap_box', label: 'Caja NAP y puerto asignado', icon: '📦' },
+  { value: 'pon_power', label: 'Medición de potencia óptica (dBm)', icon: '🔋' },
+  { value: 'equipment_sticker', label: 'Sticker de serie/MAC del equipo', icon: '🏷️' },
+];
+const existingPhotoByCategory = computed(() => {
+  const map = new Map<ClientPhotoCategory, ClientPhotoWithUrl>();
+  for (const p of existingPhotos.value) map.set(p.category, p);
+  return map;
+});
+
 const DOCUMENT_LABEL: Record<string, string> = { cedula: 'DNI', ruc: 'RUC', pasaporte: 'Pasaporte' };
 
 onMounted(async () => {
@@ -131,6 +168,11 @@ onMounted(async () => {
   await loadMaterials();
   if (trabajo.value) {
     await Promise.all([loadClientInfo(trabajo.value.clientId), loadExistingPhotos(trabajo.value.contractId)]);
+  }
+  if (jobType === 'ticket') {
+    infraStore.fetchElementos().catch(() => {});
+    fibra.fetchTodosNapPuertos().catch(() => {});
+    await loadEquipos();
   }
 });
 
@@ -274,6 +316,108 @@ async function handleAddMaterial() {
   }
 }
 
+// ---- Registro / Cambio de equipos (Fase 95, solo averias) ----
+// "Saliente" se libera de inmediato (ya salio fisicamente de la casa). El
+// "entrante" NO queda oficialmente asignado al cliente todavia — se guarda
+// 'pending_approval' y un admin lo aprueba desde TicketDetailView (la BD ya
+// rechaza que un tecnico lo deje 'assigned' directo desde un ticket).
+const assignedUnits = ref<InventoryUnit[]>([]);
+const pendingUnits = ref<InventoryUnit[]>([]);
+const loadingUnits = ref(false);
+
+async function loadEquipos() {
+  if (jobType !== 'ticket' || !trabajo.value) return;
+  loadingUnits.value = true;
+  try {
+    const [assigned, pending] = await Promise.all([
+      trabajo.value.contractId
+        ? inventoryUnitsStore.fetchUnitsByContract(trabajo.value.contractId)
+        : inventoryUnitsStore.fetchUnitsByClient(trabajo.value.clientId),
+      inventoryUnitsStore.fetchUnitsByTicket(jobId),
+    ]);
+    assignedUnits.value = assigned.filter((u) => u.status === 'assigned');
+    pendingUnits.value = pending.filter((u) => u.status === 'pending_approval');
+  } finally {
+    loadingUnits.value = false;
+  }
+}
+
+const outgoingForm = ref({ unitId: '', condition: 'in_repair' as 'damaged' | 'in_repair', reason: '' });
+const savingOutgoing = ref(false);
+const outgoingError = ref<string | null>(null);
+
+async function handleOutgoingUnit() {
+  if (!trabajo.value || !outgoingForm.value.unitId) return;
+  savingOutgoing.value = true;
+  outgoingError.value = null;
+  try {
+    await inventoryUnitsStore.returnUnit(
+      outgoingForm.value.unitId,
+      outgoingForm.value.condition,
+      outgoingForm.value.reason || 'Retirado en averia',
+      trabajo.value.clientId,
+      jobId,
+    );
+    outgoingForm.value = { unitId: '', condition: 'in_repair', reason: '' };
+    await loadEquipos();
+  } catch (e) {
+    outgoingError.value = getErrorMessage(e, 'Error al retirar el equipo');
+  } finally {
+    savingOutgoing.value = false;
+  }
+}
+
+const incomingForm = ref({ productId: '', unitId: '', reason: '' });
+const availableIncomingUnits = ref<InventoryUnit[]>([]);
+const loadingIncomingUnits = ref(false);
+const savingIncoming = ref(false);
+const incomingError = ref<string | null>(null);
+
+async function onIncomingProductChange() {
+  incomingForm.value.unitId = '';
+  availableIncomingUnits.value = [];
+  if (!incomingForm.value.productId) return;
+  loadingIncomingUnits.value = true;
+  try {
+    const units = await inventoryUnitsStore.fetchUnitsByProduct(incomingForm.value.productId);
+    availableIncomingUnits.value = units.filter((u) => u.status === 'in_stock');
+  } finally {
+    loadingIncomingUnits.value = false;
+  }
+}
+
+async function handleIncomingUnit() {
+  if (!trabajo.value || !incomingForm.value.unitId) return;
+  savingIncoming.value = true;
+  incomingError.value = null;
+  try {
+    await inventoryUnitsStore.stageUnitFromTicket(incomingForm.value.unitId, trabajo.value.clientId, {
+      contractId: trabajo.value.contractId ?? undefined,
+      ticketId: jobId,
+      reason: incomingForm.value.reason || 'Equipo entrante registrado en averia',
+    });
+    incomingForm.value = { productId: '', unitId: '', reason: '' };
+    availableIncomingUnits.value = [];
+    await loadEquipos();
+  } catch (e) {
+    incomingError.value = getErrorMessage(e, 'Error al registrar el equipo entrante');
+  } finally {
+    savingIncoming.value = false;
+  }
+}
+
+// ---- dBm + cambio de puerto NAP opcionales (Fase 95, solo averias) ----
+const napOptions = computed(() =>
+  infraStore.elementos
+    .filter((e) => e.tipo === 'caja_nap')
+    .map((e) => {
+      const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
+      const used = puertos.filter((p) => p.estado === 'ocupado').length;
+      return { id: e.id, name: e.name, used, capacity: e.puertos_total ?? NAP_CLIENT_LIMIT };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)),
+);
+
 // ---- Cierre de trabajo ----
 const INSTALL_PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] = [
   { value: 'facade', label: 'Fachada' },
@@ -306,6 +450,9 @@ const closureForm = ref({
   closureNotes: '',
   motivoAveria: '' as TicketMotivoAveria | '',
   justificacion: '',
+  // Fase 95 — opcionales, solo si la averia exigio recablear/revisar fibra.
+  potenciaDbm: null as number | null,
+  napElementoId: '',
 });
 const requiresJustification = computed(
   () => jobType !== 'installation' && MOTIVOS_EXIMEN_TECNICO.includes(closureForm.value.motivoAveria as TicketMotivoAveria),
@@ -385,7 +532,10 @@ async function handleCloseSubmit() {
   closeError.value = null;
   closeResult.value = null;
   try {
-    const categories = jobType === 'installation' ? INSTALL_PHOTO_CATEGORIES.map((c) => c.value) : TICKET_PHOTO_CATEGORIES.map((c) => c.value);
+    const categories =
+      jobType === 'installation'
+        ? INSTALL_PHOTO_CATEGORIES.map((c) => c.value)
+        : [...TICKET_PHOTO_CATEGORIES.map((c) => c.value), ...CENSO_CATEGORIES.map((c) => c.value)];
     const photos = categories
       .filter((cat) => closurePhotos.value[cat])
       .map((cat) => ({ category: cat, file: closurePhotos.value[cat]! }));
@@ -404,8 +554,11 @@ async function handleCloseSubmit() {
       signatureBlob: signatureBlob.value,
       updateClientGps: jobType === 'installation',
       clientPhotoCategories: jobType === 'installation' ? (INSTALL_PHOTO_CATEGORIES.map((c) => c.value) as ClientPhotoCategory[]) : [],
+      pendingApprovalCategories: jobType === 'ticket' ? CENSO_CATEGORIES.map((c) => c.value) : [],
       motivoAveria: jobType === 'installation' ? null : (closureForm.value.motivoAveria || null),
       justificacionCierre: jobType === 'installation' ? null : (closureForm.value.justificacion.trim() || null),
+      potenciaDbm: jobType === 'ticket' ? closureForm.value.potenciaDbm : null,
+      napElementoId: jobType === 'ticket' ? closureForm.value.napElementoId || null : null,
     });
     closeResult.value = result.queued ? 'queued' : 'ok';
     if (!result.queued) setTimeout(() => router.push('/campo'), 1200);
@@ -489,8 +642,8 @@ async function handleCloseSubmit() {
         <p v-else class="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">Sin ficha adicional disponible.</p>
       </section>
 
-      <!-- Fotos ya registradas del cliente -->
-      <section v-if="loadingPhotos || existingPhotos.length" class="surface p-3.5 mb-3">
+      <!-- Fotos ya registradas del cliente (instalaciones: solo lectura) -->
+      <section v-if="jobType === 'installation' && (loadingPhotos || existingPhotos.length)" class="surface p-3.5 mb-3">
         <h2 class="text-sm font-semibold mb-2">Fotos anteriores</h2>
         <p v-if="loadingPhotos" class="text-xs text-slate-400">Cargando fotos...</p>
         <p v-else-if="!existingPhotos.length" class="text-xs text-slate-400">Sin fotos registradas todavía.</p>
@@ -499,6 +652,41 @@ async function handleCloseSubmit() {
             <img :src="p.url ?? undefined" :alt="PHOTO_LABEL[p.category]" class="w-full h-28 object-cover rounded-lg border border-slate-200" />
             <p class="text-[11px] text-slate-500 mt-1 text-center">{{ PHOTO_LABEL[p.category] }}</p>
           </a>
+        </div>
+      </section>
+
+      <!-- Censo fotografico (averias): "Actualizar" si ya existe, "Pendiente
+           de registro" si es un cliente antiguo sin censar. Las fotos nuevas
+           quedan pendientes de aprobacion del admin (Fase 95). -->
+      <section v-if="jobType === 'ticket' && !isLockedForTecnico" class="surface p-3.5 mb-3">
+        <h2 class="text-sm font-semibold mb-1">📋 Censo fotográfico</h2>
+        <p class="text-[11px] text-slate-500 mb-3">
+          Aprovecha la visita para completar la ficha del cliente. Las fotos nuevas quedan pendientes de aprobación del administrador.
+        </p>
+        <p v-if="loadingPhotos" class="text-xs text-slate-400">Cargando...</p>
+        <div v-else class="space-y-2.5">
+          <div v-for="cat in CENSO_CATEGORIES" :key="cat.value" class="flex items-center gap-2.5">
+            <img
+              v-if="existingPhotoByCategory.get(cat.value)?.url"
+              :src="existingPhotoByCategory.get(cat.value)!.url ?? undefined"
+              class="w-12 h-12 object-cover rounded-lg border border-slate-200 shrink-0"
+            />
+            <div
+              v-else
+              class="w-12 h-12 shrink-0 rounded-lg border border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-base"
+            >
+              ⚠️
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-slate-700 truncate">{{ cat.icon }} {{ cat.label }}</p>
+              <p v-if="!existingPhotoByCategory.get(cat.value)" class="text-[11px] text-amber-600">Pendiente de registro</p>
+              <p v-else class="text-[11px] text-slate-400">Ya registrada</p>
+            </div>
+            <label class="shrink-0 text-center px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] cursor-pointer whitespace-nowrap">
+              {{ closurePhotos[cat.value] ? '✓ Lista' : existingPhotoByCategory.get(cat.value) ? '📷 Actualizar' : '📷 Capturar' }}
+              <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPhotoChange(cat.value, $event)" />
+            </label>
+          </div>
         </div>
       </section>
 
@@ -607,6 +795,71 @@ async function handleCloseSubmit() {
           <p v-if="materialError" class="text-xs text-red-600 mt-1.5">{{ materialError }}</p>
         </section>
 
+        <!-- Registro / Cambio de equipos (averias) -->
+        <section v-if="jobType === 'ticket'" class="surface p-3.5 mb-3">
+          <h2 class="text-sm font-semibold mb-2">🔧 Registro / Cambio de equipos</h2>
+          <p v-if="loadingUnits" class="text-xs text-slate-400">Cargando...</p>
+          <template v-else>
+            <div class="mb-3">
+              <p class="text-xs font-medium text-slate-600 mb-1.5">Equipo saliente (dar de baja / garantía)</p>
+              <p v-if="!assignedUnits.length" class="text-[11px] text-slate-400">El cliente no tiene equipos asignados.</p>
+              <form v-else class="space-y-1.5" @submit.prevent="handleOutgoingUnit">
+                <select v-model="outgoingForm.unitId" class="field-input text-sm">
+                  <option value="">Selecciona el equipo...</option>
+                  <option v-for="u in assignedUnits" :key="u.id" :value="u.id">
+                    {{ u.product?.name ?? 'Equipo' }} — {{ u.serial_number || u.mac_address }}
+                  </option>
+                </select>
+                <div class="flex gap-2">
+                  <select v-model="outgoingForm.condition" class="field-input text-sm flex-1">
+                    <option value="in_repair">Enviar a garantía/reparación</option>
+                    <option value="damaged">Dar de baja (dañado)</option>
+                  </select>
+                  <button type="submit" :disabled="savingOutgoing || !outgoingForm.unitId" class="btn-secondary text-xs shrink-0">
+                    Retirar
+                  </button>
+                </div>
+                <input v-model="outgoingForm.reason" placeholder="Motivo (opcional)" class="field-input text-sm" />
+              </form>
+              <p v-if="outgoingError" class="text-xs text-red-600 mt-1">{{ outgoingError }}</p>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100">
+              <p class="text-xs font-medium text-slate-600 mb-1.5">Equipo entrante (del stock asignado)</p>
+              <form class="space-y-1.5" @submit.prevent="handleIncomingUnit">
+                <select v-model="incomingForm.productId" class="field-input text-sm" @change="onIncomingProductChange">
+                  <option value="">Producto...</option>
+                  <option v-for="p in inventoryStore.products.filter((prod) => prod.is_serialized)" :key="p.id" :value="p.id">
+                    {{ p.name }}
+                  </option>
+                </select>
+                <select v-model="incomingForm.unitId" class="field-input text-sm" :disabled="!incomingForm.productId || loadingIncomingUnits">
+                  <option value="">{{ loadingIncomingUnits ? 'Cargando...' : 'Serie/MAC disponible...' }}</option>
+                  <option v-for="u in availableIncomingUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
+                </select>
+                <p v-if="incomingForm.productId && !loadingIncomingUnits && !availableIncomingUnits.length" class="text-[11px] text-amber-700">
+                  Sin unidades disponibles en bodega para este producto.
+                </p>
+                <input v-model="incomingForm.reason" placeholder="Motivo (opcional)" class="field-input text-sm" />
+                <button type="submit" :disabled="savingIncoming || !incomingForm.unitId" class="btn-secondary text-xs w-full">
+                  {{ savingIncoming ? 'Registrando...' : 'Registrar (pendiente de aprobación)' }}
+                </button>
+              </form>
+              <p v-if="incomingError" class="text-xs text-red-600 mt-1">{{ incomingError }}</p>
+            </div>
+
+            <div v-if="pendingUnits.length" class="pt-3 mt-3 border-t border-slate-100">
+              <p class="text-xs font-medium text-amber-700 mb-1.5">⏳ Pendientes de aprobación</p>
+              <ul class="space-y-1 text-xs">
+                <li v-for="u in pendingUnits" :key="u.id" class="flex justify-between">
+                  <span>{{ u.product?.name ?? 'Equipo' }}</span>
+                  <span class="text-slate-500 font-mono">{{ u.serial_number || u.mac_address }}</span>
+                </li>
+              </ul>
+            </div>
+          </template>
+        </section>
+
         <!-- Cierre de trabajo -->
         <section class="surface p-3.5 mb-3">
           <h2 class="text-sm font-semibold mb-2">Cierre de trabajo</h2>
@@ -625,6 +878,25 @@ async function handleCloseSubmit() {
           </div>
 
           <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
+
+          <template v-if="jobType === 'ticket'">
+            <p class="text-xs font-medium text-slate-600 mb-1">Parámetros de red (opcional, si recableaste)</p>
+            <div class="grid grid-cols-2 gap-2 mb-3">
+              <input
+                v-model.number="closureForm.potenciaDbm"
+                type="number"
+                step="0.1"
+                placeholder="Potencia (dBm)"
+                class="field-input text-sm"
+              />
+              <select v-model="closureForm.napElementoId" class="field-input text-sm">
+                <option value="">Caja NAP (sin cambio)</option>
+                <option v-for="n in napOptions" :key="n.id" :value="n.id">
+                  {{ n.name }} — {{ n.used }}/{{ n.capacity }}
+                </option>
+              </select>
+            </div>
+          </template>
 
           <template v-if="jobType !== 'installation'">
             <label class="block text-xs text-slate-600 mb-1">

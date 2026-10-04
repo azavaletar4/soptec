@@ -10,6 +10,8 @@ import { useClientPhotosStore } from '@/stores/clientPhotos';
 import { useOltStore } from '@/stores/olt';
 import { useMikrotikStore } from '@/stores/mikrotik';
 import { useTr069Store } from '@/stores/tr069';
+import { useFoFibraStore } from '@/stores/foFibra';
+import { useInfraElementosStore } from '@/stores/infraElementos';
 import { compressImage } from '@/lib/imageCompression';
 import {
   enqueueClosure,
@@ -18,7 +20,7 @@ import {
   listQueuedClosures,
   type QueuedClosure,
 } from '@/lib/offlineQueue';
-import type { ClientPhotoCategory, Installation, JobType, ServiceContract, Ticket, TicketMotivoAveria } from '@/types/domain';
+import { NAP_CLIENT_LIMIT, type ClientPhotoCategory, type Installation, type JobType, type ServiceContract, type Ticket, type TicketMotivoAveria } from '@/types/domain';
 
 const BUCKET = 'work-evidence';
 
@@ -121,10 +123,18 @@ export interface ClosureInput {
   /** Categorias que ademas de guardarse en work_order_photos deben reflejarse en
    *  el slot fijo de client_photos (fachada/caja NAP/modem/potencia PON). */
   clientPhotoCategories: ClientPhotoCategory[];
+  /** Fase 95 — censo fotografico de una averia: categorias que quedan
+   *  work_order_photos.status='pending_approval' en vez de aplicarse directo
+   *  a client_photos (las aprueba un admin desde TicketDetailView). */
+  pendingApprovalCategories: ClientPhotoCategory[];
   /** Fase 49 — solo aplica a tickets (averias), null en instalaciones. */
   motivoAveria: TicketMotivoAveria | null;
   /** Justificacion obligatoria cuando motivoAveria es client_damage o external_factor. */
   justificacionCierre: string | null;
+  /** Fase 95 — lectura manual de potencia optica (dBm), solo tickets. */
+  potenciaDbm: number | null;
+  /** Fase 95 — caja NAP nueva si hubo cambio de puerto, solo tickets. */
+  napElementoId: string | null;
 }
 
 /**
@@ -157,6 +167,8 @@ export const useCampoStore = defineStore('campo', () => {
   const oltStore = useOltStore();
   const mikrotikStore = useMikrotikStore();
   const tr069Store = useTr069Store();
+  const fibra = useFoFibraStore();
+  const infraStore = useInfraElementosStore();
 
   const loading = ref(false);
   const queuedCount = ref(0);
@@ -304,13 +316,23 @@ export const useCampoStore = defineStore('campo', () => {
       const path = `${input.jobType}/${input.jobId}/${photo.category}-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, compressedFile, { upsert: false });
       if (upErr) throw upErr;
-      const { error: rowErr } = await supabase
-        .from('work_order_photos')
-        .insert({ job_type: input.jobType, job_id: input.jobId, category: photo.category, storage_path: path });
+
+      // Censo fotografico de una averia (Fase 95): queda guardada con status
+      // 'pending_approval' — NO se aplica a client_photos todavia, un admin
+      // la aprueba desde TicketDetailView (copia el archivo, marca 'approved').
+      const isPendingApproval = input.pendingApprovalCategories.includes(photo.category as ClientPhotoCategory);
+      const { error: rowErr } = await supabase.from('work_order_photos').insert({
+        job_type: input.jobType,
+        job_id: input.jobId,
+        category: photo.category,
+        storage_path: path,
+        status: isPendingApproval ? 'pending_approval' : 'approved',
+      });
       if (rowErr) throw rowErr;
 
       if (isEvidenceCategory(photo.category) && !evidenciaPath) evidenciaPath = path;
-      if (input.contractId && input.clientPhotoCategories.includes(photo.category as ClientPhotoCategory)) {
+
+      if (!isPendingApproval && input.contractId && input.clientPhotoCategories.includes(photo.category as ClientPhotoCategory)) {
         // clientPhotosStore.uploadPhoto comprime de nuevo por su cuenta, pero
         // ya recibe la version liviana (compressImage no vuelve a pisar un
         // archivo que ya salio mas chico que el original, ver su propio
@@ -338,10 +360,21 @@ export const useCampoStore = defineStore('campo', () => {
         ont_serial: input.ontSerial,
         closure_notes: input.closureNotes,
         signature_path: signaturePath,
+        potencia_dbm: input.potenciaDbm,
       },
       { onConflict: 'job_type,job_id' },
     );
     if (closureErr) throw closureErr;
+
+    // Cambio de puerto NAP (Fase 95, solo si la averia exigio recablear):
+    // mismo assignContractToNap que usa una instalacion nueva — libera el
+    // puerto anterior del contrato (si tenia) y ocupa uno en la caja elegida.
+    if (input.napElementoId && input.contractId) {
+      if (!infraStore.elementos.length) await infraStore.fetchElementos();
+      const elemento = infraStore.elementos.find((e) => e.id === input.napElementoId);
+      const capacity = elemento?.puertos_total ?? NAP_CLIENT_LIMIT;
+      await fibra.assignContractToNap(input.napElementoId, input.contractId, input.clientId, capacity);
+    }
 
     if (input.jobType === 'installation') {
       await installationsStore.updateStatus(input.jobId, 'completed');
@@ -372,8 +405,11 @@ export const useCampoStore = defineStore('campo', () => {
       signatureBlob: item.signatureBlob,
       updateClientGps: true,
       clientPhotoCategories: item.clientPhotoCategories as ClientPhotoCategory[],
+      pendingApprovalCategories: item.pendingApprovalCategories as ClientPhotoCategory[],
       motivoAveria: item.motivoAveria as TicketMotivoAveria | null,
       justificacionCierre: item.justificacionCierre,
+      potenciaDbm: item.potenciaDbm,
+      napElementoId: item.napElementoId,
     });
   }
 
@@ -392,8 +428,11 @@ export const useCampoStore = defineStore('campo', () => {
         photos: input.photos.map((p) => ({ category: p.category, blob: p.file, fileName: p.file.name })),
         signatureBlob: input.signatureBlob,
         clientPhotoCategories: input.clientPhotoCategories,
+        pendingApprovalCategories: input.pendingApprovalCategories,
         motivoAveria: input.motivoAveria,
         justificacionCierre: input.justificacionCierre,
+        potenciaDbm: input.potenciaDbm,
+        napElementoId: input.napElementoId,
       });
       await refreshQueuedCount();
       return { queued: true };
@@ -417,8 +456,11 @@ export const useCampoStore = defineStore('campo', () => {
           photos: input.photos.map((p) => ({ category: p.category, blob: p.file, fileName: p.file.name })),
           signatureBlob: input.signatureBlob,
           clientPhotoCategories: input.clientPhotoCategories,
+          pendingApprovalCategories: input.pendingApprovalCategories,
           motivoAveria: input.motivoAveria,
           justificacionCierre: input.justificacionCierre,
+          potenciaDbm: input.potenciaDbm,
+          napElementoId: input.napElementoId,
         });
         await refreshQueuedCount();
         return { queued: true };

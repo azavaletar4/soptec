@@ -122,6 +122,7 @@ const STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   in_repair: 'En reparación',
   retired: 'Retirado',
   en_recupero: 'Por Recoger',
+  pending_approval: 'Pendiente de aprobación',
 };
 const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
@@ -130,6 +131,7 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
   in_repair: 'bg-amber-500/15 text-amber-700',
   retired: 'bg-slate-200 text-slate-500',
   en_recupero: 'bg-rose-500/15 text-rose-700',
+  pending_approval: 'bg-orange-500/15 text-orange-700',
 };
 </script>
 
