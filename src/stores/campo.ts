@@ -10,6 +10,7 @@ import { useClientPhotosStore } from '@/stores/clientPhotos';
 import { useOltStore } from '@/stores/olt';
 import { useMikrotikStore } from '@/stores/mikrotik';
 import { useTr069Store } from '@/stores/tr069';
+import { compressImage } from '@/lib/imageCompression';
 import {
   enqueueClosure,
   flushQueue,
@@ -298,9 +299,10 @@ export const useCampoStore = defineStore('campo', () => {
         if (isEvidenceCategory(photo.category) && !evidenciaPath) evidenciaPath = alreadyUploaded.get(photo.category)!;
         continue;
       }
-      const ext = photo.file.name.includes('.') ? photo.file.name.split('.').pop() : 'jpg';
+      const compressedFile = await compressImage(photo.file);
+      const ext = compressedFile.name.includes('.') ? compressedFile.name.split('.').pop() : 'jpg';
       const path = `${input.jobType}/${input.jobId}/${photo.category}-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, photo.file, { upsert: false });
+      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, compressedFile, { upsert: false });
       if (upErr) throw upErr;
       const { error: rowErr } = await supabase
         .from('work_order_photos')
@@ -309,7 +311,11 @@ export const useCampoStore = defineStore('campo', () => {
 
       if (isEvidenceCategory(photo.category) && !evidenciaPath) evidenciaPath = path;
       if (input.contractId && input.clientPhotoCategories.includes(photo.category as ClientPhotoCategory)) {
-        await clientPhotosStore.uploadPhoto(input.clientId, input.contractId, photo.category as ClientPhotoCategory, photo.file);
+        // clientPhotosStore.uploadPhoto comprime de nuevo por su cuenta, pero
+        // ya recibe la version liviana (compressImage no vuelve a pisar un
+        // archivo que ya salio mas chico que el original, ver su propio
+        // chequeo de tamaño), asi que no hay doble costo real de red.
+        await clientPhotosStore.uploadPhoto(input.clientId, input.contractId, photo.category as ClientPhotoCategory, compressedFile);
       }
     }
 

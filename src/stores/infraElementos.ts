@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { compressImage } from '@/lib/imageCompression';
 import { ZONE_NAP_LIMIT, type InfraElemento, type InfraElementoTipo } from '@/types/domain';
 
 const BUCKET = 'infra-photos';
@@ -95,9 +96,10 @@ export const useInfraElementosStore = defineStore('infraElementos', () => {
   }
 
   async function uploadPhoto(id: string, file: File, previousPath?: string | null) {
-    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg';
+    const compressed = await compressImage(file);
+    const ext = compressed.name.includes('.') ? compressed.name.split('.').pop() : 'jpg';
     const path = `${id}/${Date.now()}.${ext}`;
-    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false });
+    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, compressed, { upsert: false });
     if (uploadError) throw uploadError;
 
     const updated = await updateElemento(id, { photo_path: path });

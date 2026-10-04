@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { compressImage } from '@/lib/imageCompression';
 import type { ClientPhoto, ClientPhotoCategory } from '@/types/domain';
 
 const BUCKET = 'client-photos';
@@ -38,10 +39,11 @@ export const useClientPhotosStore = defineStore('clientPhotos', () => {
     file: File,
     previousPath?: string | null,
   ): Promise<ClientPhotoWithUrl> {
-    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg';
+    const compressed = await compressImage(file);
+    const ext = compressed.name.includes('.') ? compressed.name.split('.').pop() : 'jpg';
     const path = `${clientId}/${contractId}/${category}-${Date.now()}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false });
+    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, compressed, { upsert: false });
     if (uploadError) throw uploadError;
 
     const { data, error } = await supabase
