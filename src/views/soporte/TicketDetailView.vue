@@ -33,6 +33,25 @@ const canEdit = computed(() => {
 const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 const deleting = ref(false);
 
+// TECNICO_RED solo pasa su averia asignada a "en progreso" o "resuelto" —
+// cerrar el ticket es la validacion final que le corresponde a
+// admin/soporte (confirma que quedo bien y archiva). Mismo criterio debe
+// reforzarse en RLS (ver Fase 15), esto solo evita ofrecer una opcion que
+// la BD va a rechazar.
+const availableStatuses = computed(() => {
+  const entries = Object.entries(STATUS_LABEL) as [TicketStatus, string][];
+  if (auth.role !== 'TECNICO_RED') return entries;
+  // Si ya esta cerrado (lo cerro admin/soporte) se deja la opcion visible
+  // para que el <select> muestre el valor real — no para que el tecnico
+  // pueda volver a elegirla desde otro estado.
+  return entries.filter(([value]) => value !== 'closed' || ticket.value?.status === 'closed');
+});
+
+// La prioridad (que tan urgente es atender la averia/alta) la fija
+// admin/soporte al crear o triar el ticket — el tecnico asignado solo
+// ejecuta, no puede subirse o bajarse la urgencia de lo que le tocó.
+const canChangePriority = computed(() => canEdit.value && auth.role !== 'TECNICO_RED');
+
 const ticketId = computed(() => route.params.id as string);
 const ticket = ref<Ticket | null>(null);
 const loading = ref(true);
@@ -154,6 +173,10 @@ onMounted(async () => {
 
 async function handleStatusChange(status: TicketStatus) {
   if (!ticket.value) return;
+  if (status === 'closed' && auth.role === 'TECNICO_RED') {
+    actionError.value = 'Solo admin/soporte puede cerrar un ticket.';
+    return;
+  }
   // Resolver/cerrar una averia siempre pasa por el modal de liquidacion, para
   // que quede clasificado el motivo antes de que el ranking de puntos la use.
   if ((status === 'resolved' || status === 'closed') && isAveriaCategory.value) {
@@ -217,6 +240,10 @@ async function openEvidencia() {
 
 async function handlePriorityChange(priority: TicketPriority) {
   if (!ticket.value) return;
+  if (auth.role === 'TECNICO_RED') {
+    actionError.value = 'Solo admin/soporte puede cambiar la prioridad.';
+    return;
+  }
   updating.value = true;
   actionError.value = null;
   try {
@@ -339,14 +366,14 @@ async function handleDelete() {
             class="field-input"
             @change="handleStatusChange(($event.target as HTMLSelectElement).value as TicketStatus)"
           >
-            <option v-for="(label, value) in STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
+            <option v-for="[value, label] in availableStatuses" :key="value" :value="value">{{ label }}</option>
           </select>
         </div>
         <div class="surface p-4">
           <div class="text-slate-500 text-xs mb-2">Prioridad</div>
           <select
             :value="ticket.priority"
-            :disabled="updating || !canEdit"
+            :disabled="updating || !canChangePriority"
             class="field-input"
             @change="handlePriorityChange(($event.target as HTMLSelectElement).value as TicketPriority)"
           >
