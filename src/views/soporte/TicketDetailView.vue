@@ -23,9 +23,11 @@ const ticketApprovalsStore = useTicketApprovalsStore();
 const auth = useAuthStore();
 
 // TECNICO_RED ve todos los tickets pero solo puede editar (estado,
-// prioridad, comentar, materiales) los que tiene asignados — el resto de
-// roles de staff puede editar cualquiera. Reglas equivalentes viven en RLS
-// (Fase 15); esto solo evita mostrar controles que la BD va a rechazar.
+// comentar) los que tiene asignados — el resto de roles de staff puede
+// editar cualquiera. Reglas equivalentes viven en RLS (Fase 15); esto solo
+// evita mostrar controles que la BD va a rechazar. Prioridad y materiales
+// tienen su propio candado mas abajo (canChangePriority/canAddMaterials):
+// son al reves — exclusivos del tecnico, no de admin/soporte.
 const canEdit = computed(() => {
   if (!ticket.value) return false;
   if (auth.role !== 'TECNICO_RED') return true;
@@ -54,6 +56,13 @@ const availableStatuses = computed(() => {
 // admin/soporte al crear o triar el ticket — el tecnico asignado solo
 // ejecuta, no puede subirse o bajarse la urgencia de lo que le tocó.
 const canChangePriority = computed(() => canEdit.value && auth.role !== 'TECNICO_RED');
+
+// Los materiales se consumen fisicamente en campo — solo el tecnico
+// asignado los registra (igual que ya hace desde la App de Campo). Un
+// admin/soporte viendo esto desde el escritorio no estuvo en la visita, asi
+// que ya no ve el formulario de "+ Usar" aqui, solo el listado de lo ya
+// registrado.
+const canAddMaterials = computed(() => canEdit.value && auth.role === 'TECNICO_RED');
 
 // Armar la cuadrilla (Fase 94) y fijar el puntaje manual es una decision de
 // despacho — mismo grupo de roles que puede escribir en job_assignees via
@@ -616,7 +625,8 @@ async function handleDelete() {
               </ul>
             </template>
 
-            <form v-if="canEdit" class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
+            <p v-if="!canAddMaterials" class="text-[11px] text-slate-400">El técnico asignado los registra desde la App de Campo.</p>
+            <form v-else class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
               <div class="flex-1 min-w-[160px]">
                 <label class="block text-xs text-slate-600 mb-1">Producto</label>
                 <select v-model="materialForm.productId" required class="field-input">
