@@ -15,6 +15,7 @@
     "tr069:set-pppoe": "tsx server/scripts/set-tr069-pppoe.ts",
     "audit:smartolt": "tsx server/scripts/audit-smartolt.ts",
     "backfill:smartolt": "tsx server/scripts/backfill-smartolt.ts",
+    "compress:storage-photos": "tsx server/scripts/compress-storage-photos.ts",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "leaflet": "^1.9.4",
     "pinia": "^2.2.4",
     "qr-scanner": "^1.4.2",
+    "sharp": "^0.35.5",
     "undici": "^6.19.8",
     "vue": "^3.5.10",
     "vue-router": "^4.4.5",
