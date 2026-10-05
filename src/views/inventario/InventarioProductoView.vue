@@ -136,6 +136,14 @@ const unitKpis = computed(() => {
   };
 });
 
+const sortedUnits = computed(() =>
+  [...units.value].sort((a, b) => {
+    if (a.status === 'in_stock' && b.status !== 'in_stock') return -1;
+    if (a.status !== 'in_stock' && b.status === 'in_stock') return 1;
+    return 0;
+  }),
+);
+
 const unitsError = ref<string | null>(null);
 
 async function loadUnits() {
@@ -705,7 +713,7 @@ async function handleDeleteProduct() {
               <tr v-else-if="!units.length">
                 <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin equipos registrados todavía.</td>
               </tr>
-              <tr v-for="u in units" :key="u.id" class="border-t border-slate-200">
+              <tr v-for="u in sortedUnits" :key="u.id" class="border-t border-slate-200">
                 <td class="px-4 py-3 font-mono text-xs">{{ u.serial_number || '—' }}</td>
                 <td class="px-4 py-3 font-mono text-xs whitespace-nowrap">{{ u.mac_address || '—' }}</td>
                 <td class="px-4 py-3">
