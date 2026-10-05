@@ -6,11 +6,13 @@ import { useTicketsStore } from '@/stores/tickets';
 import { useInstallationsStore } from '@/stores/installations';
 import { useRoutinesStore } from '@/stores/routines';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { useAuthStore } from '@/stores/auth';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
-import type { JobType } from '@/types/domain';
+import { TURNOS, todayStr } from '@/lib/turnos';
+import type { JobType, StaffProfile } from '@/types/domain';
 
 // Fase 101-B: tablero de despacho tipo "Cronograma de Campo" (TOA-like) —
 // cruza los 3 tipos de orden (averias/altas/rutinas) por tecnico y hora,
@@ -24,8 +26,14 @@ const ticketsStore = useTicketsStore();
 const installationsStore = useInstallationsStore();
 const routinesStore = useRoutinesStore();
 const catalogsStore = useCatalogsStore();
+const auth = useAuthStore();
 const { confirmDialog } = useConfirm();
 const toast = useToast();
+
+// Click & Create (Fase 104): crear tickets es exclusivo de SUPERADMIN/ADMIN
+// (RLS tickets_insert_admin) — ocultar/deshabilitar el click para el resto
+// evita una navegacion que de todos modos no abriria el modal en /soporte.
+const canCreateTickets = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
 const HOUR_START = 8;
 const HOUR_END = 18;
@@ -96,10 +104,6 @@ const items = computed<BoardItem[]>(() => {
 });
 
 // ---- Fecha seleccionada (un solo dia — el tablero es un cronograma diario, no un rango) ----
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 const selectedDate = ref(todayStr());
 
 function shiftDate(days: number) {
@@ -136,6 +140,22 @@ function blockStyle(item: BoardItem) {
 
 function timeLabel(iso: string) {
   return new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Click & Create (Fase 104): click en una casilla VACIA del tablero (no en
+// un bloque existente, esos ya tienen su propio @click) abre "Nuevo
+// ticket" en /soporte con fecha/turno/tecnico pre-cargados segun donde se
+// hizo click en la fila de ese tecnico.
+function handleCellClick(e: MouseEvent, tech: StaffProfile) {
+  if (!canCreateTickets.value) return;
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  const hour = HOUR_START + frac * (HOUR_END - HOUR_START);
+  const turno = TURNOS.find((t) => hour >= Number(t.start.split(':')[0]) && hour < Number(t.end.split(':')[0])) ?? TURNOS[0];
+  router.push({
+    path: '/soporte',
+    query: { schedule_date: selectedDate.value, schedule_turno: turno.value, tech_id: tech.id },
+  });
 }
 
 // Reloj compartido para el cronometro "en progreso" (mismo patron que TicketsView.vue).
@@ -279,7 +299,12 @@ async function confirmSchedule(item: BoardItem) {
           <div class="w-36 shrink-0 flex items-center text-xs font-medium text-slate-700 truncate pr-2">
             {{ tech.full_name || tech.email }}
           </div>
-          <div class="relative flex-1 h-11 bg-slate-50 rounded-md">
+          <div
+            class="relative flex-1 h-11 bg-slate-50 rounded-md"
+            :class="canCreateTickets ? 'cursor-pointer hover:bg-sky-50' : ''"
+            :title="canCreateTickets ? 'Click para crear un ticket en este horario' : undefined"
+            @click="handleCellClick($event, tech)"
+          >
             <!-- lineas guia por hora -->
             <div class="absolute inset-0 grid" :style="{ gridTemplateColumns: `repeat(${HOURS.length - 1}, 1fr)` }">
               <div v-for="h in HOURS.slice(0, -1)" :key="h" class="border-l border-slate-200 first:border-l-0"></div>
@@ -291,7 +316,7 @@ async function confirmSchedule(item: BoardItem) {
               :class="[TYPE_META[item.jobType].bg, TYPE_META[item.jobType].border]"
               :style="blockStyle(item)"
               :title="`${TYPE_META[item.jobType].label}: ${item.label} (${timeLabel(item.scheduledStartAt!)}–${timeLabel(item.scheduledEndAt!)})`"
-              @click="item.jobType === 'ticket' ? goToDetail(item) : openSchedule(item)"
+              @click.stop="item.jobType === 'ticket' ? goToDetail(item) : openSchedule(item)"
             >
               {{ item.label }}
               <template v-if="item.inProgress"> · ⏱️ {{ formatElapsedTime(item.updatedAt, now) }}</template>

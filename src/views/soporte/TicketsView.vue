@@ -10,10 +10,12 @@ import { useTicketsStore } from '@/stores/tickets';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { MOTIVO_AVERIA_OPTIONS } from '@/lib/ticketMotivoAveria';
+import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
 import type { ServiceContract, Ticket, TicketCategory, TicketMotivoAveria, TicketPriority, TicketStatus } from '@/types/domain';
 
@@ -23,6 +25,7 @@ const ticketsStore = useTicketsStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
+const jobAssigneesStore = useJobAssigneesStore();
 const auth = useAuthStore();
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
@@ -85,6 +88,11 @@ const emptyForm = () => ({
   priority: 'medium' as TicketPriority,
   // Fase 103 — sospecha inicial opcional, pre-llena el cierre del tecnico.
   motivo_preliminar: '' as TicketMotivoAveria | '',
+  // Fase 104 — agendamiento y asignacion directa (opcional): si se eligen
+  // turno + tecnico juntos, el ticket nace ya ubicado en el Cronograma.
+  schedule_date: todayStr(),
+  schedule_turno: '',
+  schedule_tech_id: '',
 });
 const form = ref(emptyForm());
 const ticketContracts = ref<ServiceContract[]>([]);
@@ -212,13 +220,25 @@ onMounted(async () => {
   // Deep link desde la ficha de un servicio puntual (Fase 37):
   // /soporte?client_id=..&contract_id=.. abre el modal ya precargado, para
   // que el ticket quede asociado a ESA linea y no solo al cliente.
+  //
+  // Deep link "Click & Create" desde el Cronograma de Campo (Fase 104):
+  // /soporte?schedule_date=..&schedule_turno=..&tech_id=.. abre el modal con
+  // el bloque de agendamiento ya precargado (click en una casilla vacia).
   const clientId = route.query.client_id as string | undefined;
-  if (clientId && canCreateTickets.value) {
+  const scheduleDate = route.query.schedule_date as string | undefined;
+  const scheduleTurno = route.query.schedule_turno as string | undefined;
+  const techId = route.query.tech_id as string | undefined;
+  if ((clientId || scheduleDate || scheduleTurno || techId) && canCreateTickets.value) {
     openCreate();
-    form.value.client_id = clientId;
-    await onTicketClientChange();
-    const contractId = route.query.contract_id as string | undefined;
-    if (contractId && ticketContracts.value.some((c) => c.id === contractId)) form.value.contract_id = contractId;
+    if (clientId) {
+      form.value.client_id = clientId;
+      await onTicketClientChange();
+      const contractId = route.query.contract_id as string | undefined;
+      if (contractId && ticketContracts.value.some((c) => c.id === contractId)) form.value.contract_id = contractId;
+    }
+    if (scheduleDate) form.value.schedule_date = scheduleDate;
+    if (scheduleTurno) form.value.schedule_turno = scheduleTurno;
+    if (techId) form.value.schedule_tech_id = techId;
   }
 });
 
@@ -251,9 +271,22 @@ async function handleSubmit() {
     formError.value = 'Selecciona un cliente';
     return;
   }
+  // Fase 104: turno y tecnico van de la mano — un turno sin tecnico (o
+  // viceversa) dejaria la orden con hora pero invisible en el Cronograma
+  // (no cae en ninguna fila) o con tecnico pero sin hora (cae en "Sin
+  // horario" igual, asi que no tiene sentido pedir solo el tecnico aca).
+  if (form.value.schedule_turno && !form.value.schedule_tech_id) {
+    formError.value = 'Elegiste un turno — selecciona también el técnico para esa cita.';
+    return;
+  }
+  if (form.value.schedule_tech_id && !form.value.schedule_turno) {
+    formError.value = 'Asignaste un técnico — selecciona también el turno de la cita.';
+    return;
+  }
   saving.value = true;
   formError.value = null;
   try {
+    const turno = TURNOS.find((t) => t.value === form.value.schedule_turno);
     const created = await ticketsStore.createTicket({
       client_id: form.value.client_id,
       contract_id: form.value.contract_id || null,
@@ -262,7 +295,20 @@ async function handleSubmit() {
       category: form.value.category,
       priority: form.value.priority,
       motivo_preliminar: AVERIA_TICKET_CATEGORIES.includes(form.value.category) ? form.value.motivo_preliminar || null : null,
+      scheduled_start_at: turno ? dateTimeToIso(form.value.schedule_date, turno.start) : null,
+      scheduled_end_at: turno ? dateTimeToIso(form.value.schedule_date, turno.end) : null,
     });
+    // Agendamiento y asignacion directa (Fase 104): el tecnico queda como
+    // lider de la cuadrilla del ticket nuevo — mismo mecanismo que
+    // CrewAssignEditor.vue, para que job_assignees/assigned_to/el
+    // Cronograma queden consistentes desde el primer momento.
+    if (turno && form.value.schedule_tech_id) {
+      await jobAssigneesStore.addAssignee('ticket', created.id, form.value.schedule_tech_id, []);
+      // El trigger de sync (Fase 94) recien al insertar en job_assignees deja
+      // assigned_to en el ticket — sin este refetch, TicketDetailView lo
+      // veria "Sin tecnicos asignados" hasta recargar a mano.
+      await ticketsStore.fetchTickets();
+    }
     showModal.value = false;
     router.push(`/soporte/${created.id}`);
   } catch (e) {
@@ -553,6 +599,34 @@ function formatDate(value: string) {
             </select>
             <p class="text-[11px] text-slate-400 mt-1">
               Si ya sospechas la causa, el técnico la verá pre-seleccionada al cerrar — puede cambiarla en campo.
+            </p>
+          </div>
+
+          <!-- Agendamiento y asignacion directa (Fase 104): opcional — si se
+               deja en blanco, el ticket cae en "Sin horario asignado" del
+               Cronograma, igual que hoy. -->
+          <div class="mb-4 rounded-lg border border-slate-200 p-3">
+            <p class="text-xs font-semibold text-slate-700 mb-2">📅 Agendamiento y Asignación Directa (opcional)</p>
+            <div class="grid grid-cols-2 gap-3 mb-2">
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Fecha programada</label>
+                <input v-model="form.schedule_date" type="date" class="field-input text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Turno / rango horario</label>
+                <select v-model="form.schedule_turno" class="field-input text-sm">
+                  <option value="">Sin agendar</option>
+                  <option v-for="t in TURNOS" :key="t.value" :value="t.value">{{ t.label }}</option>
+                </select>
+              </div>
+            </div>
+            <label class="block text-xs text-slate-600 mb-1">Técnico / cuadrilla asignada</label>
+            <select v-model="form.schedule_tech_id" class="field-input text-sm">
+              <option value="">Sin asignar</option>
+              <option v-for="t in technicians" :key="t.id" :value="t.id">{{ t.full_name || t.email }}</option>
+            </select>
+            <p class="text-[11px] text-slate-400 mt-1">
+              Si eliges turno y técnico, el ticket aparece ya ubicado en el Cronograma de Campo.
             </p>
           </div>
 
