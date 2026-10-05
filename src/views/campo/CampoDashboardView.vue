@@ -5,6 +5,7 @@ import CampoLayout from '@/components/campo/CampoLayout.vue';
 import { useCampoStore, type TrabajoEstadoUi, type TrabajoItem } from '@/stores/campo';
 import { useAuthStore } from '@/stores/auth';
 import { telLink, waLink } from '@/lib/phone';
+import type { Ticket } from '@/types/domain';
 
 const router = useRouter();
 const campoStore = useCampoStore();
@@ -26,6 +27,15 @@ const tabs = computed<{ value: TabValue; label: string }[]>(() => {
 const activeTab = ref<TabValue>('pendiente');
 const search = ref('');
 
+// Cliente Ausente / re-agendamiento prioritario (Fase 102): un ticket
+// reprogramado cuya fecha ya llego se va al Top 1 de "Pendientes", igual
+// que en TicketsView.vue (vista de escritorio).
+function isDueReschedule(t: TrabajoItem): boolean {
+  if (t.jobType !== 'ticket') return false;
+  const ticket = t.raw as Ticket;
+  return ticket.status === 'rescheduled' && !!ticket.rescheduled_to && new Date(ticket.rescheduled_to).getTime() <= Date.now();
+}
+
 const filtered = computed(() => {
   let list: TrabajoItem[] =
     activeTab.value === 'disponible'
@@ -33,7 +43,7 @@ const filtered = computed(() => {
       : campoStore.trabajos.filter((t) => t.estadoUi === activeTab.value);
   const q = search.value.trim().toLowerCase();
   if (q) list = list.filter((t) => `${t.clienteNombre} ${t.direccion ?? ''}`.toLowerCase().includes(q));
-  return list;
+  return [...list].sort((a, b) => Number(isDueReschedule(b)) - Number(isDueReschedule(a)));
 });
 
 const counts = computed(() => {
@@ -87,8 +97,10 @@ onMounted(() => {
         v-for="t in filtered"
         :key="`${t.jobType}-${t.id}`"
         class="surface p-3.5 active:scale-[0.99] transition-transform"
+        :class="isDueReschedule(t) ? 'ring-2 ring-red-500' : ''"
         @click="openTrabajo(t)"
       >
+        <p v-if="isDueReschedule(t)" class="text-[11px] font-bold text-red-600 mb-1.5">🔴 REPROGRAMADO - ATENDER PRIMERO</p>
         <div class="flex items-start justify-between gap-2 mb-1.5">
           <div class="flex items-center gap-1.5">
             <span

@@ -96,6 +96,7 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   in_progress: 'En progreso',
   resolved: 'Resuelto',
   closed: 'Cerrado',
+  rescheduled: 'Reprogramado',
 };
 const PRIORITY_LABEL: Record<TicketPriority, string> = {
   low: 'Baja',
@@ -356,6 +357,44 @@ async function handlePriorityChange(priority: TicketPriority) {
   }
 }
 
+// Cliente Ausente / re-agendamiento prioritario (Fase 102): la fecha/hora
+// de reprogramacion es 100% editable desde aca — tanto admin/soporte como
+// el propio tecnico asignado (canEdit ya cubre ambos casos), a diferencia
+// de la prioridad que es exclusiva de despacho. Cambiarla reordena la lista
+// de Soporte sola (filteredTickets es reactivo a ticketsStore.tickets).
+const rescheduleDraft = ref({ date: '', reason: '' });
+const savingReschedule = ref(false);
+const rescheduleError = ref<string | null>(null);
+
+function startEditReschedule() {
+  if (!ticket.value) return;
+  rescheduleDraft.value = {
+    date: ticket.value.rescheduled_to ? ticket.value.rescheduled_to.slice(0, 16) : '',
+    reason: ticket.value.reschedule_reason ?? '',
+  };
+  rescheduleError.value = null;
+}
+
+async function handleSaveReschedule() {
+  if (!ticket.value) return;
+  if (!rescheduleDraft.value.date) {
+    rescheduleError.value = 'Elige la fecha/hora de reprogramación.';
+    return;
+  }
+  savingReschedule.value = true;
+  rescheduleError.value = null;
+  try {
+    ticket.value = await ticketsStore.updateTicket(ticket.value.id, {
+      rescheduled_to: new Date(rescheduleDraft.value.date).toISOString(),
+      reschedule_reason: rescheduleDraft.value.reason.trim() || null,
+    });
+  } catch (e) {
+    rescheduleError.value = getErrorMessage(e, 'Error al guardar la reprogramación');
+  } finally {
+    savingReschedule.value = false;
+  }
+}
+
 async function handleSavePoints() {
   if (!ticket.value) return;
   savingPoints.value = true;
@@ -493,6 +532,35 @@ async function handleDelete() {
                 <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
               </select>
             </div>
+          </div>
+
+          <!-- Cliente Ausente / re-agendamiento prioritario (Fase 102) -->
+          <div v-if="ticket.status === 'rescheduled' || ticket.rescheduled_to" class="surface p-4 text-sm border-2 border-red-200">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-red-600 text-xs font-bold">🔴 Reprogramado — fecha editable</div>
+              <button v-if="canEdit && !rescheduleDraft.date" type="button" class="text-xs text-sky-700" @click="startEditReschedule">
+                ✏️ Editar
+              </button>
+            </div>
+            <template v-if="canEdit && rescheduleDraft.date">
+              <label class="block text-xs text-slate-500 mb-1">Fecha de reprogramación</label>
+              <input v-model="rescheduleDraft.date" type="datetime-local" class="field-input text-sm mb-2" />
+              <label class="block text-xs text-slate-500 mb-1">Motivo</label>
+              <textarea v-model="rescheduleDraft.reason" rows="2" class="field-input text-sm mb-2"></textarea>
+              <div class="flex gap-2">
+                <button type="button" class="btn-primary text-xs px-3 py-1.5" :disabled="savingReschedule" @click="handleSaveReschedule">
+                  {{ savingReschedule ? 'Guardando...' : 'Guardar' }}
+                </button>
+                <button type="button" class="btn-ghost text-xs px-2 py-1.5" @click="rescheduleDraft = { date: '', reason: '' }">Cancelar</button>
+              </div>
+              <p v-if="rescheduleError" class="text-xs text-red-600 mt-1.5">{{ rescheduleError }}</p>
+            </template>
+            <template v-else>
+              <p class="font-medium">
+                {{ ticket.rescheduled_to ? new Date(ticket.rescheduled_to).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : 'Sin fecha' }}
+              </p>
+              <p v-if="ticket.reschedule_reason" class="text-slate-600 mt-1">{{ ticket.reschedule_reason }}</p>
+            </template>
           </div>
 
           <div class="surface p-4 text-sm">

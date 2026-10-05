@@ -5,6 +5,7 @@ import CampoLayout from '@/components/campo/CampoLayout.vue';
 import SignaturePad from '@/components/campo/SignaturePad.vue';
 import QrScannerModal from '@/components/campo/QrScannerModal.vue';
 import { useCampoStore, isNetworkError, type DiagnosticoResult } from '@/stores/campo';
+import { useTicketsStore } from '@/stores/tickets';
 import { useOltStore } from '@/stores/olt';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
@@ -36,6 +37,7 @@ import {
 const route = useRoute();
 const router = useRouter();
 const campoStore = useCampoStore();
+const ticketsStore = useTicketsStore();
 const oltStore = useOltStore();
 const inventoryStore = useInventoryStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
@@ -448,7 +450,8 @@ async function loadEquipos() {
     const [assigned, pending] = await Promise.all([
       trabajo.value.contractId
         ? inventoryUnitsStore.fetchUnitsByContract(trabajo.value.contractId)
-        : inventoryUnitsStore.fetchUnitsByClient(trabajo.value.clientId),
+        : // clientId nunca es null aqui: esta funcion retorna arriba si jobType !== 'ticket', y un ticket siempre tiene cliente.
+          inventoryUnitsStore.fetchUnitsByClient(trabajo.value.clientId!),
       inventoryUnitsStore.fetchUnitsByTicket(jobId),
     ]);
     assignedUnits.value = assigned.filter((u) => u.status === 'assigned');
@@ -523,9 +526,12 @@ async function handleTakeTicket() {
   }
 }
 
-// ---- Devolver un ticket ya tomado (Fase 99): el cliente no estaba. Deja
-// una nota obligatoria (ticket_comments) y el ticket vuelve a la bolsa de
-// "Disponibles" para cualquier tecnico, incluyendo el mismo mas tarde. ----
+// ---- Devolver un ticket ya tomado (Fase 99): el tecnico no puede
+// continuar (emergencia, se equivoco de orden, etc). Deja una nota
+// obligatoria (ticket_comments) y el ticket vuelve a la bolsa de
+// "Disponibles" para que CUALQUIER tecnico lo tome — a diferencia de
+// "Cliente Ausente" (Fase 102, mas abajo), que reprograma y se lo queda el
+// mismo tecnico. ----
 const isMyAssignment = computed(() => assignees.value.some((a) => a.technician_id === auth.user?.id));
 const showReturnForm = ref(false);
 const returnReason = ref('');
@@ -555,6 +561,59 @@ async function handleReturnTicket() {
   }
 }
 
+// ---- Cliente Ausente / re-agendamiento prioritario (Fase 102): el tecnico
+// llego y no habia nadie. A diferencia de "Devolver orden", el ticket SIGUE
+// asignado al mismo tecnico — solo se reprograma (status='rescheduled',
+// priority sube a 'urgent' automaticamente) para una fecha/hora puntual.
+// El "desvincular el temporizador" del pedido pasa solo: el chip de
+// cronometro en TicketsView.vue/CampoDashboardView solo se muestra con
+// status 'in_progress', que este update deja atras. ----
+const canMarkAusente = computed(
+  () => jobType === 'ticket' && isMyAssignment.value && (trabajo.value?.raw as Ticket | undefined)?.status === 'in_progress',
+);
+const showAusenteForm = ref(false);
+const ausenteDate = ref('');
+const ausenteReason = ref('');
+const savingAusente = ref(false);
+const ausenteError = ref<string | null>(null);
+
+function defaultAusenteDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(8, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function toggleAusenteForm() {
+  showAusenteForm.value = !showAusenteForm.value;
+  if (showAusenteForm.value && !ausenteDate.value) ausenteDate.value = defaultAusenteDate();
+  ausenteError.value = null;
+}
+
+async function handleMarkAusente() {
+  if (!ausenteDate.value) {
+    ausenteError.value = 'Elige la fecha de reprogramación.';
+    return;
+  }
+  savingAusente.value = true;
+  ausenteError.value = null;
+  try {
+    await ticketsStore.updateTicket(jobId, {
+      status: 'rescheduled',
+      priority: 'urgent',
+      rescheduled_to: new Date(ausenteDate.value).toISOString(),
+      reschedule_reason: ausenteReason.value.trim() || null,
+    });
+    toast.success('Marcado como Cliente Ausente — reprogramado y subido a prioridad urgente.');
+    router.push('/campo');
+  } catch (e) {
+    ausenteError.value = getErrorMessage(e, 'No se pudo reprogramar el ticket');
+  } finally {
+    savingAusente.value = false;
+  }
+}
+
 const outgoingForm = ref({ unitId: '', condition: 'in_stock' as 'in_stock' | 'damaged' | 'in_repair', reason: '' });
 const savingOutgoing = ref(false);
 const outgoingError = ref<string | null>(null);
@@ -564,11 +623,12 @@ async function handleOutgoingUnit() {
   savingOutgoing.value = true;
   outgoingError.value = null;
   try {
+    // clientId nunca es null aqui: este formulario solo se muestra para jobType === 'ticket'.
     await inventoryUnitsStore.returnUnit(
       outgoingForm.value.unitId,
       outgoingForm.value.condition,
       outgoingForm.value.reason || 'Retirado en averia',
-      trabajo.value.clientId,
+      trabajo.value.clientId!,
       jobId,
     );
     outgoingForm.value = { unitId: '', condition: 'in_stock', reason: '' };
@@ -604,7 +664,8 @@ async function handleIncomingUnit() {
   savingIncoming.value = true;
   incomingError.value = null;
   try {
-    await inventoryUnitsStore.stageUnitFromTicket(incomingForm.value.unitId, trabajo.value.clientId, {
+    // clientId nunca es null aqui: este formulario solo se muestra para jobType === 'ticket'.
+    await inventoryUnitsStore.stageUnitFromTicket(incomingForm.value.unitId, trabajo.value.clientId!, {
       contractId: trabajo.value.contractId ?? undefined,
       ticketId: jobId,
       reason: incomingForm.value.reason || 'Equipo entrante registrado en averia',
@@ -910,9 +971,30 @@ async function handleCloseSubmit() {
           <p v-else class="text-xs text-slate-400">Sin técnicos asignados.</p>
           <p v-if="selfAssignError" class="text-xs text-red-600 mt-2">{{ selfAssignError }}</p>
 
+          <div v-if="canMarkAusente" class="mt-3 pt-3 border-t border-slate-100">
+            <button v-if="!showAusenteForm" type="button" class="btn-secondary w-full text-xs !bg-amber-500/15 !text-amber-700 !border-amber-300" @click="toggleAusenteForm">
+              🏠 Cliente Ausente
+            </button>
+            <div v-else class="space-y-2">
+              <label class="block text-xs text-slate-600 mb-1">Fecha de reprogramación</label>
+              <input v-model="ausenteDate" type="datetime-local" class="field-input text-sm" />
+              <label class="block text-xs text-slate-600 mb-1">Motivo (opcional)</label>
+              <textarea v-model="ausenteReason" rows="2" placeholder="Ej. no contesta, casa cerrada..." class="field-input text-sm"></textarea>
+              <div class="flex gap-2">
+                <button type="button" class="btn-secondary text-xs flex-1" :disabled="savingAusente" @click="toggleAusenteForm">
+                  Cancelar
+                </button>
+                <button type="button" class="btn-primary text-xs flex-1 !bg-amber-500" :disabled="savingAusente" @click="handleMarkAusente">
+                  {{ savingAusente ? 'Guardando...' : 'Confirmar reprogramación' }}
+                </button>
+              </div>
+              <p v-if="ausenteError" class="text-xs text-red-600">{{ ausenteError }}</p>
+            </div>
+          </div>
+
           <div v-if="isMyAssignment && !ticketFrozen" class="mt-3 pt-3 border-t border-slate-100">
             <button v-if="!showReturnForm" type="button" class="btn-danger text-xs" @click="toggleReturnForm">
-              ↩️ Devolver orden (cliente no estaba)
+              ↩️ Devolver orden (no puedo continuar)
             </button>
             <div v-else class="space-y-2">
               <textarea

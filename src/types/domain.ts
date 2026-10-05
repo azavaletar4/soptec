@@ -3,7 +3,7 @@ export type DocumentType = 'cedula' | 'ruc' | 'pasaporte';
 export type ClientStatus = 'prospect' | 'active' | 'suspended' | 'retired';
 export type ContractStatus = 'active' | 'suspended' | 'cancelled';
 export type ContractPriority = 'high' | 'medium' | 'low';
-export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'rescheduled';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TicketCategory =
   | 'no_service'
@@ -221,6 +221,9 @@ export interface Ticket {
   /** Agendamiento de hora exacta (Fase 101/B) — nullable, lo asigna despacho desde el tablero Timeline. */
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
+  /** Cliente Ausente / re-agendamiento prioritario (Fase 102) — solo tiene sentido cuando status='rescheduled'. */
+  rescheduled_to: string | null;
+  reschedule_reason: string | null;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'latitude' | 'longitude'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }

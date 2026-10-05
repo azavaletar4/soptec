@@ -91,12 +91,14 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   in_progress: 'En progreso',
   resolved: 'Resuelto',
   closed: 'Cerrado',
+  rescheduled: 'Reprogramado',
 };
 const STATUS_CLASS: Record<TicketStatus, string> = {
   open: 'bg-yellow-500/15 text-yellow-600',
   in_progress: 'bg-sky-500/15 text-sky-700',
   resolved: 'bg-green-500/15 text-green-600',
   closed: 'bg-slate-500/15 text-slate-600',
+  rescheduled: 'bg-red-500/15 text-red-600',
 };
 const PRIORITY_LABEL: Record<TicketPriority, string> = {
   low: 'Baja',
@@ -124,19 +126,21 @@ const STATUS_TABS: { value: TicketStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'Todos' },
   { value: 'open', label: 'Abiertos' },
   { value: 'in_progress', label: 'En progreso' },
+  { value: 'rescheduled', label: 'Reprogramados' },
   { value: 'resolved', label: 'Resueltos' },
   { value: 'closed', label: 'Cerrados' },
 ];
 
-// Orden automatico (Fase 90): los activos (abierto/en progreso) siempre
-// arriba, resueltos/cerrados al fondo; dentro de los activos, por urgencia
-// (urgente > alta > media > baja); y como ultimo criterio, los mas
+// Orden automatico (Fase 90): los activos (abierto/en progreso/reprogramado)
+// siempre arriba, resueltos/cerrados al fondo; dentro de los activos, por
+// urgencia (urgente > alta > media > baja); y como ultimo criterio, los mas
 // recientes primero. Es reactivo: como updateTicketStatus reemplaza el
 // ticket en ticketsStore.tickets, este computed se re-ordena solo en
 // cuanto cambia el estado, sin recargar la pagina.
 const STATUS_SORT_TIER: Record<TicketStatus, number> = {
   open: 0,
   in_progress: 0,
+  rescheduled: 0,
   resolved: 1,
   closed: 1,
 };
@@ -147,14 +151,28 @@ const PRIORITY_SORT_RANK: Record<TicketPriority, number> = {
   low: 3,
 };
 
+// Cliente Ausente / re-agendamiento prioritario (Fase 102): un ticket
+// 'rescheduled' cuya fecha ya llego (o paso) se va al Top 1 absoluto de la
+// lista, por encima de cualquier otro criterio — ni siquiera un 'urgent'
+// recien creado le gana. Antes de que llegue esa fecha, sigue el orden
+// normal (ya quedo con priority='urgent' al marcarlo, asi que igual flota
+// cerca de arriba dentro del tier activo).
+function isDueReschedule(t: Ticket, nowMs: number): boolean {
+  return t.status === 'rescheduled' && !!t.rescheduled_to && new Date(t.rescheduled_to).getTime() <= nowMs;
+}
+
 const filteredTickets = computed(() => {
   let list = ticketsStore.tickets;
   if (statusFilter.value !== 'all') list = list.filter((t) => t.status === statusFilter.value);
   if (dateRange.value) {
     const { start, end } = dateRange.value;
     list = list.filter((t) => {
-      const created = new Date(t.created_at).getTime();
-      return created >= start.getTime() && created <= end.getTime();
+      // Un reprogramado se filtra por SU fecha de reprogramacion, no por
+      // cuando se creo originalmente — si no, "Hoy" lo esconderia justo el
+      // dia que debe atenderse primero.
+      const relevant = t.status === 'rescheduled' && t.rescheduled_to ? new Date(t.rescheduled_to) : new Date(t.created_at);
+      const time = relevant.getTime();
+      return time >= start.getTime() && time <= end.getTime();
     });
   }
   const q = searchQuery.value.trim().toLowerCase();
@@ -166,6 +184,8 @@ const filteredTickets = computed(() => {
     );
   }
   return [...list].sort((a, b) => {
+    const dueDiff = Number(isDueReschedule(b, now.value)) - Number(isDueReschedule(a, now.value));
+    if (dueDiff !== 0) return dueDiff;
     const tierDiff = STATUS_SORT_TIER[a.status] - STATUS_SORT_TIER[b.status];
     if (tierDiff !== 0) return tierDiff;
     const priorityDiff = PRIORITY_SORT_RANK[a.priority] - PRIORITY_SORT_RANK[b.priority];
@@ -330,8 +350,12 @@ function formatDate(value: string) {
           v-for="t in filteredTickets"
           :key="t.id"
           class="surface p-3 cursor-pointer"
+          :class="isDueReschedule(t, now) ? 'ring-2 ring-red-500' : ''"
           @click="goToDetail(t)"
         >
+          <p v-if="isDueReschedule(t, now)" class="text-[11px] font-bold text-red-600 mb-1.5">
+            🔴 REPROGRAMADO - ATENDER PRIMERO
+          </p>
           <div class="flex items-start justify-between gap-2 mb-1.5">
             <span class="font-mono text-xs text-slate-500" :title="formatDate(t.created_at)">{{ t.ticket_number }}</span>
             <div class="flex gap-1.5 shrink-0">
@@ -394,11 +418,15 @@ function formatDate(value: string) {
               v-for="t in filteredTickets"
               :key="t.id"
               class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
+              :class="isDueReschedule(t, now) ? 'bg-red-50' : ''"
               @click="goToDetail(t)"
             >
               <td class="px-4 py-3">
                 <div class="font-mono text-xs text-slate-500" :title="formatDate(t.created_at)">{{ t.ticket_number }}</div>
                 <div class="text-slate-900">{{ t.title }}</div>
+                <p v-if="isDueReschedule(t, now)" class="text-[11px] font-bold text-red-600 mt-0.5">
+                  🔴 REPROGRAMADO - ATENDER PRIMERO
+                </p>
               </td>
               <td class="px-4 py-3 text-slate-600">
                 {{ t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : '—' }}

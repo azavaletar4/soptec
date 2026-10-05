@@ -32,7 +32,7 @@ export interface TicketReport {
 }
 
 const EMPTY_CLIENT_STATUS: Record<ClientStatus, number> = { active: 0, suspended: 0, prospect: 0, retired: 0 };
-const EMPTY_TICKET_STATUS: Record<TicketStatus, number> = { open: 0, in_progress: 0, resolved: 0, closed: 0 };
+const EMPTY_TICKET_STATUS: Record<TicketStatus, number> = { open: 0, in_progress: 0, resolved: 0, closed: 0, rescheduled: 0 };
 const EMPTY_TICKET_CATEGORY: Record<TicketCategory, number> = {
   no_service: 0,
   slow_speed: 0,

@@ -901,12 +901,14 @@ const TICKET_STATUS_LABEL: Record<TicketStatus, string> = {
   in_progress: 'En progreso',
   resolved: 'Resuelto',
   closed: 'Cerrado',
+  rescheduled: 'Reprogramado',
 };
 const TICKET_STATUS_CLASS: Record<TicketStatus, string> = {
   open: 'bg-yellow-500/15 text-yellow-600',
   in_progress: 'bg-sky-500/15 text-sky-700',
   resolved: 'bg-green-500/15 text-green-600',
   closed: 'bg-slate-500/15 text-slate-600',
+  rescheduled: 'bg-red-500/15 text-red-600',
 };
 
 async function loadTickets() {
