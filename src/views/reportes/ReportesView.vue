@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useReportsStore, type ClientReport, type FinancialReport, type TicketReport } from '@/stores/reports';
 import { getErrorMessage } from '@/lib/errors';
+import { MOTIVO_AVERIA_LABEL } from '@/lib/ticketMotivoAveria';
 import type { TicketCategory, TicketPriority, TicketStatus } from '@/types/domain';
 
 const reportsStore = useReportsStore();
@@ -60,6 +61,14 @@ const CATEGORY_COLOR: Record<TicketCategory, string> = {
   installation: '#0ea5e9',
   equipment: '#22c55e',
   reconnection_relocation: '#a855f7',
+  other: '#64748b',
+};
+const ROOT_CAUSE_COLOR: Record<string, string> = {
+  bad_installation: '#ef4444',
+  material_wear: '#f97316',
+  client_damage: '#eab308',
+  external_factor: '#8b5cf6',
+  defective_equipment: '#0ea5e9',
   other: '#64748b',
 };
 
@@ -262,6 +271,28 @@ onMounted(loadReports);
                 ></div>
               </div>
               <span class="w-6 text-right">{{ ticketReport?.byPriority[pr] ?? 0 }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-slate-100 p-4">
+          <div class="text-xs text-slate-500 mb-3">
+            Averías por causa raíz
+            <span v-if="ticketReport?.rootCauseMissing" class="text-slate-400">({{ ticketReport.rootCauseMissing }} sin causa registrada)</span>
+          </div>
+          <div class="space-y-2">
+            <div v-for="(label, cause) in MOTIVO_AVERIA_LABEL" :key="cause" class="flex items-center gap-3 text-xs">
+              <span class="w-28 truncate text-slate-600">{{ label }}</span>
+              <div class="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  class="h-full"
+                  :style="{
+                    width: `${((ticketReport?.byRootCause[cause] ?? 0) / maxOf(ticketReport?.byRootCause ?? {})) * 100}%`,
+                    background: ROOT_CAUSE_COLOR[cause],
+                  }"
+                ></div>
+              </div>
+              <span class="w-6 text-right">{{ ticketReport?.byRootCause[cause] ?? 0 }}</span>
             </div>
           </div>
         </div>

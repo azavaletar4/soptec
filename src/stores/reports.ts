@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import type { ClientStatus, InvoiceStatus, TicketCategory, TicketPriority, TicketStatus } from '@/types/domain';
+import type { ClientStatus, InvoiceStatus, TicketCategory, TicketMotivoAveria, TicketPriority, TicketStatus } from '@/types/domain';
 
 // Reportes calculados en el cliente (select + reduce en JS): a la escala de
 // un solo ISP (cientos/pocos miles de filas) es mas simple que armar vistas
@@ -27,6 +27,10 @@ export interface TicketReport {
   byStatus: Record<TicketStatus, number>;
   byCategory: Record<TicketCategory, number>;
   byPriority: Record<TicketPriority, number>;
+  /** Causa raiz (Fase 103) — solo cuenta tickets ya cerrados con motivo_averia asignado. */
+  byRootCause: Record<TicketMotivoAveria, number>;
+  /** Averias (resueltas/cerradas) todavia sin causa raiz asignada — dato de calidad del dato, no un desglose de causa. */
+  rootCauseMissing: number;
   avgResolutionHours: number | null;
   technicianRanking: { staffId: string; name: string; ticketCount: number; points: number }[];
 }
@@ -43,6 +47,14 @@ const EMPTY_TICKET_CATEGORY: Record<TicketCategory, number> = {
   other: 0,
 };
 const EMPTY_TICKET_PRIORITY: Record<TicketPriority, number> = { low: 0, medium: 0, high: 0, urgent: 0 };
+const EMPTY_ROOT_CAUSE: Record<TicketMotivoAveria, number> = {
+  bad_installation: 0,
+  material_wear: 0,
+  client_damage: 0,
+  external_factor: 0,
+  defective_equipment: 0,
+  other: 0,
+};
 
 export const useReportsStore = defineStore('reports', () => {
   const loading = ref(false);
@@ -99,7 +111,7 @@ export const useReportsStore = defineStore('reports', () => {
     const { data, error: err } = await supabase
       .from('tickets')
       .select(
-        'id, status, category, priority, points, assigned_to, created_at, resolved_at, closed_at, assigned_profile:profiles!tickets_assigned_to_fkey(id, full_name, email)',
+        'id, status, category, priority, points, assigned_to, created_at, resolved_at, closed_at, motivo_averia, assigned_profile:profiles!tickets_assigned_to_fkey(id, full_name, email)',
       )
       .gte('created_at', fromIso)
       .lte('created_at', toIso);
@@ -114,12 +126,15 @@ export const useReportsStore = defineStore('reports', () => {
       created_at: string;
       resolved_at: string | null;
       closed_at: string | null;
+      motivo_averia: TicketMotivoAveria | null;
       assigned_profile: { id: string; full_name: string | null; email: string } | null;
     }[];
 
     const byStatus = { ...EMPTY_TICKET_STATUS };
     const byCategory = { ...EMPTY_TICKET_CATEGORY };
     const byPriority = { ...EMPTY_TICKET_PRIORITY };
+    const byRootCause = { ...EMPTY_ROOT_CAUSE };
+    let rootCauseMissing = 0;
     let resolutionHoursSum = 0;
     let resolutionCount = 0;
     const techMap = new Map<string, { name: string; ticketCount: number; points: number }>();
@@ -128,6 +143,11 @@ export const useReportsStore = defineStore('reports', () => {
       byStatus[t.status] += 1;
       byCategory[t.category] += 1;
       byPriority[t.priority] += 1;
+
+      if (t.status === 'resolved' || t.status === 'closed') {
+        if (t.motivo_averia) byRootCause[t.motivo_averia] += 1;
+        else rootCauseMissing += 1;
+      }
 
       const finishedAt = t.resolved_at ?? t.closed_at;
       if (finishedAt) {
@@ -159,6 +179,8 @@ export const useReportsStore = defineStore('reports', () => {
       byStatus,
       byCategory,
       byPriority,
+      byRootCause,
+      rootCauseMissing,
       avgResolutionHours: resolutionCount ? resolutionHoursSum / resolutionCount : null,
       technicianRanking,
     };

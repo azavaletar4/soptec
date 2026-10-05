@@ -12,6 +12,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { waLink } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
+import { MOTIVO_AVERIA_LABEL, MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
 import type { Ticket, TicketComment, TicketPriority, TicketStatus, TicketMotivoAveria, InventoryMovement, InventoryUnit } from '@/types/domain';
 
 const route = useRoute();
@@ -113,13 +114,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   reconnection_relocation: 'Reconexión / Traslado',
   other: 'Otro',
 };
-const MOTIVO_LABEL: Record<TicketMotivoAveria, string> = {
-  bad_installation: 'Mala instalación',
-  material_wear: 'Deterioro de material',
-  client_damage: 'Daño provocado por el cliente',
-  external_factor: 'Factor externo',
-  defective_equipment: 'Equipo defectuoso',
-};
 
 // Liquidar una averia (categorias en AVERIA_TICKET_CATEGORIES) exige elegir
 // un motivo antes de marcarla resuelta/cerrada — alimenta el ranking de
@@ -129,12 +123,15 @@ const MOTIVO_LABEL: Record<TicketMotivoAveria, string> = {
 const isAveriaCategory = computed(() => !!ticket.value && AVERIA_TICKET_CATEGORIES.includes(ticket.value.category));
 
 const showCloseAveriaModal = ref(false);
-const closeAveriaForm = ref({ status: 'resolved' as TicketStatus, motivoAveria: '' as TicketMotivoAveria | '', observacion: '' });
+const closeAveriaForm = ref({
+  status: 'resolved' as TicketStatus,
+  motivoAveria: '' as TicketMotivoAveria | '',
+  motivoAveriaDetalle: '',
+  observacion: '',
+});
 const savingCloseAveria = ref(false);
 const closeAveriaError = ref<string | null>(null);
-const requiresJustification = computed(
-  () => closeAveriaForm.value.motivoAveria === 'client_damage' || closeAveriaForm.value.motivoAveria === 'external_factor',
-);
+const requiresJustification = computed(() => MOTIVOS_EXIMEN_TECNICO.includes(closeAveriaForm.value.motivoAveria as TicketMotivoAveria));
 
 async function loadTicket() {
   loading.value = true;
@@ -284,7 +281,11 @@ async function handleStatusChange(status: TicketStatus) {
   if ((status === 'resolved' || status === 'closed') && isAveriaCategory.value) {
     closeAveriaForm.value = {
       status,
-      motivoAveria: ticket.value.motivo_averia ?? '',
+      // Causa preliminar de despacho (Fase 103): solo se usa como sugerencia
+      // la primera vez — si el ticket ya tiene un motivo_averia propio (se
+      // esta re-liquidando), ese manda.
+      motivoAveria: ticket.value.motivo_averia ?? ticket.value.motivo_preliminar ?? '',
+      motivoAveriaDetalle: ticket.value.motivo_averia_detalle ?? '',
       observacion: ticket.value.observacion_cierre ?? '',
     };
     closeAveriaError.value = null;
@@ -304,6 +305,10 @@ async function handleStatusChange(status: TicketStatus) {
 
 async function handleCloseAveriaSubmit() {
   if (!ticket.value || !closeAveriaForm.value.motivoAveria) return;
+  if (closeAveriaForm.value.motivoAveria === 'other' && !closeAveriaForm.value.motivoAveriaDetalle.trim()) {
+    closeAveriaError.value = 'Describe la causa encontrada (seleccionaste "Otra causa").';
+    return;
+  }
   if (requiresJustification.value && !closeAveriaForm.value.observacion.trim()) {
     closeAveriaError.value = 'La justificación es obligatoria para este motivo.';
     return;
@@ -315,6 +320,7 @@ async function handleCloseAveriaSubmit() {
     ticket.value = await ticketsStore.updateTicket(ticket.value.id, {
       status: closeAveriaForm.value.status,
       motivo_averia: closeAveriaForm.value.motivoAveria,
+      motivo_averia_detalle: closeAveriaForm.value.motivoAveria === 'other' ? closeAveriaForm.value.motivoAveriaDetalle.trim() || null : null,
       observacion_cierre: closeAveriaForm.value.observacion.trim() || null,
     });
     showCloseAveriaModal.value = false;
@@ -568,9 +574,14 @@ async function handleDelete() {
             <p class="whitespace-pre-wrap">{{ ticket.description || 'Sin descripción.' }}</p>
           </div>
 
+          <div v-if="ticket.motivo_preliminar && !ticket.motivo_averia" class="surface p-4 text-sm">
+            <div class="text-slate-500 text-xs mb-1">Causa preliminar (sospecha de despacho)</div>
+            <p class="font-medium">{{ MOTIVO_AVERIA_LABEL[ticket.motivo_preliminar] }}</p>
+          </div>
+
           <div v-if="ticket.motivo_averia" class="surface p-4 text-sm">
             <div class="flex items-center justify-between mb-2">
-              <div class="text-slate-500 text-xs">Motivo de cierre</div>
+              <div class="text-slate-500 text-xs">Causa técnica encontrada en campo</div>
               <span
                 class="badge text-[10px]"
                 :class="ticket.imputable_a_tecnico ? 'bg-amber-500/15 text-amber-700' : 'bg-emerald-500/15 text-emerald-700'"
@@ -578,7 +589,8 @@ async function handleDelete() {
                 {{ ticket.imputable_a_tecnico ? 'Imputable al técnico' : 'No imputable al técnico' }}
               </span>
             </div>
-            <p class="font-medium">{{ MOTIVO_LABEL[ticket.motivo_averia] }}</p>
+            <p class="font-medium">{{ MOTIVO_AVERIA_LABEL[ticket.motivo_averia] }}</p>
+            <p v-if="ticket.motivo_averia_detalle" class="text-slate-700 mt-1">{{ ticket.motivo_averia_detalle }}</p>
             <p v-if="ticket.observacion_cierre" class="text-slate-700 whitespace-pre-wrap mt-2">{{ ticket.observacion_cierre }}</p>
             <button
               v-if="ticket.evidencia_url"
@@ -751,15 +763,19 @@ async function handleDelete() {
           <h2 class="text-lg font-semibold mb-4">Liquidar avería</h2>
 
           <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Motivo de la avería</label>
+            <label class="block text-xs text-slate-600 mb-1">Causa técnica encontrada en campo</label>
             <select v-model="closeAveriaForm.motivoAveria" required class="field-input">
-              <option value="" disabled>Selecciona el motivo...</option>
-              <option value="bad_installation">Mala instalación</option>
-              <option value="material_wear">Deterioro de material</option>
-              <option value="client_damage">Daño provocado por el cliente (ej. mascota, golpe)</option>
-              <option value="external_factor">Factor externo (corte de fibra troncal, corte eléctrico)</option>
-              <option value="defective_equipment">Equipo defectuoso</option>
+              <option value="" disabled>Selecciona la causa...</option>
+              <option v-for="m in MOTIVO_AVERIA_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
             </select>
+            <p v-if="ticket?.motivo_preliminar && !ticket.motivo_averia" class="text-[11px] text-slate-400 mt-1">
+              Sospecha inicial de despacho: {{ MOTIVO_AVERIA_LABEL[ticket.motivo_preliminar] }} — ya viene preseleccionada, cámbiala si corresponde.
+            </p>
+          </div>
+
+          <div v-if="closeAveriaForm.motivoAveria === 'other'" class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Describe la causa</label>
+            <input v-model="closeAveriaForm.motivoAveriaDetalle" class="field-input" placeholder="Causa encontrada..." />
           </div>
 
           <div v-if="requiresJustification" class="mb-4">

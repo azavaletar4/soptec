@@ -173,6 +173,8 @@ export interface ClosureInput {
   pendingApprovalCategories: ClientPhotoCategory[];
   /** Fase 49 — solo aplica a tickets (averias), null en instalaciones. */
   motivoAveria: TicketMotivoAveria | null;
+  /** Fase 103 — texto libre cuando motivoAveria = 'other'. */
+  motivoAveriaDetalle: string | null;
   /** Justificacion obligatoria cuando motivoAveria es client_damage o external_factor. */
   justificacionCierre: string | null;
   /** Fase 95 — lectura manual de potencia optica (dBm), solo tickets. */
@@ -469,6 +471,7 @@ export const useCampoStore = defineStore('campo', () => {
       await ticketsStore.updateTicket(input.jobId, {
         status: input.targetStatus as Ticket['status'],
         motivo_averia: input.motivoAveria,
+        motivo_averia_detalle: input.motivoAveriaDetalle,
         observacion_cierre: input.justificacionCierre,
         evidencia_url: evidenciaPath,
       });
@@ -492,6 +495,7 @@ export const useCampoStore = defineStore('campo', () => {
       clientPhotoCategories: item.clientPhotoCategories as ClientPhotoCategory[],
       pendingApprovalCategories: item.pendingApprovalCategories as ClientPhotoCategory[],
       motivoAveria: item.motivoAveria as TicketMotivoAveria | null,
+      motivoAveriaDetalle: item.motivoAveriaDetalle,
       justificacionCierre: item.justificacionCierre,
       potenciaDbm: item.potenciaDbm,
       napElementoId: item.napElementoId,
@@ -515,6 +519,7 @@ export const useCampoStore = defineStore('campo', () => {
         clientPhotoCategories: input.clientPhotoCategories,
         pendingApprovalCategories: input.pendingApprovalCategories,
         motivoAveria: input.motivoAveria,
+        motivoAveriaDetalle: input.motivoAveriaDetalle,
         justificacionCierre: input.justificacionCierre,
         potenciaDbm: input.potenciaDbm,
         napElementoId: input.napElementoId,
@@ -543,6 +548,7 @@ export const useCampoStore = defineStore('campo', () => {
           clientPhotoCategories: input.clientPhotoCategories,
           pendingApprovalCategories: input.pendingApprovalCategories,
           motivoAveria: input.motivoAveria,
+          motivoAveriaDetalle: input.motivoAveriaDetalle,
           justificacionCierre: input.justificacionCierre,
           potenciaDbm: input.potenciaDbm,
           napElementoId: input.napElementoId,

@@ -19,6 +19,7 @@ import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
+import { MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
 import {
   NAP_CLIENT_LIMIT,
@@ -705,29 +706,30 @@ const TICKET_PHOTO_CATEGORIES = [
   { value: 'evidencia_2', label: 'Evidencia 2' },
 ];
 
-// Motivo de cierre de la averia (Fase 49) — clasifica si es responsabilidad
-// del tecnico antes de que el ranking de puntos la use para penalizar. Solo
-// "cliente" y "factor externo" lo eximen; el resto (mala instalacion,
-// deterioro, equipo defectuoso) si es imputable al tecnico.
-const MOTIVO_AVERIA_OPTIONS: { value: TicketMotivoAveria; label: string }[] = [
-  { value: 'bad_installation', label: 'Mala instalación' },
-  { value: 'material_wear', label: 'Deterioro de material' },
-  { value: 'client_damage', label: 'Daño provocado por el cliente (ej. mascota, golpe)' },
-  { value: 'external_factor', label: 'Factor externo (corte de fibra troncal, corte eléctrico)' },
-  { value: 'defective_equipment', label: 'Equipo defectuoso' },
-];
-const MOTIVOS_EXIMEN_TECNICO: TicketMotivoAveria[] = ['client_damage', 'external_factor'];
-
 const closureForm = ref({
   latitude: null as number | null,
   longitude: null as number | null,
   closureNotes: '',
   motivoAveria: '' as TicketMotivoAveria | '',
+  // Fase 103 — texto libre cuando motivoAveria = 'other'.
+  motivoAveriaDetalle: '',
   justificacion: '',
   // Fase 95 — opcionales, solo si la averia exigio recablear/revisar fibra.
   potenciaDbm: null as number | null,
   napElementoId: '',
 });
+// Causa preliminar (Fase 103): si admin/soporte dejo una sospecha al crear
+// el ticket, se pre-carga aca apenas se conoce el ticket — el tecnico la ve
+// ya seleccionada pero puede cambiarla libremente antes de cerrar.
+watch(
+  () => trabajo.value?.raw,
+  (raw) => {
+    if (jobType !== 'ticket' || !raw || closureForm.value.motivoAveria) return;
+    const preliminar = (raw as Ticket).motivo_preliminar;
+    if (preliminar) closureForm.value.motivoAveria = preliminar;
+  },
+  { immediate: true },
+);
 const requiresJustification = computed(
   () => jobType === 'ticket' && MOTIVOS_EXIMEN_TECNICO.includes(closureForm.value.motivoAveria as TicketMotivoAveria),
 );
@@ -807,7 +809,11 @@ async function handleCloseSubmit() {
   // foto de evidencia como respaldo.
   if (jobType === 'ticket') {
     if (!closureForm.value.motivoAveria) {
-      closeError.value = 'Selecciona el motivo de la avería para poder cerrarla.';
+      closeError.value = 'Selecciona la causa técnica encontrada en campo para poder cerrar la avería.';
+      return;
+    }
+    if (closureForm.value.motivoAveria === 'other' && !closureForm.value.motivoAveriaDetalle.trim()) {
+      closeError.value = 'Describe la causa encontrada (seleccionaste "Otra causa").';
       return;
     }
     if (requiresJustification.value) {
@@ -854,6 +860,8 @@ async function handleCloseSubmit() {
       clientPhotoCategories: jobType === 'installation' ? (INSTALL_PHOTO_CATEGORIES.map((c) => c.value) as ClientPhotoCategory[]) : [],
       pendingApprovalCategories: jobType === 'ticket' ? CENSO_CATEGORIES.map((c) => c.value) : [],
       motivoAveria: jobType === 'ticket' ? closureForm.value.motivoAveria || null : null,
+      motivoAveriaDetalle:
+        jobType === 'ticket' && closureForm.value.motivoAveria === 'other' ? closureForm.value.motivoAveriaDetalle.trim() || null : null,
       justificacionCierre: jobType === 'ticket' ? closureForm.value.justificacion.trim() || null : null,
       potenciaDbm: jobType === 'ticket' ? closureForm.value.potenciaDbm : null,
       napElementoId: jobType === 'ticket' ? closureForm.value.napElementoId || null : null,
@@ -1381,12 +1389,22 @@ async function handleCloseSubmit() {
 
           <template v-if="jobType === 'ticket'">
             <label class="block text-xs text-slate-600 mb-1">
-              Motivo de la avería<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
+              Causa técnica encontrada en campo<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
             </label>
-            <select v-model="closureForm.motivoAveria" class="field-input text-sm mb-3">
-              <option value="" disabled>Selecciona el motivo...</option>
+            <select v-model="closureForm.motivoAveria" class="field-input text-sm mb-1.5">
+              <option value="" disabled>Selecciona la causa...</option>
               <option v-for="m in MOTIVO_AVERIA_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
             </select>
+            <p v-if="(trabajo?.raw as Ticket)?.motivo_preliminar" class="text-[11px] text-slate-400 mb-1.5">
+              Sospecha inicial de despacho: {{ MOTIVO_AVERIA_OPTIONS.find((m) => m.value === (trabajo?.raw as Ticket)?.motivo_preliminar)?.label }}
+              — cámbiala si en campo encontraste algo distinto.
+            </p>
+            <input
+              v-if="closureForm.motivoAveria === 'other'"
+              v-model="closureForm.motivoAveriaDetalle"
+              placeholder="Describe la causa encontrada..."
+              class="field-input text-sm mb-3"
+            />
 
             <template v-if="requiresJustification">
               <label class="block text-xs text-slate-600 mb-1">

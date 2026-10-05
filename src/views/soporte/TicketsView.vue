@@ -13,7 +13,9 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
-import type { ServiceContract, Ticket, TicketCategory, TicketPriority, TicketStatus } from '@/types/domain';
+import { MOTIVO_AVERIA_OPTIONS } from '@/lib/ticketMotivoAveria';
+import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
+import type { ServiceContract, Ticket, TicketCategory, TicketMotivoAveria, TicketPriority, TicketStatus } from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
@@ -81,6 +83,8 @@ const emptyForm = () => ({
   description: '',
   category: 'other' as TicketCategory,
   priority: 'medium' as TicketPriority,
+  // Fase 103 — sospecha inicial opcional, pre-llena el cierre del tecnico.
+  motivo_preliminar: '' as TicketMotivoAveria | '',
 });
 const form = ref(emptyForm());
 const ticketContracts = ref<ServiceContract[]>([]);
@@ -257,6 +261,7 @@ async function handleSubmit() {
       description: form.value.description || null,
       category: form.value.category,
       priority: form.value.priority,
+      motivo_preliminar: AVERIA_TICKET_CATEGORIES.includes(form.value.category) ? form.value.motivo_preliminar || null : null,
     });
     showModal.value = false;
     router.push(`/soporte/${created.id}`);
@@ -538,6 +543,17 @@ function formatDate(value: string) {
                 <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
               </select>
             </div>
+          </div>
+
+          <div v-if="AVERIA_TICKET_CATEGORIES.includes(form.category)" class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Causa preliminar (opcional)</label>
+            <select v-model="form.motivo_preliminar" class="field-input">
+              <option value="">Sin sospecha todavía</option>
+              <option v-for="m in MOTIVO_AVERIA_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
+            </select>
+            <p class="text-[11px] text-slate-400 mt-1">
+              Si ya sospechas la causa, el técnico la verá pre-seleccionada al cerrar — puede cambiarla en campo.
+            </p>
           </div>
 
           <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>

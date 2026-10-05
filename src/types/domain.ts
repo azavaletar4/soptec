@@ -18,7 +18,8 @@ export type TicketMotivoAveria =
   | 'material_wear'
   | 'client_damage'
   | 'external_factor'
-  | 'defective_equipment';
+  | 'defective_equipment'
+  | 'other';
 
 /** Categorias de ticket que cuentan como averia para el ranking de puntos (Fase 27) y el cierre con motivo (Fase 49). */
 export const AVERIA_TICKET_CATEGORIES: TicketCategory[] = ['no_service', 'slow_speed', 'equipment'];
@@ -216,6 +217,10 @@ export interface Ticket {
   imputable_a_tecnico: boolean;
   /** Justificacion obligatoria cuando el motivo es client_damage o external_factor. */
   observacion_cierre: string | null;
+  /** Texto libre cuando motivo_averia = 'other' (Fase 103). */
+  motivo_averia_detalle: string | null;
+  /** Sospecha inicial de admin/soporte al crear el ticket (Fase 103, opcional) — pre-llena el cierre, el tecnico la puede cambiar. */
+  motivo_preliminar: TicketMotivoAveria | null;
   /** Ruta dentro del bucket privado work-evidence (no una URL publica lista para usar). */
   evidencia_url: string | null;
   /** Agendamiento de hora exacta (Fase 101/B) — nullable, lo asigna despacho desde el tablero Timeline. */
