@@ -136,12 +136,18 @@ const unitKpis = computed(() => {
   };
 });
 
+const UNIT_STATUS_SORT_ORDER: Record<InventoryUnitStatus, number> = {
+  in_stock: 0,
+  in_repair: 1,
+  damaged: 2,
+  en_recupero: 3,
+  pending_approval: 4,
+  assigned: 5,
+  retired: 6,
+};
+
 const sortedUnits = computed(() =>
-  [...units.value].sort((a, b) => {
-    if (a.status === 'in_stock' && b.status !== 'in_stock') return -1;
-    if (a.status !== 'in_stock' && b.status === 'in_stock') return 1;
-    return 0;
-  }),
+  [...units.value].sort((a, b) => UNIT_STATUS_SORT_ORDER[a.status] - UNIT_STATUS_SORT_ORDER[b.status]),
 );
 
 const unitsError = ref<string | null>(null);
