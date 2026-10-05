@@ -509,7 +509,7 @@ function formatDate(value: string) {
                     {{ deletingId === job.id ? 'Eliminando...' : 'Eliminar' }}
                   </button>
                 </template>
-                <span v-else class="text-xs text-sky-700">Ver / editar →</span>
+                <button v-else type="button" class="text-xs text-sky-700 hover:underline" @click="goToJob(job)">Ver / editar →</button>
               </td>
             </tr>
           </tbody>
