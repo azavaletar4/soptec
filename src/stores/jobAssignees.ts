@@ -78,5 +78,16 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
     if (error) throw error;
   }
 
-  return { loading, fetchAssignees, addAssignee, removeAssignee, setLeader, selfAssignTicket };
+  /**
+   * Fase 99: el tecnico devuelve un ticket que ya habia tomado (ej. el
+   * cliente no estaba) — libera la cuadrilla completa y deja una nota
+   * obligatoria (ticket_comments) con el motivo. Mismo patron que
+   * selfAssignTicket: RPC SECURITY DEFINER, la RLS normal se lo niega.
+   */
+  async function returnTicket(ticketId: string, reason: string) {
+    const { error } = await supabase.rpc('return_ticket', { p_ticket_id: ticketId, p_reason: reason });
+    if (error) throw error;
+  }
+
+  return { loading, fetchAssignees, addAssignee, removeAssignee, setLeader, selfAssignTicket, returnTicket };
 });

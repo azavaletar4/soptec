@@ -202,6 +202,11 @@ export const useCampoStore = defineStore('campo', () => {
     await ticketsStore.fetchTickets();
   }
 
+  async function returnTicket(ticketId: string, reason: string) {
+    await jobAssigneesStore.returnTicket(ticketId, reason);
+    await ticketsStore.fetchTickets();
+  }
+
   async function fetchAll() {
     loading.value = true;
     try {
@@ -509,6 +514,7 @@ export const useCampoStore = defineStore('campo', () => {
     trabajos,
     availableTickets,
     selfAssignTicket,
+    returnTicket,
     fetchAll,
     refreshQueuedCount,
     runDiagnostico,

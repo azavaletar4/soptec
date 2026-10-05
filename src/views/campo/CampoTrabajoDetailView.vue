@@ -423,6 +423,38 @@ async function handleTakeTicket() {
   }
 }
 
+// ---- Devolver un ticket ya tomado (Fase 99): el cliente no estaba. Deja
+// una nota obligatoria (ticket_comments) y el ticket vuelve a la bolsa de
+// "Disponibles" para cualquier tecnico, incluyendo el mismo mas tarde. ----
+const isMyAssignment = computed(() => assignees.value.some((a) => a.technician_id === auth.user?.id));
+const showReturnForm = ref(false);
+const returnReason = ref('');
+const returning = ref(false);
+const returnError = ref<string | null>(null);
+
+function toggleReturnForm() {
+  showReturnForm.value = !showReturnForm.value;
+  returnError.value = null;
+}
+
+async function handleReturnTicket() {
+  if (!returnReason.value.trim()) {
+    returnError.value = 'Escribe el motivo de la devolución.';
+    return;
+  }
+  returning.value = true;
+  returnError.value = null;
+  try {
+    await campoStore.returnTicket(jobId, returnReason.value.trim());
+    toast.success('Orden devuelta. Vuelve a la bolsa de disponibles.');
+    router.push('/campo');
+  } catch (e) {
+    returnError.value = getErrorMessage(e, 'No se pudo devolver la orden');
+  } finally {
+    returning.value = false;
+  }
+}
+
 const outgoingForm = ref({ unitId: '', condition: 'in_stock' as 'in_stock' | 'damaged' | 'in_repair', reason: '' });
 const savingOutgoing = ref(false);
 const outgoingError = ref<string | null>(null);
@@ -749,6 +781,29 @@ async function handleCloseSubmit() {
           </button>
           <p v-else class="text-xs text-slate-400">Sin técnicos asignados.</p>
           <p v-if="selfAssignError" class="text-xs text-red-600 mt-2">{{ selfAssignError }}</p>
+
+          <div v-if="isMyAssignment" class="mt-3 pt-3 border-t border-slate-100">
+            <button v-if="!showReturnForm" type="button" class="btn-danger text-xs !px-0" @click="toggleReturnForm">
+              ↩️ Devolver orden (cliente no estaba)
+            </button>
+            <div v-else class="space-y-2">
+              <textarea
+                v-model="returnReason"
+                rows="2"
+                placeholder="Motivo de la devolución (ej. cliente salió, no contesta...)"
+                class="field-input text-sm"
+              ></textarea>
+              <div class="flex gap-2">
+                <button type="button" class="btn-secondary text-xs flex-1" :disabled="returning" @click="toggleReturnForm">
+                  Cancelar
+                </button>
+                <button type="button" class="btn-destructive text-xs flex-1" :disabled="returning" @click="handleReturnTicket">
+                  {{ returning ? 'Devolviendo...' : 'Confirmar devolución' }}
+                </button>
+              </div>
+              <p v-if="returnError" class="text-xs text-red-600">{{ returnError }}</p>
+            </div>
+          </div>
         </template>
       </section>
 
