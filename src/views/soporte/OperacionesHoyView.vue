@@ -2,7 +2,6 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
 import TicketFlowGuide from '@/components/soporte/TicketFlowGuide.vue';
 import TechnicianStatusBar from '@/components/soporte/TechnicianStatusBar.vue';
 import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
@@ -12,12 +11,19 @@ import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useAuthStore } from '@/stores/auth';
+import { useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
 import { getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { MOTIVO_AVERIA_OPTIONS } from '@/lib/ticketMotivoAveria';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
-import type { ServiceContract, Ticket, TicketCategory, TicketMotivoAveria, TicketPriority, TicketStatus } from '@/types/domain';
+import type { JobType, ServiceContract, Ticket, TicketCategory, TicketMotivoAveria, TicketPriority } from '@/types/domain';
+
+// Fase 107: reemplaza el switcher de pestañas por tipo (Fase 101,
+// SoporteModeTabs.vue — ya no existe) por una sola bandeja que cruza
+// Averias/Altas/Rutinas ACTIVAS del dia a dia. Lo resuelto/cerrado vive
+// aparte en HistoricoAtendidosView.vue — asi esta vista no se va llenando
+// de trabajo que ya no hace falta revisar.
 
 const route = useRoute();
 const router = useRouter();
@@ -27,6 +33,7 @@ const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
 const jobAssigneesStore = useJobAssigneesStore();
 const auth = useAuthStore();
+const { activeJobs } = useUnifiedJobs();
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
 
@@ -65,6 +72,7 @@ async function handleQuickStart(t: Ticket) {
 // Crear tickets es solo para ADMIN/SUPERADMIN; TECNICO_RED y SOPORTE
 // pueden ver/atender los que ya existen.
 const canCreateTickets = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+const canCreateOthers = computed(() => auth.role !== 'TECNICO_RED');
 
 // La App de Campo (Fase 32) no tiene entrada propia en el sidebar para no
 // amontonarlo — se accede desde aqui, mismo criterio que "Ranking tecnicos".
@@ -74,9 +82,8 @@ const showModal = ref(false);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const clientFilter = ref('');
-const statusFilter = ref<TicketStatus | 'all'>('all');
+const typeFilter = ref<JobType | 'all'>('all');
 const searchQuery = ref('');
-// Filtro de fecha (Fase 101) — contra created_at (cuando se reporto la averia).
 const dateRange = ref<DateRange | null>(null);
 
 const emptyForm = () => ({
@@ -98,20 +105,18 @@ const form = ref(emptyForm());
 const ticketContracts = ref<ServiceContract[]>([]);
 const loadingTicketContracts = ref(false);
 
-const STATUS_LABEL: Record<TicketStatus, string> = {
-  open: 'Abierto',
-  in_progress: 'En progreso',
-  resolved: 'Resuelto',
-  closed: 'Cerrado',
-  rescheduled: 'Reprogramado',
+const TYPE_META: Record<JobType, { label: string; dot: string; badge: string }> = {
+  ticket: { label: '🔴 Avería', dot: 'bg-red-500', badge: 'bg-red-500/15 text-red-700' },
+  installation: { label: '🟢 Alta', dot: 'bg-green-500', badge: 'bg-green-500/15 text-green-700' },
+  routine: { label: '🟡 Rutina', dot: 'bg-amber-500', badge: 'bg-amber-500/15 text-amber-700' },
 };
-const STATUS_CLASS: Record<TicketStatus, string> = {
-  open: 'bg-yellow-500/15 text-yellow-600',
-  in_progress: 'bg-sky-500/15 text-sky-700',
-  resolved: 'bg-green-500/15 text-green-600',
-  closed: 'bg-slate-500/15 text-slate-600',
-  rescheduled: 'bg-red-500/15 text-red-600',
-};
+const TYPE_TABS: { value: JobType | 'all'; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'ticket', label: '🔴 Solo Averías' },
+  { value: 'installation', label: '🟢 Solo Altas' },
+  { value: 'routine', label: '🟡 Solo Rutinas' },
+];
+
 const PRIORITY_LABEL: Record<TicketPriority, string> = {
   low: 'Baja',
   medium: 'Media',
@@ -134,28 +139,9 @@ const CATEGORY_LABEL: Record<TicketCategory, string> = {
   other: 'Otro',
 };
 
-const STATUS_TABS: { value: TicketStatus | 'all'; label: string }[] = [
-  { value: 'all', label: 'Todos' },
-  { value: 'open', label: 'Abiertos' },
-  { value: 'in_progress', label: 'En progreso' },
-  { value: 'rescheduled', label: 'Reprogramados' },
-  { value: 'resolved', label: 'Resueltos' },
-  { value: 'closed', label: 'Cerrados' },
-];
-
-// Orden automatico (Fase 90): los activos (abierto/en progreso/reprogramado)
-// siempre arriba, resueltos/cerrados al fondo; dentro de los activos, por
-// urgencia (urgente > alta > media > baja); y como ultimo criterio, los mas
-// recientes primero. Es reactivo: como updateTicketStatus reemplaza el
-// ticket en ticketsStore.tickets, este computed se re-ordena solo en
-// cuanto cambia el estado, sin recargar la pagina.
-const STATUS_SORT_TIER: Record<TicketStatus, number> = {
-  open: 0,
-  in_progress: 0,
-  rescheduled: 0,
-  resolved: 1,
-  closed: 1,
-};
+// Orden automatico (Fase 90): dentro de lo activo, por urgencia (urgente >
+// alta > media > baja, solo aplica a tickets — instalaciones/rutinas caen
+// al final de ese criterio) y como ultimo, lo mas reciente primero.
 const PRIORITY_SORT_RANK: Record<TicketPriority, number> = {
   urgent: 0,
   high: 1,
@@ -164,45 +150,40 @@ const PRIORITY_SORT_RANK: Record<TicketPriority, number> = {
 };
 
 // Cliente Ausente / re-agendamiento prioritario (Fase 102): un ticket
-// 'rescheduled' cuya fecha ya llego (o paso) se va al Top 1 absoluto de la
-// lista, por encima de cualquier otro criterio — ni siquiera un 'urgent'
-// recien creado le gana. Antes de que llegue esa fecha, sigue el orden
-// normal (ya quedo con priority='urgent' al marcarlo, asi que igual flota
-// cerca de arriba dentro del tier activo).
-function isDueReschedule(t: Ticket, nowMs: number): boolean {
+// 'rescheduled' cuya fecha ya llego se va al Top 1 absoluto de la lista.
+function isDueReschedule(job: UnifiedJob, nowMs: number): boolean {
+  if (job.jobType !== 'ticket') return false;
+  const t = job.raw as Ticket;
   return t.status === 'rescheduled' && !!t.rescheduled_to && new Date(t.rescheduled_to).getTime() <= nowMs;
 }
 
-const filteredTickets = computed(() => {
-  let list = ticketsStore.tickets;
-  if (statusFilter.value !== 'all') list = list.filter((t) => t.status === statusFilter.value);
+const filteredJobs = computed(() => {
+  let list = activeJobs.value;
+  if (typeFilter.value !== 'all') list = list.filter((j) => j.jobType === typeFilter.value);
   if (dateRange.value) {
     const { start, end } = dateRange.value;
-    list = list.filter((t) => {
+    list = list.filter((j) => {
       // Un reprogramado se filtra por SU fecha de reprogramacion, no por
-      // cuando se creo originalmente — si no, "Hoy" lo esconderia justo el
-      // dia que debe atenderse primero.
-      const relevant = t.status === 'rescheduled' && t.rescheduled_to ? new Date(t.rescheduled_to) : new Date(t.created_at);
+      // cuando se creo originalmente.
+      const t = j.jobType === 'ticket' ? (j.raw as Ticket) : null;
+      const relevant =
+        t?.status === 'rescheduled' && t.rescheduled_to
+          ? new Date(t.rescheduled_to)
+          : j.scheduledStartAt
+            ? new Date(j.scheduledStartAt)
+            : new Date(`${j.fallbackDate}T12:00:00`);
       const time = relevant.getTime();
       return time >= start.getTime() && time <= end.getTime();
     });
   }
   const q = searchQuery.value.trim().toLowerCase();
-  if (q) {
-    list = list.filter((t) =>
-      `${t.title} ${t.ticket_number ?? ''} ${t.clients?.first_name ?? ''} ${t.clients?.last_name ?? ''}`
-        .toLowerCase()
-        .includes(q),
-    );
-  }
+  if (q) list = list.filter((j) => `${j.label} ${j.number ?? ''}`.toLowerCase().includes(q));
   return [...list].sort((a, b) => {
     const dueDiff = Number(isDueReschedule(b, now.value)) - Number(isDueReschedule(a, now.value));
     if (dueDiff !== 0) return dueDiff;
-    const tierDiff = STATUS_SORT_TIER[a.status] - STATUS_SORT_TIER[b.status];
-    if (tierDiff !== 0) return tierDiff;
-    const priorityDiff = PRIORITY_SORT_RANK[a.priority] - PRIORITY_SORT_RANK[b.priority];
+    const priorityDiff = PRIORITY_SORT_RANK[a.priority ?? 'low'] - PRIORITY_SORT_RANK[b.priority ?? 'low'];
     if (priorityDiff !== 0) return priorityDiff;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 });
 
@@ -218,8 +199,7 @@ const filteredClients = computed(() => {
 onMounted(async () => {
   await Promise.all([ticketsStore.fetchTickets(), clientsStore.fetchClients(), catalogsStore.fetchStaff()]);
   // Deep link desde la ficha de un servicio puntual (Fase 37):
-  // /soporte?client_id=..&contract_id=.. abre el modal ya precargado, para
-  // que el ticket quede asociado a ESA linea y no solo al cliente.
+  // /soporte?client_id=..&contract_id=.. abre el modal ya precargado.
   //
   // Deep link "Click & Create" desde el Cronograma de Campo (Fase 104):
   // /soporte?schedule_date=..&schedule_turno=..&tech_id=.. abre el modal con
@@ -318,8 +298,15 @@ async function handleSubmit() {
   }
 }
 
-function goToDetail(ticket: Ticket) {
-  router.push(`/soporte/${ticket.id}`);
+// Click en una fila: un ticket tiene su propia pagina de detalle; una
+// instalacion/rutina se edita inline en su propia tabla (materiales,
+// cuadrilla, censo...) — no tiene un modal de detalle aparte, asi que
+// navega ahi con el nombre precargado en el buscador que esas vistas ya
+// tienen, en vez de inventar un mecanismo de deep-link nuevo.
+function goToJob(job: UnifiedJob) {
+  if (job.jobType === 'ticket') router.push(`/soporte/${job.id}`);
+  else if (job.jobType === 'installation') router.push(`/soporte/instalaciones?q=${encodeURIComponent(job.label)}`);
+  else router.push(`/soporte/rutinas?q=${encodeURIComponent(job.label)}`);
 }
 
 const deletingId = ref<string | null>(null);
@@ -349,17 +336,19 @@ function formatDate(value: string) {
   <AppLayout>
     <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
-        <h1 class="text-2xl font-semibold">Soporte</h1>
-        <p class="text-slate-600 text-sm mt-1">{{ ticketsStore.tickets.length }} tickets registrados</p>
-        <SoporteModeTabs active="tickets" class="mt-3" />
+        <h1 class="text-2xl font-semibold">📋 Operaciones de Hoy</h1>
+        <p class="text-slate-600 text-sm mt-1">{{ filteredJobs.length }} órdenes activas — Averías, Altas y Rutinas</p>
+        <button class="text-xs text-sky-700 hover:underline mt-1" @click="router.push('/soporte/historico')">
+          📁 Histórico de Atendidos →
+        </button>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <button v-if="canOpenCampo" class="btn-ghost" @click="router.push('/campo')">📱 App de Campo</button>
         <button v-if="auth.role !== 'TECNICO_RED'" class="btn-ghost" @click="router.push('/soporte/agenda')">📅 Agenda</button>
         <button class="btn-ghost" @click="router.push('/soporte/ranking')">🏆 Ranking técnicos</button>
-        <button v-if="canCreateTickets" class="btn-primary" @click="openCreate">
-          + Nuevo ticket
-        </button>
+        <button v-if="canCreateOthers" class="btn-secondary" @click="router.push('/soporte/instalaciones?create=1')">+ Alta</button>
+        <button v-if="canCreateOthers" class="btn-secondary" @click="router.push('/soporte/rutinas?create=1')">+ Rutina</button>
+        <button v-if="canCreateTickets" class="btn-primary" @click="openCreate">+ Avería</button>
       </div>
     </div>
 
@@ -369,18 +358,14 @@ function formatDate(value: string) {
 
     <div class="surface flex flex-col gap-3 p-3 mb-4">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <input
-          v-model="searchQuery"
-          placeholder="Buscar por titulo, numero de ticket o cliente..."
-          class="field-input sm:max-w-xs"
-        />
+        <input v-model="searchQuery" placeholder="Buscar por título, número o cliente..." class="field-input sm:max-w-xs" />
         <div class="flex flex-wrap gap-2">
           <button
-            v-for="tab in STATUS_TABS"
+            v-for="tab in TYPE_TABS"
             :key="tab.value"
             class="px-3 py-1.5 rounded-lg text-xs font-medium"
-            :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
-            @click="statusFilter = tab.value"
+            :class="typeFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+            @click="typeFilter = tab.value"
           >
             {{ tab.label }}
           </button>
@@ -392,72 +377,64 @@ function formatDate(value: string) {
     <p v-if="ticketsStore.error" class="mb-4 text-sm text-red-600">{{ ticketsStore.error }}</p>
 
     <p v-if="ticketsStore.loading" class="text-center text-slate-500 py-6">Cargando...</p>
-    <p v-else-if="!filteredTickets.length" class="text-center text-slate-500 py-6">No hay tickets en este filtro.</p>
+    <p v-else-if="!filteredJobs.length" class="text-center text-slate-500 py-6">No hay operaciones activas en este filtro.</p>
 
     <template v-else>
       <!-- Movil: cards (asi operan los tecnicos en campo) -->
       <div class="flex flex-col gap-3 sm:hidden">
         <div
-          v-for="t in filteredTickets"
-          :key="t.id"
+          v-for="job in filteredJobs"
+          :key="`${job.jobType}-${job.id}`"
           class="surface p-3 cursor-pointer"
-          :class="isDueReschedule(t, now) ? 'ring-2 ring-red-500' : ''"
-          @click="goToDetail(t)"
+          :class="isDueReschedule(job, now) ? 'ring-2 ring-red-500' : ''"
+          @click="goToJob(job)"
         >
-          <p v-if="isDueReschedule(t, now)" class="text-[11px] font-bold text-red-600 mb-1.5">
-            🔴 REPROGRAMADO - ATENDER PRIMERO
-          </p>
+          <p v-if="isDueReschedule(job, now)" class="text-[11px] font-bold text-red-600 mb-1.5">🔴 REPROGRAMADO - ATENDER PRIMERO</p>
           <div class="flex items-start justify-between gap-2 mb-1.5">
-            <span class="font-mono text-xs text-slate-500" :title="formatDate(t.created_at)">{{ t.ticket_number }}</span>
+            <span class="font-mono text-xs text-slate-500" :title="formatDate(job.createdAt)">{{ job.number ?? '—' }}</span>
             <div class="flex gap-1.5 shrink-0">
-              <span class="badge text-[10px]" :class="STATUS_CLASS[t.status]">{{ STATUS_LABEL[t.status] }}</span>
-              <span class="badge text-[10px]" :class="PRIORITY_CLASS[t.priority]">{{ PRIORITY_LABEL[t.priority] }}</span>
+              <span class="badge text-[10px]" :class="TYPE_META[job.jobType].badge">{{ TYPE_META[job.jobType].label }}</span>
+              <span v-if="job.priority" class="badge text-[10px]" :class="PRIORITY_CLASS[job.priority]">{{ PRIORITY_LABEL[job.priority] }}</span>
             </div>
           </div>
-          <div class="text-slate-900 font-medium mb-1">
-            {{ t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : t.title }}
-          </div>
+          <div class="text-slate-900 font-medium mb-1">{{ job.label }}</div>
           <div class="text-xs text-slate-500 mb-3">
-            {{ CATEGORY_LABEL[t.category] }} · {{ t.assigned_profile?.full_name || t.assigned_profile?.email || 'Sin asignar' }}
+            {{ job.jobType === 'ticket' ? CATEGORY_LABEL[(job.raw as Ticket).category] : job.assignedName ?? 'Sin asignar' }}
           </div>
 
-          <div class="flex items-center justify-between gap-2" @click.stop>
+          <div v-if="job.jobType === 'ticket'" class="flex items-center justify-between gap-2" @click.stop>
             <button
-              v-if="t.status === 'open' && t.assigned_to && canActOn(t)"
+              v-if="(job.raw as Ticket).status === 'open' && (job.raw as Ticket).assigned_to && canActOn(job.raw as Ticket)"
               class="btn-primary flex-1 text-sm py-2"
-              :disabled="startingId === t.id"
-              @click="handleQuickStart(t)"
+              :disabled="startingId === job.id"
+              @click="handleQuickStart(job.raw as Ticket)"
             >
-              {{ startingId === t.id ? 'Iniciando...' : '▶ Iniciar orden' }}
+              {{ startingId === job.id ? 'Iniciando...' : '▶ Iniciar orden' }}
             </button>
-            <button
-              v-else-if="t.status === 'in_progress'"
-              class="btn-secondary flex-1 text-sm py-2"
-              @click="goToDetail(t)"
-            >
-              ⏱️ {{ formatElapsedTime(t.updated_at, now) }} · Finalizar
+            <button v-else-if="(job.raw as Ticket).status === 'in_progress'" class="btn-secondary flex-1 text-sm py-2" @click="goToJob(job)">
+              ⏱️ {{ formatElapsedTime((job.raw as Ticket).updated_at, now) }} · Finalizar
             </button>
-            <button v-else class="btn-ghost flex-1 text-sm py-2" @click="goToDetail(t)">Ver detalle</button>
+            <button v-else class="btn-ghost flex-1 text-sm py-2" @click="goToJob(job)">Ver detalle</button>
             <button
               v-if="canCreateTickets"
               class="text-xs text-red-500/80 hover:text-red-600 shrink-0"
-              :disabled="deletingId === t.id"
-              @click="handleDelete(t)"
+              :disabled="deletingId === job.id"
+              @click="handleDelete(job.raw as Ticket)"
             >
-              {{ deletingId === t.id ? '...' : 'Eliminar' }}
+              {{ deletingId === job.id ? '...' : 'Eliminar' }}
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Desktop: tabla compacta (Puntos/fecha completa viven en el detalle) -->
+      <!-- Desktop: tabla compacta -->
       <div class="table-shell hidden sm:block">
-        <table class="w-full text-sm min-w-[720px]">
+        <table class="w-full text-sm min-w-[760px]">
           <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
             <tr>
-              <th class="text-left px-4 py-3">Ticket</th>
+              <th class="text-left px-4 py-3">Orden</th>
               <th class="text-left px-4 py-3">Cliente</th>
-              <th class="text-left px-4 py-3">Categoría</th>
+              <th class="text-left px-4 py-3">Tipo</th>
               <th class="text-left px-4 py-3">Prioridad</th>
               <th class="text-left px-4 py-3">Estado</th>
               <th class="text-left px-4 py-3">Asignado</th>
@@ -466,54 +443,57 @@ function formatDate(value: string) {
           </thead>
           <tbody>
             <tr
-              v-for="t in filteredTickets"
-              :key="t.id"
+              v-for="job in filteredJobs"
+              :key="`${job.jobType}-${job.id}`"
               class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
-              :class="isDueReschedule(t, now) ? 'bg-red-50' : ''"
-              @click="goToDetail(t)"
+              :class="isDueReschedule(job, now) ? 'bg-red-50' : ''"
+              @click="goToJob(job)"
             >
               <td class="px-4 py-3">
-                <div class="font-mono text-xs text-slate-500" :title="formatDate(t.created_at)">{{ t.ticket_number }}</div>
-                <div class="text-slate-900">{{ t.title }}</div>
-                <p v-if="isDueReschedule(t, now)" class="text-[11px] font-bold text-red-600 mt-0.5">
-                  🔴 REPROGRAMADO - ATENDER PRIMERO
-                </p>
+                <div class="font-mono text-xs text-slate-500" :title="formatDate(job.createdAt)">{{ job.number ?? '—' }}</div>
+                <div class="text-slate-900">{{ job.jobType === 'ticket' ? (job.raw as Ticket).title : job.label }}</div>
+                <p v-if="isDueReschedule(job, now)" class="text-[11px] font-bold text-red-600 mt-0.5">🔴 REPROGRAMADO - ATENDER PRIMERO</p>
               </td>
-              <td class="px-4 py-3 text-slate-600">
-                {{ t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : '—' }}
-              </td>
-              <td class="px-4 py-3 text-slate-600">{{ CATEGORY_LABEL[t.category] }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ job.label }}</td>
               <td class="px-4 py-3">
-                <span class="badge" :class="PRIORITY_CLASS[t.priority]">
-                  {{ PRIORITY_LABEL[t.priority] }}
+                <span class="badge" :class="TYPE_META[job.jobType].badge">{{ TYPE_META[job.jobType].label }}</span>
+                <span v-if="job.jobType === 'ticket'" class="block text-[11px] text-slate-400 mt-0.5">
+                  {{ CATEGORY_LABEL[(job.raw as Ticket).category] }}
                 </span>
               </td>
               <td class="px-4 py-3">
-                <span class="badge" :class="STATUS_CLASS[t.status]">
-                  {{ STATUS_LABEL[t.status] }}
+                <span v-if="job.priority" class="badge" :class="PRIORITY_CLASS[job.priority]">{{ PRIORITY_LABEL[job.priority] }}</span>
+                <span v-else class="text-slate-300">—</span>
+              </td>
+              <td class="px-4 py-3">
+                <span class="badge" :class="job.jobType === 'ticket' && isDueReschedule(job, now) ? 'bg-red-500/15 text-red-700' : 'bg-sky-500/15 text-sky-700'">
+                  {{ job.status }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-slate-600">{{ t.assigned_profile?.full_name || t.assigned_profile?.email || 'Sin asignar' }}</td>
+              <td class="px-4 py-3 text-slate-600">{{ job.assignedName ?? 'Sin asignar' }}</td>
               <td class="px-4 py-3 text-right whitespace-nowrap" @click.stop>
-                <button
-                  v-if="t.status === 'open' && t.assigned_to && canActOn(t)"
-                  class="text-xs text-sky-700 hover:text-sky-800 font-medium mr-3"
-                  :disabled="startingId === t.id"
-                  @click="handleQuickStart(t)"
-                >
-                  {{ startingId === t.id ? 'Iniciando...' : '▶ Iniciar' }}
-                </button>
-                <span v-else-if="t.status === 'in_progress'" class="text-xs text-sky-700 mr-3">
-                  ⏱️ {{ formatElapsedTime(t.updated_at, now) }}
-                </span>
-                <button
-                  v-if="canCreateTickets"
-                  class="text-xs text-red-500/80 hover:text-red-600"
-                  :disabled="deletingId === t.id"
-                  @click="handleDelete(t)"
-                >
-                  {{ deletingId === t.id ? 'Eliminando...' : 'Eliminar' }}
-                </button>
+                <template v-if="job.jobType === 'ticket'">
+                  <button
+                    v-if="(job.raw as Ticket).status === 'open' && (job.raw as Ticket).assigned_to && canActOn(job.raw as Ticket)"
+                    class="text-xs text-sky-700 hover:text-sky-800 font-medium mr-3"
+                    :disabled="startingId === job.id"
+                    @click="handleQuickStart(job.raw as Ticket)"
+                  >
+                    {{ startingId === job.id ? 'Iniciando...' : '▶ Iniciar' }}
+                  </button>
+                  <span v-else-if="(job.raw as Ticket).status === 'in_progress'" class="text-xs text-sky-700 mr-3">
+                    ⏱️ {{ formatElapsedTime((job.raw as Ticket).updated_at, now) }}
+                  </span>
+                  <button
+                    v-if="canCreateTickets"
+                    class="text-xs text-red-500/80 hover:text-red-600"
+                    :disabled="deletingId === job.id"
+                    @click="handleDelete(job.raw as Ticket)"
+                  >
+                    {{ deletingId === job.id ? 'Eliminando...' : 'Eliminar' }}
+                  </button>
+                </template>
+                <span v-else class="text-xs text-sky-700">Ver / editar →</span>
               </td>
             </tr>
           </tbody>
@@ -523,26 +503,13 @@ function formatDate(value: string) {
 
     <Teleport to="body">
       <div v-if="showModal" class="modal-overlay">
-        <form
-          class="w-full max-w-lg modal-panel max-h-[90vh] overflow-y-auto"
-          @submit.prevent="handleSubmit"
-        >
-          <h2 class="text-lg font-semibold mb-4">Nuevo ticket</h2>
+        <form class="w-full max-w-lg modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleSubmit">
+          <h2 class="text-lg font-semibold mb-4">Nueva avería</h2>
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Cliente</label>
-            <input
-              v-model="clientFilter"
-              placeholder="Buscar por nombre o documento..."
-              class="field-input mb-2"
-            />
-            <select
-              v-model="form.client_id"
-              required
-              size="5"
-              class="field-input"
-              @change="onTicketClientChange"
-            >
+            <input v-model="clientFilter" placeholder="Buscar por nombre o documento..." class="field-input mb-2" />
+            <select v-model="form.client_id" required size="5" class="field-input" @change="onTicketClientChange">
               <option v-for="c in filteredClients" :key="c.id" :value="c.id">
                 {{ c.first_name }} {{ c.last_name }} — {{ c.document_number }}
               </option>
@@ -569,11 +536,7 @@ function formatDate(value: string) {
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Descripción</label>
-            <textarea
-              v-model="form.description"
-              rows="3"
-              class="field-input"
-            ></textarea>
+            <textarea v-model="form.description" rows="3" class="field-input"></textarea>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-4">
@@ -633,11 +596,9 @@ function formatDate(value: string) {
           <p v-if="formError" class="text-sm text-red-600 mb-3">{{ formError }}</p>
 
           <div class="flex justify-end gap-2">
-            <button type="button" class="btn-ghost" @click="showModal = false">
-              Cancelar
-            </button>
+            <button type="button" class="btn-ghost" @click="showModal = false">Cancelar</button>
             <button type="submit" :disabled="saving" class="btn-primary">
-              {{ saving ? 'Creando...' : 'Crear ticket' }}
+              {{ saving ? 'Creando...' : 'Crear avería' }}
             </button>
           </div>
         </form>

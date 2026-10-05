@@ -1,0 +1,97 @@
+import { computed } from 'vue';
+import { useTicketsStore } from '@/stores/tickets';
+import { useInstallationsStore } from '@/stores/installations';
+import { useRoutinesStore } from '@/stores/routines';
+import type { Installation, JobType, Routine, Ticket, TicketPriority } from '@/types/domain';
+
+/**
+ * Cruza Tickets (averias) + Installations (altas) + Routines en una sola
+ * forma comun (Fase 107) — usado por "Operaciones de Hoy" y "Historico de
+ * Atendidos". DispatchBoardView.vue (Fase 101-B) NO se migra a esto: ya
+ * tiene su propio cruce funcionando, tocarlo sin necesidad concreta no
+ * vale el riesgo (refactor gradual, no big-bang).
+ */
+export interface UnifiedJob {
+  id: string;
+  jobType: JobType;
+  /** ticket_number / routine_number / null en una instalacion (no tiene numero propio). */
+  number: string | null;
+  label: string;
+  status: string;
+  priority: TicketPriority | null;
+  assignedName: string | null;
+  scheduledStartAt: string | null;
+  /** Fecha a mostrar cuando no hay scheduled_start_at. */
+  fallbackDate: string;
+  createdAt: string;
+  /** Fecha en que se liquido (resolved_at/closed_at/completed_at) — null si todavia esta activa. */
+  finishedAt: string | null;
+  raw: Ticket | Installation | Routine;
+}
+
+const ACTIVE_STATUS: Record<JobType, string[]> = {
+  ticket: ['open', 'in_progress', 'rescheduled'],
+  installation: ['pending', 'scheduled'],
+  routine: ['pending', 'scheduled', 'in_progress'],
+};
+
+export function useUnifiedJobs() {
+  const ticketsStore = useTicketsStore();
+  const installationsStore = useInstallationsStore();
+  const routinesStore = useRoutinesStore();
+
+  const allJobs = computed<UnifiedJob[]>(() => {
+    const tickets = ticketsStore.tickets.map<UnifiedJob>((t) => ({
+      id: t.id,
+      jobType: 'ticket',
+      number: t.ticket_number,
+      label: t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : t.title,
+      status: t.status,
+      priority: t.priority,
+      assignedName: t.assigned_profile?.full_name || t.assigned_profile?.email || null,
+      scheduledStartAt: t.scheduled_start_at,
+      fallbackDate: t.created_at.slice(0, 10),
+      createdAt: t.created_at,
+      finishedAt: t.resolved_at ?? t.closed_at,
+      raw: t,
+    }));
+    const installations = installationsStore.installations
+      .filter((i) => i.status !== 'cancelled')
+      .map<UnifiedJob>((i) => ({
+        id: i.id,
+        jobType: 'installation',
+        number: null,
+        label: i.clients ? `${i.clients.first_name} ${i.clients.last_name}` : 'Instalación',
+        status: i.status,
+        priority: null,
+        assignedName: i.assigned_profile?.full_name || i.assigned_profile?.email || null,
+        scheduledStartAt: i.scheduled_start_at,
+        fallbackDate: (i.scheduled_date ?? i.created_at).slice(0, 10),
+        createdAt: i.created_at,
+        finishedAt: i.completed_at,
+        raw: i,
+      }));
+    const routines = routinesStore.routines
+      .filter((r) => r.status !== 'cancelled')
+      .map<UnifiedJob>((r) => ({
+        id: r.id,
+        jobType: 'routine',
+        number: r.routine_number,
+        label: r.clients ? `${r.clients.first_name} ${r.clients.last_name}` : r.title,
+        status: r.status,
+        priority: null,
+        assignedName: r.assigned_profile?.full_name || r.assigned_profile?.email || null,
+        scheduledStartAt: r.scheduled_start_at,
+        fallbackDate: (r.scheduled_date ?? r.created_at).slice(0, 10),
+        createdAt: r.created_at,
+        finishedAt: r.completed_at,
+        raw: r,
+      }));
+    return [...tickets, ...installations, ...routines];
+  });
+
+  const activeJobs = computed(() => allJobs.value.filter((j) => ACTIVE_STATUS[j.jobType].includes(j.status)));
+  const finishedJobs = computed(() => allJobs.value.filter((j) => !ACTIVE_STATUS[j.jobType].includes(j.status)));
+
+  return { ticketsStore, installationsStore, routinesStore, allJobs, activeJobs, finishedJobs };
+}

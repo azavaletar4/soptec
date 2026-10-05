@@ -630,7 +630,7 @@ async function handleReturnTicket() {
 // asignado al mismo tecnico — solo se reprograma (status='rescheduled',
 // priority sube a 'urgent' automaticamente) para una fecha/hora puntual.
 // El "desvincular el temporizador" del pedido pasa solo: el chip de
-// cronometro en TicketsView.vue/CampoDashboardView solo se muestra con
+// cronometro en OperacionesHoyView.vue/CampoDashboardView solo se muestra con
 // status 'in_progress', que este update deja atras. ----
 const canMarkAusente = computed(
   () => jobType === 'ticket' && isMyAssignment.value && (trabajo.value?.raw as Ticket | undefined)?.status === 'in_progress',

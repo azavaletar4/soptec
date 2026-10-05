@@ -19,7 +19,7 @@ import type { JobType, StaffProfile } from '@/types/domain';
 // con agendamiento de hora exacta (scheduled_start_at/scheduled_end_at,
 // agregados ya en la migracion de Fase A). Vista ALTERNATIVA a las tablas
 // de Averias/Altas/Rutinas (selector de vista, punto 4 del pedido), no un
-// 4to tipo de orden — por eso vive aparte de SoporteModeTabs.
+// 4to tipo de orden — por eso vive aparte de "Operaciones de Hoy" (Fase 107).
 
 const router = useRouter();
 const ticketsStore = useTicketsStore();
@@ -175,7 +175,7 @@ function handleCellClick(e: MouseEvent, tech: StaffProfile) {
   });
 }
 
-// Reloj compartido para el cronometro "en progreso" (mismo patron que TicketsView.vue).
+// Reloj compartido para el cronometro "en progreso" (mismo patron que OperacionesHoyView.vue).
 const now = ref(Date.now());
 let clockTimer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {

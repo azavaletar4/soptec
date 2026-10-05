@@ -64,7 +64,15 @@ const router = createRouter({
     {
       path: '/soporte',
       name: 'soporte',
-      component: () => import('@/views/soporte/TicketsView.vue'),
+      component: () => import('@/views/soporte/OperacionesHoyView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      // Fase 107: tickets/instalaciones/rutinas ya resueltos/cerrados/completados
+      // — Operaciones de Hoy solo muestra lo activo, esto vive aparte.
+      path: '/soporte/historico',
+      name: 'soporte-historico',
+      component: () => import('@/views/soporte/HistoricoAtendidosView.vue'),
       meta: { requiresAuth: true },
     },
     {

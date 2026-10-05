@@ -118,7 +118,7 @@ function toggleManualProfiles() {
   }
 }
 
-// ---- 3) Cliente (mismo patron de busqueda que TicketsView.vue/InstalacionesView.vue) ----
+// ---- 3) Cliente (mismo patron de busqueda que OperacionesHoyView.vue/InstalacionesView.vue) ----
 const clientFilter = ref('');
 const selectedClientId = ref('');
 const filteredClients = computed(() => {

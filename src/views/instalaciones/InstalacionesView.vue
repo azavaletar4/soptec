@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
 import CrewAssignEditor from '@/components/soporte/CrewAssignEditor.vue';
 import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
 import { useInstallationsStore } from '@/stores/installations';
@@ -29,6 +28,7 @@ import {
   type InventoryUnit,
 } from '@/types/domain';
 
+const route = useRoute();
 const router = useRouter();
 const installationsStore = useInstallationsStore();
 const jobAssigneesStore = useJobAssigneesStore();
@@ -180,6 +180,12 @@ onMounted(async () => {
     infraStore.fetchElementos(),
     fibra.fetchTodosNapPuertos(),
   ]);
+  // Deep link desde "Operaciones de Hoy" (Fase 107): ?q= precarga el
+  // buscador (click en una fila de Alta), ?create=1 abre el modal de
+  // creación directo (botón "+ Alta").
+  const q = route.query.q as string | undefined;
+  if (q) searchQuery.value = q;
+  if (route.query.create) openCreate();
 });
 
 // ---- Materiales usados (Fase 11b: vincula Inventario con Instalaciones) ----
@@ -787,7 +793,9 @@ function formatDate(value: string | null) {
       <div>
         <h1 class="text-2xl font-semibold">Instalaciones</h1>
         <p class="text-slate-600 text-sm mt-1">{{ installationsStore.installations.length }} órdenes registradas</p>
-        <SoporteModeTabs active="instalaciones" class="mt-3" />
+        <button class="text-xs text-sky-700 hover:underline mt-1" @click="router.push('/soporte')">
+          ← Volver a Operaciones de Hoy
+        </button>
       </div>
       <div class="flex gap-2">
         <button v-if="auth.role !== 'TECNICO_RED'" class="btn-ghost" @click="router.push('/soporte/agenda')">📅 Agenda</button>

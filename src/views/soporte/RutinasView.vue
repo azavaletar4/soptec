@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
 import CrewAssignEditor from '@/components/soporte/CrewAssignEditor.vue';
 import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
 import { useRoutinesStore } from '@/stores/routines';
@@ -20,6 +19,7 @@ import type { Routine, RoutineCategory, RoutineStatus } from '@/types/domain';
 // una rutina puede apuntar a una zona/caja NAP sin ser de un cliente puntual
 // (zone_id/nap_elemento_id/client_id son todos opcionales).
 
+const route = useRoute();
 const router = useRouter();
 const routinesStore = useRoutinesStore();
 const clientsStore = useClientsStore();
@@ -116,6 +116,12 @@ onMounted(async () => {
     catalogsStore.fetchZones(),
     infraStore.fetchElementos(),
   ]);
+  // Deep link desde "Operaciones de Hoy" (Fase 107): ?q= precarga el
+  // buscador (click en una fila de Rutina), ?create=1 abre el modal de
+  // creación directo (botón "+ Rutina").
+  const q = route.query.q as string | undefined;
+  if (q) searchQuery.value = q;
+  if (route.query.create) openCreate();
 });
 
 // ---- Crear / Editar ----
@@ -237,7 +243,9 @@ function formatDate(value: string | null) {
       <div>
         <h1 class="text-2xl font-semibold">Rutinas</h1>
         <p class="text-slate-600 text-sm mt-1">{{ routinesStore.routines.length }} rutinas registradas</p>
-        <SoporteModeTabs active="rutinas" class="mt-3" />
+        <button class="text-xs text-sky-700 hover:underline mt-1" @click="router.push('/soporte')">
+          ← Volver a Operaciones de Hoy
+        </button>
       </div>
       <div class="flex gap-2">
         <button v-if="canManage" class="btn-ghost" @click="router.push('/soporte/agenda')">📅 Agenda</button>

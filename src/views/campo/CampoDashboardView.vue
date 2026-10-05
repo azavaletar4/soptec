@@ -14,12 +14,20 @@ const auth = useAuthStore();
 // 'disponible' (Fase 98) no es un estado de TrabajoEstadoUi — es una lista
 // aparte (tickets 'open' sin tecnico, campoStore.availableTickets), solo
 // visible para TECNICO_RED, para poder "tomar" una averia libre.
-type TabValue = TrabajoEstadoUi | 'disponible';
+//
+// Fase 107: "pendiente" y "en_proceso" se fusionan en una sola pestaña
+// ("Mis Pendientes de Hoy") — misma idea que "Operaciones de Hoy" en
+// escritorio, el tecnico no necesita separar "no iniciado" de "en curso"
+// para saber que le falta atender. La salida automatica al resolver ya
+// pasa sola: ticketEstado()/installationEstado()/routineEstado() (campo.ts)
+// mapean resuelto/completado a 'completado', asi que filtered() lo saca
+// solo de esta pestaña sin tocar ese codigo.
+type TabValue = 'pendiente' | 'completado' | 'disponible';
+const PENDIENTE_ESTADOS: TrabajoEstadoUi[] = ['pendiente', 'en_proceso'];
 const tabs = computed<{ value: TabValue; label: string }[]>(() => {
   const base: { value: TabValue; label: string }[] = [
-    { value: 'pendiente', label: 'Pendientes' },
-    { value: 'en_proceso', label: 'En proceso' },
-    { value: 'completado', label: 'Completadas' },
+    { value: 'pendiente', label: '🙋 Mis Pendientes de Hoy' },
+    { value: 'completado', label: '📁 Histórico de Atendidos' },
   ];
   if (auth.role === 'TECNICO_RED') base.push({ value: 'disponible', label: '🙋 Disponibles' });
   return base;
@@ -29,7 +37,7 @@ const search = ref('');
 
 // Cliente Ausente / re-agendamiento prioritario (Fase 102): un ticket
 // reprogramado cuya fecha ya llego se va al Top 1 de "Pendientes", igual
-// que en TicketsView.vue (vista de escritorio).
+// que en OperacionesHoyView.vue (vista de escritorio).
 function isDueReschedule(t: TrabajoItem): boolean {
   if (t.jobType !== 'ticket') return false;
   const ticket = t.raw as Ticket;
@@ -37,10 +45,10 @@ function isDueReschedule(t: TrabajoItem): boolean {
 }
 
 const filtered = computed(() => {
-  let list: TrabajoItem[] =
-    activeTab.value === 'disponible'
-      ? campoStore.availableTickets
-      : campoStore.trabajos.filter((t) => t.estadoUi === activeTab.value);
+  let list: TrabajoItem[];
+  if (activeTab.value === 'disponible') list = campoStore.availableTickets;
+  else if (activeTab.value === 'pendiente') list = campoStore.trabajos.filter((t) => PENDIENTE_ESTADOS.includes(t.estadoUi));
+  else list = campoStore.trabajos.filter((t) => t.estadoUi === 'completado');
   const q = search.value.trim().toLowerCase();
   if (q) list = list.filter((t) => `${t.clienteNombre} ${t.direccion ?? ''}`.toLowerCase().includes(q));
   return [...list].sort((a, b) => Number(isDueReschedule(b)) - Number(isDueReschedule(a)));
@@ -49,11 +57,13 @@ const filtered = computed(() => {
 const counts = computed(() => {
   const c: Record<TabValue, number> = {
     pendiente: 0,
-    en_proceso: 0,
     completado: 0,
     disponible: campoStore.availableTickets.length,
   };
-  for (const t of campoStore.trabajos) c[t.estadoUi]++;
+  for (const t of campoStore.trabajos) {
+    if (PENDIENTE_ESTADOS.includes(t.estadoUi)) c.pendiente++;
+    else if (t.estadoUi === 'completado') c.completado++;
+  }
   return c;
 });
 
@@ -76,7 +86,7 @@ onMounted(() => {
   <CampoLayout title="Mis trabajos">
     <input v-model="search" placeholder="Buscar cliente o dirección..." class="field-input mb-3" />
 
-    <div class="grid gap-2 mb-3" :class="tabs.length > 3 ? 'grid-cols-2' : 'grid-cols-3'">
+    <div class="grid gap-2 mb-3" :class="tabs.length > 2 ? 'grid-cols-3' : 'grid-cols-2'">
       <button
         v-for="tab in tabs"
         :key="tab.value"
@@ -105,9 +115,13 @@ onMounted(() => {
           <div class="flex items-center gap-1.5">
             <span
               class="badge text-[10px]"
-              :class="t.jobType === 'installation' ? 'bg-sky-500/15 text-sky-700' : 'bg-orange-500/15 text-orange-700'"
+              :class="{
+                'bg-green-500/15 text-green-700': t.jobType === 'installation',
+                'bg-red-500/15 text-red-700': t.jobType === 'ticket',
+                'bg-amber-500/15 text-amber-700': t.jobType === 'routine',
+              }"
             >
-              {{ t.jobType === 'installation' ? 'Instalación' : 'Avería' }}
+              {{ t.jobType === 'installation' ? '🟢 Alta' : t.jobType === 'routine' ? '🟡 Rutina' : '🔴 Avería' }}
             </span>
             <span v-if="activeTab === 'disponible'" class="badge text-[10px] bg-amber-500/15 text-amber-700">🙋 Libre</span>
           </div>
