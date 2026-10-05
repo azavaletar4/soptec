@@ -5,6 +5,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
 import TicketFlowGuide from '@/components/soporte/TicketFlowGuide.vue';
 import TechnicianStatusBar from '@/components/soporte/TechnicianStatusBar.vue';
+import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
@@ -70,6 +71,8 @@ const formError = ref<string | null>(null);
 const clientFilter = ref('');
 const statusFilter = ref<TicketStatus | 'all'>('all');
 const searchQuery = ref('');
+// Filtro de fecha (Fase 101) — contra created_at (cuando se reporto la averia).
+const dateRange = ref<DateRange | null>(null);
 
 const emptyForm = () => ({
   client_id: '',
@@ -147,6 +150,13 @@ const PRIORITY_SORT_RANK: Record<TicketPriority, number> = {
 const filteredTickets = computed(() => {
   let list = ticketsStore.tickets;
   if (statusFilter.value !== 'all') list = list.filter((t) => t.status === statusFilter.value);
+  if (dateRange.value) {
+    const { start, end } = dateRange.value;
+    list = list.filter((t) => {
+      const created = new Date(t.created_at).getTime();
+      return created >= start.getTime() && created <= end.getTime();
+    });
+  }
   const q = searchQuery.value.trim().toLowerCase();
   if (q) {
     list = list.filter((t) =>
@@ -285,23 +295,26 @@ function formatDate(value: string) {
 
     <TechnicianStatusBar :technicians="technicians" :tickets="ticketsStore.tickets" :now="now" />
 
-    <div class="surface flex flex-col gap-3 p-3 mb-4 sm:flex-row sm:items-center">
-      <input
-        v-model="searchQuery"
-        placeholder="Buscar por titulo, numero de ticket o cliente..."
-        class="field-input sm:max-w-xs"
-      />
-      <div class="flex flex-wrap gap-2">
-        <button
-          v-for="tab in STATUS_TABS"
-          :key="tab.value"
-          class="px-3 py-1.5 rounded-lg text-xs font-medium"
-          :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
-          @click="statusFilter = tab.value"
-        >
-          {{ tab.label }}
-        </button>
+    <div class="surface flex flex-col gap-3 p-3 mb-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input
+          v-model="searchQuery"
+          placeholder="Buscar por titulo, numero de ticket o cliente..."
+          class="field-input sm:max-w-xs"
+        />
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="tab in STATUS_TABS"
+            :key="tab.value"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium"
+            :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+            @click="statusFilter = tab.value"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
+      <DateRangeFilter @change="dateRange = $event" />
     </div>
 
     <p v-if="ticketsStore.error" class="mb-4 text-sm text-red-600">{{ ticketsStore.error }}</p>

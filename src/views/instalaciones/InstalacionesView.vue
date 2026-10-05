@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import SoporteModeTabs from '@/components/soporte/SoporteModeTabs.vue';
 import CrewAssignEditor from '@/components/soporte/CrewAssignEditor.vue';
+import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
 import { useInstallationsStore } from '@/stores/installations';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useClientsStore } from '@/stores/clients';
@@ -85,6 +86,8 @@ const statusFilter = ref<InstallationStatus | 'all'>('all');
 const searchQuery = ref('');
 const clientContracts = ref<ServiceContract[]>([]);
 const loadingContracts = ref(false);
+// Filtro de fecha (Fase 101) — contra scheduled_date (si no tiene, created_at).
+const dateRange = ref<DateRange | null>(null);
 
 const emptyForm = () => ({
   client_id: '',
@@ -143,6 +146,14 @@ const STATUS_SORT_TIER: Record<InstallationStatus, number> = {
 const filteredInstallations = computed(() => {
   let list = installationsStore.installations;
   if (statusFilter.value !== 'all') list = list.filter((i) => i.status === statusFilter.value);
+  if (dateRange.value) {
+    const { start, end } = dateRange.value;
+    list = list.filter((i) => {
+      const ref = i.scheduled_date ? new Date(`${i.scheduled_date}T12:00:00`) : new Date(i.created_at);
+      const t = ref.getTime();
+      return t >= start.getTime() && t <= end.getTime();
+    });
+  }
   const q = searchQuery.value.trim().toLowerCase();
   if (q) {
     list = list.filter((i) =>
@@ -781,23 +792,26 @@ function formatDate(value: string | null) {
       <button v-if="auth.role !== 'TECNICO_RED'" class="btn-primary" @click="openCreate">+ Nueva instalación</button>
     </div>
 
-    <div class="surface flex flex-col gap-3 p-3 mb-4 sm:flex-row sm:items-center">
-      <input
-        v-model="searchQuery"
-        placeholder="Buscar por cliente o número de contrato..."
-        class="field-input sm:max-w-xs"
-      />
-      <div class="flex flex-wrap gap-2">
-        <button
-          v-for="tab in STATUS_TABS"
-          :key="tab.value"
-          class="px-3 py-1.5 rounded-lg text-xs font-medium"
-          :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
-          @click="statusFilter = tab.value"
-        >
-          {{ tab.label }}
-        </button>
+    <div class="surface flex flex-col gap-3 p-3 mb-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input
+          v-model="searchQuery"
+          placeholder="Buscar por cliente o número de contrato..."
+          class="field-input sm:max-w-xs"
+        />
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="tab in STATUS_TABS"
+            :key="tab.value"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium"
+            :class="statusFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+            @click="statusFilter = tab.value"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
+      <DateRangeFilter @change="dateRange = $event" />
     </div>
 
     <p v-if="installationsStore.error" class="mb-4 text-sm text-red-600">{{ installationsStore.error }}</p>

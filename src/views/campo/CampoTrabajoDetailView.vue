@@ -67,15 +67,19 @@ const trabajo = computed(
     campoStore.availableTickets.find((t) => t.jobType === jobType && t.id === jobId),
 );
 
-// Una instalacion 'completed' queda cerrada para el tecnico (Fase 69, lo
-// mismo que ya rige "Materiales" en InstalacionesView.vue) — pero esta
-// pantalla (app de campo) tenia el mismo formulario de cierre (fotos, GPS,
-// firma) sin ningun candado: un tecnico podia reabrir un trabajo ya
-// completado y volver a "completarlo", pisando las fotos/GPS ya guardados.
-// Se oculta Materiales y Cierre de trabajo para el tecnico cuando el
-// trabajo ya esta 'completado'; admin/super lo siguen viendo siempre.
+// Una instalacion 'completed' (o una rutina 'completed'/'cancelled', Fase
+// 101) queda cerrada para el tecnico (Fase 69, lo mismo que ya rige
+// "Materiales" en InstalacionesView.vue) — pero esta pantalla (app de
+// campo) tenia el mismo formulario de cierre (fotos, GPS, firma) sin
+// ningun candado: un tecnico podia reabrir un trabajo ya completado y
+// volver a "completarlo", pisando las fotos/GPS ya guardados. Se oculta
+// Materiales y Cierre de trabajo para el tecnico en ese caso; admin/super
+// lo siguen viendo siempre.
 const isLockedForTecnico = computed(
-  () => jobType === 'installation' && auth.role === 'TECNICO_RED' && trabajo.value?.estadoUi === 'completado',
+  () =>
+    (jobType === 'installation' || jobType === 'routine') &&
+    auth.role === 'TECNICO_RED' &&
+    trabajo.value?.estadoUi === 'completado',
 );
 // Misma idea que isLockedForTecnico pero para tickets: una vez resuelta o
 // cerrada la averia, el tecnico ya no puede corregir materiales/equipos/
@@ -197,7 +201,9 @@ onMounted(async () => {
   // recien arrancar los ~20-60s que tarda leer RX+TX por Telnet.
   runDiagnostico();
   await loadMaterials();
-  if (trabajo.value) {
+  // Una rutina sin cliente puntual (apunta a zona/caja NAP, Fase 101) no
+  // tiene ficha de cliente que cargar.
+  if (trabajo.value?.clientId) {
     await Promise.all([loadClientInfo(trabajo.value.clientId), loadExistingPhotos(trabajo.value.contractId)]);
   }
   if (jobType === 'ticket') {
@@ -219,7 +225,10 @@ const diagError = ref<string | null>(null);
 let diagInFlight: Promise<void> | null = null;
 
 function runDiagnostico(): Promise<void> {
-  if (!trabajo.value) return Promise.resolve();
+  // Una rutina sin cliente puntual (zona/caja NAP) no tiene a quien
+  // consultarle OLT/MikroTik/TR-069.
+  const clientId = trabajo.value?.clientId;
+  if (!clientId) return Promise.resolve();
   // Ya hay una consulta en curso (manual o la pre-carga automatica de
   // abajo) — el tecnico se "sube" a esa misma respuesta en vez de pedir
   // otra. Si ya habia terminado, esto es null y arranca una nueva (permite
@@ -230,7 +239,7 @@ function runDiagnostico(): Promise<void> {
   diagError.value = null;
   diagInFlight = (async () => {
     try {
-      diagnostico.value = await campoStore.runDiagnostico(trabajo.value!.clientId, trabajo.value!.contractId);
+      diagnostico.value = await campoStore.runDiagnostico(clientId, trabajo.value!.contractId);
     } catch (e) {
       // A diferencia del cierre de trabajo, esto necesita hablar con la OLT en
       // vivo — no se puede "guardar para mas tarde" como las fotos. Lo minimo
@@ -336,6 +345,8 @@ const savingMaterial = ref(false);
 const materialError = ref<string | null>(null);
 
 async function loadMaterials() {
+  // Rutinas V1 no registra materiales (Fase 101, alcance recortado).
+  if (jobType === 'routine') return;
   materials.value =
     jobType === 'installation'
       ? await inventoryStore.fetchMovementsByInstallation(jobId)
@@ -657,7 +668,7 @@ const closureForm = ref({
   napElementoId: '',
 });
 const requiresJustification = computed(
-  () => jobType !== 'installation' && MOTIVOS_EXIMEN_TECNICO.includes(closureForm.value.motivoAveria as TicketMotivoAveria),
+  () => jobType === 'ticket' && MOTIVOS_EXIMEN_TECNICO.includes(closureForm.value.motivoAveria as TicketMotivoAveria),
 );
 const justificacionMissing = ref(false);
 const closurePhotos = ref<Record<string, File | undefined>>({});
@@ -729,10 +740,11 @@ async function handleCloseSubmit() {
   }
   signatureMissing.value = false;
 
-  // Averia/soporte: el motivo de cierre es obligatorio para poder liquidarla
-  // (alimenta el ranking de puntos, Fase 49). Si el motivo exime al tecnico,
-  // ademas exige justificacion y al menos una foto de evidencia como respaldo.
-  if (jobType !== 'installation') {
+  // Averia: el motivo de cierre es obligatorio para poder liquidarla (alimenta
+  // el ranking de puntos, Fase 49) — no aplica a instalaciones ni a rutinas.
+  // Si el motivo exime al tecnico, ademas exige justificacion y al menos una
+  // foto de evidencia como respaldo.
+  if (jobType === 'ticket') {
     if (!closureForm.value.motivoAveria) {
       closeError.value = 'Selecciona el motivo de la avería para poder cerrarla.';
       return;
@@ -758,7 +770,9 @@ async function handleCloseSubmit() {
     const categories =
       jobType === 'installation'
         ? INSTALL_PHOTO_CATEGORIES.map((c) => c.value)
-        : [...TICKET_PHOTO_CATEGORIES.map((c) => c.value), ...CENSO_CATEGORIES.map((c) => c.value)];
+        : jobType === 'ticket'
+          ? [...TICKET_PHOTO_CATEGORIES.map((c) => c.value), ...CENSO_CATEGORIES.map((c) => c.value)]
+          : TICKET_PHOTO_CATEGORIES.map((c) => c.value);
     const photos = categories
       .filter((cat) => closurePhotos.value[cat])
       .map((cat) => ({ category: cat, file: closurePhotos.value[cat]! }));
@@ -768,7 +782,7 @@ async function handleCloseSubmit() {
       jobId,
       clientId: trabajo.value.clientId,
       contractId: trabajo.value.contractId,
-      targetStatus: jobType === 'installation' ? 'completed' : 'resolved',
+      targetStatus: jobType === 'ticket' ? 'resolved' : 'completed',
       latitude: closureForm.value.latitude,
       longitude: closureForm.value.longitude,
       ontSerial: null,
@@ -778,8 +792,8 @@ async function handleCloseSubmit() {
       updateClientGps: jobType === 'installation',
       clientPhotoCategories: jobType === 'installation' ? (INSTALL_PHOTO_CATEGORIES.map((c) => c.value) as ClientPhotoCategory[]) : [],
       pendingApprovalCategories: jobType === 'ticket' ? CENSO_CATEGORIES.map((c) => c.value) : [],
-      motivoAveria: jobType === 'installation' ? null : (closureForm.value.motivoAveria || null),
-      justificacionCierre: jobType === 'installation' ? null : (closureForm.value.justificacion.trim() || null),
+      motivoAveria: jobType === 'ticket' ? closureForm.value.motivoAveria || null : null,
+      justificacionCierre: jobType === 'ticket' ? closureForm.value.justificacion.trim() || null : null,
       potenciaDbm: jobType === 'ticket' ? closureForm.value.potenciaDbm : null,
       napElementoId: jobType === 'ticket' ? closureForm.value.napElementoId || null : null,
     });
@@ -804,9 +818,13 @@ async function handleCloseSubmit() {
       <section class="surface p-3.5 mb-3">
         <span
           class="badge text-[10px] mb-2"
-          :class="jobType === 'installation' ? 'bg-sky-500/15 text-sky-700' : 'bg-orange-500/15 text-orange-700'"
+          :class="{
+            'bg-sky-500/15 text-sky-700': jobType === 'installation',
+            'bg-orange-500/15 text-orange-700': jobType === 'ticket',
+            'bg-amber-500/15 text-amber-700': jobType === 'routine',
+          }"
         >
-          {{ jobType === 'installation' ? 'Instalación' : 'Avería' }}
+          {{ jobType === 'installation' ? 'Instalación' : jobType === 'routine' ? 'Rutina' : 'Avería' }}
         </span>
         <p class="font-semibold">{{ trabajo.clienteNombre }}</p>
         <p v-if="trabajo.direccion" class="text-xs text-slate-500 mt-0.5">{{ trabajo.direccion }}</p>
@@ -987,8 +1005,8 @@ async function handleCloseSubmit() {
         </div>
       </section>
 
-      <!-- Diagnostico express -->
-      <section class="surface p-3.5 mb-3">
+      <!-- Diagnostico express (no aplica a una rutina sin cliente puntual) -->
+      <section v-if="trabajo.clientId" class="surface p-3.5 mb-3">
         <div class="flex items-center justify-between mb-2">
           <h2 class="text-sm font-semibold">Diagnóstico express</h2>
           <button class="btn-primary text-xs py-1.5" :disabled="diagLoading" @click="runDiagnostico">
@@ -1065,10 +1083,13 @@ async function handleCloseSubmit() {
 
       <!-- Materiales -->
       <section v-if="isLockedForTecnico" class="surface p-3.5 mb-3 bg-slate-50">
-        <h2 class="text-sm font-semibold mb-1">✅ Instalación completada</h2>
+        <h2 class="text-sm font-semibold mb-1">✅ {{ jobType === 'routine' ? 'Rutina completada' : 'Instalación completada' }}</h2>
         <p class="text-xs text-slate-500">
-          Esta instalación ya fue completada — materiales, fotos, GPS y firma quedan cerrados para técnicos. Si
-          falta corregir algo, pide a un administrador que la regrese a "Programada" para poder editarla de nuevo.
+          {{
+            jobType === 'routine'
+              ? 'Esta rutina ya fue completada — materiales, fotos y cierre quedan cerrados para técnicos. Si falta corregir algo, pide a administración/soporte que la reabra desde el panel.'
+              : 'Esta instalación ya fue completada — materiales, fotos, GPS y firma quedan cerrados para técnicos. Si falta corregir algo, pide a un administrador que la regrese a "Programada" para poder editarla de nuevo.'
+          }}
         </p>
       </section>
 
@@ -1081,7 +1102,9 @@ async function handleCloseSubmit() {
       </section>
 
       <template v-else-if="!isUnassignedTicket">
-        <section class="surface p-3.5 mb-3">
+        <!-- Rutinas V1 no registra materiales/equipos (Fase 101) — alcance
+             recortado a proposito, ver migracion. -->
+        <section v-if="jobType !== 'routine'" class="surface p-3.5 mb-3">
           <h2 class="text-sm font-semibold mb-2">Materiales usados</h2>
           <ul v-if="activeMaterials.length" class="space-y-2 mb-3 text-xs">
             <li v-for="m in activeMaterials" :key="m.id" class="flex items-center justify-between gap-2 py-0.5">
@@ -1274,7 +1297,7 @@ async function handleCloseSubmit() {
             </div>
           </template>
 
-          <template v-if="jobType !== 'installation'">
+          <template v-if="jobType === 'ticket'">
             <label class="block text-xs text-slate-600 mb-1">
               Motivo de la avería<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
             </label>
@@ -1315,7 +1338,15 @@ async function handleCloseSubmit() {
           <p v-if="closeResult === 'ok'" class="text-sm text-green-600 mt-3">Trabajo cerrado correctamente.</p>
 
           <button type="button" :disabled="closing" class="btn-primary w-full text-sm mt-3" @click="handleCloseSubmit">
-            {{ closing ? 'Guardando...' : jobType === 'installation' ? 'Completar instalación' : 'Resolver avería' }}
+            {{
+              closing
+                ? 'Guardando...'
+                : jobType === 'installation'
+                  ? 'Completar instalación'
+                  : jobType === 'routine'
+                    ? 'Completar rutina'
+                    : 'Resolver avería'
+            }}
           </button>
         </section>
       </template>

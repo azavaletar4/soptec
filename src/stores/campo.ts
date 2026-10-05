@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
 import { useInstallationsStore } from '@/stores/installations';
 import { useTicketsStore } from '@/stores/tickets';
+import { useRoutinesStore } from '@/stores/routines';
 import { useContractsStore } from '@/stores/contracts';
 import { useClientsStore } from '@/stores/clients';
 import { useClientPhotosStore } from '@/stores/clientPhotos';
@@ -21,7 +22,16 @@ import {
   listQueuedClosures,
   type QueuedClosure,
 } from '@/lib/offlineQueue';
-import { NAP_CLIENT_LIMIT, type ClientPhotoCategory, type Installation, type JobType, type ServiceContract, type Ticket, type TicketMotivoAveria } from '@/types/domain';
+import {
+  NAP_CLIENT_LIMIT,
+  type ClientPhotoCategory,
+  type Installation,
+  type JobType,
+  type Routine,
+  type ServiceContract,
+  type Ticket,
+  type TicketMotivoAveria,
+} from '@/types/domain';
 
 const BUCKET = 'work-evidence';
 
@@ -32,7 +42,8 @@ export interface TrabajoItem {
   jobType: JobType;
   estadoUi: TrabajoEstadoUi;
   titulo: string;
-  clientId: string;
+  /** Null en una rutina sin cliente puntual (apunta a una zona/caja NAP, Fase 101). */
+  clientId: string | null;
   clienteNombre: string;
   telefono: string | null;
   direccion: string | null;
@@ -40,7 +51,7 @@ export interface TrabajoItem {
   longitude: number | null;
   fecha: string | null;
   contractId: string | null;
-  raw: Installation | Ticket;
+  raw: Installation | Ticket | Routine;
 }
 
 function installationEstado(i: Installation): TrabajoEstadoUi {
@@ -97,6 +108,37 @@ function fromTicket(t: Ticket): TrabajoItem {
   };
 }
 
+function routineEstado(r: Routine): TrabajoEstadoUi {
+  if (r.status === 'completed' || r.status === 'cancelled') return 'completado';
+  if (r.status === 'in_progress') return 'en_proceso';
+  return 'pendiente';
+}
+
+function routineTargetLabel(r: Routine): string {
+  if (r.clients) return `${r.clients.first_name} ${r.clients.last_name}`;
+  if (r.nap_elemento) return `Caja NAP · ${r.nap_elemento.name}`;
+  if (r.zones) return `Zona · ${r.zones.name}`;
+  return r.title;
+}
+
+function fromRoutine(r: Routine): TrabajoItem {
+  return {
+    id: r.id,
+    jobType: 'routine',
+    estadoUi: routineEstado(r),
+    titulo: r.title || 'Rutina',
+    clientId: r.client_id,
+    clienteNombre: routineTargetLabel(r),
+    telefono: r.clients?.phone ?? null,
+    direccion: null,
+    latitude: r.clients?.latitude ?? null,
+    longitude: r.clients?.longitude ?? null,
+    fecha: r.scheduled_date ?? r.created_at,
+    contractId: null,
+    raw: r,
+  };
+}
+
 export interface DiagnosticoResult {
   ont: { found: boolean; rxPower: number | null; txPower: number | null; status?: string; error?: string };
   pppoe: { found: boolean; address: string | null; uptime: string | null; error?: string };
@@ -111,7 +153,8 @@ interface ClosurePhotoInput {
 export interface ClosureInput {
   jobType: JobType;
   jobId: string;
-  clientId: string;
+  /** Null en una rutina sin cliente puntual (Fase 101). */
+  clientId: string | null;
   contractId: string | null;
   targetStatus: string;
   latitude: number | null;
@@ -171,6 +214,7 @@ export const useCampoStore = defineStore('campo', () => {
   const fibra = useFoFibraStore();
   const infraStore = useInfraElementosStore();
   const jobAssigneesStore = useJobAssigneesStore();
+  const routinesStore = useRoutinesStore();
 
   const loading = ref(false);
   const queuedCount = ref(0);
@@ -186,7 +230,11 @@ export const useCampoStore = defineStore('campo', () => {
     const tickets = ticketsStore.tickets
       .filter((t) => !soloPropios || t.assigned_to === uid)
       .map(fromTicket);
-    return [...instalaciones, ...tickets].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? '') * -1);
+    const rutinas = routinesStore.routines
+      .filter((r) => r.status !== 'cancelled')
+      .filter((r) => !soloPropios || r.assigned_to === uid)
+      .map(fromRoutine);
+    return [...instalaciones, ...tickets, ...rutinas].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? '') * -1);
   });
 
   // ---- Tickets libres (Fase 98): averias 'open' sin ningun tecnico
@@ -210,7 +258,7 @@ export const useCampoStore = defineStore('campo', () => {
   async function fetchAll() {
     loading.value = true;
     try {
-      await Promise.all([installationsStore.fetchInstallations(), ticketsStore.fetchTickets()]);
+      await Promise.all([installationsStore.fetchInstallations(), ticketsStore.fetchTickets(), routinesStore.fetchRoutines()]);
     } finally {
       loading.value = false;
     }
@@ -307,7 +355,7 @@ export const useCampoStore = defineStore('campo', () => {
   // ---- Cierre de trabajo (fotos + firma + GPS + serial ONT), con cola
   // offline como respaldo cuando no hay señal en el sitio del cliente. ----
   async function performClosureSubmit(input: ClosureInput) {
-    if (input.updateClientGps && input.latitude != null && input.longitude != null) {
+    if (input.updateClientGps && input.clientId && input.latitude != null && input.longitude != null) {
       await clientsStore.updateClient(input.clientId, { latitude: input.latitude, longitude: input.longitude });
       if (input.contractId) {
         await contractsStore.updateContract(input.contractId, { latitude: input.latitude, longitude: input.longitude });
@@ -359,7 +407,12 @@ export const useCampoStore = defineStore('campo', () => {
 
       if (isEvidenceCategory(photo.category) && !evidenciaPath) evidenciaPath = path;
 
-      if (!isPendingApproval && input.contractId && input.clientPhotoCategories.includes(photo.category as ClientPhotoCategory)) {
+      if (
+        !isPendingApproval &&
+        input.clientId &&
+        input.contractId &&
+        input.clientPhotoCategories.includes(photo.category as ClientPhotoCategory)
+      ) {
         // clientPhotosStore.uploadPhoto comprime de nuevo por su cuenta, pero
         // ya recibe la version liviana (compressImage no vuelve a pisar un
         // archivo que ya salio mas chico que el original, ver su propio
@@ -396,7 +449,7 @@ export const useCampoStore = defineStore('campo', () => {
     // Cambio de puerto NAP (Fase 95, solo si la averia exigio recablear):
     // mismo assignContractToNap que usa una instalacion nueva — libera el
     // puerto anterior del contrato (si tenia) y ocupa uno en la caja elegida.
-    if (input.napElementoId && input.contractId) {
+    if (input.napElementoId && input.contractId && input.clientId) {
       if (!infraStore.elementos.length) await infraStore.fetchElementos();
       const elemento = infraStore.elementos.find((e) => e.id === input.napElementoId);
       const capacity = elemento?.puertos_total ?? NAP_CLIENT_LIMIT;
@@ -405,6 +458,11 @@ export const useCampoStore = defineStore('campo', () => {
 
     if (input.jobType === 'installation') {
       await installationsStore.updateStatus(input.jobId, 'completed');
+    } else if (input.jobType === 'routine') {
+      await routinesStore.updateRoutine(input.jobId, {
+        status: 'completed',
+        closure_notes: input.closureNotes,
+      });
     } else {
       // imputable_a_tecnico se deriva del motivo en un trigger de BD (Fase
       // 49) — no se manda desde aca, para que quede una sola fuente de verdad.

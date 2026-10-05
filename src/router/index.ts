@@ -84,6 +84,14 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de
+      // orden junto a Tickets e Instalaciones, mismo criterio de ubicacion.
+      path: '/soporte/rutinas',
+      name: 'rutinas',
+      component: () => import('@/views/soporte/RutinasView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/soporte/:id',
       name: 'soporte-detalle',
       component: () => import('@/views/soporte/TicketDetailView.vue'),

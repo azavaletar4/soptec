@@ -18,7 +18,8 @@ export interface QueuedClosure {
   createdAt: number;
   jobType: JobType;
   jobId: string;
-  clientId: string;
+  /** Null en una rutina sin cliente puntual (Fase 101). */
+  clientId: string | null;
   contractId: string | null;
   targetStatus: string;
   latitude: number | null;

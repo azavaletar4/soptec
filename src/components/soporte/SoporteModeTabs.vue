@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
 
-// Conmutador principal del flujo operativo de tecnicos: une Instalaciones
-// (altas nuevas) y Tickets/Averias (soporte post-venta) bajo "Soporte", que
-// antes vivian en secciones separadas del sidebar (Operaciones vs Soporte).
-// Estilo "segmented control" compacto, no dos bloques grandes estirados.
-defineProps<{ active: 'instalaciones' | 'tickets' }>();
+// Conmutador principal del flujo operativo de tecnicos: une Tickets/Averias
+// (soporte post-venta), Instalaciones (altas nuevas) y Rutinas (mantenimiento
+// preventivo, Fase 101) bajo "Soporte", que antes vivian en secciones
+// separadas del sidebar (Operaciones vs Soporte). Estilo "segmented control"
+// compacto, no bloques grandes estirados.
+defineProps<{ active: 'instalaciones' | 'tickets' | 'rutinas' }>();
 
 const router = useRouter();
 </script>
@@ -27,6 +28,14 @@ const router = useRouter();
       @click="router.push('/soporte/instalaciones')"
     >
       📦 Instalaciones nuevas
+    </button>
+    <button
+      type="button"
+      class="rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+      :class="active === 'rutinas' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
+      @click="router.push('/soporte/rutinas')"
+    >
+      🔄 Rutinas
     </button>
   </div>
 </template>

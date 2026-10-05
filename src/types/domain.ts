@@ -24,6 +24,8 @@ export type TicketMotivoAveria =
 export const AVERIA_TICKET_CATEGORIES: TicketCategory[] = ['no_service', 'slow_speed', 'equipment'];
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled' | 'exonerada';
 export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
+export type RoutineStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+export type RoutineCategory = 'peinado_nap' | 'mantenimiento_preventivo' | 'revision_zona' | 'otro';
 export type InventoryMovementType = 'ingreso' | 'egreso';
 export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired' | 'en_recupero' | 'pending_approval';
 export type WorkOrderPhotoStatus = 'pending_approval' | 'approved' | 'rejected';
@@ -237,6 +239,35 @@ export interface Installation {
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'address' | 'latitude' | 'longitude'> | null;
   contracts?: Pick<ServiceContract, 'id' | 'contract_number' | 'service_type'> | null;
+  assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+/** Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de orden,
+ *  junto a Ticket (averia) e Installation (alta). A diferencia de esos dos,
+ *  client_id es opcional: una rutina puede apuntar a una zona o caja NAP sin
+ *  ser de un cliente puntual. */
+export interface Routine {
+  id: string;
+  routine_number: string | null;
+  title: string;
+  description: string | null;
+  category: RoutineCategory;
+  zone_id: string | null;
+  nap_elemento_id: string | null;
+  client_id: string | null;
+  status: RoutineStatus;
+  assigned_to: string | null;
+  scheduled_date: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  closure_notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'latitude' | 'longitude'> | null;
+  zones?: Pick<Zone, 'id' | 'name'> | null;
+  nap_elemento?: Pick<InfraElemento, 'id' | 'name'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
 
@@ -631,7 +662,7 @@ export interface Vehiculo {
   tecnico?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
 
-export type JobType = 'installation' | 'ticket';
+export type JobType = 'installation' | 'ticket' | 'routine';
 
 /** Cierre de un trabajo de campo (alta o averia) — GPS del cierre, serial de
  *  ONT leido por QR y firma de conformidad. Ver Fase 32. */
