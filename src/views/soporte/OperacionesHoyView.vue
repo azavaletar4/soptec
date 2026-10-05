@@ -13,7 +13,7 @@ import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useAuthStore } from '@/stores/auth';
-import { useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
+import { JOB_STATUS_CLASS, JOB_STATUS_LABEL, useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
 import { getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { MOTIVO_AVERIA_OPTIONS } from '@/lib/ticketMotivoAveria';
@@ -471,8 +471,11 @@ function formatDate(value: string) {
                 <span v-else class="text-slate-300">—</span>
               </td>
               <td class="px-4 py-3">
-                <span class="badge" :class="job.jobType === 'ticket' && isDueReschedule(job, now) ? 'bg-red-500/15 text-red-700' : 'bg-sky-500/15 text-sky-700'">
-                  {{ job.status }}
+                <span
+                  class="badge"
+                  :class="job.jobType === 'ticket' && isDueReschedule(job, now) ? 'bg-red-500/15 text-red-700' : JOB_STATUS_CLASS[job.status]"
+                >
+                  {{ JOB_STATUS_LABEL[job.status] ?? job.status }}
                 </span>
               </td>
               <td class="px-4 py-3 text-slate-600">{{ job.assignedName ?? 'Sin asignar' }}</td>

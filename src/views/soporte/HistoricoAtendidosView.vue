@@ -6,7 +6,7 @@ import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeF
 import { useTicketsStore } from '@/stores/tickets';
 import { useInstallationsStore } from '@/stores/installations';
 import { useRoutinesStore } from '@/stores/routines';
-import { useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
+import { JOB_STATUS_CLASS, JOB_STATUS_LABEL, useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
 import type { JobType, Ticket } from '@/types/domain';
 
 // Fase 107: todo lo resuelto/cerrado/completado vive aca aparte — asi
@@ -110,7 +110,7 @@ function formatDate(value: string | null) {
           </div>
           <div class="text-slate-900 font-medium mb-1">{{ job.label }}</div>
           <div class="text-xs text-slate-500">
-            {{ job.status }} · atendido {{ formatDate(job.finishedAt) }} · {{ job.assignedName ?? 'Sin asignar' }}
+            {{ JOB_STATUS_LABEL[job.status] ?? job.status }} · atendido {{ formatDate(job.finishedAt) }} · {{ job.assignedName ?? 'Sin asignar' }}
           </div>
         </div>
       </div>
@@ -140,7 +140,7 @@ function formatDate(value: string | null) {
               </td>
               <td class="px-4 py-3 text-slate-600">{{ job.label }}</td>
               <td class="px-4 py-3"><span class="badge" :class="TYPE_META[job.jobType].badge">{{ TYPE_META[job.jobType].label }}</span></td>
-              <td class="px-4 py-3"><span class="badge bg-slate-500/15 text-slate-600">{{ job.status }}</span></td>
+              <td class="px-4 py-3"><span class="badge" :class="JOB_STATUS_CLASS[job.status]">{{ JOB_STATUS_LABEL[job.status] ?? job.status }}</span></td>
               <td class="px-4 py-3 text-slate-600">{{ job.assignedName ?? 'Sin asignar' }}</td>
               <td class="px-4 py-3 text-slate-500 text-xs">{{ formatDate(job.finishedAt) }}</td>
             </tr>

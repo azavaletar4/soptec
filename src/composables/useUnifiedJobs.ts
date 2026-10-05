@@ -36,6 +36,34 @@ const ACTIVE_STATUS: Record<JobType, string[]> = {
   routine: ['pending', 'scheduled', 'in_progress'],
 };
 
+// Traduccion de estado para "Operaciones de Hoy"/"Historico de Atendidos"
+// (Fase 107/108) — los 3 tipos juntos solo usan 9 valores en total y
+// ninguno se repite con significado distinto entre tipos, asi que un solo
+// mapa plano alcanza (antes se mostraba el valor crudo en ingles: 'open',
+// 'pending', etc).
+export const JOB_STATUS_LABEL: Record<string, string> = {
+  open: 'Abierto',
+  in_progress: 'En progreso',
+  resolved: 'Resuelto',
+  closed: 'Cerrado',
+  rescheduled: 'Reprogramado',
+  pending: 'Pendiente',
+  scheduled: 'Programado',
+  completed: 'Completado',
+  cancelled: 'Cancelado',
+};
+export const JOB_STATUS_CLASS: Record<string, string> = {
+  open: 'bg-yellow-500/15 text-yellow-600',
+  in_progress: 'bg-sky-500/15 text-sky-700',
+  resolved: 'bg-green-500/15 text-green-600',
+  closed: 'bg-slate-500/15 text-slate-600',
+  rescheduled: 'bg-red-500/15 text-red-700',
+  pending: 'bg-yellow-500/15 text-yellow-600',
+  scheduled: 'bg-sky-500/15 text-sky-700',
+  completed: 'bg-green-500/15 text-green-600',
+  cancelled: 'bg-slate-500/15 text-slate-600',
+};
+
 export function useUnifiedJobs() {
   const ticketsStore = useTicketsStore();
   const installationsStore = useInstallationsStore();
