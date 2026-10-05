@@ -147,6 +147,13 @@ export const useInventoryStore = defineStore('inventory', () => {
       quantity: movement.quantity,
       reason: `Reversión del movimiento del ${new Date(movement.created_at).toLocaleString('es-PE')}${movement.reason ? ` ("${movement.reason}")` : ''}`,
       reversesMovementId: movement.id,
+      // Sin esto la reversion quedaba huerfana del ticket/instalacion
+      // original (ticket_id/installation_id en null): el stock SI se
+      // corregia, pero una vista filtrada por ticket (CampoTrabajoDetailView,
+      // Fase 100) nunca veia la fila de reversion, asi que el item "quitado"
+      // seguia apareciendo como vigente en esa lista.
+      ticketId: movement.ticket_id ?? undefined,
+      installationId: movement.installation_id ?? undefined,
     });
   }
 
