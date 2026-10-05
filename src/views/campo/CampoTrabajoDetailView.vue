@@ -893,7 +893,7 @@ async function handleCloseSubmit() {
           <p v-if="selfAssignError" class="text-xs text-red-600 mt-2">{{ selfAssignError }}</p>
 
           <div v-if="isMyAssignment && !ticketFrozen" class="mt-3 pt-3 border-t border-slate-100">
-            <button v-if="!showReturnForm" type="button" class="btn-danger text-xs !px-0" @click="toggleReturnForm">
+            <button v-if="!showReturnForm" type="button" class="btn-danger text-xs" @click="toggleReturnForm">
               ↩️ Devolver orden (cliente no estaba)
             </button>
             <div v-else class="space-y-2">
@@ -967,7 +967,7 @@ async function handleCloseSubmit() {
               <button
                 v-if="photoPreviewUrls[cat.value]"
                 type="button"
-                class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white border border-slate-300 flex items-center justify-center text-[10px] shadow-sm"
+                class="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-white border border-slate-300 flex items-center justify-center text-sm shadow-sm"
                 title="Repetir foto"
                 @click="clearPhoto(cat.value)"
               >
@@ -1083,19 +1083,31 @@ async function handleCloseSubmit() {
       <template v-else-if="!isUnassignedTicket">
         <section class="surface p-3.5 mb-3">
           <h2 class="text-sm font-semibold mb-2">Materiales usados</h2>
-          <ul v-if="activeMaterials.length" class="space-y-1.5 mb-2.5 text-xs">
-            <li v-for="m in activeMaterials" :key="m.id" class="flex items-center justify-between gap-2">
-              <span class="flex-1 truncate">{{ m.product?.name ?? 'Producto' }}</span>
+          <ul v-if="activeMaterials.length" class="space-y-2 mb-3 text-xs">
+            <li v-for="m in activeMaterials" :key="m.id" class="flex items-center justify-between gap-2 py-0.5">
+              <span class="flex-1 min-w-0 truncate">{{ m.product?.name ?? 'Producto' }}</span>
               <template v-if="editingMaterialId === m.id">
-                <input v-model.number="editMaterialQty" type="number" min="1" class="field-input text-xs w-16 py-1 shrink-0" />
-                <button type="button" class="text-sky-700 text-[11px] shrink-0" @click="handleSaveMaterialQty(m)">Guardar</button>
-                <button type="button" class="text-slate-400 text-[11px] shrink-0" @click="editingMaterialId = null">Cancelar</button>
+                <input v-model.number="editMaterialQty" type="number" min="1" class="field-input text-sm w-16 py-1.5 shrink-0" />
+                <button
+                  type="button"
+                  class="shrink-0 px-3 py-2 rounded-lg bg-sky-500/15 text-sky-700 text-xs font-medium"
+                  @click="handleSaveMaterialQty(m)"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  class="shrink-0 px-3 py-2 rounded-lg bg-slate-100 text-slate-500 text-xs font-medium"
+                  @click="editingMaterialId = null"
+                >
+                  Cancelar
+                </button>
               </template>
               <template v-else>
                 <span class="text-slate-600 shrink-0">{{ m.quantity }} {{ m.product?.unit }}</span>
                 <button
                   type="button"
-                  class="text-sky-700 text-[11px] shrink-0"
+                  class="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg bg-sky-500/10 text-base disabled:opacity-50"
                   :disabled="materialActionBusy === m.id"
                   title="Corregir cantidad"
                   @click="startEditMaterial(m)"
@@ -1104,7 +1116,7 @@ async function handleCloseSubmit() {
                 </button>
                 <button
                   type="button"
-                  class="text-red-600 text-[11px] shrink-0"
+                  class="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg bg-red-500/10 text-base disabled:opacity-50"
                   :disabled="materialActionBusy === m.id"
                   title="Quitar material"
                   @click="handleRemoveMaterial(m)"
@@ -1181,13 +1193,15 @@ async function handleCloseSubmit() {
 
             <div v-if="pendingUnits.length" class="pt-3 mt-3 border-t border-slate-100">
               <p class="text-xs font-medium text-amber-700 mb-1.5">⏳ Pendientes de aprobación</p>
-              <ul class="space-y-1.5 text-xs">
-                <li v-for="u in pendingUnits" :key="u.id" class="flex items-center justify-between gap-2">
-                  <span class="flex-1 truncate">{{ u.product?.name ?? 'Equipo' }}</span>
-                  <span class="text-slate-500 font-mono shrink-0">{{ u.serial_number || u.mac_address }}</span>
+              <ul class="space-y-2 text-xs">
+                <li v-for="u in pendingUnits" :key="u.id" class="flex items-center justify-between gap-2 py-0.5">
+                  <div class="flex-1 min-w-0">
+                    <p class="truncate">{{ u.product?.name ?? 'Equipo' }}</p>
+                    <p class="text-slate-500 font-mono">{{ u.serial_number || u.mac_address }}</p>
+                  </div>
                   <button
                     type="button"
-                    class="text-red-600 text-[11px] shrink-0"
+                    class="shrink-0 px-3 py-2 rounded-lg bg-red-500/10 text-red-600 text-xs font-medium disabled:opacity-50"
                     :disabled="unlinkingUnitId === u.id"
                     title="Desvincular (serie/MAC equivocada)"
                     @click="handleUnlinkPendingUnit(u)"
@@ -1230,7 +1244,7 @@ async function handleCloseSubmit() {
               <button
                 v-if="photoPreviewUrls[cat.value]"
                 type="button"
-                class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 border border-slate-300 flex items-center justify-center text-xs shadow-sm"
+                class="absolute top-1 right-1 w-8 h-8 rounded-full bg-white/90 border border-slate-300 flex items-center justify-center text-sm shadow-sm"
                 title="Repetir foto"
                 @click="clearPhoto(cat.value)"
               >
