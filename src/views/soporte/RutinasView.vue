@@ -11,7 +11,8 @@ import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
-import type { Routine, RoutineCategory, RoutineStatus } from '@/types/domain';
+import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
+import type { Routine, RoutineCategory, RoutineStatus, TicketPriority } from '@/types/domain';
 
 // Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de orden
 // junto a Tickets (averias) e Instalaciones (altas). Reusa job_assignees
@@ -138,6 +139,7 @@ const emptyForm = () => ({
   title: '',
   description: '',
   category: 'mantenimiento_preventivo' as RoutineCategory,
+  priority: 'medium' as TicketPriority,
   client_id: '',
   zone_id: '',
   nap_elemento_id: '',
@@ -167,6 +169,7 @@ function openEdit(r: Routine) {
     title: r.title,
     description: r.description ?? '',
     category: r.category,
+    priority: r.priority,
     client_id: r.client_id ?? '',
     zone_id: r.zone_id ?? '',
     nap_elemento_id: r.nap_elemento_id ?? '',
@@ -189,6 +192,7 @@ async function handleSubmit() {
     title: form.value.title.trim(),
     description: form.value.description.trim() || null,
     category: form.value.category,
+    priority: form.value.priority,
     client_id: targetKind.value === 'client' ? form.value.client_id || null : null,
     zone_id: targetKind.value === 'zone' ? form.value.zone_id || null : null,
     nap_elemento_id: targetKind.value === 'nap' ? form.value.nap_elemento_id || null : null,
@@ -281,7 +285,10 @@ function formatDate(value: string | null) {
         <div v-for="r in filteredRoutines" :key="r.id" class="surface p-3 cursor-pointer" @click="canEdit(r) && openEdit(r)">
           <div class="flex items-start justify-between gap-2 mb-1.5">
             <span class="font-mono text-xs text-slate-500">{{ r.routine_number }}</span>
-            <span class="badge text-[10px]" :class="STATUS_CLASS[r.status]">{{ STATUS_LABEL[r.status] }}</span>
+            <span class="flex gap-1.5">
+              <span class="badge text-[10px]" :class="PRIORITY_CLASS[r.priority]">{{ PRIORITY_LABEL[r.priority] }}</span>
+              <span class="badge text-[10px]" :class="STATUS_CLASS[r.status]">{{ STATUS_LABEL[r.status] }}</span>
+            </span>
           </div>
           <div class="text-slate-900 font-medium mb-1">{{ r.title }}</div>
           <div class="text-xs text-slate-500 mb-1">{{ CATEGORY_LABEL[r.category] }} · {{ targetLabel(r) }}</div>
@@ -300,6 +307,7 @@ function formatDate(value: string | null) {
               <th class="text-left px-4 py-3">Categoría</th>
               <th class="text-left px-4 py-3">Destino</th>
               <th class="text-left px-4 py-3">Fecha</th>
+              <th class="text-left px-4 py-3">Prioridad</th>
               <th class="text-left px-4 py-3">Estado</th>
               <th class="text-left px-4 py-3">Asignado</th>
               <th class="text-right px-4 py-3">Acciones</th>
@@ -320,6 +328,9 @@ function formatDate(value: string | null) {
               <td class="px-4 py-3 text-slate-600">{{ CATEGORY_LABEL[r.category] }}</td>
               <td class="px-4 py-3 text-slate-600">{{ targetLabel(r) }}</td>
               <td class="px-4 py-3 text-slate-600">{{ formatDate(r.scheduled_date) }}</td>
+              <td class="px-4 py-3">
+                <span class="badge" :class="PRIORITY_CLASS[r.priority]">{{ PRIORITY_LABEL[r.priority] }}</span>
+              </td>
               <td class="px-4 py-3">
                 <span class="badge" :class="STATUS_CLASS[r.status]">{{ STATUS_LABEL[r.status] }}</span>
               </td>
@@ -366,6 +377,13 @@ function formatDate(value: string | null) {
               <label class="block text-xs text-slate-600 mb-1">Fecha programada</label>
               <input v-model="form.scheduled_date" type="date" class="field-input" />
             </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Prioridad</label>
+            <select v-model="form.priority" class="field-input" :disabled="!canManage">
+              <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
+            </select>
           </div>
 
           <div class="mb-3">

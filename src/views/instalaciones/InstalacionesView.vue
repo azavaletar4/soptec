@@ -17,6 +17,7 @@ import { useFoFibraStore } from '@/stores/foFibra';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
+import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import {
   NAP_CLIENT_LIMIT,
   type ClientPhotoCategory,
@@ -26,6 +27,7 @@ import {
   type ServiceContract,
   type InventoryMovement,
   type InventoryUnit,
+  type TicketPriority,
 } from '@/types/domain';
 
 const route = useRoute();
@@ -92,6 +94,7 @@ const dateRange = ref<DateRange | null>(null);
 const emptyForm = () => ({
   client_id: '',
   contract_id: '',
+  priority: 'medium' as TicketPriority,
   scheduled_date: '',
   scheduled_time: '',
   assigned_to: '',
@@ -541,6 +544,7 @@ async function handleSubmit() {
     const created = await installationsStore.createInstallation({
       client_id: form.value.client_id,
       contract_id: form.value.contract_id || null,
+      priority: form.value.priority,
       scheduled_date: form.value.scheduled_date || null,
       scheduled_time: form.value.scheduled_time || null,
       assigned_to: form.value.assigned_to || null,
@@ -579,6 +583,19 @@ async function handleStatusChange(inst: Installation, status: InstallationStatus
     await installationsStore.updateStatus(inst.id, status);
   } catch (e) {
     alert(getErrorMessage(e, 'Error al cambiar el estado'));
+  }
+}
+
+// Prioridad (Fase 108): es una decision de despacho, igual que en Tickets
+// (ver TicketDetailView.vue:handlePriorityChange) — el tecnico asignado NO
+// la cambia, solo ve la que ya le pusieron.
+const canEditPriority = computed(() => auth.role !== 'TECNICO_RED');
+
+async function handlePriorityChange(inst: Installation, priority: TicketPriority) {
+  try {
+    await installationsStore.updateInstallation(inst.id, { priority });
+  } catch (e) {
+    alert(getErrorMessage(e, 'Error al cambiar la prioridad'));
   }
 }
 
@@ -828,12 +845,13 @@ function formatDate(value: string | null) {
     <p v-if="installationsStore.error" class="mb-4 text-sm text-red-600">{{ installationsStore.error }}</p>
 
     <div class="table-shell">
-      <table class="w-full text-sm min-w-[900px]">
+      <table class="w-full text-sm min-w-[980px]">
         <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Cliente</th>
             <th class="text-left px-4 py-3">Contrato</th>
             <th class="text-left px-4 py-3">Fecha programada</th>
+            <th class="text-left px-4 py-3">Prioridad</th>
             <th class="text-left px-4 py-3">Estado</th>
             <th class="text-left px-4 py-3">Técnico</th>
             <th class="text-right px-4 py-3">Acciones</th>
@@ -841,10 +859,10 @@ function formatDate(value: string | null) {
         </thead>
         <tbody>
           <tr v-if="installationsStore.loading">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+            <td colspan="7" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!filteredInstallations.length">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">No hay instalaciones en este filtro.</td>
+            <td colspan="7" class="px-4 py-6 text-center text-slate-500">No hay instalaciones en este filtro.</td>
           </tr>
           <tr v-for="inst in filteredInstallations" :key="inst.id" class="border-t border-slate-200">
             <td class="px-4 py-3 cursor-pointer hover:text-sky-600" @click="goToClient(inst)">
@@ -855,6 +873,17 @@ function formatDate(value: string | null) {
             <td class="px-4 py-3 text-slate-600">
               {{ formatDate(inst.scheduled_date) }}
               <span v-if="inst.scheduled_time" class="text-xs text-slate-500"> · {{ inst.scheduled_time.slice(0, 5) }}</span>
+            </td>
+            <td class="px-4 py-3">
+              <select
+                v-if="canEditPriority"
+                class="field-input py-1.5 text-xs"
+                :value="inst.priority"
+                @change="handlePriorityChange(inst, ($event.target as HTMLSelectElement).value as TicketPriority)"
+              >
+                <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
+              </select>
+              <span v-else class="badge" :class="PRIORITY_CLASS[inst.priority]">{{ PRIORITY_LABEL[inst.priority] }}</span>
             </td>
             <td class="px-4 py-3">
               <select
@@ -935,6 +964,13 @@ function formatDate(value: string | null) {
               <label class="block text-xs text-slate-600 mb-1">Hora</label>
               <input v-model="form.scheduled_time" type="time" class="field-input" />
             </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Prioridad</label>
+            <select v-model="form.priority" class="field-input">
+              <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
+            </select>
           </div>
 
           <div class="mb-3">

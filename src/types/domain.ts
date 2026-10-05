@@ -255,6 +255,8 @@ export interface Installation {
   client_id: string;
   contract_id: string | null;
   status: InstallationStatus;
+  /** Prioridad de despacho (Fase 108) — mismo enum/significado que Ticket.priority. */
+  priority: TicketPriority;
   scheduled_date: string | null;
   scheduled_time: string | null;
   /** Agendamiento de hora exacta (Fase 101/B) — nullable, lo asigna despacho desde el tablero Timeline. */
@@ -287,6 +289,8 @@ export interface Routine {
   nap_elemento_id: string | null;
   client_id: string | null;
   status: RoutineStatus;
+  /** Prioridad de despacho (Fase 108) — mismo enum/significado que Ticket.priority. */
+  priority: TicketPriority;
   assigned_to: string | null;
   scheduled_date: string | null;
   scheduled_start_at: string | null;

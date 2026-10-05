@@ -17,6 +17,7 @@ import { useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
 import { getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { MOTIVO_AVERIA_OPTIONS } from '@/lib/ticketMotivoAveria';
+import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
 import type { JobType, ServiceContract, Ticket, TicketCategory, TicketMotivoAveria, TicketPriority } from '@/types/domain';
@@ -127,18 +128,6 @@ const TYPE_TABS: { value: JobType | 'all'; label: string }[] = [
   { value: 'routine', label: '🟡 Solo Rutinas' },
 ];
 
-const PRIORITY_LABEL: Record<TicketPriority, string> = {
-  low: 'Baja',
-  medium: 'Media',
-  high: 'Alta',
-  urgent: 'Urgente',
-};
-const PRIORITY_CLASS: Record<TicketPriority, string> = {
-  low: 'bg-slate-500/15 text-slate-600',
-  medium: 'bg-sky-500/15 text-sky-700',
-  high: 'bg-orange-500/15 text-orange-600',
-  urgent: 'bg-red-500/15 text-red-600',
-};
 const CATEGORY_LABEL: Record<TicketCategory, string> = {
   no_service: 'Sin servicio',
   slow_speed: 'Lentitud',
@@ -149,9 +138,9 @@ const CATEGORY_LABEL: Record<TicketCategory, string> = {
   other: 'Otro',
 };
 
-// Orden automatico (Fase 90): dentro de lo activo, por urgencia (urgente >
-// alta > media > baja, solo aplica a tickets — instalaciones/rutinas caen
-// al final de ese criterio) y como ultimo, lo mas reciente primero.
+// Orden automatico (Fase 90, extendido en Fase 108 a Altas/Rutinas ya que
+// las 3 tienen su propia prioridad): dentro de lo activo, por urgencia
+// (urgente > alta > media > baja) y como ultimo, lo mas reciente primero.
 const PRIORITY_SORT_RANK: Record<TicketPriority, number> = {
   urgent: 0,
   high: 1,
@@ -191,7 +180,7 @@ const filteredJobs = computed(() => {
   return [...list].sort((a, b) => {
     const dueDiff = Number(isDueReschedule(b, now.value)) - Number(isDueReschedule(a, now.value));
     if (dueDiff !== 0) return dueDiff;
-    const priorityDiff = PRIORITY_SORT_RANK[a.priority ?? 'low'] - PRIORITY_SORT_RANK[b.priority ?? 'low'];
+    const priorityDiff = PRIORITY_SORT_RANK[a.priority] - PRIORITY_SORT_RANK[b.priority];
     if (priorityDiff !== 0) return priorityDiff;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
