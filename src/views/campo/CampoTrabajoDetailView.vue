@@ -14,6 +14,9 @@ import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
 import { useAuthStore } from '@/stores/auth';
+import { useJobAssigneesStore } from '@/stores/jobAssignees';
+import { useConfirm } from '@/composables/useConfirm';
+import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
 import {
@@ -23,6 +26,7 @@ import {
   type Installation,
   type InventoryMovement,
   type InventoryUnit,
+  type JobAssignee,
   type JobType,
   type ServiceContract,
   type Ticket,
@@ -41,6 +45,9 @@ const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const clientPhotosStore = useClientPhotosStore();
 const auth = useAuthStore();
+const jobAssigneesStore = useJobAssigneesStore();
+const { confirmDialog } = useConfirm();
+const toast = useToast();
 
 // Provisionar (dar de alta desde cero) una ONT en la OLT es tarea de
 // administracion, no del tecnico de campo — el backend ya lo exige
@@ -51,7 +58,14 @@ const canProvisionOnt = computed(() => auth.role !== 'TECNICO_RED');
 const jobType = route.params.tipo as JobType;
 const jobId = route.params.id as string;
 
-const trabajo = computed(() => campoStore.trabajos.find((t) => t.jobType === jobType && t.id === jobId));
+// Fase 98: un ticket 'open' sin tecnico asignado vive en
+// campoStore.availableTickets, no en trabajos (que solo trae lo del propio
+// tecnico) — hay que buscar en ambos para poder abrir su detalle y "tomarlo".
+const trabajo = computed(
+  () =>
+    campoStore.trabajos.find((t) => t.jobType === jobType && t.id === jobId) ??
+    campoStore.availableTickets.find((t) => t.jobType === jobType && t.id === jobId),
+);
 
 // Una instalacion 'completed' queda cerrada para el tecnico (Fase 69, lo
 // mismo que ya rige "Materiales" en InstalacionesView.vue) — pero esta
@@ -179,7 +193,7 @@ onMounted(async () => {
   if (jobType === 'ticket') {
     infraStore.fetchElementos().catch(() => {});
     fibra.fetchTodosNapPuertos().catch(() => {});
-    await loadEquipos();
+    await Promise.all([loadEquipos(), loadAssignees()]);
   }
 });
 
@@ -362,6 +376,50 @@ async function loadEquipos() {
     pendingUnits.value = pending.filter((u) => u.status === 'pending_approval');
   } finally {
     loadingUnits.value = false;
+  }
+}
+
+// ---- Tecnico(s) asignados / auto-asignacion de un ticket libre (Fase 98) ----
+const assignees = ref<JobAssignee[]>([]);
+const loadingAssignees = ref(false);
+const selfAssigning = ref(false);
+const selfAssignError = ref<string | null>(null);
+
+// Mientras un ticket no tiene a nadie asignado, el formulario completo
+// (materiales, equipos, cierre) queda bloqueado — un tecnico que todavia no
+// "tomo" la orden no deberia poder cerrarla (la BD lo rechazaria igual, ver
+// tickets_update_staff, pero asi queda claro en la UI antes de intentarlo).
+const isUnassignedTicket = computed(() => jobType === 'ticket' && !loadingAssignees.value && !assignees.value.length);
+
+async function loadAssignees() {
+  if (jobType !== 'ticket') return;
+  loadingAssignees.value = true;
+  try {
+    assignees.value = await jobAssigneesStore.fetchAssignees('ticket', jobId);
+  } finally {
+    loadingAssignees.value = false;
+  }
+}
+
+async function handleTakeTicket() {
+  const ok = await confirmDialog({
+    title: '¿Ya coordinaste con el cliente?',
+    message: 'Asegúrate de haber contactado al cliente para verificar que se encuentra en su domicilio antes de asumir la orden.',
+    confirmLabel: 'Sí, ya coordiné',
+    cancelLabel: 'Cancelar',
+  });
+  if (!ok) return;
+
+  selfAssigning.value = true;
+  selfAssignError.value = null;
+  try {
+    await campoStore.selfAssignTicket(jobId);
+    await Promise.all([loadAssignees(), loadEquipos()]);
+    toast.success('¡Ticket asignado con éxito! Ya puedes iniciar la atención.');
+  } catch (e) {
+    selfAssignError.value = getErrorMessage(e, 'No se pudo asignar el ticket (puede que alguien ya lo haya tomado)');
+  } finally {
+    selfAssigning.value = false;
   }
 }
 
@@ -665,6 +723,41 @@ async function handleCloseSubmit() {
         <p v-else class="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">Sin ficha adicional disponible.</p>
       </section>
 
+      <!-- Tecnico asignado / auto-asignacion de un ticket libre (Fase 98) -->
+      <section v-if="jobType === 'ticket'" class="surface p-3.5 mb-3">
+        <h2 class="text-sm font-semibold mb-2">Técnico asignado</h2>
+        <p v-if="loadingAssignees" class="text-xs text-slate-400">Cargando...</p>
+        <template v-else>
+          <div v-if="assignees.length" class="flex flex-wrap gap-2">
+            <span
+              v-for="a in assignees"
+              :key="a.technician_id"
+              class="badge text-[11px]"
+              :class="a.role === 'leader' ? 'bg-sky-500/15 text-sky-700' : 'bg-slate-500/15 text-slate-600'"
+            >
+              {{ a.profile?.full_name || a.profile?.email || 'Técnico' }} {{ a.role === 'leader' ? '(líder)' : '(apoyo)' }}
+            </span>
+          </div>
+          <button
+            v-else-if="auth.role === 'TECNICO_RED'"
+            type="button"
+            class="btn-primary w-full text-sm"
+            :disabled="selfAssigning"
+            @click="handleTakeTicket"
+          >
+            {{ selfAssigning ? 'Asignando...' : '🙋‍♂️ Tomar este ticket' }}
+          </button>
+          <p v-else class="text-xs text-slate-400">Sin técnicos asignados.</p>
+          <p v-if="selfAssignError" class="text-xs text-red-600 mt-2">{{ selfAssignError }}</p>
+        </template>
+      </section>
+
+      <!-- Ticket libre: el formulario de materiales/equipos/cierre queda
+           bloqueado hasta que el tecnico lo tome (boton de arriba). -->
+      <section v-if="isUnassignedTicket" class="surface p-3.5 mb-3 bg-amber-50 border border-amber-200">
+        <p class="text-xs text-amber-700">Toma este ticket para habilitar materiales, equipos y cierre de trabajo.</p>
+      </section>
+
       <!-- Fotos ya registradas del cliente (instalaciones: solo lectura) -->
       <section v-if="jobType === 'installation' && (loadingPhotos || existingPhotos.length)" class="surface p-3.5 mb-3">
         <h2 class="text-sm font-semibold mb-2">Fotos anteriores</h2>
@@ -681,7 +774,7 @@ async function handleCloseSubmit() {
       <!-- Censo fotografico (averias): "Actualizar" si ya existe, "Pendiente
            de registro" si es un cliente antiguo sin censar. Las fotos nuevas
            quedan pendientes de aprobacion del admin (Fase 95). -->
-      <section v-if="jobType === 'ticket' && !isLockedForTecnico" class="surface p-3.5 mb-3">
+      <section v-if="jobType === 'ticket' && !isLockedForTecnico && !isUnassignedTicket" class="surface p-3.5 mb-3">
         <h2 class="text-sm font-semibold mb-1">📋 Censo fotográfico</h2>
         <p class="text-[11px] text-slate-500 mb-3">
           Aprovecha la visita para completar la ficha del cliente. Las fotos nuevas quedan pendientes de aprobación del administrador.
@@ -798,7 +891,7 @@ async function handleCloseSubmit() {
         </p>
       </section>
 
-      <template v-else>
+      <template v-else-if="!isUnassignedTicket">
         <section class="surface p-3.5 mb-3">
           <h2 class="text-sm font-semibold mb-2">Materiales usados</h2>
           <ul v-if="materials.length" class="space-y-1 mb-2.5 text-xs">

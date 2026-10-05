@@ -3,28 +3,46 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import { useCampoStore, type TrabajoEstadoUi, type TrabajoItem } from '@/stores/campo';
+import { useAuthStore } from '@/stores/auth';
 import { telLink, waLink } from '@/lib/phone';
 
 const router = useRouter();
 const campoStore = useCampoStore();
+const auth = useAuthStore();
 
-const tabs: { value: TrabajoEstadoUi; label: string }[] = [
-  { value: 'pendiente', label: 'Pendientes' },
-  { value: 'en_proceso', label: 'En proceso' },
-  { value: 'completado', label: 'Completadas' },
-];
-const activeTab = ref<TrabajoEstadoUi>('pendiente');
+// 'disponible' (Fase 98) no es un estado de TrabajoEstadoUi — es una lista
+// aparte (tickets 'open' sin tecnico, campoStore.availableTickets), solo
+// visible para TECNICO_RED, para poder "tomar" una averia libre.
+type TabValue = TrabajoEstadoUi | 'disponible';
+const tabs = computed<{ value: TabValue; label: string }[]>(() => {
+  const base: { value: TabValue; label: string }[] = [
+    { value: 'pendiente', label: 'Pendientes' },
+    { value: 'en_proceso', label: 'En proceso' },
+    { value: 'completado', label: 'Completadas' },
+  ];
+  if (auth.role === 'TECNICO_RED') base.push({ value: 'disponible', label: '🙋 Disponibles' });
+  return base;
+});
+const activeTab = ref<TabValue>('pendiente');
 const search = ref('');
 
 const filtered = computed(() => {
-  let list = campoStore.trabajos.filter((t) => t.estadoUi === activeTab.value);
+  let list: TrabajoItem[] =
+    activeTab.value === 'disponible'
+      ? campoStore.availableTickets
+      : campoStore.trabajos.filter((t) => t.estadoUi === activeTab.value);
   const q = search.value.trim().toLowerCase();
   if (q) list = list.filter((t) => `${t.clienteNombre} ${t.direccion ?? ''}`.toLowerCase().includes(q));
   return list;
 });
 
 const counts = computed(() => {
-  const c: Record<TrabajoEstadoUi, number> = { pendiente: 0, en_proceso: 0, completado: 0 };
+  const c: Record<TabValue, number> = {
+    pendiente: 0,
+    en_proceso: 0,
+    completado: 0,
+    disponible: campoStore.availableTickets.length,
+  };
   for (const t of campoStore.trabajos) c[t.estadoUi]++;
   return c;
 });
@@ -48,7 +66,7 @@ onMounted(() => {
   <CampoLayout title="Mis trabajos">
     <input v-model="search" placeholder="Buscar cliente o dirección..." class="field-input mb-3" />
 
-    <div class="grid grid-cols-3 gap-2 mb-3">
+    <div class="grid gap-2 mb-3" :class="tabs.length > 3 ? 'grid-cols-2' : 'grid-cols-3'">
       <button
         v-for="tab in tabs"
         :key="tab.value"
@@ -72,12 +90,15 @@ onMounted(() => {
         @click="openTrabajo(t)"
       >
         <div class="flex items-start justify-between gap-2 mb-1.5">
-          <span
-            class="badge text-[10px]"
-            :class="t.jobType === 'installation' ? 'bg-sky-500/15 text-sky-700' : 'bg-orange-500/15 text-orange-700'"
-          >
-            {{ t.jobType === 'installation' ? 'Instalación' : 'Avería' }}
-          </span>
+          <div class="flex items-center gap-1.5">
+            <span
+              class="badge text-[10px]"
+              :class="t.jobType === 'installation' ? 'bg-sky-500/15 text-sky-700' : 'bg-orange-500/15 text-orange-700'"
+            >
+              {{ t.jobType === 'installation' ? 'Instalación' : 'Avería' }}
+            </span>
+            <span v-if="activeTab === 'disponible'" class="badge text-[10px] bg-amber-500/15 text-amber-700">🙋 Libre</span>
+          </div>
           <span class="text-[11px] text-slate-500">{{ formatFecha(t.fecha) }}</span>
         </div>
         <p class="font-semibold text-sm text-slate-900">{{ t.clienteNombre }}</p>

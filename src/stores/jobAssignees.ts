@@ -66,5 +66,17 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
     if (promoteErr) throw promoteErr;
   }
 
-  return { loading, fetchAssignees, addAssignee, removeAssignee, setLeader };
+  /**
+   * Fase 98: el propio tecnico toma un ticket SIN asignar desde la App de
+   * Campo. A diferencia de addAssignee (bloqueado por RLS para TECNICO_RED,
+   * ver migracion), esto llama a una funcion SECURITY DEFINER que valida
+   * puntualmente que el ticket no tenga ya alguien asignado antes de
+   * convertir al tecnico en su lider.
+   */
+  async function selfAssignTicket(ticketId: string) {
+    const { error } = await supabase.rpc('self_assign_ticket', { p_ticket_id: ticketId });
+    if (error) throw error;
+  }
+
+  return { loading, fetchAssignees, addAssignee, removeAssignee, setLeader, selfAssignTicket };
 });

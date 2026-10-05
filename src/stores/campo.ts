@@ -12,6 +12,7 @@ import { useMikrotikStore } from '@/stores/mikrotik';
 import { useTr069Store } from '@/stores/tr069';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { useInfraElementosStore } from '@/stores/infraElementos';
+import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { compressImage } from '@/lib/imageCompression';
 import {
   enqueueClosure,
@@ -169,6 +170,7 @@ export const useCampoStore = defineStore('campo', () => {
   const tr069Store = useTr069Store();
   const fibra = useFoFibraStore();
   const infraStore = useInfraElementosStore();
+  const jobAssigneesStore = useJobAssigneesStore();
 
   const loading = ref(false);
   const queuedCount = ref(0);
@@ -186,6 +188,19 @@ export const useCampoStore = defineStore('campo', () => {
       .map(fromTicket);
     return [...instalaciones, ...tickets].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? '') * -1);
   });
+
+  // ---- Tickets libres (Fase 98): averias 'open' sin ningun tecnico
+  // asignado todavia — visibles para CUALQUIER tecnico (no solo el que las
+  // creo/tiene asignadas) para que pueda "tomarlas" el que este libre, sin
+  // esperar a que despacho se las reparta a mano. ----
+  const availableTickets = computed<TrabajoItem[]>(() =>
+    ticketsStore.tickets.filter((t) => t.status === 'open' && !t.assigned_to).map(fromTicket),
+  );
+
+  async function selfAssignTicket(ticketId: string) {
+    await jobAssigneesStore.selfAssignTicket(ticketId);
+    await ticketsStore.fetchTickets();
+  }
 
   async function fetchAll() {
     loading.value = true;
@@ -492,6 +507,8 @@ export const useCampoStore = defineStore('campo', () => {
     syncing,
     queuedCount,
     trabajos,
+    availableTickets,
+    selfAssignTicket,
     fetchAll,
     refreshQueuedCount,
     runDiagnostico,
