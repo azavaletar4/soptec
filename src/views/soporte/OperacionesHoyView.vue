@@ -4,8 +4,10 @@ import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import TicketFlowGuide from '@/components/soporte/TicketFlowGuide.vue';
 import TechnicianStatusBar from '@/components/soporte/TechnicianStatusBar.vue';
-import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
+import DateRangeFilter, { type DateRange, type DateRangePreset } from '@/components/soporte/DateRangeFilter.vue';
 import { useTicketsStore } from '@/stores/tickets';
+import { useInstallationsStore } from '@/stores/installations';
+import { useRoutinesStore } from '@/stores/routines';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -28,6 +30,8 @@ import type { JobType, ServiceContract, Ticket, TicketCategory, TicketMotivoAver
 const route = useRoute();
 const router = useRouter();
 const ticketsStore = useTicketsStore();
+const installationsStore = useInstallationsStore();
+const routinesStore = useRoutinesStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
@@ -85,6 +89,12 @@ const clientFilter = ref('');
 const typeFilter = ref<JobType | 'all'>('all');
 const searchQuery = ref('');
 const dateRange = ref<DateRange | null>(null);
+// Fase 107: a diferencia de Instalaciones/Rutinas/Agenda (donde "Hoy" es el
+// default util porque mezclan activo+resuelto), aca el default NO filtra
+// por fecha — el objetivo de esta bandeja es mostrar TODO lo activo sin
+// importar cuando se creo/agendo, para no esconder una averia vieja que
+// sigue abierta (ver plan Fase 107). El usuario puede acotar manualmente.
+const datePreset = ref<DateRangePreset>('todos');
 
 const emptyForm = () => ({
   client_id: '',
@@ -197,7 +207,13 @@ const filteredClients = computed(() => {
 });
 
 onMounted(async () => {
-  await Promise.all([ticketsStore.fetchTickets(), clientsStore.fetchClients(), catalogsStore.fetchStaff()]);
+  await Promise.all([
+    ticketsStore.fetchTickets(),
+    installationsStore.fetchInstallations(),
+    routinesStore.fetchRoutines(),
+    clientsStore.fetchClients(),
+    catalogsStore.fetchStaff(),
+  ]);
   // Deep link desde la ficha de un servicio puntual (Fase 37):
   // /soporte?client_id=..&contract_id=.. abre el modal ya precargado.
   //
@@ -371,7 +387,7 @@ function formatDate(value: string) {
           </button>
         </div>
       </div>
-      <DateRangeFilter @change="dateRange = $event" />
+      <DateRangeFilter v-model:preset="datePreset" show-all-option @change="dateRange = $event" />
     </div>
 
     <p v-if="ticketsStore.error" class="mb-4 text-sm text-red-600">{{ ticketsStore.error }}</p>

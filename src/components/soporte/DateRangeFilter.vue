@@ -1,19 +1,29 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 // Filtro de rango de fechas compartido por las 3 bandejas de Soporte
 // (Averias/Altas/Rutinas, Fase 101) — mismo control en los 3, cada vista
 // decide contra que columna de fecha filtra (created_at o scheduled_date).
 // 'Hoy' es el default pedido: al entrar a cualquiera de las 3 vistas se ve
 // primero lo de hoy, no el historico completo.
-export type DateRangePreset = 'hoy' | 'semana' | 'mes' | 'rango';
+//
+// 'todos' (Fase 107) — sin filtro, para "Operaciones de Hoy": ese tablero
+// solo muestra ordenes ACTIVAS (nunca resueltas/cerradas), asi que filtrar
+// ademas por fecha de creacion/agenda podria esconder una averia vieja que
+// sigue abierta. El default sigue siendo 'hoy' para quien no pase v-model:preset
+// (Instalaciones/Rutinas/Agenda, sin cambios) — un consumidor nuevo puede
+// enlazar su propio preset inicial en 'todos' via v-model:preset.
+export type DateRangePreset = 'hoy' | 'semana' | 'mes' | 'rango' | 'todos';
 export interface DateRange {
   start: Date;
   end: Date;
 }
 
 const preset = defineModel<DateRangePreset>('preset', { default: 'hoy' });
-const emit = defineEmits<{ change: [DateRange] }>();
+const emit = defineEmits<{ change: [DateRange | null] }>();
+// Solo "Operaciones de Hoy" (Fase 107) pasa esto — ahi "Todos" es un boton
+// permanente mas, no algo que aparece/desaparece segun el preset activo.
+const props = defineProps<{ showAllOption?: boolean }>();
 
 const rangeStart = ref('');
 const rangeEnd = ref('');
@@ -31,6 +41,7 @@ function endOfDay(d: Date): Date {
 
 function computeRange(): DateRange | null {
   const now = new Date();
+  if (preset.value === 'todos') return null;
   if (preset.value === 'hoy') return { start: startOfDay(now), end: endOfDay(now) };
   if (preset.value === 'semana') {
     // Semana de lunes a domingo (convencion local) — getDay(): 0=domingo.
@@ -53,19 +64,22 @@ function computeRange(): DateRange | null {
 }
 
 function emitChange() {
-  const range = computeRange();
-  if (range) emit('change', range);
+  emit('change', computeRange());
 }
 
 watch([preset, rangeStart, rangeEnd], emitChange);
 onMounted(emitChange);
 
-const PRESET_OPTIONS: { value: DateRangePreset; label: string }[] = [
-  { value: 'hoy', label: 'Hoy' },
-  { value: 'semana', label: 'Esta semana' },
-  { value: 'mes', label: 'Este mes' },
-  { value: 'rango', label: 'Calendario / Rango' },
-];
+const PRESET_OPTIONS = computed<{ value: DateRangePreset; label: string }[]>(() => {
+  const base: { value: DateRangePreset; label: string }[] = [
+    { value: 'hoy', label: 'Hoy' },
+    { value: 'semana', label: 'Esta semana' },
+    { value: 'mes', label: 'Este mes' },
+    { value: 'rango', label: 'Calendario / Rango' },
+  ];
+  if (props.showAllOption) base.unshift({ value: 'todos', label: 'Todos' });
+  return base;
+});
 </script>
 
 <template>
