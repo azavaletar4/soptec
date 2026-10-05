@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import SignaturePad from '@/components/campo/SignaturePad.vue';
@@ -77,6 +77,16 @@ const trabajo = computed(
 const isLockedForTecnico = computed(
   () => jobType === 'installation' && auth.role === 'TECNICO_RED' && trabajo.value?.estadoUi === 'completado',
 );
+// Misma idea que isLockedForTecnico pero para tickets: una vez resuelta o
+// cerrada la averia, el tecnico ya no puede corregir materiales/equipos/
+// fotos/cierre desde la App de Campo — solo administracion/soporte desde el
+// panel. La RLS de fondo (tickets_update_staff, Fase 94/88) solo bloqueaba
+// 'closed'; esto es ademas un candado de UX para 'resolved'.
+const ticketFrozen = computed(() => {
+  if (jobType !== 'ticket' || auth.role !== 'TECNICO_RED') return false;
+  const status = (trabajo.value?.raw as Ticket | undefined)?.status;
+  return status === 'resolved' || status === 'closed';
+});
 const trabajoDescripcion = computed(() => {
   const raw = trabajo.value?.raw;
   if (!raw) return null;
@@ -332,6 +342,20 @@ async function loadMaterials() {
       : await inventoryStore.fetchMovementsByTicket(jobId);
 }
 
+// El Kardex es insert-only (Fase 58, no se borra ninguna fila) — "quitar" o
+// "corregir" un material ya registrado significa revertirlo (movimiento
+// opuesto, reintegra el stock) y, si corresponde, volver a registrarlo con
+// la cantidad correcta. Por eso la lista que ve el tecnico solo muestra los
+// egresos TODAVIA vigentes (sin su reversion), no el Kardex crudo completo.
+const activeMaterials = computed(() => {
+  const revertedIds = new Set(materials.value.filter((m) => m.reverses_movement_id).map((m) => m.reverses_movement_id));
+  return materials.value.filter((m) => m.movement_type === 'egreso' && !revertedIds.has(m.id));
+});
+
+const editingMaterialId = ref<string | null>(null);
+const editMaterialQty = ref(1);
+const materialActionBusy = ref<string | null>(null);
+
 async function handleAddMaterial() {
   if (!materialForm.value.productId || materialForm.value.quantity <= 0) return;
   savingMaterial.value = true;
@@ -350,6 +374,50 @@ async function handleAddMaterial() {
     materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa el stock disponible)');
   } finally {
     savingMaterial.value = false;
+  }
+}
+
+function startEditMaterial(m: InventoryMovement) {
+  editingMaterialId.value = m.id;
+  editMaterialQty.value = m.quantity;
+  materialError.value = null;
+}
+
+async function handleSaveMaterialQty(m: InventoryMovement) {
+  const newQty = editMaterialQty.value;
+  editingMaterialId.value = null;
+  if (!newQty || newQty === m.quantity) return;
+  materialActionBusy.value = m.id;
+  materialError.value = null;
+  try {
+    await inventoryStore.revertMovement(m);
+    if (newQty > 0) {
+      await inventoryStore.registerUsage({
+        productId: m.product_id,
+        quantity: newQty,
+        installationId: jobType === 'installation' ? jobId : undefined,
+        ticketId: jobType === 'ticket' ? jobId : undefined,
+        reason: `Corrección de cantidad (antes ${m.quantity})`,
+      });
+    }
+    await loadMaterials();
+  } catch (e) {
+    materialError.value = getErrorMessage(e, 'Error al corregir la cantidad');
+  } finally {
+    materialActionBusy.value = null;
+  }
+}
+
+async function handleRemoveMaterial(m: InventoryMovement) {
+  materialActionBusy.value = m.id;
+  materialError.value = null;
+  try {
+    await inventoryStore.revertMovement(m);
+    await loadMaterials();
+  } catch (e) {
+    materialError.value = getErrorMessage(e, 'Error al quitar el material');
+  } finally {
+    materialActionBusy.value = null;
   }
 }
 
@@ -376,6 +444,27 @@ async function loadEquipos() {
     pendingUnits.value = pending.filter((u) => u.status === 'pending_approval');
   } finally {
     loadingUnits.value = false;
+  }
+}
+
+// Desvincular un equipo entrante pendiente de aprobacion (serie/MAC
+// equivocada): vuelve a 'in_stock' (bodega, libre para reasignar) y se
+// suelta del ticket/cliente. Solo aplica al entrante — el saliente ya salio
+// fisicamente de la casa y corregirlo es trabajo de administracion (ver
+// InventarioProductoView.vue, "forzar a bodega").
+const unlinkingUnitId = ref<string | null>(null);
+const unlinkError = ref<string | null>(null);
+
+async function handleUnlinkPendingUnit(unit: InventoryUnit) {
+  unlinkingUnitId.value = unit.id;
+  unlinkError.value = null;
+  try {
+    await inventoryUnitsStore.rejectUnit(unit.id, 'Desvinculado por el técnico (serie/MAC equivocada)');
+    await loadEquipos();
+  } catch (e) {
+    unlinkError.value = getErrorMessage(e, 'Error al desvincular el equipo');
+  } finally {
+    unlinkingUnitId.value = null;
   }
 }
 
@@ -600,10 +689,31 @@ function useCurrentLocation() {
   );
 }
 
+// Vista previa local (object URL) de una foto recien capturada, con boton
+// "Repetir foto" para descartarla y volver a tomarla antes de enviarla —
+// antes solo se veia un check de texto, sin forma de confirmar visualmente
+// ni de corregir una foto borrosa/equivocada sin cerrar y reabrir la app.
+const photoPreviewUrls = ref<Record<string, string>>({});
+
 function onPhotoChange(category: string, event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
-  if (file) closurePhotos.value[category] = file;
+  if (!file) return;
+  closurePhotos.value[category] = file;
+  if (photoPreviewUrls.value[category]) URL.revokeObjectURL(photoPreviewUrls.value[category]);
+  photoPreviewUrls.value[category] = URL.createObjectURL(file);
 }
+
+function clearPhoto(category: string) {
+  delete closurePhotos.value[category];
+  if (photoPreviewUrls.value[category]) {
+    URL.revokeObjectURL(photoPreviewUrls.value[category]);
+    delete photoPreviewUrls.value[category];
+  }
+}
+
+onBeforeUnmount(() => {
+  for (const url of Object.values(photoPreviewUrls.value)) URL.revokeObjectURL(url);
+});
 
 async function handleCloseSubmit() {
   if (!trabajo.value) return;
@@ -782,7 +892,7 @@ async function handleCloseSubmit() {
           <p v-else class="text-xs text-slate-400">Sin técnicos asignados.</p>
           <p v-if="selfAssignError" class="text-xs text-red-600 mt-2">{{ selfAssignError }}</p>
 
-          <div v-if="isMyAssignment" class="mt-3 pt-3 border-t border-slate-100">
+          <div v-if="isMyAssignment && !ticketFrozen" class="mt-3 pt-3 border-t border-slate-100">
             <button v-if="!showReturnForm" type="button" class="btn-danger text-xs !px-0" @click="toggleReturnForm">
               ↩️ Devolver orden (cliente no estaba)
             </button>
@@ -829,7 +939,7 @@ async function handleCloseSubmit() {
       <!-- Censo fotografico (averias): "Actualizar" si ya existe, "Pendiente
            de registro" si es un cliente antiguo sin censar. Las fotos nuevas
            quedan pendientes de aprobacion del admin (Fase 95). -->
-      <section v-if="jobType === 'ticket' && !isLockedForTecnico && !isUnassignedTicket" class="surface p-3.5 mb-3">
+      <section v-if="jobType === 'ticket' && !isLockedForTecnico && !isUnassignedTicket && !ticketFrozen" class="surface p-3.5 mb-3">
         <h2 class="text-sm font-semibold mb-1">📋 Censo fotográfico</h2>
         <p class="text-[11px] text-slate-500 mb-3">
           Aprovecha la visita para completar la ficha del cliente. Las fotos nuevas quedan pendientes de aprobación del administrador.
@@ -837,16 +947,32 @@ async function handleCloseSubmit() {
         <p v-if="loadingPhotos" class="text-xs text-slate-400">Cargando...</p>
         <div v-else class="space-y-2.5">
           <div v-for="cat in CENSO_CATEGORIES" :key="cat.value" class="flex items-center gap-2.5">
-            <img
-              v-if="existingPhotoByCategory.get(cat.value)?.url"
-              :src="existingPhotoByCategory.get(cat.value)!.url ?? undefined"
-              class="w-12 h-12 object-cover rounded-lg border border-slate-200 shrink-0"
-            />
-            <div
-              v-else
-              class="w-12 h-12 shrink-0 rounded-lg border border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-base"
-            >
-              ⚠️
+            <div class="relative w-12 h-12 shrink-0">
+              <img
+                v-if="photoPreviewUrls[cat.value]"
+                :src="photoPreviewUrls[cat.value]"
+                class="w-12 h-12 object-cover rounded-lg border border-sky-300"
+              />
+              <img
+                v-else-if="existingPhotoByCategory.get(cat.value)?.url"
+                :src="existingPhotoByCategory.get(cat.value)!.url ?? undefined"
+                class="w-12 h-12 object-cover rounded-lg border border-slate-200"
+              />
+              <div
+                v-else
+                class="w-12 h-12 rounded-lg border border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-base"
+              >
+                ⚠️
+              </div>
+              <button
+                v-if="photoPreviewUrls[cat.value]"
+                type="button"
+                class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white border border-slate-300 flex items-center justify-center text-[10px] shadow-sm"
+                title="Repetir foto"
+                @click="clearPhoto(cat.value)"
+              >
+                🔄
+              </button>
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-xs font-medium text-slate-700 truncate">{{ cat.icon }} {{ cat.label }}</p>
@@ -946,13 +1072,46 @@ async function handleCloseSubmit() {
         </p>
       </section>
 
+      <section v-else-if="ticketFrozen" class="surface p-3.5 mb-3 bg-slate-50">
+        <h2 class="text-sm font-semibold mb-1">🔒 Avería resuelta</h2>
+        <p class="text-xs text-slate-500">
+          Esta avería ya fue marcada como resuelta — materiales, equipos, fotos y cierre quedan cerrados para
+          técnicos. Si falta corregir algo, pide a administración/soporte que lo ajuste desde el panel.
+        </p>
+      </section>
+
       <template v-else-if="!isUnassignedTicket">
         <section class="surface p-3.5 mb-3">
           <h2 class="text-sm font-semibold mb-2">Materiales usados</h2>
-          <ul v-if="materials.length" class="space-y-1 mb-2.5 text-xs">
-            <li v-for="m in materials" :key="m.id" class="flex justify-between">
-              <span>{{ m.product?.name ?? 'Producto' }}</span>
-              <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }}</span>
+          <ul v-if="activeMaterials.length" class="space-y-1.5 mb-2.5 text-xs">
+            <li v-for="m in activeMaterials" :key="m.id" class="flex items-center justify-between gap-2">
+              <span class="flex-1 truncate">{{ m.product?.name ?? 'Producto' }}</span>
+              <template v-if="editingMaterialId === m.id">
+                <input v-model.number="editMaterialQty" type="number" min="1" class="field-input text-xs w-16 py-1 shrink-0" />
+                <button type="button" class="text-sky-700 text-[11px] shrink-0" @click="handleSaveMaterialQty(m)">Guardar</button>
+                <button type="button" class="text-slate-400 text-[11px] shrink-0" @click="editingMaterialId = null">Cancelar</button>
+              </template>
+              <template v-else>
+                <span class="text-slate-600 shrink-0">{{ m.quantity }} {{ m.product?.unit }}</span>
+                <button
+                  type="button"
+                  class="text-sky-700 text-[11px] shrink-0"
+                  :disabled="materialActionBusy === m.id"
+                  title="Corregir cantidad"
+                  @click="startEditMaterial(m)"
+                >
+                  ✏️
+                </button>
+                <button
+                  type="button"
+                  class="text-red-600 text-[11px] shrink-0"
+                  :disabled="materialActionBusy === m.id"
+                  title="Quitar material"
+                  @click="handleRemoveMaterial(m)"
+                >
+                  🗑️
+                </button>
+              </template>
             </li>
           </ul>
           <form class="flex gap-2" @submit.prevent="handleAddMaterial">
@@ -1022,12 +1181,22 @@ async function handleCloseSubmit() {
 
             <div v-if="pendingUnits.length" class="pt-3 mt-3 border-t border-slate-100">
               <p class="text-xs font-medium text-amber-700 mb-1.5">⏳ Pendientes de aprobación</p>
-              <ul class="space-y-1 text-xs">
-                <li v-for="u in pendingUnits" :key="u.id" class="flex justify-between">
-                  <span>{{ u.product?.name ?? 'Equipo' }}</span>
-                  <span class="text-slate-500 font-mono">{{ u.serial_number || u.mac_address }}</span>
+              <ul class="space-y-1.5 text-xs">
+                <li v-for="u in pendingUnits" :key="u.id" class="flex items-center justify-between gap-2">
+                  <span class="flex-1 truncate">{{ u.product?.name ?? 'Equipo' }}</span>
+                  <span class="text-slate-500 font-mono shrink-0">{{ u.serial_number || u.mac_address }}</span>
+                  <button
+                    type="button"
+                    class="text-red-600 text-[11px] shrink-0"
+                    :disabled="unlinkingUnitId === u.id"
+                    title="Desvincular (serie/MAC equivocada)"
+                    @click="handleUnlinkPendingUnit(u)"
+                  >
+                    ✕ Desvincular
+                  </button>
                 </li>
               </ul>
+              <p v-if="unlinkError" class="text-xs text-red-600 mt-1.5">{{ unlinkError }}</p>
             </div>
           </template>
         </section>
@@ -1041,11 +1210,32 @@ async function handleCloseSubmit() {
           </button>
 
           <div class="grid grid-cols-2 gap-2 mb-3">
-            <div v-for="cat in jobType === 'installation' ? INSTALL_PHOTO_CATEGORIES : TICKET_PHOTO_CATEGORIES" :key="cat.value">
-              <label class="block text-center px-2 py-2 rounded-lg bg-slate-100 text-[11px] cursor-pointer truncate">
+            <div
+              v-for="cat in jobType === 'installation' ? INSTALL_PHOTO_CATEGORIES : TICKET_PHOTO_CATEGORIES"
+              :key="cat.value"
+              class="relative"
+            >
+              <img
+                v-if="photoPreviewUrls[cat.value]"
+                :src="photoPreviewUrls[cat.value]"
+                class="w-full h-20 object-cover rounded-lg border border-sky-300 mb-1"
+              />
+              <label
+                class="block text-center px-2 py-2 rounded-lg text-[11px] cursor-pointer truncate"
+                :class="closurePhotos[cat.value] ? 'bg-sky-500/15 text-sky-700' : 'bg-slate-100'"
+              >
                 {{ closurePhotos[cat.value] ? '✓ ' + cat.label : cat.label }}
                 <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPhotoChange(cat.value, $event)" />
               </label>
+              <button
+                v-if="photoPreviewUrls[cat.value]"
+                type="button"
+                class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 border border-slate-300 flex items-center justify-center text-xs shadow-sm"
+                title="Repetir foto"
+                @click="clearPhoto(cat.value)"
+              >
+                🔄
+              </button>
             </div>
           </div>
 
