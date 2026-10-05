@@ -117,14 +117,31 @@ function belongsToSelectedDate(item: BoardItem): boolean {
   return item.fallbackDate === selectedDate.value;
 }
 
+// Fase 106: 'resuelto'/'cerrado' (o 'completed' en altas/rutinas) es un
+// estado final — una vez ahi, la orden no tiene nada mas que agendar.
+function isFinalStatus(item: BoardItem): boolean {
+  if (item.jobType === 'ticket') return item.status === 'resolved' || item.status === 'closed';
+  return item.status === 'completed';
+}
+
 const dayItems = computed(() => items.value.filter(belongsToSelectedDate));
 const scheduledItems = computed(() => dayItems.value.filter((i) => i.scheduledStartAt && i.scheduledEndAt));
-const unscheduledItems = computed(() => dayItems.value.filter((i) => !(i.scheduledStartAt && i.scheduledEndAt)));
+// "Sin horario asignado" es estrictamente para trabajo TODAVIA por agendar —
+// una orden que ya se resolvio/cerro sin haber tenido hora no tiene sentido
+// seguir pidiendo que se agende, asi que se excluye (Fase 106).
+const unscheduledItems = computed(() =>
+  dayItems.value.filter((i) => !(i.scheduledStartAt && i.scheduledEndAt) && !isFinalStatus(i)),
+);
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
 
+// Switch "Ocultar Resueltos" (Fase 106) — deja visible solo la carga de
+// trabajo pendiente del dia en la matriz; "Sin horario asignado" ya excluye
+// finalizados siempre, sin importar este switch.
+const hideResolved = ref(false);
+
 function itemsForTechnician(techId: string) {
-  return scheduledItems.value.filter((i) => i.assignedTo === techId);
+  return scheduledItems.value.filter((i) => i.assignedTo === techId && (!hideResolved.value || !isFinalStatus(i)));
 }
 
 // Posicion/ancho del bloque dentro de la franja 08:00-18:00, en %.
@@ -274,6 +291,10 @@ async function confirmSchedule(item: BoardItem) {
         <button class="btn-secondary text-xs px-2.5 py-1.5" @click="selectedDate = todayStr()">Hoy</button>
         <button class="btn-secondary text-xs px-2.5 py-1.5" @click="shiftDate(1)">Siguiente →</button>
       </div>
+      <label class="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+        <input v-model="hideResolved" type="checkbox" class="rounded border-slate-300" />
+        Ocultar Resueltos
+      </label>
       <div class="flex items-center gap-3 text-xs text-slate-600 ml-auto">
         <span v-for="(meta, type) in TYPE_META" :key="type" class="inline-flex items-center gap-1.5">
           <span class="h-2.5 w-2.5 rounded-full" :class="meta.dot"></span>{{ meta.label }}

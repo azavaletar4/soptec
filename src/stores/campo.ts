@@ -509,6 +509,21 @@ export const useCampoStore = defineStore('campo', () => {
         closure_notes: input.closureNotes,
       });
     } else {
+      // Fase 106: si el ticket llega a resolverse sin haber tenido hora
+      // agendada, se le asigna la hora real de atencion — si no, quedaba
+      // invisible para siempre en el Cronograma (ya no cae en "Sin horario
+      // asignado" porque esta resuelto, Fase 106 punto 1, pero tampoco
+      // aparecia en ninguna fila de la matriz).
+      const { data: currentTicket } = await supabase
+        .from('tickets')
+        .select('scheduled_start_at')
+        .eq('id', input.jobId)
+        .single();
+      const now = new Date();
+      const autoSchedule = currentTicket?.scheduled_start_at
+        ? {}
+        : { scheduled_start_at: now.toISOString(), scheduled_end_at: new Date(now.getTime() + 60 * 60000).toISOString() };
+
       // imputable_a_tecnico se deriva del motivo en un trigger de BD (Fase
       // 49) — no se manda desde aca, para que quede una sola fuente de verdad.
       await ticketsStore.updateTicket(input.jobId, {
@@ -517,6 +532,7 @@ export const useCampoStore = defineStore('campo', () => {
         motivo_averia_detalle: input.motivoAveriaDetalle,
         observacion_cierre: input.justificacionCierre,
         evidencia_url: evidenciaPath,
+        ...autoSchedule,
       });
     }
   }
