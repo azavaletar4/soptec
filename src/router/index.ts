@@ -92,6 +92,15 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Fase 101-B: tablero de despacho Timeline/Calendario (TOA) — cruza
+      // los 3 tipos de orden por tecnico/hora, con agendamiento de hora
+      // exacta. Vista alternativa a las tablas de arriba, no un 4to tipo.
+      path: '/soporte/agenda',
+      name: 'soporte-agenda',
+      component: () => import('@/views/soporte/DispatchBoardView.vue'),
+      meta: { requiresAuth: true, roles: NOT_TECNICO },
+    },
+    {
       path: '/soporte/:id',
       name: 'soporte-detalle',
       component: () => import('@/views/soporte/TicketDetailView.vue'),

@@ -284,6 +284,7 @@ function formatDate(value: string) {
       </div>
       <div class="flex gap-2">
         <button v-if="canOpenCampo" class="btn-ghost" @click="router.push('/campo')">📱 App de Campo</button>
+        <button v-if="auth.role !== 'TECNICO_RED'" class="btn-ghost" @click="router.push('/soporte/agenda')">📅 Agenda</button>
         <button class="btn-ghost" @click="router.push('/soporte/ranking')">🏆 Ranking técnicos</button>
         <button v-if="canCreateTickets" class="btn-primary" @click="openCreate">
           + Nuevo ticket

@@ -789,7 +789,10 @@ function formatDate(value: string | null) {
         <p class="text-slate-600 text-sm mt-1">{{ installationsStore.installations.length }} órdenes registradas</p>
         <SoporteModeTabs active="instalaciones" class="mt-3" />
       </div>
-      <button v-if="auth.role !== 'TECNICO_RED'" class="btn-primary" @click="openCreate">+ Nueva instalación</button>
+      <div class="flex gap-2">
+        <button v-if="auth.role !== 'TECNICO_RED'" class="btn-ghost" @click="router.push('/soporte/agenda')">📅 Agenda</button>
+        <button v-if="auth.role !== 'TECNICO_RED'" class="btn-primary" @click="openCreate">+ Nueva instalación</button>
+      </div>
     </div>
 
     <div class="surface flex flex-col gap-3 p-3 mb-4">

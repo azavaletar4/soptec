@@ -239,7 +239,10 @@ function formatDate(value: string | null) {
         <p class="text-slate-600 text-sm mt-1">{{ routinesStore.routines.length }} rutinas registradas</p>
         <SoporteModeTabs active="rutinas" class="mt-3" />
       </div>
-      <button v-if="canManage" class="btn-primary" @click="openCreate">+ Nueva rutina</button>
+      <div class="flex gap-2">
+        <button v-if="canManage" class="btn-ghost" @click="router.push('/soporte/agenda')">📅 Agenda</button>
+        <button v-if="canManage" class="btn-primary" @click="openCreate">+ Nueva rutina</button>
+      </div>
     </div>
 
     <div class="surface flex flex-col gap-3 p-3 mb-4">

@@ -218,6 +218,9 @@ export interface Ticket {
   observacion_cierre: string | null;
   /** Ruta dentro del bucket privado work-evidence (no una URL publica lista para usar). */
   evidencia_url: string | null;
+  /** Agendamiento de hora exacta (Fase 101/B) — nullable, lo asigna despacho desde el tablero Timeline. */
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'latitude' | 'longitude'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
@@ -229,6 +232,9 @@ export interface Installation {
   status: InstallationStatus;
   scheduled_date: string | null;
   scheduled_time: string | null;
+  /** Agendamiento de hora exacta (Fase 101/B) — nullable, lo asigna despacho desde el tablero Timeline. */
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
   assigned_to: string | null;
   notes: string | null;
   /** Nota libre del tecnico para instalaciones "Solo IPTV" (Fase 45) — cuenta/usuario IPTV en el Smart TV del cliente. */
