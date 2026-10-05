@@ -8,6 +8,7 @@ import { useRoutinesStore } from '@/stores/routines';
 import { useContractsStore } from '@/stores/contracts';
 import { useClientsStore } from '@/stores/clients';
 import { useClientPhotosStore } from '@/stores/clientPhotos';
+import { useClientEquipmentPhotosStore } from '@/stores/clientEquipmentPhotos';
 import { useOltStore } from '@/stores/olt';
 import { useMikrotikStore } from '@/stores/mikrotik';
 import { useTr069Store } from '@/stores/tr069';
@@ -25,6 +26,7 @@ import {
 import {
   NAP_CLIENT_LIMIT,
   type ClientPhotoCategory,
+  type EquipmentPhotoType,
   type Installation,
   type JobType,
   type Routine,
@@ -150,6 +152,12 @@ interface ClosurePhotoInput {
   file: File;
 }
 
+/** Fase 105 — fotos de serie de equipos (galeria dinamica, no un slot unico). */
+export interface ClosureEquipmentPhotoInput {
+  equipmentType: EquipmentPhotoType;
+  file: File;
+}
+
 export interface ClosureInput {
   jobType: JobType;
   jobId: string;
@@ -162,6 +170,8 @@ export interface ClosureInput {
   ontSerial: string | null;
   closureNotes: string | null;
   photos: ClosurePhotoInput[];
+  /** Fase 105 — fotos de serie de equipos (Modem/TV Box/Mesh/Otro), lista dinamica. */
+  equipmentPhotos: ClosureEquipmentPhotoInput[];
   signatureBlob: Blob | null;
   updateClientGps: boolean;
   /** Categorias que ademas de guardarse en work_order_photos deben reflejarse en
@@ -210,6 +220,7 @@ export const useCampoStore = defineStore('campo', () => {
   const contractsStore = useContractsStore();
   const clientsStore = useClientsStore();
   const clientPhotosStore = useClientPhotosStore();
+  const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
   const oltStore = useOltStore();
   const mikrotikStore = useMikrotikStore();
   const tr069Store = useTr069Store();
@@ -423,6 +434,38 @@ export const useCampoStore = defineStore('campo', () => {
       }
     }
 
+    // Fotos de serie de equipos (Fase 105) — galeria dinamica, no un slot
+    // unico: cada entrada es su propia fila, nunca pisa a otra. En una
+    // averia queda 'pending_approval' (igual que el resto del censo, un
+    // admin la revisa); en una instalacion se aplica directo (como ya hace
+    // el resto de fotos de instalacion).
+    for (const eq of input.equipmentPhotos) {
+      const compressedFile = await compressImage(eq.file);
+      if (input.jobType === 'ticket') {
+        const ext = compressedFile.name.includes('.') ? compressedFile.name.split('.').pop() : 'jpg';
+        const path = `${input.jobType}/${input.jobId}/equipment-${eq.equipmentType}-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, compressedFile, { upsert: false });
+        if (upErr) throw upErr;
+        const { error: rowErr } = await supabase.from('work_order_photos').insert({
+          job_type: input.jobType,
+          job_id: input.jobId,
+          category: `equipment_sticker__${eq.equipmentType}`,
+          storage_path: path,
+          status: 'pending_approval',
+        });
+        if (rowErr) throw rowErr;
+      } else if (input.jobType === 'installation' && input.clientId && input.contractId) {
+        await clientEquipmentPhotosStore.uploadDirect(
+          input.clientId,
+          input.contractId,
+          eq.equipmentType,
+          compressedFile,
+          'installation',
+          input.jobId,
+        );
+      }
+    }
+
     let signaturePath: string | null = null;
     if (input.signatureBlob) {
       signaturePath = `${input.jobType}/${input.jobId}/signature-${Date.now()}.png`;
@@ -490,6 +533,10 @@ export const useCampoStore = defineStore('campo', () => {
       ontSerial: item.ontSerial,
       closureNotes: item.closureNotes,
       photos: item.photos.map((p) => ({ category: p.category, file: new File([p.blob], p.fileName, { type: p.blob.type }) })),
+      equipmentPhotos: item.equipmentPhotos.map((p) => ({
+        equipmentType: p.equipmentType,
+        file: new File([p.blob], p.fileName, { type: p.blob.type }),
+      })),
       signatureBlob: item.signatureBlob,
       updateClientGps: true,
       clientPhotoCategories: item.clientPhotoCategories as ClientPhotoCategory[],
@@ -515,6 +562,7 @@ export const useCampoStore = defineStore('campo', () => {
         ontSerial: input.ontSerial,
         closureNotes: input.closureNotes,
         photos: input.photos.map((p) => ({ category: p.category, blob: p.file, fileName: p.file.name })),
+        equipmentPhotos: input.equipmentPhotos.map((p) => ({ equipmentType: p.equipmentType, blob: p.file, fileName: p.file.name })),
         signatureBlob: input.signatureBlob,
         clientPhotoCategories: input.clientPhotoCategories,
         pendingApprovalCategories: input.pendingApprovalCategories,
@@ -544,6 +592,7 @@ export const useCampoStore = defineStore('campo', () => {
           ontSerial: input.ontSerial,
           closureNotes: input.closureNotes,
           photos: input.photos.map((p) => ({ category: p.category, blob: p.file, fileName: p.file.name })),
+          equipmentPhotos: input.equipmentPhotos.map((p) => ({ equipmentType: p.equipmentType, blob: p.file, fileName: p.file.name })),
           signatureBlob: input.signatureBlob,
           clientPhotoCategories: input.clientPhotoCategories,
           pendingApprovalCategories: input.pendingApprovalCategories,

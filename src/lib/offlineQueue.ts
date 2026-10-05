@@ -1,5 +1,5 @@
 import { createStore, get, set, del, keys } from 'idb-keyval';
-import type { JobType } from '@/types/domain';
+import type { EquipmentPhotoType, JobType } from '@/types/domain';
 
 /**
  * Cola de cierres de trabajo pendientes de sincronizar cuando el tecnico
@@ -9,6 +9,13 @@ import type { JobType } from '@/types/domain';
  */
 export interface QueuedPhoto {
   category: string;
+  blob: Blob;
+  fileName: string;
+}
+
+/** Fase 105 — fotos de serie de equipos en cola offline. */
+export interface QueuedEquipmentPhoto {
+  equipmentType: EquipmentPhotoType;
   blob: Blob;
   fileName: string;
 }
@@ -27,6 +34,7 @@ export interface QueuedClosure {
   ontSerial: string | null;
   closureNotes: string | null;
   photos: QueuedPhoto[];
+  equipmentPhotos: QueuedEquipmentPhoto[];
   signatureBlob: Blob | null;
   clientPhotoCategories: string[]; // categorias que ademas deben reflejarse en client_photos (instalaciones)
   /** Fase 95 — categorias del censo fotografico de una averia que quedan 'pending_approval' (no se aplican a client_photos hasta que un admin las apruebe). */

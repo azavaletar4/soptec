@@ -3,16 +3,19 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import CrewAssignEditor from '@/components/soporte/CrewAssignEditor.vue';
+import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
-import { useTicketApprovalsStore, type PendingPhotoWithUrl } from '@/stores/ticketApprovals';
+import { useTicketApprovalsStore, parseEquipmentType, type PendingPhotoWithUrl } from '@/stores/ticketApprovals';
+import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { waLink } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
 import { MOTIVO_AVERIA_LABEL, MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
+import { EQUIPMENT_TYPE_LABEL } from '@/lib/equipmentPhotoType';
 import type { Ticket, TicketComment, TicketPriority, TicketStatus, TicketMotivoAveria, InventoryMovement, InventoryUnit } from '@/types/domain';
 
 const route = useRoute();
@@ -21,6 +24,7 @@ const ticketsStore = useTicketsStore();
 const catalogs = useCatalogsStore();
 const inventoryStore = useInventoryStore();
 const ticketApprovalsStore = useTicketApprovalsStore();
+const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 
 // TECNICO_RED ve todos los tickets pero solo puede editar (estado,
@@ -218,8 +222,13 @@ async function handleApprovePhoto(photo: PendingPhotoWithUrl) {
   approvalBusyId.value = photo.id;
   approvalError.value = null;
   try {
-    await ticketApprovalsStore.approvePhoto(photo, ticket.value.client_id, ticket.value.contract_id);
+    // Fase 105: una foto de serie de equipo va a la galeria dinamica
+    // (client_equipment_photos), no al slot unico de client_photos.
+    const isEquipment = !!parseEquipmentType(photo.category);
+    if (isEquipment) await ticketApprovalsStore.approveEquipmentPhoto(photo, ticket.value.client_id, ticket.value.contract_id);
+    else await ticketApprovalsStore.approvePhoto(photo, ticket.value.client_id, ticket.value.contract_id);
     await loadApprovals();
+    if (isEquipment) await loadEquipmentPhotos();
   } catch (e) {
     approvalError.value = getErrorMessage(e, 'Error al aprobar la foto');
   } finally {
@@ -266,8 +275,40 @@ async function handleRejectEquipment(unit: InventoryUnit) {
   }
 }
 
+// ---- Fotos de serie de equipos ya aprobadas (Fase 105) — galeria, no un slot unico. ----
+const approvedEquipmentPhotos = ref<ClientEquipmentPhotoWithUrl[]>([]);
+const loadingEquipmentPhotos = ref(false);
+const deletingEquipmentId = ref<string | null>(null);
+
+async function loadEquipmentPhotos() {
+  if (!ticket.value?.contract_id) {
+    approvedEquipmentPhotos.value = [];
+    return;
+  }
+  loadingEquipmentPhotos.value = true;
+  try {
+    approvedEquipmentPhotos.value = await clientEquipmentPhotosStore.fetchByContract(ticket.value.contract_id);
+  } finally {
+    loadingEquipmentPhotos.value = false;
+  }
+}
+
+async function handleDeleteEquipmentPhoto(photo: ClientEquipmentPhotoWithUrl) {
+  if (!confirm('¿Eliminar esta foto de equipo?')) return;
+  deletingEquipmentId.value = photo.id;
+  try {
+    await clientEquipmentPhotosStore.deletePhoto(photo.id, photo.storage_path);
+    approvedEquipmentPhotos.value = approvedEquipmentPhotos.value.filter((p) => p.id !== photo.id);
+  } catch (e) {
+    approvalError.value = getErrorMessage(e, 'Error al eliminar la foto');
+  } finally {
+    deletingEquipmentId.value = null;
+  }
+}
+
 onMounted(async () => {
   await Promise.all([loadTicket(), loadComments(), loadMaterials(), catalogs.fetchStaff(), inventoryStore.fetchProducts(), loadApprovals()]);
+  await loadEquipmentPhotos();
 });
 
 async function handleStatusChange(status: TicketStatus) {
@@ -331,6 +372,29 @@ async function handleCloseAveriaSubmit() {
   }
 }
 
+// ---- Lightbox (Fase 105) — visor a pantalla completa, reusado en pendientes
+// de aprobacion (con aprobar/rechazar), evidencia del cierre y fotos de equipo. ----
+const lightboxPhotos = ref<LightboxPhoto[]>([]);
+const lightboxIndex = ref(0);
+const lightboxCanApprove = ref(false);
+
+function openLightbox(photos: LightboxPhoto[], startId: string, canApprove = false) {
+  lightboxPhotos.value = photos;
+  lightboxIndex.value = Math.max(0, photos.findIndex((p) => p.id === startId));
+  lightboxCanApprove.value = canApprove;
+}
+
+function handleLightboxApprove(id: string) {
+  const photo = pendingPhotos.value.find((p) => p.id === id);
+  if (photo) handleApprovePhoto(photo);
+  lightboxPhotos.value = [];
+}
+function handleLightboxReject(id: string) {
+  const photo = pendingPhotos.value.find((p) => p.id === id);
+  if (photo) handleRejectPhoto(photo);
+  lightboxPhotos.value = [];
+}
+
 const evidenciaLoading = ref(false);
 async function openEvidencia() {
   if (!ticket.value?.evidencia_url) return;
@@ -338,7 +402,7 @@ async function openEvidencia() {
   try {
     const { data, error: err } = await supabase.storage.from('work-evidence').createSignedUrl(ticket.value.evidencia_url, 3600);
     if (err || !data?.signedUrl) throw err ?? new Error('Sin URL firmada');
-    window.open(data.signedUrl, '_blank', 'noopener');
+    openLightbox([{ id: 'evidencia', url: data.signedUrl, label: 'Evidencia del cierre' }], 'evidencia');
   } catch (e) {
     actionError.value = getErrorMessage(e, 'No se pudo abrir la evidencia');
   } finally {
@@ -617,9 +681,25 @@ async function handleDelete() {
                 <p class="text-xs text-slate-500 mb-1.5">Fotos</p>
                 <div class="grid grid-cols-2 gap-2">
                   <div v-for="p in pendingPhotos" :key="p.id" class="rounded-lg border border-slate-200 overflow-hidden">
-                    <img :src="p.url ?? undefined" class="w-full h-24 object-cover" />
+                    <img
+                      :src="p.url ?? undefined"
+                      class="w-full h-24 object-cover cursor-pointer"
+                      @click="
+                        openLightbox(
+                          pendingPhotos.map((pp) => ({
+                            id: pp.id,
+                            url: pp.url ?? '',
+                            label: parseEquipmentType(pp.category) ? EQUIPMENT_TYPE_LABEL[parseEquipmentType(pp.category)!] : pp.category,
+                          })),
+                          p.id,
+                          true,
+                        )
+                      "
+                    />
                     <div class="p-1.5">
-                      <p class="text-[11px] text-slate-600 truncate">{{ p.category }}</p>
+                      <p class="text-[11px] text-slate-600 truncate">
+                        {{ parseEquipmentType(p.category) ? EQUIPMENT_TYPE_LABEL[parseEquipmentType(p.category)!] : p.category }}
+                      </p>
                       <div class="flex gap-1 mt-1">
                         <button
                           class="flex-1 text-[11px] text-green-700 bg-green-50 rounded px-1.5 py-0.5"
@@ -665,6 +745,36 @@ async function handleDelete() {
               </div>
             </template>
             <p v-if="approvalError" class="text-xs text-red-600 mt-2">{{ approvalError }}</p>
+          </div>
+
+          <!-- Fotos de serie de equipos ya aprobadas (Fase 105) — galeria, no un slot unico. -->
+          <div v-if="loadingEquipmentPhotos || approvedEquipmentPhotos.length" class="surface p-4 text-sm">
+            <div class="text-slate-500 text-xs mb-2">📦 Fotos de serie de equipos</div>
+            <p v-if="loadingEquipmentPhotos" class="text-xs text-slate-400">Cargando...</p>
+            <div v-else class="grid grid-cols-3 gap-2">
+              <div v-for="p in approvedEquipmentPhotos" :key="p.id" class="relative">
+                <img
+                  :src="p.url ?? undefined"
+                  class="w-full h-16 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                  @click="
+                    openLightbox(
+                      approvedEquipmentPhotos.map((ep) => ({ id: ep.id, url: ep.url ?? '', label: EQUIPMENT_TYPE_LABEL[ep.equipment_type] })),
+                      p.id,
+                    )
+                  "
+                />
+                <p class="text-[10px] text-slate-500 mt-0.5 truncate">{{ EQUIPMENT_TYPE_LABEL[p.equipment_type] }}</p>
+                <button
+                  type="button"
+                  class="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 border border-slate-300 flex items-center justify-center text-xs"
+                  :disabled="deletingEquipmentId === p.id"
+                  title="Eliminar"
+                  @click="handleDeleteEquipmentPhoto(p)"
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="surface p-4 text-sm">
@@ -798,5 +908,15 @@ async function handleDelete() {
         </form>
       </div>
     </Teleport>
+
+    <PhotoLightbox
+      v-if="lightboxPhotos.length"
+      :photos="lightboxPhotos"
+      :start-index="lightboxIndex"
+      :can-approve="lightboxCanApprove"
+      @close="lightboxPhotos = []"
+      @approve="handleLightboxApprove"
+      @reject="handleLightboxReject"
+    />
   </AppLayout>
 </template>

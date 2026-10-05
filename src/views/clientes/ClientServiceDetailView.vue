@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientSectionCard from '@/components/clientes/ClientSectionCard.vue';
 import RecoveryModal from '@/components/inventario/RecoveryModal.vue';
+import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -19,8 +20,10 @@ import { useDescuentosCompensacionStore } from '@/stores/descuentosCompensacion'
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
+import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
+import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import {
   NAP_CLIENT_LIMIT,
   ZONE_CLIENT_LIMIT,
@@ -29,6 +32,7 @@ import {
   type ContractStatus,
   type DescuentoCompensacion,
   type DocumentType,
+  type EquipmentPhotoType,
   type Invoice,
   type InventoryUnit,
   type InventoryUnitStatus,
@@ -69,6 +73,7 @@ const descuentosStore = useDescuentosCompensacionStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 const clientPhotosStore = useClientPhotosStore();
+const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 
 const canDeleteContracts = computed(() => auth.role === 'SUPERADMIN');
@@ -893,6 +898,66 @@ async function handleDeletePhoto(category: ClientPhotoCategory) {
   }
 }
 
+// ---- Fotos de serie de equipos (Fase 105): galeria dinamica, no un slot
+// unico — un cliente puede tener varias (modem + tv box + mesh) a la vez.
+// A diferencia de la App de Campo, aca el admin la sube directo (sin paso
+// de aprobacion, el mismo criterio que PHOTO_CATEGORIES arriba). ----
+const equipmentPhotos = ref<ClientEquipmentPhotoWithUrl[]>([]);
+const loadingEquipmentPhotos = ref(true);
+const equipmentPhotoError = ref<string | null>(null);
+const uploadingEquipmentType = ref<EquipmentPhotoType | null>(null);
+const newEquipmentType = ref<EquipmentPhotoType>('modem');
+const deletingEquipmentId = ref<string | null>(null);
+
+async function loadEquipmentPhotos() {
+  loadingEquipmentPhotos.value = true;
+  try {
+    equipmentPhotos.value = await clientEquipmentPhotosStore.fetchByContract(contractId.value);
+  } catch (e) {
+    equipmentPhotoError.value = getErrorMessage(e, 'Error al cargar las fotos de equipos');
+  } finally {
+    loadingEquipmentPhotos.value = false;
+  }
+}
+
+async function handleAddEquipmentPhoto(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  uploadingEquipmentType.value = newEquipmentType.value;
+  equipmentPhotoError.value = null;
+  try {
+    const added = await clientEquipmentPhotosStore.uploadDirect(clientId.value, contractId.value, newEquipmentType.value, file);
+    equipmentPhotos.value.unshift(added);
+  } catch (e) {
+    equipmentPhotoError.value = getErrorMessage(e, 'Error al subir la foto');
+  } finally {
+    uploadingEquipmentType.value = null;
+    input.value = '';
+  }
+}
+
+async function handleDeleteEquipmentPhoto(photo: ClientEquipmentPhotoWithUrl) {
+  if (!confirm('¿Eliminar esta foto de equipo?')) return;
+  deletingEquipmentId.value = photo.id;
+  try {
+    await clientEquipmentPhotosStore.deletePhoto(photo.id, photo.storage_path);
+    equipmentPhotos.value = equipmentPhotos.value.filter((p) => p.id !== photo.id);
+  } catch (e) {
+    equipmentPhotoError.value = getErrorMessage(e, 'Error al eliminar la foto');
+  } finally {
+    deletingEquipmentId.value = null;
+  }
+}
+
+// ---- Lightbox (Fase 105) — reusado para las fotos de slot fijo y la galeria de equipos. ----
+const lightboxPhotos = ref<LightboxPhoto[]>([]);
+const lightboxIndex = ref(0);
+function openLightbox(items: LightboxPhoto[], startId: string) {
+  lightboxPhotos.value = items;
+  lightboxIndex.value = Math.max(0, items.findIndex((p) => p.id === startId));
+}
+
 // ---- Tickets de esta línea ----
 const tickets = ref<Ticket[]>([]);
 const loadingTickets = ref(true);
@@ -1215,6 +1280,7 @@ onMounted(async () => {
     loadUnits(),
     loadOnts(),
     loadPhotos(),
+    loadEquipmentPhotos(),
     mikrotikStore.fetchDevices(),
     oltStore.fetchDevices().catch(() => {}),
     inventoryStore.products.length ? Promise.resolve() : inventoryStore.fetchProducts(),
@@ -1808,9 +1874,19 @@ onMounted(async () => {
         <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
           <div v-for="cat in PHOTO_CATEGORIES" :key="cat.value" class="surface p-4">
             <div class="text-slate-500 text-xs mb-2">{{ cat.label }}</div>
-            <a v-if="photos[cat.value]?.url" :href="photos[cat.value]!.url!" target="_blank" rel="noopener">
+            <button
+              v-if="photos[cat.value]?.url"
+              type="button"
+              class="block w-full"
+              @click="
+                openLightbox(
+                  PHOTO_CATEGORIES.filter((c) => photos[c.value]?.url).map((c) => ({ id: c.value, url: photos[c.value]!.url!, label: c.label })),
+                  cat.value,
+                )
+              "
+            >
               <img :src="photos[cat.value]!.url!" class="w-full h-32 object-cover rounded-lg mb-2" />
-            </a>
+            </button>
             <label
               v-else
               class="w-full h-32 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center gap-1 text-xs text-slate-400 mb-2 cursor-pointer transition-colors hover:border-sky-400 hover:bg-sky-50/50 hover:text-sky-700"
@@ -1837,6 +1913,48 @@ onMounted(async () => {
               </button>
             </div>
           </div>
+        </div>
+      </ClientSectionCard>
+
+      <ClientSectionCard title="Fotos de serie de equipos" icon="📦">
+        <p class="text-xs text-slate-500 mb-3">Una foto por cada equipo del cliente (módem, TV Box, mesh...).</p>
+        <p v-if="equipmentPhotoError" class="mb-3 text-sm text-red-600">{{ equipmentPhotoError }}</p>
+        <p v-if="loadingEquipmentPhotos" class="text-sm text-slate-500">Cargando...</p>
+        <div v-else class="grid gap-4 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
+          <div v-for="p in equipmentPhotos" :key="p.id" class="surface p-3">
+            <button
+              type="button"
+              class="block w-full"
+              @click="
+                openLightbox(
+                  equipmentPhotos.map((ep) => ({ id: ep.id, url: ep.url ?? '', label: EQUIPMENT_TYPE_LABEL[ep.equipment_type] })),
+                  p.id,
+                )
+              "
+            >
+              <img :src="p.url ?? undefined" class="w-full h-24 object-cover rounded-lg mb-2" />
+            </button>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs text-slate-600">{{ EQUIPMENT_TYPE_LABEL[p.equipment_type] }}</span>
+              <button
+                type="button"
+                class="text-xs text-red-600 hover:text-red-700"
+                :disabled="deletingEquipmentId === p.id"
+                @click="handleDeleteEquipmentPhoto(p)"
+              >
+                🗑️ Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <select v-model="newEquipmentType" class="field-input text-sm flex-1">
+            <option v-for="opt in EQUIPMENT_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+          <label class="btn-secondary text-xs px-3 py-2 cursor-pointer shrink-0" :class="{ 'opacity-60 pointer-events-none': uploadingEquipmentType }">
+            {{ uploadingEquipmentType ? 'Subiendo...' : '+ Agregar foto de serie de otro equipo' }}
+            <input type="file" accept="image/*" class="hidden" @change="handleAddEquipmentPhoto" />
+          </label>
         </div>
       </ClientSectionCard>
       </div>
@@ -2139,5 +2257,7 @@ onMounted(async () => {
         </form>
       </div>
     </Teleport>
+
+    <PhotoLightbox v-if="lightboxPhotos.length" :photos="lightboxPhotos" :start-index="lightboxIndex" @close="lightboxPhotos = []" />
   </component>
 </template>

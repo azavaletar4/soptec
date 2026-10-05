@@ -4,8 +4,10 @@ import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import SignaturePad from '@/components/campo/SignaturePad.vue';
 import QrScannerModal from '@/components/campo/QrScannerModal.vue';
+import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
 import { useCampoStore, isNetworkError, type DiagnosticoResult } from '@/stores/campo';
 import { useTicketsStore } from '@/stores/tickets';
+import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useOltStore } from '@/stores/olt';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
@@ -20,11 +22,13 @@ import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
+import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
 import {
   NAP_CLIENT_LIMIT,
   type Client,
   type ClientPhotoCategory,
+  type EquipmentPhotoType,
   type Installation,
   type InventoryMovement,
   type InventoryUnit,
@@ -47,6 +51,7 @@ const fibra = useFoFibraStore();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const clientPhotosStore = useClientPhotosStore();
+const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 const jobAssigneesStore = useJobAssigneesStore();
 const { confirmDialog } = useConfirm();
@@ -171,18 +176,72 @@ async function loadExistingPhotos(contractId: string | null) {
   }
 }
 
-// ---- Censo fotografico de una averia (Fase 95): las 5 categorias de la
+// ---- Fotos de serie de equipos (Fase 105): galeria dinamica (modem/tv
+// box/mesh/otro) — a diferencia de client_photos (slot unico), un contrato
+// puede tener varias filas a la vez. Solo aplica a ticket/installation: una
+// rutina no tiene contract_id (Routine en types/domain.ts), asi que
+// contractId queda null y estas funciones no hacen nada. ----
+const approvedEquipmentPhotos = ref<ClientEquipmentPhotoWithUrl[]>([]);
+const loadingEquipmentPhotos = ref(false);
+
+async function loadEquipmentPhotos(contractId: string | null) {
+  if (!contractId) {
+    approvedEquipmentPhotos.value = [];
+    return;
+  }
+  loadingEquipmentPhotos.value = true;
+  try {
+    approvedEquipmentPhotos.value = await clientEquipmentPhotosStore.fetchByContract(contractId);
+  } catch {
+    approvedEquipmentPhotos.value = [];
+  } finally {
+    loadingEquipmentPhotos.value = false;
+  }
+}
+
+interface EquipmentPhotoEntry {
+  id: string;
+  type: EquipmentPhotoType;
+  file: File | null;
+  previewUrl: string | null;
+}
+const equipmentEntries = ref<EquipmentPhotoEntry[]>([]);
+
+function addEquipmentEntry() {
+  equipmentEntries.value.push({ id: `eq-${Date.now()}-${Math.random().toString(36).slice(2)}`, type: 'modem', file: null, previewUrl: null });
+}
+
+function removeEquipmentEntry(id: string) {
+  const entry = equipmentEntries.value.find((e) => e.id === id);
+  if (entry?.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+  equipmentEntries.value = equipmentEntries.value.filter((e) => e.id !== id);
+}
+
+function onEquipmentFileChange(id: string, event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const entry = equipmentEntries.value.find((e) => e.id === id);
+  if (!entry) return;
+  if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+  entry.file = file;
+  entry.previewUrl = URL.createObjectURL(file);
+}
+
+// ---- Censo fotografico de una averia (Fase 95): las categorias de la
 // ficha tecnica del cliente. Si ya existe una foto de esa categoria se
 // ofrece "Actualizar" (reemplazo/historico); si el cliente es antiguo y
 // nunca se le tomo, se marca "Pendiente de registro" para que el tecnico
 // aproveche la visita. Nunca se aplican directo — quedan 'pending_approval'
 // hasta que un admin las apruebe (a diferencia de una instalacion nueva).
+// "Sticker de serie/MAC" salio de aca en la Fase 105 — paso a ser una
+// galeria dinamica aparte (ver "Fotos de serie de equipos" mas abajo),
+// porque un cliente puede tener modem+tv box+mesh a la vez y esto era un
+// slot unico que se pisaba solo.
 const CENSO_CATEGORIES: { value: ClientPhotoCategory; label: string; icon: string }[] = [
   { value: 'facade', label: 'Fachada de la vivienda', icon: '🏠' },
   { value: 'modem_position', label: 'Ubicación del módem/ONU/Mesh', icon: '📶' },
   { value: 'nap_box', label: 'Caja NAP y puerto asignado', icon: '📦' },
   { value: 'pon_power', label: 'Medición de potencia óptica (dBm)', icon: '🔋' },
-  { value: 'equipment_sticker', label: 'Sticker de serie/MAC del equipo', icon: '🏷️' },
 ];
 const existingPhotoByCategory = computed(() => {
   const map = new Map<ClientPhotoCategory, ClientPhotoWithUrl>();
@@ -207,7 +266,11 @@ onMounted(async () => {
   // Una rutina sin cliente puntual (apunta a zona/caja NAP, Fase 101) no
   // tiene ficha de cliente que cargar.
   if (trabajo.value?.clientId) {
-    await Promise.all([loadClientInfo(trabajo.value.clientId), loadExistingPhotos(trabajo.value.contractId)]);
+    await Promise.all([
+      loadClientInfo(trabajo.value.clientId),
+      loadExistingPhotos(trabajo.value.contractId),
+      loadEquipmentPhotos(trabajo.value.contractId),
+    ]);
   }
   if (jobType === 'ticket') {
     infraStore.fetchElementos().catch(() => {});
@@ -705,6 +768,10 @@ const TICKET_PHOTO_CATEGORIES = [
   { value: 'evidencia_1', label: 'Evidencia 1' },
   { value: 'evidencia_2', label: 'Evidencia 2' },
 ];
+// Fase 105 — hoja de servicio / acta de conformidad firmada, antes exclusiva
+// de instalaciones (INSTALL_PHOTO_CATEGORIES ya la tenia). Para una averia
+// queda pendiente de aprobacion, igual que el resto del censo.
+const SERVICE_SHEET_CATEGORY = { value: 'service_sheet' as const, label: '📄 Hoja de Servicio / Acta de Conformidad' };
 
 const closureForm = ref({
   latitude: null as number | null,
@@ -787,7 +854,18 @@ function clearPhoto(category: string) {
 
 onBeforeUnmount(() => {
   for (const url of Object.values(photoPreviewUrls.value)) URL.revokeObjectURL(url);
+  for (const entry of equipmentEntries.value) if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
 });
+
+// ---- Lightbox (Fase 105): visor a pantalla completa para cualquier galeria
+// de solo lectura de esta pantalla (fotos anteriores, censo, equipos). ----
+const lightboxPhotos = ref<LightboxPhoto[]>([]);
+const lightboxIndex = ref(0);
+
+function openLightbox(photos: LightboxPhoto[], startId: string) {
+  lightboxPhotos.value = photos;
+  lightboxIndex.value = Math.max(0, photos.findIndex((p) => p.id === startId));
+}
 
 async function handleCloseSubmit() {
   if (!trabajo.value) return;
@@ -834,15 +912,19 @@ async function handleCloseSubmit() {
   closeError.value = null;
   closeResult.value = null;
   try {
+    const censoYActa = jobType === 'ticket' ? [...CENSO_CATEGORIES.map((c) => c.value), SERVICE_SHEET_CATEGORY.value] : [];
     const categories =
       jobType === 'installation'
         ? INSTALL_PHOTO_CATEGORIES.map((c) => c.value)
         : jobType === 'ticket'
-          ? [...TICKET_PHOTO_CATEGORIES.map((c) => c.value), ...CENSO_CATEGORIES.map((c) => c.value)]
+          ? [...TICKET_PHOTO_CATEGORIES.map((c) => c.value), ...censoYActa]
           : TICKET_PHOTO_CATEGORIES.map((c) => c.value);
     const photos = categories
       .filter((cat) => closurePhotos.value[cat])
       .map((cat) => ({ category: cat, file: closurePhotos.value[cat]! }));
+    const equipmentPhotos = equipmentEntries.value
+      .filter((e): e is EquipmentPhotoEntry & { file: File } => !!e.file)
+      .map((e) => ({ equipmentType: e.type, file: e.file }));
 
     const result = await campoStore.submitClosure({
       jobType,
@@ -855,10 +937,11 @@ async function handleCloseSubmit() {
       ontSerial: null,
       closureNotes: closureForm.value.closureNotes || null,
       photos,
+      equipmentPhotos,
       signatureBlob: signatureBlob.value,
       updateClientGps: jobType === 'installation',
       clientPhotoCategories: jobType === 'installation' ? (INSTALL_PHOTO_CATEGORIES.map((c) => c.value) as ClientPhotoCategory[]) : [],
-      pendingApprovalCategories: jobType === 'ticket' ? CENSO_CATEGORIES.map((c) => c.value) : [],
+      pendingApprovalCategories: censoYActa,
       motivoAveria: jobType === 'ticket' ? closureForm.value.motivoAveria || null : null,
       motivoAveriaDetalle:
         jobType === 'ticket' && closureForm.value.motivoAveria === 'other' ? closureForm.value.motivoAveriaDetalle.trim() || null : null,
@@ -1037,10 +1120,21 @@ async function handleCloseSubmit() {
         <p v-if="loadingPhotos" class="text-xs text-slate-400">Cargando fotos...</p>
         <p v-else-if="!existingPhotos.length" class="text-xs text-slate-400">Sin fotos registradas todavía.</p>
         <div v-else class="grid grid-cols-2 gap-2">
-          <a v-for="p in existingPhotos" :key="p.id" :href="p.url ?? undefined" target="_blank" rel="noopener" class="block">
+          <button
+            v-for="p in existingPhotos"
+            :key="p.id"
+            type="button"
+            class="block text-left"
+            @click="
+              openLightbox(
+                existingPhotos.map((ep) => ({ id: ep.id, url: ep.url ?? '', label: PHOTO_LABEL[ep.category] })),
+                p.id,
+              )
+            "
+          >
             <img :src="p.url ?? undefined" :alt="PHOTO_LABEL[p.category]" class="w-full h-28 object-cover rounded-lg border border-slate-200" />
             <p class="text-[11px] text-slate-500 mt-1 text-center">{{ PHOTO_LABEL[p.category] }}</p>
-          </a>
+          </button>
         </div>
       </section>
 
@@ -1059,12 +1153,14 @@ async function handleCloseSubmit() {
               <img
                 v-if="photoPreviewUrls[cat.value]"
                 :src="photoPreviewUrls[cat.value]"
-                class="w-12 h-12 object-cover rounded-lg border border-sky-300"
+                class="w-12 h-12 object-cover rounded-lg border border-sky-300 cursor-pointer"
+                @click="openLightbox([{ id: cat.value, url: photoPreviewUrls[cat.value], label: cat.label }], cat.value)"
               />
               <img
                 v-else-if="existingPhotoByCategory.get(cat.value)?.url"
                 :src="existingPhotoByCategory.get(cat.value)!.url ?? undefined"
-                class="w-12 h-12 object-cover rounded-lg border border-slate-200"
+                class="w-12 h-12 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                @click="openLightbox([{ id: cat.value, url: existingPhotoByCategory.get(cat.value)!.url ?? '', label: cat.label }], cat.value)"
               />
               <div
                 v-else
@@ -1093,6 +1189,70 @@ async function handleCloseSubmit() {
             </label>
           </div>
         </div>
+      </section>
+
+      <!-- Fotos de serie de equipos (Fase 105): galeria dinamica, no un
+           slot unico — ticket e installation, solo si hay contrato. -->
+      <section
+        v-if="(jobType === 'ticket' || jobType === 'installation') && !isLockedForTecnico && !isUnassignedTicket && !ticketFrozen && trabajo.contractId"
+        class="surface p-3.5 mb-3"
+      >
+        <h2 class="text-sm font-semibold mb-1">📦 Fotos de serie de equipos</h2>
+        <p class="text-[11px] text-slate-500 mb-3">
+          Una foto por cada equipo del cliente (módem, TV Box, mesh...).
+          {{ jobType === 'ticket' ? 'Quedan pendientes de aprobación del administrador.' : '' }}
+        </p>
+
+        <p v-if="loadingEquipmentPhotos" class="text-xs text-slate-400 mb-2">Cargando...</p>
+        <div v-else-if="approvedEquipmentPhotos.length" class="grid grid-cols-3 gap-2 mb-3">
+          <button
+            v-for="p in approvedEquipmentPhotos"
+            :key="p.id"
+            type="button"
+            @click="
+              openLightbox(
+                approvedEquipmentPhotos.map((ep) => ({ id: ep.id, url: ep.url ?? '', label: EQUIPMENT_TYPE_LABEL[ep.equipment_type] })),
+                p.id,
+              )
+            "
+          >
+            <img :src="p.url ?? undefined" class="w-full h-16 object-cover rounded-lg border border-slate-200" />
+            <p class="text-[10px] text-slate-500 mt-0.5 truncate">{{ EQUIPMENT_TYPE_LABEL[p.equipment_type] }}</p>
+          </button>
+        </div>
+
+        <div v-for="entry in equipmentEntries" :key="entry.id" class="flex items-center gap-2.5 mb-2">
+          <div class="relative w-12 h-12 shrink-0">
+            <img
+              v-if="entry.previewUrl"
+              :src="entry.previewUrl"
+              class="w-12 h-12 object-cover rounded-lg border border-sky-300 cursor-pointer"
+              @click="openLightbox([{ id: entry.id, url: entry.previewUrl, label: EQUIPMENT_TYPE_LABEL[entry.type] }], entry.id)"
+            />
+            <div v-else class="w-12 h-12 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-base">
+              🏷️
+            </div>
+          </div>
+          <select v-model="entry.type" class="field-input text-sm flex-1 py-1.5">
+            <option v-for="opt in EQUIPMENT_TYPE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+          <label class="shrink-0 text-center px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] cursor-pointer whitespace-nowrap">
+            {{ entry.file ? '✓ Lista' : '📷 Capturar' }}
+            <input type="file" accept="image/*" capture="environment" class="hidden" @change="onEquipmentFileChange(entry.id, $event)" />
+          </label>
+          <button
+            type="button"
+            class="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg bg-red-500/10 text-base"
+            title="Quitar"
+            @click="removeEquipmentEntry(entry.id)"
+          >
+            🗑️
+          </button>
+        </div>
+
+        <button type="button" class="btn-secondary text-xs w-full" @click="addEquipmentEntry">
+          + Agregar foto de serie de otro equipo
+        </button>
       </section>
 
       <!-- Diagnostico express (no aplica a una rutina sin cliente puntual) -->
@@ -1338,7 +1498,11 @@ async function handleCloseSubmit() {
 
           <div class="grid grid-cols-2 gap-2 mb-3">
             <div
-              v-for="cat in jobType === 'installation' ? INSTALL_PHOTO_CATEGORIES : TICKET_PHOTO_CATEGORIES"
+              v-for="cat in jobType === 'installation'
+                ? INSTALL_PHOTO_CATEGORIES
+                : jobType === 'ticket'
+                  ? [...TICKET_PHOTO_CATEGORIES, SERVICE_SHEET_CATEGORY]
+                  : TICKET_PHOTO_CATEGORIES"
               :key="cat.value"
               class="relative"
             >
@@ -1453,5 +1617,6 @@ async function handleCloseSubmit() {
     </template>
 
     <QrScannerModal :open="qrOpen" @close="qrOpen = false" @scan="onQrScan" />
+    <PhotoLightbox v-if="lightboxPhotos.length" :photos="lightboxPhotos" :start-index="lightboxIndex" @close="lightboxPhotos = []" />
   </CampoLayout>
 </template>

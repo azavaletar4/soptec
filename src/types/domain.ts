@@ -111,6 +111,23 @@ export interface ClientPhoto {
   created_at: string;
 }
 
+export type EquipmentPhotoType = 'modem' | 'tv_box' | 'mesh' | 'otro';
+
+/** Galeria de fotos de serie/MAC por equipo (Fase 105) — a diferencia de ClientPhoto, NO es
+ *  un slot unico: un cliente puede tener varias (modem + tv box + mesh) a la vez. */
+export interface ClientEquipmentPhoto {
+  id: string;
+  contract_id: string;
+  client_id: string;
+  equipment_type: EquipmentPhotoType;
+  storage_path: string;
+  status: WorkOrderPhotoStatus;
+  job_type: JobType | null;
+  job_id: string | null;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
 export type ContractServiceType = 'internet_combo' | 'solo_iptv';
 
 export interface ServiceContract {
