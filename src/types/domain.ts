@@ -195,6 +195,7 @@ export interface StaffProfile {
   email: string;
   full_name: string | null;
   role: string;
+  phone: string | null;
 }
 
 export type StaffRole = 'SUPERADMIN' | 'ADMIN' | 'TECNICO_RED' | 'SOPORTE' | 'FACTURACION';

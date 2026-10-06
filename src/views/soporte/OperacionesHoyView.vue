@@ -38,7 +38,7 @@ const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
 const jobAssigneesStore = useJobAssigneesStore();
 const auth = useAuthStore();
-const { activeJobs } = useUnifiedJobs();
+const { allJobs, activeJobs } = useUnifiedJobs();
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
 
@@ -96,6 +96,36 @@ const dateRange = ref<DateRange | null>(null);
 // importar cuando se creo/agendo, para no esconder una averia vieja que
 // sigue abierta (ver plan Fase 107). El usuario puede acotar manualmente.
 const datePreset = ref<DateRangePreset>('todos');
+
+// Filtro por tecnico desde TechnicianStatusBar (Fase 111): un clic en una
+// tarjeta filtra+resalta abajo. techFilterTicketId es el ticket puntual a
+// resaltar (tecnico "en atencion"/"en camino"); si viene null pero
+// techFilterId si, el tecnico esta "disponible" y se amplia la busqueda a
+// TODAS sus ordenes (activas o ya atendidas) agendadas/completadas hoy, no
+// solo las activas — por eso usa allJobs en vez de activeJobs en ese caso.
+const techFilterId = ref<string | null>(null);
+const techFilterTicketId = ref<string | null>(null);
+
+function handleTechSelect(techId: string, ticketId: string | null) {
+  if (techFilterId.value === techId) {
+    techFilterId.value = null;
+    techFilterTicketId.value = null;
+    return;
+  }
+  techFilterId.value = techId;
+  techFilterTicketId.value = ticketId;
+}
+
+function handleTechOpenTicket(ticketId: string) {
+  router.push(`/soporte/${ticketId}`);
+}
+
+function clearTechFilter() {
+  techFilterId.value = null;
+  techFilterTicketId.value = null;
+}
+
+const selectedTechName = computed(() => technicians.value.find((t) => t.id === techFilterId.value)?.full_name ?? null);
 
 const emptyForm = () => ({
   client_id: '',
@@ -156,8 +186,23 @@ function isDueReschedule(job: UnifiedJob, nowMs: number): boolean {
   return t.status === 'rescheduled' && !!t.rescheduled_to && new Date(t.rescheduled_to).getTime() <= nowMs;
 }
 
+// Agendada o completada "hoy" para el tecnico "disponible" seleccionado:
+// por su propia fecha de agenda, o por fallbackDate si no tiene hora exacta,
+// o por cuando se atendio (finishedAt) — igual criterio que fallbackDate en
+// useUnifiedJobs.ts, en formato de fecha simple YYYY-MM-DD.
+function isRelevantToday(job: UnifiedJob): boolean {
+  const today = todayStr();
+  if (job.finishedAt && job.finishedAt.slice(0, 10) === today) return true;
+  if (job.scheduledStartAt) return job.scheduledStartAt.slice(0, 10) === today;
+  return job.fallbackDate === today;
+}
+
 const filteredJobs = computed(() => {
-  let list = activeJobs.value;
+  let list =
+    techFilterId.value && !techFilterTicketId.value
+      ? allJobs.value.filter((j) => j.assignedId === techFilterId.value && isRelevantToday(j))
+      : activeJobs.value;
+  if (techFilterId.value) list = list.filter((j) => j.assignedId === techFilterId.value);
   if (typeFilter.value !== 'all') list = list.filter((j) => j.jobType === typeFilter.value);
   if (dateRange.value) {
     const { start, end } = dateRange.value;
@@ -342,7 +387,9 @@ function formatDate(value: string) {
     <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">📋 Operaciones de Hoy</h1>
-        <p class="text-slate-600 text-sm mt-1">{{ filteredJobs.length }} órdenes activas — Averías, Altas y Rutinas</p>
+        <p class="text-slate-600 text-sm mt-1">
+          {{ filteredJobs.length }} {{ techFilterId && !techFilterTicketId ? 'órdenes de hoy' : 'órdenes activas' }} — Averías, Altas y Rutinas
+        </p>
         <button class="text-xs text-sky-700 hover:underline mt-1" @click="router.push('/soporte/historico')">
           📁 Histórico de Atendidos →
         </button>
@@ -359,7 +406,22 @@ function formatDate(value: string) {
 
     <TicketFlowGuide />
 
-    <TechnicianStatusBar :technicians="technicians" :tickets="ticketsStore.tickets" :now="now" />
+    <TechnicianStatusBar
+      :technicians="technicians"
+      :tickets="ticketsStore.tickets"
+      :now="now"
+      :selected-tech-id="techFilterId"
+      @select="handleTechSelect"
+      @open-ticket="handleTechOpenTicket"
+    />
+
+    <div v-if="techFilterId" class="flex items-center gap-2 mb-4 text-sm">
+      <span class="badge bg-sky-500/15 text-sky-700">
+        👷 Filtrando por {{ selectedTechName ?? 'técnico' }}
+        {{ techFilterTicketId ? '· orden activa' : '· agenda/atendido hoy' }}
+      </span>
+      <button type="button" class="text-xs text-slate-500 hover:text-slate-800" @click="clearTechFilter">✕ Quitar filtro</button>
+    </div>
 
     <div class="surface flex flex-col gap-3 p-3 mb-4">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -391,7 +453,7 @@ function formatDate(value: string) {
           v-for="job in filteredJobs"
           :key="`${job.jobType}-${job.id}`"
           class="surface p-3 cursor-pointer"
-          :class="isDueReschedule(job, now) ? 'ring-2 ring-red-500' : ''"
+          :class="isDueReschedule(job, now) ? 'ring-2 ring-red-500' : job.id === techFilterTicketId ? 'ring-2 ring-sky-500' : ''"
           @click="goToJob(job)"
         >
           <p v-if="isDueReschedule(job, now)" class="text-[11px] font-bold text-red-600 mb-1.5">🔴 REPROGRAMADO - ATENDER PRIMERO</p>
@@ -451,7 +513,7 @@ function formatDate(value: string) {
               v-for="job in filteredJobs"
               :key="`${job.jobType}-${job.id}`"
               class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
-              :class="isDueReschedule(job, now) ? 'bg-red-50' : ''"
+              :class="isDueReschedule(job, now) ? 'bg-red-50' : job.id === techFilterTicketId ? 'bg-sky-50 ring-1 ring-inset ring-sky-400' : ''"
               @click="goToJob(job)"
             >
               <td class="px-4 py-3">

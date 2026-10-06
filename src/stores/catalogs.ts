@@ -68,7 +68,7 @@ export const useCatalogsStore = defineStore('catalogs', () => {
     if (staff.value.length) return;
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, role')
+      .select('id, email, full_name, role, phone')
       .neq('role', 'CLIENTE')
       .eq('active', true)
       .order('full_name');
