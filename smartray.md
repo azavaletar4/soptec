@@ -239,6 +239,74 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
 
 ---
 
+## 2026-10-05
+
+### Detalle de Ticket (Soporte) — vista de solo lectura para rol Técnico
+- Rol Técnico ahora ve el detalle de ticket congelado: selects de Estado y Prioridad
+  deshabilitados, banner ámbar arriba de la ficha ("📱 Para gestionar este ticket, utiliza la App
+  de Campo"), y en "Seguimiento" la caja de comentario se reemplaza por el mismo mensaje.
+- "Materiales usados" perdió el formulario de selector de producto + botón "+ Usar" en el panel
+  web — para **todos** los roles queda solo como lista de solo lectura ("Registrado por el técnico
+  desde la App de Campo").
+
+### Histórico de Atendidos
+- Columna "Atendido" pasa a mostrar dos líneas: "Creado: DD/MM/YYYY hh:mm a.m./p.m." y
+  "Atendido: ...".
+- Nueva columna **"Tiempo de respuesta"** con badge "⏱️ Xh Ym" de color según el tiempo: **verde**
+  (menos de 4h), **amarillo** (4h-24h), **rojo** (más de 24h).
+- Nuevo selector "Todos los técnicos" junto a los chips de tipo (Averías/Altas/Rutinas).
+- Nuevo botón **"⬇️ Exportar a CSV"** arriba a la derecha (descarga el listado filtrado).
+- Nueva columna **"Evidencias"** con botón "📷 Evidencias" por fila — abre el visor de fotos a
+  pantalla completa (mismo `PhotoLightbox` reusado en el resto del panel) con todas las fotos de
+  campo de esa orden.
+
+### Operaciones de Hoy — tarjetas de "Técnicos activos"
+- Cada tarjeta es ahora un botón interactivo: un clic filtra y resalta (anillo celeste) el ticket
+  activo del técnico en la tabla de abajo, o sus órdenes de hoy si está "Disponible"; doble clic
+  sobre una orden activa abre su detalle directo.
+- Nuevo badge verde **"✓ N hoy"** con el conteo de órdenes resueltas/cerradas hoy por ese técnico.
+- El cronómetro de la orden activa cambia de gris a **naranja** (más de 60 min) o **rojo** con ⚠️
+  (más de 120 min), en vez de quedarse siempre del mismo color.
+- Nuevos iconos **💬 WhatsApp** / **📞 Llamar** en la esquina de la tarjeta (solo si el técnico
+  tiene teléfono registrado).
+- Chip **"👷 Filtrando por [técnico] · [modo] ✕ Quitar filtro"** aparece sobre la tabla cuando hay
+  un técnico seleccionado.
+
+### Instalaciones / Detalle de Ticket — modal al reabrir una orden
+- Nuevo modal de confirmación ("⚠️ ¿Estás seguro de reabrir esta orden? Se mantendrán guardados
+  los equipos y materiales previamente asignados.") antes de bajar el estado de una orden
+  Completada/Resuelta a un estado anterior — mismo estilo que el resto de modales del panel.
+
+### Operaciones de Hoy — cabecera y pestañas
+- Nuevo selector de pestañas destacado **"📋 Operaciones de Hoy" / "📁 Histórico de Atendidos"**
+  arriba de todo (componente `SoporteTabs`, reusado en ambas pantallas) — reemplaza el link de
+  texto chico "📁 Histórico de Atendidos →" y el botón "← Volver a Operaciones de Hoy".
+- Se eliminó la fila de filtros de fecha (Hoy/Esta semana/Este mes/Calendario) de **Operaciones de
+  Hoy** — esos filtros quedan exclusivos de Histórico de Atendidos.
+
+---
+
+## 2026-10-06
+
+### Navegación general — logo y migas de pan
+- El isotipo + "SmartRayco / Panel de gestión" del sidebar (y del header en celular) ahora es un
+  enlace al Dashboard (o a Soporte si el rol es Técnico, que no tiene Dashboard propio), con una
+  leve opacidad y un glow celeste alrededor del ícono al pasar el mouse.
+- Nueva barra de **migas de pan** ("Inicio › Sección › Página") debajo del logo, en la cabecera de
+  **todos** los módulos del panel. En el detalle de un ticket suma un último nivel dinámico con el
+  número real (ej. "Inicio › Soporte › Operaciones de Hoy › TCK-2026-00026").
+
+### Operaciones de Hoy — tarjetas de "Técnicos activos": telemetría de campo
+- Cada tarjeta suma dos indicadores nuevos: **🔋 porcentaje de batería** (texto rojo si es menor a
+  20%, "—" si el técnico nunca reportó) y **📍 "hace N min"** desde el último reporte GPS (texto
+  ámbar "⚠️ Sin señal" si pasan más de 15 minutos sin reportar, o si nunca reportó ubicación).
+- Clic en el indicador de GPS abre un modal con un mapa (Leaflet/OpenStreetMap, mismo estilo que
+  Mapa de Red/Mapa de Clientes) centrado en la última ubicación del técnico — el marcador y el
+  centro del mapa se mueven solos si llega una ubicación más reciente mientras el modal sigue
+  abierto (en vivo, vía Supabase Realtime).
+
+---
+
 ## Cómo se sigue actualizando este archivo
 
 Cada vez que se aplique un cambio visual nuevo (color, layout, componente, texto de interfaz,
