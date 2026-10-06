@@ -13,7 +13,6 @@ import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from 
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { waLink } from '@/lib/phone';
-import { supabase } from '@/lib/supabase';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
 import { MOTIVO_AVERIA_LABEL, MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
 import { EQUIPMENT_TYPE_LABEL } from '@/lib/equipmentPhotoType';
@@ -189,6 +188,26 @@ async function loadApprovals() {
   }
 }
 
+// ---- Evidencia del cierre (Evidencia 1/2): work_order_photos ya guarda cada
+// una en su propia fila (categorias distintas, nunca se pisan), pero
+// ticket.evidencia_url es un campo escalar que solo alcanzaba a quedarse con
+// la PRIMERA foto subida (ver campoStore.performClosureSubmit) — la segunda
+// quedaba guardada pero invisible para el admin. Se leen ambas directo de
+// work_order_photos en vez de depender de ese campo.
+const evidenciaPhotos = ref<PendingPhotoWithUrl[]>([]);
+const loadingEvidencia = ref(false);
+const EVIDENCIA_LABEL: Record<string, string> = { evidencia_1: 'Evidencia 1', evidencia_2: 'Evidencia 2' };
+
+async function loadEvidencia() {
+  loadingEvidencia.value = true;
+  try {
+    const photos = await ticketApprovalsStore.fetchJobPhotos('ticket', ticketId.value);
+    evidenciaPhotos.value = photos.filter((p) => p.category === 'evidencia_1' || p.category === 'evidencia_2').sort((a, b) => a.category.localeCompare(b.category));
+  } finally {
+    loadingEvidencia.value = false;
+  }
+}
+
 async function handleApprovePhoto(photo: PendingPhotoWithUrl) {
   if (!ticket.value?.contract_id) {
     approvalError.value = 'Este ticket no tiene un servicio/línea asociado — no se puede aplicar a la ficha del cliente.';
@@ -282,7 +301,7 @@ async function handleDeleteEquipmentPhoto(photo: ClientEquipmentPhotoWithUrl) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadTicket(), loadComments(), loadMaterials(), catalogs.fetchStaff(), loadApprovals()]);
+  await Promise.all([loadTicket(), loadComments(), loadMaterials(), catalogs.fetchStaff(), loadApprovals(), loadEvidencia()]);
   await loadEquipmentPhotos();
 });
 
@@ -402,19 +421,10 @@ function handleLightboxReject(id: string) {
   lightboxPhotos.value = [];
 }
 
-const evidenciaLoading = ref(false);
-async function openEvidencia() {
-  if (!ticket.value?.evidencia_url) return;
-  evidenciaLoading.value = true;
-  try {
-    const { data, error: err } = await supabase.storage.from('work-evidence').createSignedUrl(ticket.value.evidencia_url, 3600);
-    if (err || !data?.signedUrl) throw err ?? new Error('Sin URL firmada');
-    openLightbox([{ id: 'evidencia', url: data.signedUrl, label: 'Evidencia del cierre' }], 'evidencia');
-  } catch (e) {
-    actionError.value = getErrorMessage(e, 'No se pudo abrir la evidencia');
-  } finally {
-    evidenciaLoading.value = false;
-  }
+function openEvidencia() {
+  if (!evidenciaPhotos.value.length) return;
+  const photos = evidenciaPhotos.value.map((p) => ({ id: p.id, url: p.url ?? '', label: EVIDENCIA_LABEL[p.category] ?? p.category }));
+  openLightbox(photos, photos[0].id);
 }
 
 async function handlePriorityChange(priority: TicketPriority) {
@@ -667,13 +677,13 @@ async function handleDelete() {
             <p v-if="ticket.motivo_averia_detalle" class="text-slate-700 mt-1">{{ ticket.motivo_averia_detalle }}</p>
             <p v-if="ticket.observacion_cierre" class="text-slate-700 whitespace-pre-wrap mt-2">{{ ticket.observacion_cierre }}</p>
             <button
-              v-if="ticket.evidencia_url"
+              v-if="evidenciaPhotos.length"
               type="button"
               class="text-xs text-sky-700 hover:text-sky-700 mt-2"
-              :disabled="evidenciaLoading"
+              :disabled="loadingEvidencia"
               @click="openEvidencia"
             >
-              {{ evidenciaLoading ? 'Abriendo...' : '📷 Ver evidencia' }}
+              📷 Ver evidencia{{ evidenciaPhotos.length > 1 ? ` (${evidenciaPhotos.length})` : '' }}
             </button>
           </div>
         </div>
