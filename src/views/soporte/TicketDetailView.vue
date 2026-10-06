@@ -27,17 +27,11 @@ const ticketApprovalsStore = useTicketApprovalsStore();
 const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 
-// TECNICO_RED ve todos los tickets pero solo puede editar (estado,
-// comentar) los que tiene asignados — el resto de roles de staff puede
-// editar cualquiera. Reglas equivalentes viven en RLS (Fase 15); esto solo
-// evita mostrar controles que la BD va a rechazar. Prioridad y materiales
-// tienen su propio candado mas abajo (canChangePriority/canAddMaterials):
-// son al reves — exclusivos del tecnico, no de admin/soporte.
-const canEdit = computed(() => {
-  if (!ticket.value) return false;
-  if (auth.role !== 'TECNICO_RED') return true;
-  return ticket.value.assigned_to === auth.user?.id;
-});
+// El tecnico gestiona sus tickets desde la App de Campo, no desde el Panel
+// Web — esta vista queda SOLO LECTURA para TECNICO_RED (estado, prioridad,
+// cuadrilla, reprogramacion y bitacora). Solo admin/soporte edita aqui.
+const isTecnico = computed(() => auth.role === 'TECNICO_RED');
+const canEdit = computed(() => !!ticket.value && !isTecnico.value);
 
 // Eliminar es solo para limpiar tickets de prueba — mismo rol que crear.
 const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
@@ -58,16 +52,8 @@ const availableStatuses = computed(() => {
 });
 
 // La prioridad (que tan urgente es atender la averia/alta) la fija
-// admin/soporte al crear o triar el ticket — el tecnico asignado solo
-// ejecuta, no puede subirse o bajarse la urgencia de lo que le tocó.
-const canChangePriority = computed(() => canEdit.value && auth.role !== 'TECNICO_RED');
-
-// Los materiales se consumen fisicamente en campo — solo el tecnico
-// asignado los registra (igual que ya hace desde la App de Campo). Un
-// admin/soporte viendo esto desde el escritorio no estuvo en la visita, asi
-// que ya no ve el formulario de "+ Usar" aqui, solo el listado de lo ya
-// registrado.
-const canAddMaterials = computed(() => canEdit.value && auth.role === 'TECNICO_RED');
+// admin/soporte al crear o triar el ticket.
+const canChangePriority = computed(() => canEdit.value);
 
 // Armar la cuadrilla (Fase 94) y fijar el puntaje manual es una decision de
 // despacho — mismo grupo de roles que puede escribir en job_assignees via
@@ -157,12 +143,12 @@ async function loadComments() {
   loadingComments.value = false;
 }
 
-// ---- Materiales usados (Fase 11b: vincula Inventario con Soporte) ----
+// ---- Materiales usados (Fase 11b) ----
+// Solo lectura en el Panel Web: los materiales se consumen fisicamente en
+// campo y el tecnico los registra desde la App de Campo. El panel ya no
+// ofrece un formulario de entrada aqui, solo el listado de lo registrado.
 const materials = ref<InventoryMovement[]>([]);
 const loadingMaterials = ref(true);
-const materialForm = ref({ productId: '', quantity: 1 });
-const savingMaterial = ref(false);
-const materialError = ref<string | null>(null);
 
 async function loadMaterials() {
   loadingMaterials.value = true;
@@ -170,26 +156,6 @@ async function loadMaterials() {
     materials.value = await inventoryStore.fetchMovementsByTicket(ticketId.value);
   } finally {
     loadingMaterials.value = false;
-  }
-}
-
-async function handleAddMaterial() {
-  if (!ticket.value || !materialForm.value.productId || materialForm.value.quantity <= 0) return;
-  savingMaterial.value = true;
-  materialError.value = null;
-  try {
-    await inventoryStore.registerUsage({
-      productId: materialForm.value.productId,
-      quantity: materialForm.value.quantity,
-      ticketId: ticket.value.id,
-      reason: `Ticket ${ticket.value.ticket_number}`,
-    });
-    materialForm.value = { productId: '', quantity: 1 };
-    await loadMaterials();
-  } catch (e) {
-    materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa el stock disponible)');
-  } finally {
-    savingMaterial.value = false;
   }
 }
 
@@ -307,7 +273,7 @@ async function handleDeleteEquipmentPhoto(photo: ClientEquipmentPhotoWithUrl) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadTicket(), loadComments(), loadMaterials(), catalogs.fetchStaff(), inventoryStore.fetchProducts(), loadApprovals()]);
+  await Promise.all([loadTicket(), loadComments(), loadMaterials(), catalogs.fetchStaff(), loadApprovals()]);
   await loadEquipmentPhotos();
 });
 
@@ -428,10 +394,9 @@ async function handlePriorityChange(priority: TicketPriority) {
 }
 
 // Cliente Ausente / re-agendamiento prioritario (Fase 102): la fecha/hora
-// de reprogramacion es 100% editable desde aca — tanto admin/soporte como
-// el propio tecnico asignado (canEdit ya cubre ambos casos), a diferencia
-// de la prioridad que es exclusiva de despacho. Cambiarla reordena la lista
-// de Soporte sola (filteredTickets es reactivo a ticketsStore.tickets).
+// de reprogramacion la edita admin/soporte desde aca (canEdit); el tecnico
+// la ve pero gestiona el ticket desde la App de Campo. Cambiarla reordena
+// la lista de Soporte sola (filteredTickets es reactivo a ticketsStore.tickets).
 const rescheduleDraft = ref({ date: '', reason: '' });
 const savingReschedule = ref(false);
 const rescheduleError = ref<string | null>(null);
@@ -557,6 +522,10 @@ async function handleDelete() {
       </div>
 
       <p v-if="actionError" class="mb-4 text-sm text-red-600">{{ actionError }}</p>
+
+      <div v-if="isTecnico" class="surface p-3 text-sm bg-amber-50 border border-amber-200 text-amber-800 mb-4">
+        📱 Para gestionar este ticket, utiliza la App de Campo.
+      </div>
 
       <div class="grid gap-4 lg:grid-cols-2">
         <!-- Columna izquierda: cliente, descripcion, estado/prioridad -->
@@ -815,26 +784,7 @@ async function handleDelete() {
               </ul>
             </template>
 
-            <p v-if="!canAddMaterials" class="text-[11px] text-slate-400">El técnico asignado los registra desde la App de Campo.</p>
-            <form v-else class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
-              <div class="flex-1 min-w-[160px]">
-                <label class="block text-xs text-slate-600 mb-1">Producto</label>
-                <select v-model="materialForm.productId" required class="field-input">
-                  <option value="" disabled>Selecciona...</option>
-                  <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">
-                    {{ p.name }} ({{ p.current_stock }} {{ p.unit }} disp.)
-                  </option>
-                </select>
-              </div>
-              <div class="w-24">
-                <label class="block text-xs text-slate-600 mb-1">Cantidad</label>
-                <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
-              </div>
-              <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
-                {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
-              </button>
-            </form>
-            <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
+            <p class="text-[11px] text-slate-400">Registrado por el técnico desde la App de Campo.</p>
           </div>
 
           <div class="surface p-4 text-sm">
@@ -861,7 +811,7 @@ async function handleDelete() {
                 {{ savingComment ? 'Enviando...' : 'Comentar' }}
               </button>
             </form>
-            <p v-else class="text-xs text-slate-400">Este ticket no está asignado a ti — solo puedes verlo.</p>
+            <p v-else class="text-xs text-slate-400">Para gestionar este ticket, utiliza la App de Campo.</p>
           </div>
         </div>
       </div>
