@@ -373,6 +373,13 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   de emisión (día del mes)" aceptaba máximo 28. Ahora acepta 1-31, con una nota debajo
   ("En meses más cortos se emite el último día del mes") y mensaje propio si se sale de rango.
 
+### Detalle de Ticket (Panel Web) — título y descripción editables
+- Botón nuevo "✏️ Editar" junto al título (solo admin/soporte, no técnico) — convierte el `<h1>`
+  en un input y la tarjeta "Descripción" en un `<textarea>`, con "Guardar cambios"/"Cancelar"
+  debajo de la descripción. Al guardar: toast de éxito ("Descripción del ticket actualizada
+  correctamente") y una nota automática en "Seguimiento" (ej. "Actualizó el título y la
+  descripción del ticket.", con el autor ya identificado ahí mismo por el timeline existente).
+
 ---
 
 ## Cómo se sigue actualizando este archivo

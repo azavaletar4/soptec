@@ -12,6 +12,7 @@ import { useTicketApprovalsStore, parseEquipmentType, type PendingPhotoWithUrl }
 import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
+import { useToast } from '@/composables/useToast';
 import { waLink } from '@/lib/phone';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
 import { MOTIVO_AVERIA_LABEL, MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
@@ -26,6 +27,7 @@ const inventoryStore = useInventoryStore();
 const ticketApprovalsStore = useTicketApprovalsStore();
 const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
+const toast = useToast();
 
 // El tecnico gestiona sus tickets desde la App de Campo, no desde el Panel
 // Web — esta vista queda SOLO LECTURA para TECNICO_RED (estado, prioridad,
@@ -481,6 +483,66 @@ async function handleSaveReschedule() {
   }
 }
 
+// ---- Editar título/descripción (Fase 120): admin/soporte puede corregir
+// las instrucciones antes o durante la atención en campo — el tecnico sigue
+// sin poder (canEdit ya lo bloquea, igual que el resto de esta vista). Un
+// solo "Guardar cambios" para ambos campos (no dos editores independientes
+// que puedan desincronizarse) y una nota en Seguimiento para dejar rastro de
+// quien cambio que — ver handleAddComment, mismo mecanismo.
+const editingHeader = ref(false);
+const titleDraft = ref('');
+const descriptionDraft = ref('');
+const savingHeader = ref(false);
+const headerError = ref<string | null>(null);
+
+function startEditHeader() {
+  if (!ticket.value) return;
+  titleDraft.value = ticket.value.title;
+  descriptionDraft.value = ticket.value.description ?? '';
+  headerError.value = null;
+  editingHeader.value = true;
+}
+
+function cancelEditHeader() {
+  editingHeader.value = false;
+  headerError.value = null;
+}
+
+async function handleSaveHeader() {
+  if (!ticket.value) return;
+  const newTitle = titleDraft.value.trim();
+  if (!newTitle) {
+    headerError.value = 'El título no puede quedar vacío.';
+    return;
+  }
+  const newDescription = descriptionDraft.value.trim() || null;
+  const titleChanged = newTitle !== ticket.value.title;
+  const descriptionChanged = newDescription !== (ticket.value.description ?? null);
+  if (!titleChanged && !descriptionChanged) {
+    editingHeader.value = false;
+    return;
+  }
+
+  savingHeader.value = true;
+  headerError.value = null;
+  try {
+    ticket.value = await ticketsStore.updateTicket(ticket.value.id, { title: newTitle, description: newDescription });
+    editingHeader.value = false;
+    toast.success('Descripción del ticket actualizada correctamente');
+    try {
+      const parts = [titleChanged && 'el título', descriptionChanged && 'la descripción'].filter(Boolean);
+      const created = await ticketsStore.addComment(ticket.value.id, `Actualizó ${parts.join(' y ')} del ticket.`);
+      comments.value.push(created);
+    } catch {
+      // La nota de auditoria es opcional — si falla no se revierte el guardado real.
+    }
+  } catch (e) {
+    headerError.value = getErrorMessage(e, 'Error al guardar los cambios');
+  } finally {
+    savingHeader.value = false;
+  }
+}
+
 async function handleSavePoints() {
   if (!ticket.value) return;
   savingPoints.value = true;
@@ -543,9 +605,15 @@ async function handleDelete() {
     <div v-else-if="notFound" class="text-slate-500">Ticket no encontrado.</div>
     <template v-else-if="ticket">
       <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
-        <div>
+        <div class="flex-1 min-w-0">
           <div class="font-mono text-xs text-slate-500 mb-1">{{ ticket.ticket_number }}</div>
-          <h1 class="text-2xl font-semibold">{{ ticket.title }}</h1>
+          <input
+            v-if="editingHeader"
+            v-model="titleDraft"
+            class="field-input text-xl font-semibold w-full max-w-xl"
+            placeholder="Título del ticket"
+          />
+          <h1 v-else class="text-2xl font-semibold">{{ ticket.title }}</h1>
           <p class="text-slate-600 text-sm mt-1">
             <router-link :to="`/clientes/${ticket.client_id}`" class="hover:text-sky-600">
               {{ ticket.clients ? `${ticket.clients.first_name} ${ticket.clients.last_name}` : 'Cliente' }}
@@ -554,6 +622,9 @@ async function handleDelete() {
           </p>
         </div>
         <div class="flex items-center gap-2">
+          <button v-if="canEdit && !editingHeader" type="button" class="btn-secondary text-sm" @click="startEditHeader">
+            ✏️ Editar
+          </button>
           <a
             v-if="ticket.clients?.phone"
             :href="waLink(ticket.clients.phone)"
@@ -655,7 +726,24 @@ async function handleDelete() {
 
           <div class="surface p-4 text-sm">
             <div class="text-slate-500 text-xs mb-2">Descripción</div>
-            <p class="whitespace-pre-wrap">{{ ticket.description || 'Sin descripción.' }}</p>
+            <template v-if="editingHeader">
+              <textarea
+                v-model="descriptionDraft"
+                rows="4"
+                placeholder="Descripción del ticket..."
+                class="field-input text-sm w-full"
+              ></textarea>
+              <div class="flex gap-2 mt-2">
+                <button type="button" class="btn-primary text-xs px-3 py-1.5" :disabled="savingHeader" @click="handleSaveHeader">
+                  {{ savingHeader ? 'Guardando...' : 'Guardar cambios' }}
+                </button>
+                <button type="button" class="btn-ghost text-xs px-2 py-1.5" :disabled="savingHeader" @click="cancelEditHeader">
+                  Cancelar
+                </button>
+              </div>
+              <p v-if="headerError" class="text-xs text-red-600 mt-1.5">{{ headerError }}</p>
+            </template>
+            <p v-else class="whitespace-pre-wrap">{{ ticket.description || 'Sin descripción.' }}</p>
           </div>
 
           <div v-if="ticket.motivo_preliminar && !ticket.motivo_averia" class="surface p-4 text-sm">
