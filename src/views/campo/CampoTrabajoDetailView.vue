@@ -289,6 +289,12 @@ onMounted(async () => {
     infraStore.fetchElementos().catch(() => {});
     fibra.fetchTodosNapPuertos().catch(() => {});
     await Promise.all([loadEquipos(), loadAssignees()]);
+  } else if (jobType === 'installation' || jobType === 'routine') {
+    // Fase 118: Altas/Rutinas tambien pueden quedar sin tecnico (pool de
+    // "Disponibles" de la App de Campo) — necesitan la misma cuadrilla/lock
+    // que ya tenian los tickets libres (Fase 98), sin el resto de carga
+    // propia de una averia (equipos, infra NAP).
+    await loadAssignees();
   }
   await restoreDraft();
 });
@@ -560,45 +566,57 @@ async function handleUnlinkPendingUnit(unit: InventoryUnit) {
   }
 }
 
-// ---- Tecnico(s) asignados / auto-asignacion de un ticket libre (Fase 98) ----
+// ---- Tecnico(s) asignados / auto-asignacion de una orden libre (Fase 98,
+// extendido a Altas/Rutinas en la Fase 118) ----
 const assignees = ref<JobAssignee[]>([]);
 const loadingAssignees = ref(false);
 const selfAssigning = ref(false);
 const selfAssignError = ref<string | null>(null);
 
-// Mientras un ticket no tiene a nadie asignado, el formulario completo
+// Mientras la orden no tiene a nadie asignado, el formulario completo
 // (materiales, equipos, cierre) queda bloqueado — un tecnico que todavia no
 // "tomo" la orden no deberia poder cerrarla (la BD lo rechazaria igual, ver
-// tickets_update_staff, pero asi queda claro en la UI antes de intentarlo).
-const isUnassignedTicket = computed(() => jobType === 'ticket' && !loadingAssignees.value && !assignees.value.length);
+// tickets_update_staff/sus equivalentes, pero asi queda claro en la UI antes
+// de intentarlo). Se mantiene el nombre "isUnassignedTicket" en el resto del
+// archivo (Censo fotografico, Cierre de trabajo) porque esas secciones solo
+// aplican a tickets de todos modos.
+const isUnassignedTicket = computed(
+  () => (jobType === 'ticket' || jobType === 'installation' || jobType === 'routine') && !loadingAssignees.value && !assignees.value.length,
+);
+const TOMAR_LABEL: Record<JobType, string> = { ticket: 'Tomar este ticket', installation: 'Tomar esta instalación', routine: 'Tomar esta rutina' };
 
 async function loadAssignees() {
-  if (jobType !== 'ticket') return;
   loadingAssignees.value = true;
   try {
-    assignees.value = await jobAssigneesStore.fetchAssignees('ticket', jobId);
+    assignees.value = await jobAssigneesStore.fetchAssignees(jobType, jobId);
   } finally {
     loadingAssignees.value = false;
   }
 }
 
 async function handleTakeTicket() {
-  const ok = await confirmDialog({
-    title: '¿Ya coordinaste con el cliente?',
-    message: 'Asegúrate de haber contactado al cliente para verificar que se encuentra en su domicilio antes de asumir la orden.',
-    confirmLabel: 'Sí, ya coordiné',
-    cancelLabel: 'Cancelar',
-  });
-  if (!ok) return;
+  // Una rutina puede no tener cliente puntual (Fase 101, apunta a zona/caja
+  // NAP) — preguntar "¿ya coordinaste con el cliente?" no aplica ahi.
+  if (jobType !== 'routine') {
+    const ok = await confirmDialog({
+      title: '¿Ya coordinaste con el cliente?',
+      message: 'Asegúrate de haber contactado al cliente para verificar que se encuentra en su domicilio antes de asumir la orden.',
+      confirmLabel: 'Sí, ya coordiné',
+      cancelLabel: 'Cancelar',
+    });
+    if (!ok) return;
+  }
 
   selfAssigning.value = true;
   selfAssignError.value = null;
   try {
-    await campoStore.selfAssignTicket(jobId);
-    await Promise.all([loadAssignees(), loadEquipos()]);
-    toast.success('¡Ticket asignado con éxito! Ya puedes iniciar la atención.');
+    if (jobType === 'ticket') await campoStore.selfAssignTicket(jobId);
+    else if (jobType === 'installation') await campoStore.selfAssignInstallation(jobId);
+    else await campoStore.selfAssignRoutine(jobId);
+    await Promise.all([loadAssignees(), jobType === 'ticket' ? loadEquipos() : Promise.resolve()]);
+    toast.success('¡Asignado con éxito! Ya puedes iniciar la atención.');
   } catch (e) {
-    selfAssignError.value = getErrorMessage(e, 'No se pudo asignar el ticket (puede que alguien ya lo haya tomado)');
+    selfAssignError.value = getErrorMessage(e, 'No se pudo asignar la orden (puede que alguien ya la haya tomado)');
   } finally {
     selfAssigning.value = false;
   }
@@ -1162,8 +1180,8 @@ async function handleCloseSubmit() {
         <p v-else class="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">Sin ficha adicional disponible.</p>
       </section>
 
-      <!-- Tecnico asignado / auto-asignacion de un ticket libre (Fase 98) -->
-      <section v-if="jobType === 'ticket'" class="surface p-3.5 mb-3">
+      <!-- Tecnico asignado / auto-asignacion de una orden libre (Fase 98/118) -->
+      <section v-if="jobType === 'ticket' || jobType === 'installation' || jobType === 'routine'" class="surface p-3.5 mb-3">
         <h2 class="text-sm font-semibold mb-2">Técnico asignado</h2>
         <p v-if="loadingAssignees" class="text-xs text-slate-400">Cargando...</p>
         <template v-else>
@@ -1184,7 +1202,7 @@ async function handleCloseSubmit() {
             :disabled="selfAssigning"
             @click="handleTakeTicket"
           >
-            {{ selfAssigning ? 'Asignando...' : '🙋‍♂️ Tomar este ticket' }}
+            {{ selfAssigning ? 'Asignando...' : `🙋‍♂️ ${TOMAR_LABEL[jobType]}` }}
           </button>
           <p v-else class="text-xs text-slate-400">Sin técnicos asignados.</p>
           <p v-if="selfAssignError" class="text-xs text-red-600 mt-2">{{ selfAssignError }}</p>
@@ -1210,7 +1228,7 @@ async function handleCloseSubmit() {
             </div>
           </div>
 
-          <div v-if="isMyAssignment && !ticketFrozen" class="mt-3 pt-3 border-t border-slate-100">
+          <div v-if="jobType === 'ticket' && isMyAssignment && !ticketFrozen" class="mt-3 pt-3 border-t border-slate-100">
             <button v-if="!showReturnForm" type="button" class="btn-danger text-xs" @click="toggleReturnForm">
               ↩️ Devolver orden (no puedo continuar)
             </button>
@@ -1235,10 +1253,10 @@ async function handleCloseSubmit() {
         </template>
       </section>
 
-      <!-- Ticket libre: el formulario de materiales/equipos/cierre queda
-           bloqueado hasta que el tecnico lo tome (boton de arriba). -->
+      <!-- Orden libre (Fase 98/118): el formulario de materiales/equipos/cierre
+           queda bloqueado hasta que el tecnico la tome (boton de arriba). -->
       <section v-if="isUnassignedTicket" class="surface p-3.5 mb-3 bg-amber-50 border border-amber-200">
-        <p class="text-xs text-amber-700">Toma este ticket para habilitar materiales, equipos y cierre de trabajo.</p>
+        <p class="text-xs text-amber-700">{{ TOMAR_LABEL[jobType] }} para habilitar materiales, equipos y cierre de trabajo.</p>
       </section>
 
       <!-- Fotos ya registradas del cliente (instalaciones: solo lectura) -->

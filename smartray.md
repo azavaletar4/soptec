@@ -349,6 +349,13 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   geocerca de oficina, pines verde/celeste/rojo = ingreso/fin de almuerzo/salida), reporte mensual
   con exportar a CSV, gestión de feriados y configuración de geocerca/horarios/tolerancia.
 
+### App de Campo — "Disponibles" ahora incluye Altas y Rutinas
+- Antes solo mostraba Averías sin técnico (Fase 98); una Alta o Rutina sin asignar quedaba
+  invisible para todos los técnicos. Ahora la pestaña "Disponibles" suma las 3, y la ficha de una
+  orden sin técnico muestra el botón "🙋‍♂️ Tomar esta instalación" / "🙋‍♂️ Tomar esta rutina"
+  (mismo candado amarillo que ya tenían las averías libres, bloqueando materiales/cierre hasta
+  tomarla).
+
 ---
 
 ## Cómo se sigue actualizando este archivo

@@ -78,6 +78,18 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
     if (error) throw error;
   }
 
+  /** Fase 118: mismo mecanismo que selfAssignTicket, para una Alta sin tecnico. */
+  async function selfAssignInstallation(installationId: string) {
+    const { error } = await supabase.rpc('self_assign_installation', { p_installation_id: installationId });
+    if (error) throw error;
+  }
+
+  /** Fase 118: mismo mecanismo que selfAssignTicket, para una Rutina sin tecnico. */
+  async function selfAssignRoutine(routineId: string) {
+    const { error } = await supabase.rpc('self_assign_routine', { p_routine_id: routineId });
+    if (error) throw error;
+  }
+
   /**
    * Fase 99: el tecnico devuelve un ticket que ya habia tomado (ej. el
    * cliente no estaba) — libera la cuadrilla completa y deja una nota
@@ -89,5 +101,5 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
     if (error) throw error;
   }
 
-  return { loading, fetchAssignees, addAssignee, removeAssignee, setLeader, selfAssignTicket, returnTicket };
+  return { loading, fetchAssignees, addAssignee, removeAssignee, setLeader, selfAssignTicket, selfAssignInstallation, selfAssignRoutine, returnTicket };
 });

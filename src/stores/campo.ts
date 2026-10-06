@@ -258,9 +258,31 @@ export const useCampoStore = defineStore('campo', () => {
     ticketsStore.tickets.filter((t) => t.status === 'open' && !t.assigned_to).map(fromTicket),
   );
 
+  // Fase 118: mismo pool de "Disponibles" que las Averias (Fase 98), ahora
+  // tambien para Altas y Rutinas sin tecnico — antes quedaban invisibles
+  // para cualquier tecnico hasta que despacho las asignara a mano.
+  const availableInstallations = computed<TrabajoItem[]>(() =>
+    installationsStore.installations
+      .filter((i) => !i.assigned_to && (i.status === 'pending' || i.status === 'scheduled'))
+      .map(fromInstallation),
+  );
+  const availableRoutines = computed<TrabajoItem[]>(() =>
+    routinesStore.routines.filter((r) => !r.assigned_to && (r.status === 'pending' || r.status === 'scheduled')).map(fromRoutine),
+  );
+
   async function selfAssignTicket(ticketId: string) {
     await jobAssigneesStore.selfAssignTicket(ticketId);
     await ticketsStore.fetchTickets();
+  }
+
+  async function selfAssignInstallation(installationId: string) {
+    await jobAssigneesStore.selfAssignInstallation(installationId);
+    await installationsStore.fetchInstallations();
+  }
+
+  async function selfAssignRoutine(routineId: string) {
+    await jobAssigneesStore.selfAssignRoutine(routineId);
+    await routinesStore.fetchRoutines();
   }
 
   async function returnTicket(ticketId: string, reason: string) {
@@ -642,7 +664,11 @@ export const useCampoStore = defineStore('campo', () => {
     queuedCount,
     trabajos,
     availableTickets,
+    availableInstallations,
+    availableRoutines,
     selfAssignTicket,
+    selfAssignInstallation,
+    selfAssignRoutine,
     returnTicket,
     fetchAll,
     refreshQueuedCount,

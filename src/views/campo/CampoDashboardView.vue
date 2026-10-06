@@ -45,9 +45,18 @@ function isDueReschedule(t: TrabajoItem): boolean {
   return ticket.status === 'rescheduled' && !!ticket.rescheduled_to && new Date(ticket.rescheduled_to).getTime() <= Date.now();
 }
 
+// Fase 118: "Disponibles" junta averias + altas + rutinas sin tecnico — antes
+// solo traia averias (Fase 98), las otras 2 quedaban invisibles para todo
+// tecnico hasta que despacho las asignara a mano.
+const availableJobs = computed<TrabajoItem[]>(() => [
+  ...campoStore.availableTickets,
+  ...campoStore.availableInstallations,
+  ...campoStore.availableRoutines,
+]);
+
 const filtered = computed(() => {
   let list: TrabajoItem[];
-  if (activeTab.value === 'disponible') list = campoStore.availableTickets;
+  if (activeTab.value === 'disponible') list = availableJobs.value;
   else if (activeTab.value === 'pendiente') list = campoStore.trabajos.filter((t) => PENDIENTE_ESTADOS.includes(t.estadoUi));
   else list = campoStore.trabajos.filter((t) => t.estadoUi === 'completado');
   const q = search.value.trim().toLowerCase();
@@ -59,7 +68,7 @@ const counts = computed(() => {
   const c: Record<TabValue, number> = {
     pendiente: 0,
     completado: 0,
-    disponible: campoStore.availableTickets.length,
+    disponible: availableJobs.value.length,
   };
   for (const t of campoStore.trabajos) {
     if (PENDIENTE_ESTADOS.includes(t.estadoUi)) c.pendiente++;
