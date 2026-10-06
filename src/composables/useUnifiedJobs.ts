@@ -86,40 +86,41 @@ export function useUnifiedJobs() {
       finishedAt: t.resolved_at ?? t.closed_at,
       raw: t,
     }));
-    const installations = installationsStore.installations
-      .filter((i) => i.status !== 'cancelled')
-      .map<UnifiedJob>((i) => ({
-        id: i.id,
-        jobType: 'installation',
-        number: null,
-        label: i.clients ? `${i.clients.first_name} ${i.clients.last_name}` : 'Instalación',
-        status: i.status,
-        priority: i.priority,
-        assignedId: i.assigned_to,
-        assignedName: i.assigned_profile?.full_name || i.assigned_profile?.email || null,
-        scheduledStartAt: i.scheduled_start_at,
-        fallbackDate: (i.scheduled_date ?? i.created_at).slice(0, 10),
-        createdAt: i.created_at,
-        finishedAt: i.completed_at,
-        raw: i,
-      }));
-    const routines = routinesStore.routines
-      .filter((r) => r.status !== 'cancelled')
-      .map<UnifiedJob>((r) => ({
-        id: r.id,
-        jobType: 'routine',
-        number: r.routine_number,
-        label: r.clients ? `${r.clients.first_name} ${r.clients.last_name}` : r.title,
-        status: r.status,
-        priority: r.priority,
-        assignedId: r.assigned_to,
-        assignedName: r.assigned_profile?.full_name || r.assigned_profile?.email || null,
-        scheduledStartAt: r.scheduled_start_at,
-        fallbackDate: (r.scheduled_date ?? r.created_at).slice(0, 10),
-        createdAt: r.created_at,
-        finishedAt: r.completed_at,
-        raw: r,
-      }));
+    // Una cancelada (installation/routine) no tiene su propia columna
+    // "cancelled_at" en la tabla — updated_at es la mejor aproximacion real
+    // (se actualiza justo al cancelar, ver handleCancel en
+    // InstalacionDetailView.vue/RutinasView.vue) para que "Atendido" en el
+    // Historico muestre CUANDO se canceló en vez de quedar en blanco.
+    const installations = installationsStore.installations.map<UnifiedJob>((i) => ({
+      id: i.id,
+      jobType: 'installation',
+      number: null,
+      label: i.clients ? `${i.clients.first_name} ${i.clients.last_name}` : 'Instalación',
+      status: i.status,
+      priority: i.priority,
+      assignedId: i.assigned_to,
+      assignedName: i.assigned_profile?.full_name || i.assigned_profile?.email || null,
+      scheduledStartAt: i.scheduled_start_at,
+      fallbackDate: (i.scheduled_date ?? i.created_at).slice(0, 10),
+      createdAt: i.created_at,
+      finishedAt: i.completed_at ?? (i.status === 'cancelled' ? i.updated_at : null),
+      raw: i,
+    }));
+    const routines = routinesStore.routines.map<UnifiedJob>((r) => ({
+      id: r.id,
+      jobType: 'routine',
+      number: r.routine_number,
+      label: r.clients ? `${r.clients.first_name} ${r.clients.last_name}` : r.title,
+      status: r.status,
+      priority: r.priority,
+      assignedId: r.assigned_to,
+      assignedName: r.assigned_profile?.full_name || r.assigned_profile?.email || null,
+      scheduledStartAt: r.scheduled_start_at,
+      fallbackDate: (r.scheduled_date ?? r.created_at).slice(0, 10),
+      createdAt: r.created_at,
+      finishedAt: r.completed_at ?? (r.status === 'cancelled' ? r.updated_at : null),
+      raw: r,
+    }));
     return [...tickets, ...installations, ...routines];
   });
 

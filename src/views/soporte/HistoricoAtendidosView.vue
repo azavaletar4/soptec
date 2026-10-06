@@ -198,7 +198,7 @@ async function openEvidencias(job: UnifiedJob) {
     <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">📁 Histórico de Atendidos</h1>
-        <p class="text-slate-600 text-sm mt-1">{{ filteredJobs.length }} órdenes resueltas / cerradas / completadas</p>
+        <p class="text-slate-600 text-sm mt-1">{{ filteredJobs.length }} órdenes resueltas / cerradas / completadas / canceladas</p>
       </div>
       <div class="flex items-center gap-2">
         <button class="btn-secondary text-sm" :disabled="!filteredJobs.length" @click="exportCsv">⬇️ Exportar a CSV</button>
