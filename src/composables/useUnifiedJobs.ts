@@ -20,6 +20,7 @@ export interface UnifiedJob {
   status: string;
   /** Fase 108: las 3 tablas (tickets/installations/routines) tienen su propia columna priority. */
   priority: TicketPriority;
+  assignedId: string | null;
   assignedName: string | null;
   scheduledStartAt: string | null;
   /** Fecha a mostrar cuando no hay scheduled_start_at. */
@@ -77,6 +78,7 @@ export function useUnifiedJobs() {
       label: t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : t.title,
       status: t.status,
       priority: t.priority,
+      assignedId: t.assigned_to,
       assignedName: t.assigned_profile?.full_name || t.assigned_profile?.email || null,
       scheduledStartAt: t.scheduled_start_at,
       fallbackDate: t.created_at.slice(0, 10),
@@ -93,6 +95,7 @@ export function useUnifiedJobs() {
         label: i.clients ? `${i.clients.first_name} ${i.clients.last_name}` : 'Instalación',
         status: i.status,
         priority: i.priority,
+        assignedId: i.assigned_to,
         assignedName: i.assigned_profile?.full_name || i.assigned_profile?.email || null,
         scheduledStartAt: i.scheduled_start_at,
         fallbackDate: (i.scheduled_date ?? i.created_at).slice(0, 10),
@@ -109,6 +112,7 @@ export function useUnifiedJobs() {
         label: r.clients ? `${r.clients.first_name} ${r.clients.last_name}` : r.title,
         status: r.status,
         priority: r.priority,
+        assignedId: r.assigned_to,
         assignedName: r.assigned_profile?.full_name || r.assigned_profile?.email || null,
         scheduledStartAt: r.scheduled_start_at,
         fallbackDate: (r.scheduled_date ?? r.created_at).slice(0, 10),

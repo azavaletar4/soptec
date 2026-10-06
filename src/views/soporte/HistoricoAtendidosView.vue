@@ -3,9 +3,15 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
+import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useInstallationsStore } from '@/stores/installations';
 import { useRoutinesStore } from '@/stores/routines';
+import { useCatalogsStore } from '@/stores/catalogs';
+import { useTicketApprovalsStore, parseEquipmentType } from '@/stores/ticketApprovals';
+import { useToast } from '@/composables/useToast';
+import { getErrorMessage } from '@/lib/errors';
+import { EQUIPMENT_TYPE_LABEL } from '@/lib/equipmentPhotoType';
 import { JOB_STATUS_CLASS, JOB_STATUS_LABEL, useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
 import type { JobType, Ticket } from '@/types/domain';
 
@@ -17,6 +23,9 @@ const router = useRouter();
 const ticketsStore = useTicketsStore();
 const installationsStore = useInstallationsStore();
 const routinesStore = useRoutinesStore();
+const catalogs = useCatalogsStore();
+const ticketApprovalsStore = useTicketApprovalsStore();
+const toast = useToast();
 const { finishedJobs } = useUnifiedJobs();
 
 const TYPE_META: Record<JobType, { label: string; badge: string }> = {
@@ -32,12 +41,16 @@ const TYPE_TABS: { value: JobType | 'all'; label: string }[] = [
 ];
 
 const typeFilter = ref<JobType | 'all'>('all');
+const technicianFilter = ref<string>('all');
 const searchQuery = ref('');
 const dateRange = ref<DateRange | null>(null);
+
+const technicians = computed(() => catalogs.staff.filter((s) => s.role === 'TECNICO_RED'));
 
 const filteredJobs = computed(() => {
   let list = finishedJobs.value;
   if (typeFilter.value !== 'all') list = list.filter((j) => j.jobType === typeFilter.value);
+  if (technicianFilter.value !== 'all') list = list.filter((j) => j.assignedId === technicianFilter.value);
   if (dateRange.value) {
     const { start, end } = dateRange.value;
     list = list.filter((j) => {
@@ -56,7 +69,7 @@ const filteredJobs = computed(() => {
 });
 
 onMounted(() => {
-  Promise.all([ticketsStore.fetchTickets(), installationsStore.fetchInstallations(), routinesStore.fetchRoutines()]);
+  Promise.all([ticketsStore.fetchTickets(), installationsStore.fetchInstallations(), routinesStore.fetchRoutines(), catalogs.fetchStaff()]);
 });
 
 function goToJob(job: UnifiedJob) {
@@ -65,9 +78,104 @@ function goToJob(job: UnifiedJob) {
   else router.push(`/soporte/rutinas?q=${encodeURIComponent(job.label)}`);
 }
 
-function formatDate(value: string | null) {
+// DD/MM/YYYY hh:mm a.m./p.m. — a mano en vez de Intl porque el formato con
+// puntos ("a.m."/"p.m.", no "a. m." con espacio) lo pide especifico el usuario.
+function formatDateTime(value: string | null): string {
   if (!value) return '—';
-  return new Date(value).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
+  const d = new Date(value);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const suffix = d.getHours() >= 12 ? 'p.m.' : 'a.m.';
+  let hours = d.getHours() % 12;
+  if (hours === 0) hours = 12;
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${String(hours).padStart(2, '0')}:${minutes} ${suffix}`;
+}
+
+// Tiempo de respuesta (creacion -> atencion): verde < 4h, amarillo 4h-24h,
+// rojo > 24h (el tramo 4h-12h/12h-24h del pedido original comparte el mismo
+// amarillo, no hay un 4to color definido).
+interface SlaInfo {
+  label: string;
+  cls: string;
+}
+function slaInfo(job: UnifiedJob): SlaInfo | null {
+  if (!job.finishedAt) return null;
+  const ms = new Date(job.finishedAt).getTime() - new Date(job.createdAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const totalMinutes = Math.round(ms / 60000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  const label = h > 0 ? `⏱️ ${h}h ${m}m` : `⏱️ ${m}m`;
+  const hours = ms / 3_600_000;
+  const cls = hours < 4 ? 'bg-green-500/15 text-green-700' : hours <= 24 ? 'bg-yellow-500/15 text-yellow-700' : 'bg-red-500/15 text-red-700';
+  return { label, cls };
+}
+function slaPlainLabel(job: UnifiedJob): string {
+  return slaInfo(job)?.label.replace('⏱️ ', '') ?? '';
+}
+
+function exportCsv() {
+  const header = ['Orden', 'Cliente', 'Tipo', 'Estado', 'Asignado', 'Creado', 'Atendido', 'Tiempo de respuesta'];
+  const rows = filteredJobs.value.map((j) => [
+    j.number ?? '',
+    j.label,
+    TYPE_META[j.jobType].label,
+    JOB_STATUS_LABEL[j.status] ?? j.status,
+    j.assignedName ?? 'Sin asignar',
+    formatDateTime(j.createdAt),
+    formatDateTime(j.finishedAt),
+    slaPlainLabel(j),
+  ]);
+  const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `historico-atendidos-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---- Acceso rapido a evidencias (fotos de campo), via el mismo PhotoLightbox
+// que usa TicketDetailView — aca es solo lectura, sin aprobar/rechazar. ----
+const PHOTO_LABELS: Record<string, string> = {
+  facade: 'Fachada',
+  service_sheet: 'Hoja de servicio',
+  modem_position: 'Posición del módem',
+  nap_box: 'Caja NAP',
+  pon_power: 'Potencia Óptica Recibida',
+  evidencia_1: 'Evidencia 1',
+  evidencia_2: 'Evidencia 2',
+};
+function photoLabel(category: string): string {
+  const equipmentType = parseEquipmentType(category);
+  if (equipmentType) return EQUIPMENT_TYPE_LABEL[equipmentType];
+  return PHOTO_LABELS[category] ?? category;
+}
+
+const lightboxPhotos = ref<LightboxPhoto[]>([]);
+const loadingEvidenciasId = ref<string | null>(null);
+const evidenciasError = ref<string | null>(null);
+
+async function openEvidencias(job: UnifiedJob) {
+  const key = `${job.jobType}-${job.id}`;
+  loadingEvidenciasId.value = key;
+  evidenciasError.value = null;
+  try {
+    const photos = await ticketApprovalsStore.fetchJobPhotos(job.jobType, job.id);
+    if (!photos.length) {
+      toast.info('Esta orden no tiene fotos registradas desde la App de Campo.');
+      return;
+    }
+    lightboxPhotos.value = photos.map((p) => ({ id: p.id, url: p.url ?? '', label: photoLabel(p.category) }));
+  } catch (e) {
+    evidenciasError.value = getErrorMessage(e, 'Error al cargar las evidencias');
+    toast.error(evidenciasError.value);
+  } finally {
+    loadingEvidenciasId.value = null;
+  }
 }
 </script>
 
@@ -78,7 +186,10 @@ function formatDate(value: string | null) {
         <h1 class="text-2xl font-semibold">📁 Histórico de Atendidos</h1>
         <p class="text-slate-600 text-sm mt-1">{{ filteredJobs.length }} órdenes resueltas / cerradas / completadas</p>
       </div>
-      <button class="btn-ghost" @click="router.push('/soporte')">← Volver a Operaciones de Hoy</button>
+      <div class="flex items-center gap-2">
+        <button class="btn-secondary text-sm" :disabled="!filteredJobs.length" @click="exportCsv">⬇️ Exportar a CSV</button>
+        <button class="btn-ghost" @click="router.push('/soporte')">← Volver a Operaciones de Hoy</button>
+      </div>
     </div>
 
     <div class="surface flex flex-col gap-3 p-3 mb-4">
@@ -95,6 +206,10 @@ function formatDate(value: string | null) {
             {{ tab.label }}
           </button>
         </div>
+        <select v-model="technicianFilter" class="field-input sm:max-w-[220px]">
+          <option value="all">Todos los técnicos</option>
+          <option v-for="t in technicians" :key="t.id" :value="t.id">{{ t.full_name || t.email }}</option>
+        </select>
       </div>
       <DateRangeFilter @change="dateRange = $event" />
     </div>
@@ -110,13 +225,29 @@ function formatDate(value: string | null) {
           </div>
           <div class="text-slate-900 font-medium mb-1">{{ job.label }}</div>
           <div class="text-xs text-slate-500">
-            {{ JOB_STATUS_LABEL[job.status] ?? job.status }} · atendido {{ formatDate(job.finishedAt) }} · {{ job.assignedName ?? 'Sin asignar' }}
+            {{ JOB_STATUS_LABEL[job.status] ?? job.status }} · {{ job.assignedName ?? 'Sin asignar' }}
+          </div>
+          <div class="text-xs text-slate-500 mt-1">
+            Creado: {{ formatDateTime(job.createdAt) }}<br />
+            Atendido: {{ formatDateTime(job.finishedAt) }}
+          </div>
+          <div class="flex items-center justify-between mt-2">
+            <span v-if="slaInfo(job)" class="badge text-[11px]" :class="slaInfo(job)!.cls">{{ slaInfo(job)!.label }}</span>
+            <span v-else />
+            <button
+              type="button"
+              class="text-xs text-sky-700"
+              :disabled="loadingEvidenciasId === `${job.jobType}-${job.id}`"
+              @click.stop="openEvidencias(job)"
+            >
+              📷 Evidencias
+            </button>
           </div>
         </div>
       </div>
 
       <div class="table-shell hidden sm:block">
-        <table class="w-full text-sm min-w-[700px]">
+        <table class="w-full text-sm min-w-[820px]">
           <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
             <tr>
               <th class="text-left px-4 py-3">Orden</th>
@@ -125,6 +256,8 @@ function formatDate(value: string | null) {
               <th class="text-left px-4 py-3">Estado</th>
               <th class="text-left px-4 py-3">Asignado</th>
               <th class="text-left px-4 py-3">Atendido</th>
+              <th class="text-left px-4 py-3">Tiempo de respuesta</th>
+              <th class="text-left px-4 py-3">Evidencias</th>
             </tr>
           </thead>
           <tbody>
@@ -142,11 +275,30 @@ function formatDate(value: string | null) {
               <td class="px-4 py-3"><span class="badge" :class="TYPE_META[job.jobType].badge">{{ TYPE_META[job.jobType].label }}</span></td>
               <td class="px-4 py-3"><span class="badge" :class="JOB_STATUS_CLASS[job.status]">{{ JOB_STATUS_LABEL[job.status] ?? job.status }}</span></td>
               <td class="px-4 py-3 text-slate-600">{{ job.assignedName ?? 'Sin asignar' }}</td>
-              <td class="px-4 py-3 text-slate-500 text-xs">{{ formatDate(job.finishedAt) }}</td>
+              <td class="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                Creado: {{ formatDateTime(job.createdAt) }}<br />
+                Atendido: {{ formatDateTime(job.finishedAt) }}
+              </td>
+              <td class="px-4 py-3">
+                <span v-if="slaInfo(job)" class="badge text-[11px] whitespace-nowrap" :class="slaInfo(job)!.cls">{{ slaInfo(job)!.label }}</span>
+                <span v-else class="text-slate-400 text-xs">—</span>
+              </td>
+              <td class="px-4 py-3">
+                <button
+                  type="button"
+                  class="btn-ghost text-xs px-2 py-1"
+                  :disabled="loadingEvidenciasId === `${job.jobType}-${job.id}`"
+                  @click.stop="openEvidencias(job)"
+                >
+                  {{ loadingEvidenciasId === `${job.jobType}-${job.id}` ? 'Cargando...' : '📷 Evidencias' }}
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
     </template>
+
+    <PhotoLightbox v-if="lightboxPhotos.length" :photos="lightboxPhotos" @close="lightboxPhotos = []" />
   </AppLayout>
 </template>

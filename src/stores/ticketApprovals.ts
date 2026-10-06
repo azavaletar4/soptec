@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useClientPhotosStore } from '@/stores/clientPhotos';
 import { useClientEquipmentPhotosStore } from '@/stores/clientEquipmentPhotos';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
-import type { ClientPhotoCategory, EquipmentPhotoType, InventoryUnit, WorkOrderPhoto } from '@/types/domain';
+import type { ClientPhotoCategory, EquipmentPhotoType, InventoryUnit, JobType, WorkOrderPhoto } from '@/types/domain';
 
 const WORK_EVIDENCE_BUCKET = 'work-evidence';
 const SIGNED_URL_TTL = 3600;
@@ -54,6 +54,27 @@ export const useTicketApprovalsStore = defineStore('ticketApprovals', () => {
     } finally {
       loading.value = false;
     }
+  }
+
+  /** Todas las fotos de una orden (ticket/instalacion/rutina) ya subidas, sin importar su status
+   *  (menos las rechazadas) — usado por el acceso rapido a evidencias del Historico de Atendidos,
+   *  a diferencia de fetchPendingPhotos que es solo el censo pendiente de aprobar de una averia. */
+  async function fetchJobPhotos(jobType: JobType, jobId: string): Promise<PendingPhotoWithUrl[]> {
+    const { data, error } = await supabase
+      .from('work_order_photos')
+      .select('*')
+      .eq('job_type', jobType)
+      .eq('job_id', jobId)
+      .neq('status', 'rejected')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    const rows = (data ?? []) as WorkOrderPhoto[];
+    return await Promise.all(
+      rows.map(async (row) => {
+        const { data: signed } = await supabase.storage.from(WORK_EVIDENCE_BUCKET).createSignedUrl(row.storage_path, SIGNED_URL_TTL);
+        return { ...row, url: signed?.signedUrl ?? null };
+      }),
+    );
   }
 
   /** Copia la foto de work-evidence a client-photos (reemplaza el slot de esa categoria/contrato) y marca 'approved'. */
@@ -108,6 +129,7 @@ export const useTicketApprovalsStore = defineStore('ticketApprovals', () => {
   return {
     loading,
     fetchPendingPhotos,
+    fetchJobPhotos,
     approvePhoto,
     approveEquipmentPhoto,
     rejectPhoto,
