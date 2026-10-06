@@ -389,6 +389,20 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   recargar. Las fotos del censo/evidencia siguen subiéndose recién al cerrar el trabajo (no hay
   sync en vivo de fotos todavía — así funciona el borrador offline de la App de Campo).
 
+### Instalaciones (Panel Web) — nueva página de detalle, sin modales sueltos
+- La tabla de Instalaciones ya no tiene botones "Materiales" ni "Completar" por fila — ahora es
+  un único botón "Ver orden →" por fila (columna Acciones), que lleva a una página de detalle
+  nueva (`/soporte/instalaciones/:id`), mismo criterio que ya existía para Tickets.
+- Esa página reúne todo lo que antes vivía en 2 modales distintos: tipo de servicio, plantilla de
+  materiales, "Otro material", equipos por serie/MAC, nota de cuenta IPTV, cuadrilla
+  (`CrewAssignEditor` inline, ya no en modal), y el formulario de "Completar instalación"
+  (GPS, Zona/Caja NAP, 5 fotos) — todo visible de una vez, sin perder nada de la validación
+  existente (equipo obligatorio en Internet/Combo, Zona/NAP obligatorias, etc.).
+- Al completarse o cancelarse, la página muestra un aviso verde/gris de solo-lectura en vez del
+  formulario de cierre, para evitar un doble envío.
+- "Operaciones de Hoy" y "Histórico de Atendidos": el clic en una fila de Alta ahora abre esta
+  página de detalle directo, en vez de caer al listado filtrado por nombre.
+
 ---
 
 ## Cómo se sigue actualizando este archivo

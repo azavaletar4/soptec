@@ -14,7 +14,7 @@ import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { EQUIPMENT_TYPE_LABEL } from '@/lib/equipmentPhotoType';
 import { JOB_STATUS_CLASS, JOB_STATUS_LABEL, useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
-import type { Installation, JobType, Ticket } from '@/types/domain';
+import type { JobType, Ticket } from '@/types/domain';
 
 // Fase 107: todo lo resuelto/cerrado/completado vive aca aparte — asi
 // "Operaciones de Hoy" solo tiene que mostrar lo que de verdad hace falta
@@ -80,14 +80,11 @@ function goToJob(job: UnifiedJob) {
   if (job.jobType === 'ticket') {
     router.push(`/soporte/${job.id}`);
   } else if (job.jobType === 'installation') {
-    // Una instalacion no tiene vista de detalle propia (a diferencia de un
-    // ticket, que si la tiene en /soporte/:id) — lo que el tecnico llena
-    // (fotos del censo, hoja de servicio...) vive en la ficha del cliente,
-    // pestaña "Fotos". Sin contract_id (no deberia pasar en una completada,
-    // pero por si acaso) se cae de vuelta al listado filtrado de antes.
-    const inst = job.raw as Installation;
-    if (inst.contract_id) router.push(`/clientes/${inst.client_id}/servicios/${inst.contract_id}?tab=fotos`);
-    else router.push(`/soporte/instalaciones?q=${encodeURIComponent(job.label)}`);
+    // Fase 122: ahora si tiene su propia vista de detalle (igual que un
+    // ticket en /soporte/:id) — ahi se ve todo lo que registro el tecnico
+    // (materiales, equipos) en modo solo-lectura por estar completada, con
+    // un acceso directo a la ficha del cliente para ver las fotos.
+    router.push(`/soporte/instalaciones/${job.id}`);
   } else {
     router.push(`/soporte/rutinas?q=${encodeURIComponent(job.label)}`);
   }

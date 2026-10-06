@@ -327,14 +327,13 @@ async function handleSubmit() {
   }
 }
 
-// Click en una fila: un ticket tiene su propia pagina de detalle; una
-// instalacion/rutina se edita inline en su propia tabla (materiales,
-// cuadrilla, censo...) — no tiene un modal de detalle aparte, asi que
-// navega ahi con el nombre precargado en el buscador que esas vistas ya
-// tienen, en vez de inventar un mecanismo de deep-link nuevo.
+// Click en una fila: un ticket y una instalacion ya tienen su propia pagina
+// de detalle (Fase 122 para instalaciones); una rutina todavia se edita
+// inline en su propia tabla, asi que navega ahi con el nombre precargado en
+// el buscador que esa vista ya tiene.
 function goToJob(job: UnifiedJob) {
   if (job.jobType === 'ticket') router.push(`/soporte/${job.id}`);
-  else if (job.jobType === 'installation') router.push(`/soporte/instalaciones?q=${encodeURIComponent(job.label)}`);
+  else if (job.jobType === 'installation') router.push(`/soporte/instalaciones/${job.id}`);
   else router.push(`/soporte/rutinas?q=${encodeURIComponent(job.label)}`);
 }
 

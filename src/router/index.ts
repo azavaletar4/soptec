@@ -104,6 +104,17 @@ const router = createRouter({
       meta: { requiresAuth: true, breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Instalaciones' }] },
     },
     {
+      // Fase 122: detalle dedicado de una instalacion — unico lugar para
+      // materiales/equipos/completar (antes modales sueltos en la tabla).
+      path: '/soporte/instalaciones/:id',
+      name: 'instalacion-detalle',
+      component: () => import('@/views/instalaciones/InstalacionDetailView.vue'),
+      meta: {
+        requiresAuth: true,
+        breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Instalaciones', to: '/soporte/instalaciones' }, { label: 'Detalle' }],
+      },
+    },
+    {
       // Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de
       // orden junto a Tickets e Instalaciones, mismo criterio de ubicacion.
       path: '/soporte/rutinas',
