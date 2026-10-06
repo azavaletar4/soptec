@@ -303,7 +303,7 @@ onMounted(async () => {
     // "Disponibles" de la App de Campo) — necesitan la misma cuadrilla/lock
     // que ya tenian los tickets libres (Fase 98), sin el resto de carga
     // propia de una averia (equipos, infra NAP).
-    await loadAssignees();
+    await Promise.all([loadAssignees(), loadInstallEquipos()]);
   }
   await restoreDraft();
 });
@@ -527,6 +527,148 @@ async function handleRemoveMaterial(m: InventoryMovement) {
   }
 }
 
+// ---- Kit base de materiales para Altas (Fase 123) — mismo "plantilla de
+// materiales" que ya existia en el Panel Web (InstalacionDetailView.vue),
+// ahora tambien desde la App de Campo. El Cable Drop no se vende por metro
+// suelto: son cables ya armados de largo fijo (drop 50/100/150/220/300m,
+// cada largo su propio producto en Inventario) — por eso, igual que en el
+// Panel Web, se elige CUAL largo se uso en vez de escribir metros libres.
+interface KitLine {
+  key: string;
+  label: string;
+  match: RegExp;
+  defaultQty: number;
+}
+const KIT_ALTA: KitLine[] = [
+  { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 1 },
+  { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 1 },
+  { key: 'conector', label: 'Conectores Ópticos', match: /conector/i, defaultQty: 2 },
+  { key: 'drop', label: 'Cable Drop', match: /drop/i, defaultQty: 0 },
+];
+// "Cliente vuelve / Reconexión": conserva la acometida ya tendida — no tiene
+// sentido descontar Drop ni Roseta de nuevo.
+const kitReconexion = ref(false);
+const kitProductChoice = ref<Record<string, string>>({});
+const kitQuantities = ref<Record<string, number>>({});
+const ferreteriaProducts = computed(() => inventoryStore.products.filter((p) => p.is_active && p.inventory_categories?.slug === 'ferreteria'));
+const kitRows = computed(() =>
+  KIT_ALTA.map((line) => {
+    const matches = ferreteriaProducts.value.filter((p) => line.match.test(p.name));
+    const chosenId = matches.length > 1 ? kitProductChoice.value[line.key] : matches[0]?.id;
+    const excluded = kitReconexion.value && (line.key === 'drop' || line.key === 'roseta');
+    return { ...line, matches, product: matches.find((p) => p.id === chosenId) ?? null, excluded };
+  }),
+);
+function resetKitQuantities() {
+  kitQuantities.value = Object.fromEntries(KIT_ALTA.map((l) => [l.key, l.defaultQty]));
+  kitProductChoice.value = {};
+}
+resetKitQuantities();
+const savingKit = ref(false);
+const kitError = ref<string | null>(null);
+
+async function handleRegisterKit() {
+  const rows = kitRows.value.filter((row) => !row.excluded && (kitQuantities.value[row.key] ?? 0) > 0 && row.product);
+  if (!rows.length) {
+    toast.info('No hay cantidades para registrar — escribe lo que usaste en cada material.');
+    return;
+  }
+  savingKit.value = true;
+  kitError.value = null;
+  const failures: string[] = [];
+  for (const row of rows) {
+    try {
+      await inventoryStore.registerUsage({
+        productId: row.product!.id,
+        quantity: kitQuantities.value[row.key] ?? 0,
+        installationId: jobId,
+        reason: `App de Campo — ${trabajo.value?.clienteNombre ?? jobId} — kit base`,
+      });
+    } catch (e) {
+      failures.push(`${row.label}: ${getErrorMessage(e)}`);
+    }
+  }
+  await loadMaterials();
+  resetKitQuantities();
+  if (failures.length) toast.error(`No se pudo registrar: ${failures.join(' · ')}`);
+  else toast.success('Kit base registrado.');
+  kitError.value = failures.length ? failures.join(' · ') : null;
+  savingKit.value = false;
+}
+
+// ---- Equipos por serie/MAC para Altas (Fase 123) — mismo flujo que ya
+// existia en el Panel Web: el tecnico elige el producto (Modem/ONT, TV Box,
+// Mesh) y luego la serie/MAC exacta de lo disponible en bodega
+// (status='in_stock', bodega central compartida — no hay stock personal por
+// tecnico). Asignar queda vinculado de inmediato al cliente/contrato/orden
+// (inventoryUnitsStore.assignUnit ya pone status='assigned'), igual que en
+// el Panel Web — no se espera al cierre de la orden.
+const installEquipmentUnits = ref<InventoryUnit[]>([]);
+const loadingInstallEquipment = ref(false);
+const installUnitForm = ref({ productId: '', unitId: '' });
+const installAvailableUnits = ref<InventoryUnit[]>([]);
+const loadingInstallAvailableUnits = ref(false);
+const savingInstallUnit = ref(false);
+const installUnitError = ref<string | null>(null);
+const removingInstallUnitId = ref<string | null>(null);
+
+async function loadInstallEquipos() {
+  if (jobType !== 'installation') return;
+  loadingInstallEquipment.value = true;
+  try {
+    installEquipmentUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(jobId);
+  } finally {
+    loadingInstallEquipment.value = false;
+  }
+}
+
+async function onInstallUnitProductChange() {
+  installUnitForm.value.unitId = '';
+  installAvailableUnits.value = [];
+  if (!installUnitForm.value.productId) return;
+  loadingInstallAvailableUnits.value = true;
+  try {
+    const units = await inventoryUnitsStore.fetchUnitsByProduct(installUnitForm.value.productId);
+    installAvailableUnits.value = units.filter((u) => u.status === 'in_stock');
+  } finally {
+    loadingInstallAvailableUnits.value = false;
+  }
+}
+
+async function handleAssignInstallUnit() {
+  if (!trabajo.value?.clientId || !installUnitForm.value.unitId) return;
+  savingInstallUnit.value = true;
+  installUnitError.value = null;
+  try {
+    await inventoryUnitsStore.assignUnit(installUnitForm.value.unitId, trabajo.value.clientId, {
+      installationId: jobId,
+      contractId: trabajo.value.contractId ?? undefined,
+      reason: `App de Campo — ${trabajo.value.clienteNombre}`,
+    });
+    installEquipmentUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(jobId);
+    await onInstallUnitProductChange();
+  } catch (e) {
+    installUnitError.value = getErrorMessage(e, 'Error al asignar el equipo');
+  } finally {
+    savingInstallUnit.value = false;
+  }
+}
+
+async function handleUnassignInstallUnit(unit: InventoryUnit) {
+  if (!confirm(`¿Quitar "${unit.product?.name ?? 'este equipo'}" de la instalación? Vuelve a bodega disponible.`)) return;
+  removingInstallUnitId.value = unit.id;
+  installUnitError.value = null;
+  try {
+    await inventoryUnitsStore.markRepaired(unit.id, 'Corrección en campo: equipo incorrecto retirado de la instalación');
+    installEquipmentUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(jobId);
+    await onInstallUnitProductChange();
+  } catch (e) {
+    installUnitError.value = getErrorMessage(e, 'Error al quitar el equipo');
+  } finally {
+    removingInstallUnitId.value = null;
+  }
+}
+
 // ---- Registro / Cambio de equipos (Fase 95, solo averias) ----
 // "Saliente" se libera de inmediato (ya salio fisicamente de la casa). El
 // "entrante" NO queda oficialmente asignado al cliente todavia — se guarda
@@ -698,6 +840,14 @@ function setupRealtimeSync() {
     channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_units', filter: `ticket_id=eq.${jobId}` }, () => {
       loadEquipos();
     });
+  } else if (jobType === 'installation') {
+    channel = channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'inventory_units', filter: `installation_id=eq.${jobId}` },
+      () => {
+        loadInstallEquipos();
+      },
+    );
   }
   realtimeChannel = channel.subscribe();
 }
@@ -1616,6 +1766,43 @@ async function handleCloseSubmit() {
       </section>
 
       <template v-else-if="!isUnassignedTicket">
+        <!-- Kit base de materiales (Fase 123, solo Altas) — Averias arranca
+             sin nada precargado a proposito (el tecnico agrega solo lo que
+             de verdad uso, ver "Materiales usados" mas abajo). -->
+        <section v-if="jobType === 'installation'" class="surface p-3.5 mb-3">
+          <h2 class="text-sm font-semibold mb-1">📦 Kit base de instalación</h2>
+          <label class="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-2 mb-3">
+            <input type="checkbox" v-model="kitReconexion" />
+            Cliente vuelve / Reconexión (conserva acometida — no descuenta Drop ni Roseta)
+          </label>
+          <div class="divide-y divide-slate-100">
+            <div v-for="row in kitRows" :key="row.key" class="py-2 first:pt-0 last:pb-0" :class="row.excluded ? 'opacity-40' : ''">
+              <div class="flex items-center gap-2">
+                <span class="flex-1 text-xs text-slate-700">{{ row.label }}</span>
+              </div>
+              <template v-if="!row.excluded">
+                <select v-if="row.matches.length > 1" v-model="kitProductChoice[row.key]" class="field-input w-full py-1 text-xs mt-1.5">
+                  <option value="">Selecciona la medida usada...</option>
+                  <option v-for="p in row.matches" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+                <div v-if="row.product" class="flex items-center gap-2 mt-1.5">
+                  <span class="flex-1 text-[11px] text-slate-400">Cantidad</span>
+                  <input v-model.number="kitQuantities[row.key]" type="number" min="0" step="1" class="field-input w-20 py-1 text-xs" />
+                  <span class="text-[11px] text-slate-400 w-16">{{ row.product.unit }}</span>
+                </div>
+                <p v-else-if="!row.matches.length" class="text-[11px] text-amber-700 mt-1">Falta crear "{{ row.label }}" en Inventario.</p>
+              </template>
+              <p v-else class="text-[11px] text-slate-400 mt-1">Excluido (reconexión).</p>
+            </div>
+          </div>
+          <div class="flex justify-end mt-3">
+            <button type="button" :disabled="savingKit" class="btn-secondary text-xs" @click="handleRegisterKit">
+              {{ savingKit ? 'Registrando...' : 'Registrar kit base' }}
+            </button>
+          </div>
+          <p v-if="kitError" class="text-xs text-red-600 mt-2">{{ kitError }}</p>
+        </section>
+
         <!-- Rutinas V1 no registra materiales/equipos (Fase 101) — alcance
              recortado a proposito, ver migracion. -->
         <section v-if="jobType !== 'routine'" class="surface p-3.5 mb-3">
@@ -1672,6 +1859,53 @@ async function handleCloseSubmit() {
             <button type="submit" :disabled="savingMaterial" class="btn-secondary text-xs shrink-0">+</button>
           </form>
           <p v-if="materialError" class="text-xs text-red-600 mt-1.5">{{ materialError }}</p>
+        </section>
+
+        <!-- Equipos por serie/MAC (Fase 123, Altas) — mismo stock de bodega
+             central que ya se usa desde el Panel Web (status='in_stock'),
+             no hay un stock personal por tecnico. -->
+        <section v-if="jobType === 'installation'" class="surface p-3.5 mb-3">
+          <h2 class="text-sm font-semibold mb-2">🔧 Equipos asignados (serie/MAC)</h2>
+          <p v-if="loadingInstallEquipment" class="text-xs text-slate-400">Cargando...</p>
+          <template v-else>
+            <ul v-if="installEquipmentUnits.length" class="space-y-1.5 mb-3 text-xs">
+              <li v-for="u in installEquipmentUnits" :key="u.id" class="flex items-center justify-between gap-2">
+                <span class="flex-1 min-w-0 truncate">{{ u.product?.name ?? 'Equipo' }} — {{ u.serial_number || u.mac_address }}</span>
+                <button
+                  type="button"
+                  :disabled="removingInstallUnitId === u.id"
+                  class="shrink-0 text-red-500/80 hover:text-red-600"
+                  @click="handleUnassignInstallUnit(u)"
+                >
+                  {{ removingInstallUnitId === u.id ? 'Quitando...' : 'Quitar' }}
+                </button>
+              </li>
+            </ul>
+            <p v-else class="text-xs text-amber-600 mb-3">Sin equipos asignados a esta instalación todavía.</p>
+
+            <form class="space-y-1.5" @submit.prevent="handleAssignInstallUnit">
+              <select v-model="installUnitForm.productId" required class="field-input text-sm" @change="onInstallUnitProductChange">
+                <option value="" disabled>Producto (Modem/ONT, TV Box, Mesh)...</option>
+                <option v-for="p in inventoryStore.products.filter((p) => p.is_serialized)" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+              <select
+                v-model="installUnitForm.unitId"
+                required
+                class="field-input text-sm"
+                :disabled="!installUnitForm.productId || loadingInstallAvailableUnits"
+              >
+                <option value="" disabled>{{ loadingInstallAvailableUnits ? 'Cargando...' : 'Selecciona la serie/MAC...' }}</option>
+                <option v-for="u in installAvailableUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
+              </select>
+              <p v-if="installUnitForm.productId && !loadingInstallAvailableUnits && !installAvailableUnits.length" class="text-[11px] text-amber-700">
+                Sin unidades disponibles en bodega para este producto.
+              </p>
+              <button type="submit" :disabled="savingInstallUnit || !installUnitForm.unitId" class="btn-secondary text-xs w-full">
+                {{ savingInstallUnit ? 'Asignando...' : '+ Asignar equipo' }}
+              </button>
+            </form>
+            <p v-if="installUnitError" class="text-xs text-red-600 mt-2">{{ installUnitError }}</p>
+          </template>
         </section>
 
         <!-- Registro / Cambio de equipos (averias) -->

@@ -403,6 +403,17 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
 - "Operaciones de Hoy" y "Histórico de Atendidos": el clic en una fila de Alta ahora abre esta
   página de detalle directo, en vez de caer al listado filtrado por nombre.
 
+### App de Campo — Kit base de materiales y equipos por serie en Altas
+- Nueva sección "📦 Kit base de instalación" (solo Altas, arriba de "Materiales usados"): Patchcord
+  (1), Roseta Óptica (1), Conectores Ópticos (2) y Cable Drop (elige el largo exacto — 50/100/150/
+  220/300m son productos distintos en Inventario, no un campo de metros libres), con un botón
+  "Registrar kit base". Checkbox "Cliente vuelve / Reconexión" atenúa (opacidad 40%) y excluye
+  Drop y Roseta del registro.
+- Nueva sección "🔧 Equipos asignados (serie/MAC)" (solo Altas, debajo de "Materiales usados"):
+  selector de producto (Modem/ONT, TV Box, Mesh) + serie/MAC exacta disponible en bodega — mismo
+  flujo que ya existía en el Panel Web, ahora también desde el celular del técnico.
+- Averías sigue arrancando sin nada precargado (sin cambios).
+
 ---
 
 ## Cómo se sigue actualizando este archivo
