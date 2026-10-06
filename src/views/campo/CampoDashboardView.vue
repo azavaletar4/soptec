@@ -5,12 +5,19 @@ import CampoLayout from '@/components/campo/CampoLayout.vue';
 import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
 import { useCampoStore, type TrabajoEstadoUi, type TrabajoItem } from '@/stores/campo';
 import { useAuthStore } from '@/stores/auth';
+import { useTicketsStore } from '@/stores/tickets';
+import { useConfirm } from '@/composables/useConfirm';
+import { useToast } from '@/composables/useToast';
+import { getErrorMessage } from '@/lib/errors';
 import { telLink, waLink } from '@/lib/phone';
 import type { Ticket } from '@/types/domain';
 
 const router = useRouter();
 const campoStore = useCampoStore();
 const auth = useAuthStore();
+const ticketsStore = useTicketsStore();
+const { confirmDialog } = useConfirm();
+const toast = useToast();
 
 // 'disponible' (Fase 98) no es un estado de TrabajoEstadoUi — es una lista
 // aparte (tickets 'open' sin tecnico, campoStore.availableTickets), solo
@@ -81,6 +88,58 @@ function openTrabajo(t: TrabajoItem) {
   router.push(`/campo/${t.jobType}/${t.id}`);
 }
 
+// Botón de acción primario de la tarjeta: "Iniciar Orden" solo aplica a un
+// ticket YA asignado al técnico (no a "Disponibles", donde primero hay que
+// "Tomar" la orden desde el detalle, Fase 98) y todavía no en curso —
+// 'open' (recien asignado por despacho) o 'rescheduled' (Cliente Ausente,
+// Fase 102, ya llegó la fecha). Dispara la misma transición que el botón
+// "Iniciar orden" del escritorio (OperacionesHoyView.vue): status='in_progress',
+// lo que a su vez hace que TechnicianStatusBar.vue (barra de "Técnicos
+// Activos") lo muestre como "En atención" vía la suscripción Realtime de
+// tickets.ts.
+const startingId = ref<string | null>(null);
+function canStartTicket(t: TrabajoItem): boolean {
+  if (t.jobType !== 'ticket' || activeTab.value === 'disponible') return false;
+  const status = (t.raw as Ticket).status;
+  return status === 'open' || status === 'rescheduled';
+}
+function isTicketInProgress(t: TrabajoItem): boolean {
+  return t.jobType === 'ticket' && activeTab.value !== 'disponible' && (t.raw as Ticket).status === 'in_progress';
+}
+
+async function startTicket(t: TrabajoItem): Promise<boolean> {
+  startingId.value = t.id;
+  try {
+    await ticketsStore.updateTicketStatus(t.id, 'in_progress');
+    return true;
+  } catch (e) {
+    toast.error(getErrorMessage(e, 'No se pudo iniciar la orden'));
+    return false;
+  } finally {
+    startingId.value = null;
+  }
+}
+
+async function handleStartClick(t: TrabajoItem) {
+  if (await startTicket(t)) openTrabajo(t);
+}
+
+async function handleCardClick(t: TrabajoItem) {
+  if (canStartTicket(t)) {
+    const ok = await confirmDialog({
+      title: 'Iniciar atención',
+      message: '¿Deseas iniciar la atención de esta orden?',
+      confirmLabel: 'Sí, iniciar',
+      cancelLabel: 'Cancelar',
+    });
+    if (ok) {
+      if (await startTicket(t)) openTrabajo(t);
+      return;
+    }
+  }
+  openTrabajo(t);
+}
+
 function formatFecha(value: string | null) {
   if (!value) return '—';
   const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
@@ -119,7 +178,7 @@ onMounted(() => {
         :key="`${t.jobType}-${t.id}`"
         class="surface p-3.5 active:scale-[0.99] transition-transform"
         :class="isDueReschedule(t) ? 'ring-2 ring-red-500' : ''"
-        @click="openTrabajo(t)"
+        @click="handleCardClick(t)"
       >
         <p v-if="isDueReschedule(t)" class="text-[11px] font-bold text-red-600 mb-1.5">🔴 REPROGRAMADO - ATENDER PRIMERO</p>
         <div class="flex items-start justify-between gap-2 mb-1.5">
@@ -140,6 +199,24 @@ onMounted(() => {
         </div>
         <p class="font-semibold text-sm text-slate-900">{{ t.clienteNombre }}</p>
         <p v-if="t.direccion" class="text-xs text-slate-500 mt-0.5">{{ t.direccion }}</p>
+
+        <div v-if="canStartTicket(t) || isTicketInProgress(t)" class="mt-3" @click.stop>
+          <button
+            v-if="canStartTicket(t)"
+            class="w-full py-2.5 rounded-lg bg-sky-500 text-slate-950 text-xs font-bold"
+            :disabled="startingId === t.id"
+            @click="handleStartClick(t)"
+          >
+            {{ startingId === t.id ? 'Iniciando...' : '🚀 Iniciar Orden' }}
+          </button>
+          <button
+            v-else
+            class="w-full py-2.5 rounded-lg bg-amber-500/15 text-amber-700 text-xs font-bold"
+            @click="openTrabajo(t)"
+          >
+            🛠️ En Atención · Abrir Formulario
+          </button>
+        </div>
 
         <div class="flex items-center gap-2 mt-3" @click.stop>
           <a

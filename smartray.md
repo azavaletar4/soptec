@@ -414,6 +414,19 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   flujo que ya existía en el Panel Web, ahora también desde el celular del técnico.
 - Averías sigue arrancando sin nada precargado (sin cambios).
 
+### App de Campo — botón "Iniciar Orden" en "Mis Pendientes de Hoy"
+- Cada tarjeta de avería asignada (pestaña "🙋 Mis Pendientes de Hoy", fuera de "Disponibles")
+  ahora muestra un botón primario de ancho completo debajo del nombre/dirección del cliente:
+  "🚀 Iniciar Orden" (fondo `bg-sky-500`, texto `text-slate-950`) cuando el ticket está `open` o
+  `rescheduled` (Cliente Ausente ya vencido), o "🛠️ En Atención · Abrir Formulario" (fondo
+  `bg-amber-500/15`, texto `text-amber-700`) cuando ya está `in_progress`.
+- Tocar "🚀 Iniciar Orden" pasa el ticket a `status='in_progress'` en Supabase y navega directo al
+  detalle (formulario de cierre). Tocar cualquier otra parte de la tarjeta (sin iniciar aún)
+  pregunta primero "¿Deseas iniciar la atención de esta orden?" antes de abrir el detalle.
+- La barra "Técnicos Activos" del Panel Web (`TechnicianStatusBar.vue`, en "Operaciones de Hoy")
+  ahora se actualiza sola en vivo cuando esto pasa — antes solo se enteraba al volver a entrar a la
+  pantalla; se agregó una suscripción Supabase Realtime a la tabla `tickets` (`tickets.ts`).
+
 ---
 
 ## Cómo se sigue actualizando este archivo
@@ -422,3 +435,4 @@ Cada vez que se aplique un cambio visual nuevo (color, layout, componente, texto
 ícono), se agrega una entrada bajo la fecha correspondiente (nueva sección `## AAAA-MM-DD` si es
 un día distinto al último registrado), con el mismo nivel de detalle que arriba: qué pantalla,
 qué cambió exactamente, y los valores de color/clase relevantes si aplica.
+

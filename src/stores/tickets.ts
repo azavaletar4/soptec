@@ -12,6 +12,8 @@ export const useTicketsStore = defineStore('tickets', () => {
   const tickets = ref<Ticket[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+  let realtimeSubscribers = 0;
 
   async function fetchTickets() {
     loading.value = true;
@@ -131,6 +133,35 @@ export const useTicketsStore = defineStore('tickets', () => {
     return data as unknown as TicketComment;
   }
 
+  /**
+   * Sincroniza en vivo cambios de estado hechos desde OTRO cliente (p.ej. un
+   * tecnico que pulsa "Iniciar Orden" en la App de Campo) — sin esto, la
+   * barra de "Técnicos Activos" (TechnicianStatusBar.vue) solo se enteraba al
+   * volver a entrar a la pantalla, no mientras el despachador la tiene abierta.
+   * Contador de referencias igual que subscribeToStaffTelemetry (catalogs.ts):
+   * varias vistas pueden montarse a la vez sin pisarse el canal.
+   */
+  function subscribeToRealtime() {
+    realtimeSubscribers += 1;
+    if (realtimeChannel) return;
+    realtimeChannel = supabase
+      .channel('tickets-realtime')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tickets' }, (payload) => {
+        const updated = payload.new as Partial<Ticket> & { id: string };
+        const idx = tickets.value.findIndex((t) => t.id === updated.id);
+        if (idx !== -1) tickets.value[idx] = { ...tickets.value[idx], ...updated };
+      })
+      .subscribe();
+  }
+
+  function unsubscribeFromRealtime() {
+    realtimeSubscribers = Math.max(0, realtimeSubscribers - 1);
+    if (realtimeSubscribers === 0 && realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+  }
+
   return {
     tickets,
     loading,
@@ -145,5 +176,7 @@ export const useTicketsStore = defineStore('tickets', () => {
     updateTicketPriority,
     fetchComments,
     addComment,
+    subscribeToRealtime,
+    unsubscribeFromRealtime,
   };
 });
