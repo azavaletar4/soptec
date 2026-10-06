@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import TicketFlowGuide from '@/components/soporte/TicketFlowGuide.vue';
 import TechnicianStatusBar from '@/components/soporte/TechnicianStatusBar.vue';
-import DateRangeFilter, { type DateRange, type DateRangePreset } from '@/components/soporte/DateRangeFilter.vue';
+import SoporteTabs from '@/components/soporte/SoporteTabs.vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useInstallationsStore } from '@/stores/installations';
 import { useRoutinesStore } from '@/stores/routines';
@@ -89,13 +89,6 @@ const formError = ref<string | null>(null);
 const clientFilter = ref('');
 const typeFilter = ref<JobType | 'all'>('all');
 const searchQuery = ref('');
-const dateRange = ref<DateRange | null>(null);
-// Fase 107: a diferencia de Instalaciones/Rutinas/Agenda (donde "Hoy" es el
-// default util porque mezclan activo+resuelto), aca el default NO filtra
-// por fecha — el objetivo de esta bandeja es mostrar TODO lo activo sin
-// importar cuando se creo/agendo, para no esconder una averia vieja que
-// sigue abierta (ver plan Fase 107). El usuario puede acotar manualmente.
-const datePreset = ref<DateRangePreset>('todos');
 
 // Filtro por tecnico desde TechnicianStatusBar (Fase 111): un clic en una
 // tarjeta filtra+resalta abajo. techFilterTicketId es el ticket puntual a
@@ -205,25 +198,6 @@ const filteredJobs = computed(() => {
   if (techFilterId.value) list = list.filter((j) => j.assignedId === techFilterId.value);
   if (typeFilter.value !== 'all') list = list.filter((j) => j.jobType === typeFilter.value);
   const q = searchQuery.value.trim().toLowerCase();
-  // Buscar por texto consulta TODA la base, ignorando el rango de fecha
-  // activo (Hoy/Esta semana/Este mes) — si el usuario ya escribio un
-  // nombre/numero puntual, quiere ESE registro sin importar cuando cayo.
-  if (dateRange.value && !q) {
-    const { start, end } = dateRange.value;
-    list = list.filter((j) => {
-      // Un reprogramado se filtra por SU fecha de reprogramacion, no por
-      // cuando se creo originalmente.
-      const t = j.jobType === 'ticket' ? (j.raw as Ticket) : null;
-      const relevant =
-        t?.status === 'rescheduled' && t.rescheduled_to
-          ? new Date(t.rescheduled_to)
-          : j.scheduledStartAt
-            ? new Date(j.scheduledStartAt)
-            : new Date(`${j.fallbackDate}T12:00:00`);
-      const time = relevant.getTime();
-      return time >= start.getTime() && time <= end.getTime();
-    });
-  }
   if (q) list = list.filter((j) => `${j.label} ${j.number ?? ''}`.toLowerCase().includes(q));
   return [...list].sort((a, b) => {
     const dueDiff = Number(isDueReschedule(b, now.value)) - Number(isDueReschedule(a, now.value));
@@ -387,15 +361,14 @@ function formatDate(value: string) {
 
 <template>
   <AppLayout>
+    <SoporteTabs />
+
     <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">📋 Operaciones de Hoy</h1>
         <p class="text-slate-600 text-sm mt-1">
           {{ filteredJobs.length }} {{ techFilterId && !techFilterTicketId ? 'órdenes de hoy' : 'órdenes activas' }} — Averías, Altas y Rutinas
         </p>
-        <button class="text-xs text-sky-700 hover:underline mt-1" @click="router.push('/soporte/historico')">
-          📁 Histórico de Atendidos →
-        </button>
       </div>
       <div class="flex flex-wrap gap-2">
         <button v-if="canOpenCampo" class="btn-ghost" @click="router.push('/campo')">📱 App de Campo</button>
@@ -441,7 +414,6 @@ function formatDate(value: string) {
           </button>
         </div>
       </div>
-      <DateRangeFilter v-model:preset="datePreset" show-all-option @change="dateRange = $event" />
     </div>
 
     <p v-if="ticketsStore.error" class="mb-4 text-sm text-red-600">{{ ticketsStore.error }}</p>

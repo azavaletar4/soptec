@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import SoporteTabs from '@/components/soporte/SoporteTabs.vue';
 import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
 import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
 import { useTicketsStore } from '@/stores/tickets';
@@ -184,6 +185,8 @@ async function openEvidencias(job: UnifiedJob) {
 
 <template>
   <AppLayout>
+    <SoporteTabs />
+
     <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
         <h1 class="text-2xl font-semibold">📁 Histórico de Atendidos</h1>
@@ -191,7 +194,6 @@ async function openEvidencias(job: UnifiedJob) {
       </div>
       <div class="flex items-center gap-2">
         <button class="btn-secondary text-sm" :disabled="!filteredJobs.length" @click="exportCsv">⬇️ Exportar a CSV</button>
-        <button class="btn-ghost" @click="router.push('/soporte')">← Volver a Operaciones de Hoy</button>
       </div>
     </div>
 
