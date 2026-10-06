@@ -70,13 +70,17 @@ const jobId = route.params.id as string;
 // ante el sistema matando el proceso, ver seccion de "Borrador local" abajo).
 const draftKey = `${jobType}_${jobId}`;
 
-// Fase 98: un ticket 'open' sin tecnico asignado vive en
-// campoStore.availableTickets, no en trabajos (que solo trae lo del propio
-// tecnico) — hay que buscar en ambos para poder abrir su detalle y "tomarlo".
+// Fase 98/118: una orden sin tecnico asignado vive en campoStore.available*
+// (tickets/installations/routines), no en trabajos (que solo trae lo del
+// propio tecnico) — hay que buscar en los 4 para poder abrir su detalle y
+// "tomarla". Sin esto, abrir una Alta/Rutina libre desde "Disponibles" se
+// quedaba en "Cargando trabajo..." para siempre (trabajo nunca resolvia).
 const trabajo = computed(
   () =>
     campoStore.trabajos.find((t) => t.jobType === jobType && t.id === jobId) ??
-    campoStore.availableTickets.find((t) => t.jobType === jobType && t.id === jobId),
+    campoStore.availableTickets.find((t) => t.jobType === jobType && t.id === jobId) ??
+    campoStore.availableInstallations.find((t) => t.jobType === jobType && t.id === jobId) ??
+    campoStore.availableRoutines.find((t) => t.jobType === jobType && t.id === jobId),
 );
 
 // Una instalacion 'completed' (o una rutina 'completed'/'cancelled', Fase
