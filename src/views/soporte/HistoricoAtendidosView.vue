@@ -51,7 +51,11 @@ const filteredJobs = computed(() => {
   let list = finishedJobs.value;
   if (typeFilter.value !== 'all') list = list.filter((j) => j.jobType === typeFilter.value);
   if (technicianFilter.value !== 'all') list = list.filter((j) => j.assignedId === technicianFilter.value);
-  if (dateRange.value) {
+  const q = searchQuery.value.trim().toLowerCase();
+  // Buscar por texto consulta TODA la base, ignorando el rango de fecha
+  // activo (el default de esta vista es "Hoy" — sin esto, buscar un cliente
+  // atendido ayer no aparecia hasta cambiar manualmente a "Este mes").
+  if (dateRange.value && !q) {
     const { start, end } = dateRange.value;
     list = list.filter((j) => {
       const relevant = j.finishedAt ? new Date(j.finishedAt) : new Date(`${j.fallbackDate}T12:00:00`);
@@ -59,7 +63,6 @@ const filteredJobs = computed(() => {
       return time >= start.getTime() && time <= end.getTime();
     });
   }
-  const q = searchQuery.value.trim().toLowerCase();
   if (q) list = list.filter((j) => `${j.label} ${j.number ?? ''}`.toLowerCase().includes(q));
   return [...list].sort((a, b) => {
     const aTime = a.finishedAt ? new Date(a.finishedAt).getTime() : new Date(a.createdAt).getTime();

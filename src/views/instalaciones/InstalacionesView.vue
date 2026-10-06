@@ -149,7 +149,12 @@ const STATUS_SORT_TIER: Record<InstallationStatus, number> = {
 const filteredInstallations = computed(() => {
   let list = installationsStore.installations;
   if (statusFilter.value !== 'all') list = list.filter((i) => i.status === statusFilter.value);
-  if (dateRange.value) {
+  const q = searchQuery.value.trim().toLowerCase();
+  // Buscar por nombre/contrato consulta TODA la base, no solo el rango de
+  // fecha activo — si hay texto en el buscador, el filtro de fecha se
+  // ignora (el usuario quiere ESE registro, sin tener que acordarse en que
+  // rango cae para verlo).
+  if (dateRange.value && !q) {
     const { start, end } = dateRange.value;
     list = list.filter((i) => {
       const ref = i.scheduled_date ? new Date(`${i.scheduled_date}T12:00:00`) : new Date(i.created_at);
@@ -157,7 +162,6 @@ const filteredInstallations = computed(() => {
       return t >= start.getTime() && t <= end.getTime();
     });
   }
-  const q = searchQuery.value.trim().toLowerCase();
   if (q) {
     list = list.filter((i) =>
       `${i.clients?.first_name ?? ''} ${i.clients?.last_name ?? ''} ${i.contracts?.contract_number ?? ''}`
@@ -578,12 +582,43 @@ function openCrewModal(inst: Installation) {
 // Completar (con GPS/fotos)/Cancelar, no este selector libre.
 const canEditStatus = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
+// Reabrir una instalacion ya completada (Fase 112): NINGUN trigger de BD
+// borra/limpia equipos o materiales al bajar el estado — reverse_inventory_*
+// (Fase 59) solo revierte al ELIMINAR o CANCELAR, nunca al volver a
+// pending/scheduled — pero igual se pide confirmacion explicita porque es
+// una correccion administrativa poco comun y facil de tocar por error desde
+// el selector libre.
+const showReopenConfirm = ref(false);
+const reopenTarget = ref<{ inst: Installation; status: InstallationStatus } | null>(null);
+
 async function handleStatusChange(inst: Installation, status: InstallationStatus) {
+  if (inst.status === 'completed' && (status === 'pending' || status === 'scheduled')) {
+    reopenTarget.value = { inst, status };
+    showReopenConfirm.value = true;
+    return;
+  }
+  await applyStatusChange(inst, status);
+}
+
+async function applyStatusChange(inst: Installation, status: InstallationStatus) {
   try {
     await installationsStore.updateStatus(inst.id, status);
   } catch (e) {
     alert(getErrorMessage(e, 'Error al cambiar el estado'));
   }
+}
+
+async function confirmReopen() {
+  if (!reopenTarget.value) return;
+  const { inst, status } = reopenTarget.value;
+  showReopenConfirm.value = false;
+  reopenTarget.value = null;
+  await applyStatusChange(inst, status);
+}
+
+function cancelReopen() {
+  showReopenConfirm.value = false;
+  reopenTarget.value = null;
 }
 
 // Prioridad (Fase 108): es una decision de despacho, igual que en Tickets
@@ -1322,6 +1357,20 @@ function formatDate(value: string | null) {
           />
           <div class="flex justify-end mt-4">
             <button class="btn-ghost" @click="showCrewModal = false">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showReopenConfirm" class="modal-overlay" @click.self="cancelReopen">
+        <div class="w-full max-w-sm modal-panel">
+          <p class="text-sm mb-4">
+            ⚠️ ¿Estás seguro de reabrir esta orden? Se mantendrán guardados los equipos y materiales previamente asignados.
+          </p>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="cancelReopen">Cancelar</button>
+            <button type="button" class="btn-primary" @click="confirmReopen">Sí, reabrir</button>
           </div>
         </div>
       </div>

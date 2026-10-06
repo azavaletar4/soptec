@@ -277,7 +277,26 @@ onMounted(async () => {
   await loadEquipmentPhotos();
 });
 
+// Reabrir un ticket ya resuelto/cerrado (Fase 112): ningun trigger de BD
+// borra/limpia materiales ni equipos al bajar el estado (solo se devuelven
+// al ELIMINAR el ticket, ver reverse_inventory_on_ticket_delete en Fase 59)
+// — pero igual se pide confirmacion explicita antes, porque es una
+// correccion administrativa poco comun desde un selector libre.
+const showReopenConfirm = ref(false);
+const reopenTargetStatus = ref<TicketStatus | null>(null);
+
 async function handleStatusChange(status: TicketStatus) {
+  if (!ticket.value) return;
+  const isReopening = (ticket.value.status === 'resolved' || ticket.value.status === 'closed') && (status === 'open' || status === 'in_progress');
+  if (isReopening) {
+    reopenTargetStatus.value = status;
+    showReopenConfirm.value = true;
+    return;
+  }
+  await applyStatusChange(status);
+}
+
+async function applyStatusChange(status: TicketStatus) {
   if (!ticket.value) return;
   if (status === 'closed' && auth.role === 'TECNICO_RED') {
     actionError.value = 'Solo admin/soporte puede cerrar un ticket.';
@@ -308,6 +327,19 @@ async function handleStatusChange(status: TicketStatus) {
   } finally {
     updating.value = false;
   }
+}
+
+async function confirmReopen() {
+  if (!reopenTargetStatus.value) return;
+  const status = reopenTargetStatus.value;
+  showReopenConfirm.value = false;
+  reopenTargetStatus.value = null;
+  await applyStatusChange(status);
+}
+
+function cancelReopen() {
+  showReopenConfirm.value = false;
+  reopenTargetStatus.value = null;
 }
 
 async function handleCloseAveriaSubmit() {
@@ -856,6 +888,20 @@ async function handleDelete() {
             </button>
           </div>
         </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showReopenConfirm" class="modal-overlay" @click.self="cancelReopen">
+        <div class="w-full max-w-sm modal-panel">
+          <p class="text-sm mb-4">
+            ⚠️ ¿Estás seguro de reabrir esta orden? Se mantendrán guardados los equipos y materiales previamente asignados.
+          </p>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="cancelReopen">Cancelar</button>
+            <button type="button" class="btn-primary" @click="confirmReopen">Sí, reabrir</button>
+          </div>
+        </div>
       </div>
     </Teleport>
 

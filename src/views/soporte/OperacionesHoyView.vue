@@ -204,7 +204,11 @@ const filteredJobs = computed(() => {
       : activeJobs.value;
   if (techFilterId.value) list = list.filter((j) => j.assignedId === techFilterId.value);
   if (typeFilter.value !== 'all') list = list.filter((j) => j.jobType === typeFilter.value);
-  if (dateRange.value) {
+  const q = searchQuery.value.trim().toLowerCase();
+  // Buscar por texto consulta TODA la base, ignorando el rango de fecha
+  // activo (Hoy/Esta semana/Este mes) — si el usuario ya escribio un
+  // nombre/numero puntual, quiere ESE registro sin importar cuando cayo.
+  if (dateRange.value && !q) {
     const { start, end } = dateRange.value;
     list = list.filter((j) => {
       // Un reprogramado se filtra por SU fecha de reprogramacion, no por
@@ -220,7 +224,6 @@ const filteredJobs = computed(() => {
       return time >= start.getTime() && time <= end.getTime();
     });
   }
-  const q = searchQuery.value.trim().toLowerCase();
   if (q) list = list.filter((j) => `${j.label} ${j.number ?? ''}`.toLowerCase().includes(q));
   return [...list].sort((a, b) => {
     const dueDiff = Number(isDueReschedule(b, now.value)) - Number(isDueReschedule(a, now.value));

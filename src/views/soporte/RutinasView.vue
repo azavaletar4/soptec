@@ -90,7 +90,10 @@ function targetLabel(r: Routine): string {
 const filteredRoutines = computed(() => {
   let list = routinesStore.routines;
   if (statusFilter.value !== 'all') list = list.filter((r) => r.status === statusFilter.value);
-  if (dateRange.value) {
+  const q = searchQuery.value.trim().toLowerCase();
+  // Buscar por texto consulta TODA la base, ignorando el rango de fecha
+  // activo (igual criterio que Instalaciones/Operaciones de Hoy/Historico).
+  if (dateRange.value && !q) {
     const { start, end } = dateRange.value;
     list = list.filter((r) => {
       const ref = r.scheduled_date ? new Date(`${r.scheduled_date}T12:00:00`) : new Date(r.created_at);
@@ -98,7 +101,6 @@ const filteredRoutines = computed(() => {
       return t >= start.getTime() && t <= end.getTime();
     });
   }
-  const q = searchQuery.value.trim().toLowerCase();
   if (q) {
     list = list.filter((r) => `${r.title} ${r.routine_number ?? ''} ${targetLabel(r)}`.toLowerCase().includes(q));
   }
