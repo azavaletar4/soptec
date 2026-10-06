@@ -379,6 +379,10 @@ async function syncXuiLineStatus(c: ServiceContract, previousStatus: ContractSta
 
 async function handleSaveContract() {
   if (!contract.value) return;
+  if (contractForm.value.billing_day < 1 || contractForm.value.billing_day > 31) {
+    contractError.value = 'El día de emisión debe estar entre 1 y 31';
+    return;
+  }
   if (contractForm.value.zone_id) {
     const count = zoneServiceCount(contractForm.value.zone_id, contract.value.id);
     if (count >= ZONE_CLIENT_LIMIT) {
@@ -1506,7 +1510,10 @@ onMounted(async () => {
           </div>
           <div>
             <label class="block text-xs text-slate-600 mb-1">Fecha de emisión (día del mes)</label>
-            <input v-model.number="contractForm.billing_day" type="number" min="1" max="28" required class="field-input" />
+            <input v-model.number="contractForm.billing_day" type="number" min="1" max="31" required class="field-input" />
+            <p class="text-[11px] text-slate-400 mt-1">
+              En meses más cortos (ej. febrero) se emite el último día del mes.
+            </p>
           </div>
         </div>
 

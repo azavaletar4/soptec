@@ -368,6 +368,11 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   derecha (default de Flutter) a la inferior izquierda. APK reconstruido y copiado a
   `C:\Users\USER\Desktop\SmartRayco.apk`.
 
+### Ficha del cliente — día de emisión hasta 31
+- "Nuevo servicio" (modal) y "Edición de servicio" (pestaña Datos del servicio): el campo "Fecha
+  de emisión (día del mes)" aceptaba máximo 28. Ahora acepta 1-31, con una nota debajo
+  ("En meses más cortos se emite el último día del mes") y mensaje propio si se sale de rango.
+
 ---
 
 ## Cómo se sigue actualizando este archivo

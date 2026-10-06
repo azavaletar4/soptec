@@ -18,17 +18,12 @@ function toIso(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function addMonthsIso(iso: string, months: number): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  return toIso(new Date(Date.UTC(y, m - 1 + months, d)));
-}
-
 function addDaysIso(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number);
   return toIso(new Date(Date.UTC(y, m - 1, d + days)));
 }
 
-/** billing_day dentro de year/month0 (0-indexado), con clamp al ultimo dia del mes. */
+/** billing_day dentro de year/month0 (0-indexado), con clamp al ultimo dia del mes (considera bisiestos solo). */
 function anchorDateForMonth(year: number, month0: number, billingDay: number): string {
   const daysInMonth = new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
   const day = Math.min(Math.max(billingDay, 1), daysInMonth);
@@ -39,6 +34,25 @@ function anchorDateForMonth(year: number, month0: number, billingDay: number): s
 function firstPeriodStartFor(billingDay: number): string {
   const now = new Date();
   return anchorDateForMonth(now.getUTCFullYear(), now.getUTCMonth(), billingDay);
+}
+
+/**
+ * Ancla del periodo SIGUIENTE a partir de uno ya anclado (mismo billing_day,
+ * un mes despues, clamped de nuevo al mes que corresponda) — Date.UTC
+ * normaliza solo el desborde de AÑO cuando month0+1 pasa de diciembre
+ * (comportamiento correcto/documentado), nunca el de dia-de-mes, que es
+ * justamente lo que anchorDateForMonth se encarga de evitar.
+ *
+ * Esto reemplaza a un addMonthsIso() anterior que sumaba un mes preservando
+ * el dia tal cual (Date.UTC(y, m, 31) en un mes de 30 dias se "desbordaba"
+ * al 1 o 2 del mes siguiente en vez de quedarse en ese mes) — invisible
+ * mientras billing_day estuvo topado en 28 (todos los meses tienen al menos
+ * 28 dias), pero corrompia los periodos de cualquier contrato con
+ * billing_day 29-31 apenas se permitiera guardarlo (Fase 119).
+ */
+function nextAnchorAfter(periodStartIso: string, billingDay: number): string {
+  const [y, m] = periodStartIso.split('-').map(Number); // m: mes 1-indexado de periodStart
+  return anchorDateForMonth(y, m, billingDay); // month0 objetivo = m (= mes de periodStart + 1)
 }
 
 /**
@@ -99,7 +113,8 @@ export async function generateDueInvoices(): Promise<GenerateDueResult> {
       let iterations = 0;
 
       while (periodStart <= today && iterations < MAX_PERIODS_PER_CONTRACT) {
-        const periodEnd = addDaysIso(addMonthsIso(periodStart, 1), -1);
+        const nextAnchor = nextAnchorAfter(periodStart, contract.billing_day);
+        const periodEnd = addDaysIso(nextAnchor, -1);
         const dueDate = dueDateForPeriod(periodStart);
 
         const { error: insErr } = await supabaseAdmin.from('invoices').insert({
@@ -116,7 +131,7 @@ export async function generateDueInvoices(): Promise<GenerateDueResult> {
 
         generated += 1;
         iterations += 1;
-        periodStart = addDaysIso(periodEnd, 1);
+        periodStart = nextAnchor;
       }
 
       if (iterations >= MAX_PERIODS_PER_CONTRACT) {
