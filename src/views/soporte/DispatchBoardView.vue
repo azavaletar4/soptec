@@ -126,11 +126,15 @@ function isFinalStatus(item: BoardItem): boolean {
 
 const dayItems = computed(() => items.value.filter(belongsToSelectedDate));
 const scheduledItems = computed(() => dayItems.value.filter((i) => i.scheduledStartAt && i.scheduledEndAt));
-// "Sin horario asignado" es estrictamente para trabajo TODAVIA por agendar —
-// una orden que ya se resolvio/cerro sin haber tenido hora no tiene sentido
-// seguir pidiendo que se agende, asi que se excluye (Fase 106).
+// "Sin horario asignado" es para trabajo que TODAVIA no tiene su fila en la
+// matriz (que es por tecnico): sin hora, o con hora pero sin tecnico (se
+// puede crear un ticket con turno reservado y el tecnico "Sin asignar" para
+// despues, ver OperacionesHoyView handleSubmit) — en ambos casos no cae en
+// ninguna fila y se perderia de vista si no quedara listado aca. Una orden
+// ya resuelta/cerrada sin haber tenido hora no tiene sentido seguir
+// pidiendo que se agende, asi que se excluye (Fase 106).
 const unscheduledItems = computed(() =>
-  dayItems.value.filter((i) => !(i.scheduledStartAt && i.scheduledEndAt) && !isFinalStatus(i)),
+  dayItems.value.filter((i) => !(i.scheduledStartAt && i.scheduledEndAt && i.assignedTo) && !isFinalStatus(i)),
 );
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));

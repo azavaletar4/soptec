@@ -312,6 +312,25 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   justificación, dBm, caja NAP, fotos del Censo/Cierre (con su miniatura) y la firma del cliente
   (se repinta como imagen fija sobre el lienzo).
 
+### Inventario — nuevo módulo "Activos y Herramientas"
+- Botón nuevo en la cabecera de Inventario (`🧰 Activos y Herramientas`) que lleva a
+  `/inventario/activos-fijos`, pantalla nueva con el mismo estilo que Flota vehicular.
+- 3 tarjetas de categoría clicables (filtran la tabla): **📱 Celulares Corporativos**, **🛠️
+  Herramientas de Campo**, **🥾 Indumentaria y EPP**.
+- Banner rojo arriba de la tabla cuando hay activos con vida útil agotada ("🔁 Elegible para
+  renovación por empresa"), mismo estilo que el aviso de vehículos urgentes.
+- Tabla con badge de **Estado** (Nuevo/En uso — Buen estado/En uso — Desgastado/Dañado-Reparación/
+  Dado de baja) y badge de **Vida útil** con semáforo rojo/ámbar/verde (`ALERTA_BADGE_CLASS`,
+  reutilizado de Flota) — en activos dañados o dados de baja muestra además "Repos. sugerida: S/
+  X.XX" (costo depreciado).
+- Modal de alta/edición con secciones "Datos del activo", "Asignación" y "Cargo de recepción"
+  (subida de PDF/foto del cargo firmado, mismo patrón que el SOAT de Flota).
+
+### Soporte — "Nuevo ticket": técnico ya no es obligatorio al reservar turno
+- El modal de creación de ticket ya no bloquea con "Elegiste un turno — selecciona también el
+  técnico" — se puede reservar fecha/turno dejando "Sin asignar" y asignar el técnico después. El
+  texto de ayuda bajo el selector de técnico se actualizó para explicarlo.
+
 ---
 
 ## Cómo se sigue actualizando este archivo

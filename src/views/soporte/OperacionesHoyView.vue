@@ -280,14 +280,14 @@ async function handleSubmit() {
     formError.value = 'Selecciona un cliente';
     return;
   }
-  // Fase 104: turno y tecnico van de la mano — un turno sin tecnico (o
-  // viceversa) dejaria la orden con hora pero invisible en el Cronograma
-  // (no cae en ninguna fila) o con tecnico pero sin hora (cae en "Sin
-  // horario" igual, asi que no tiene sentido pedir solo el tecnico aca).
-  if (form.value.schedule_turno && !form.value.schedule_tech_id) {
-    formError.value = 'Elegiste un turno — selecciona también el técnico para esa cita.';
-    return;
-  }
+  // Fase 104 (relajado luego): un turno SIN tecnico es valido — a veces se
+  // conoce la fecha/hora de la cita pero todavia no quien va a ir, y se
+  // asigna despues desde el Cronograma o el detalle del ticket. La orden
+  // queda con hora pero sin fila en la matriz del Cronograma (que es por
+  // tecnico) hasta que se le asigne alguien — DispatchBoardView la sigue
+  // mostrando en "Sin horario asignado" mientras tanto (ver unscheduledItems).
+  // Lo que si sigue sin sentido es un tecnico SIN turno (no hay cita que
+  // asignarle).
   if (form.value.schedule_tech_id && !form.value.schedule_turno) {
     formError.value = 'Asignaste un técnico — selecciona también el turno de la cita.';
     return;
@@ -636,7 +636,9 @@ function formatDate(value: string) {
               <option v-for="t in technicians" :key="t.id" :value="t.id">{{ t.full_name || t.email }}</option>
             </select>
             <p class="text-[11px] text-slate-400 mt-1">
-              Si eliges turno y técnico, el ticket aparece ya ubicado en el Cronograma de Campo.
+              Si eliges turno y técnico, el ticket aparece ya ubicado en el Cronograma de Campo. Si todavía no sabes
+              quién va a ir, deja "Sin asignar" — igual queda con la fecha/turno reservados y puedes asignar el
+              técnico después, desde el Cronograma o el detalle del ticket.
             </p>
           </div>
 

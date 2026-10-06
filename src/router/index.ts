@@ -198,6 +198,16 @@ const router = createRouter({
       },
     },
     {
+      path: '/inventario/activos-fijos',
+      name: 'inventario-activos-fijos',
+      component: () => import('@/views/inventario/ActivosFijosView.vue'),
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Activos y Herramientas' }],
+      },
+    },
+    {
       path: '/inventario/:id',
       name: 'inventario-detalle',
       component: () => import('@/views/inventario/InventarioProductoView.vue'),

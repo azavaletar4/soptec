@@ -35,6 +35,8 @@ export type VehiculoTipo = 'auto' | 'moto';
 export type VehiculoEstado = 'activo' | 'mantenimiento' | 'inactivo';
 export type MantenimientoTipo = 'preventivo' | 'correctivo';
 export type AlertaNivel = 'rojo' | 'amarillo' | 'verde' | 'sin_datos';
+export type ActivoCategoria = 'celular' | 'herramienta' | 'epp';
+export type ActivoEstado = 'nuevo' | 'en_uso_bueno' | 'en_uso_desgastado' | 'danado' | 'baja';
 
 /** Tope de clientes por zona de cobertura (regla de negocio, no de esquema). */
 export const ZONE_CLIENT_LIMIT = 128;
@@ -697,6 +699,33 @@ export interface Vehiculo {
   proximo_mantenimiento_fecha: string | null;
   proximo_mantenimiento_km: number | null;
   notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  tecnico?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+/** Activo fijo (no consumible) entregado a un tecnico — celular corporativo,
+ *  herramienta o indumentaria/EPP (Fase 116). A diferencia de InventoryProduct
+ *  no tiene Kardex de stock: es 1:1 con un responsable mientras esta en uso.
+ *  El % de vida util restante y el costo depreciado sugerido para reposicion
+ *  se calculan en el frontend (ver lib/activosDepreciacion.ts) a partir de
+ *  fecha_entrega + vida_util_meses + costo_compra, no se persisten. */
+export interface ActivoTecnico {
+  id: string;
+  categoria: ActivoCategoria;
+  codigo: string;
+  nombre: string;
+  modelo: string | null;
+  costo_compra: number;
+  fecha_compra: string | null;
+  vida_util_meses: number;
+  tecnico_id: string | null;
+  fecha_entrega: string | null;
+  estado: ActivoEstado;
+  /** Ruta dentro del bucket privado 'activos-cargos' (no una URL publica) — ver cargoUrl en ActivoTecnicoWithUrl. */
+  cargo_documento_path: string | null;
+  notas: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

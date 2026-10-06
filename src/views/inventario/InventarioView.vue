@@ -160,6 +160,7 @@ async function handleDelete(p: InventoryProduct) {
         <p class="text-slate-600 text-sm mt-1">{{ kpis.total }} ítems · {{ kpis.lowStock }} con stock bajo</p>
       </div>
       <div class="flex gap-2">
+        <button class="btn-secondary" @click="router.push('/inventario/activos-fijos')">🧰 Activos y Herramientas</button>
         <button class="btn-secondary" @click="router.push('/inventario/devoluciones')">Devoluciones</button>
         <button class="btn-primary" @click="openCreate">+ Nuevo producto</button>
       </div>
