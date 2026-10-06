@@ -26,19 +26,23 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('@/views/DashboardView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [] },
     },
     {
       path: '/clientes',
       name: 'clientes',
       component: () => import('@/views/clientes/ClientesView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Clientes' }] },
     },
     {
       path: '/clientes/:id',
       name: 'cliente-detalle',
       component: () => import('@/views/clientes/ClientDetailView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Clientes', to: '/clientes' }, { label: 'Detalle de cliente' }],
+      },
     },
     {
       // Ficha independiente de UN servicio/contrato puntual (Fase 37): ver
@@ -47,25 +51,33 @@ const router = createRouter({
       path: '/clientes/:id/servicios/:contractId',
       name: 'cliente-servicio-detalle',
       component: () => import('@/views/clientes/ClientServiceDetailView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Clientes', to: '/clientes' }, { label: 'Detalle de servicio' }],
+      },
     },
     {
       path: '/olt',
       name: 'olt',
       component: () => import('@/views/olt/OltDevicesView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Planta Interna' }, { label: 'Red & OLTs' }] },
     },
     {
       path: '/olt/:id',
       name: 'olt-detalle',
       component: () => import('@/views/olt/OltDetailView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Planta Interna' }, { label: 'Red & OLTs', to: '/olt' }, { label: 'Detalle de OLT' }],
+      },
     },
     {
       path: '/soporte',
       name: 'soporte',
       component: () => import('@/views/soporte/OperacionesHoyView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Operaciones de Hoy', to: '/soporte' }] },
     },
     {
       // Fase 107: tickets/instalaciones/rutinas ya resueltos/cerrados/completados
@@ -73,13 +85,13 @@ const router = createRouter({
       path: '/soporte/historico',
       name: 'soporte-historico',
       component: () => import('@/views/soporte/HistoricoAtendidosView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Histórico de Atendidos' }] },
     },
     {
       path: '/soporte/ranking',
       name: 'soporte-ranking',
       component: () => import('@/views/soporte/RankingTecnicosView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Ranking de técnicos' }] },
     },
     {
       // Antes vivia en "Operaciones" como /instalaciones: se mudo bajo
@@ -89,7 +101,7 @@ const router = createRouter({
       path: '/soporte/instalaciones',
       name: 'instalaciones',
       component: () => import('@/views/instalaciones/InstalacionesView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Instalaciones' }] },
     },
     {
       // Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de
@@ -97,7 +109,7 @@ const router = createRouter({
       path: '/soporte/rutinas',
       name: 'rutinas',
       component: () => import('@/views/soporte/RutinasView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Rutinas' }] },
     },
     {
       // Fase 101-B: tablero de despacho Timeline/Calendario (TOA) — cruza
@@ -106,81 +118,106 @@ const router = createRouter({
       path: '/soporte/agenda',
       name: 'soporte-agenda',
       component: () => import('@/views/soporte/DispatchBoardView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Agenda' }] },
     },
     {
       path: '/soporte/:id',
       name: 'soporte-detalle',
       component: () => import('@/views/soporte/TicketDetailView.vue'),
-      meta: { requiresAuth: true },
+      // El ultimo nivel (numero de ticket) lo suma TicketDetailView.vue en
+      // vivo via useBreadcrumbExtra — este array es el "mientras carga".
+      meta: {
+        requiresAuth: true,
+        breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Operaciones de Hoy', to: '/soporte' }],
+      },
     },
     { path: '/instalaciones', redirect: '/soporte/instalaciones' },
     {
       path: '/campo',
       name: 'campo',
       component: () => import('@/views/campo/CampoDashboardView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'], breadcrumb: [{ label: 'App de Campo' }] },
     },
     {
       path: '/campo/:tipo/:id',
       name: 'campo-detalle',
       component: () => import('@/views/campo/CampoTrabajoDetailView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] },
+      meta: {
+        requiresAuth: true,
+        roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'],
+        breadcrumb: [{ label: 'App de Campo', to: '/campo' }, { label: 'Detalle de trabajo' }],
+      },
     },
     { path: '/mapa', redirect: '/mapa/red' },
     {
       path: '/mapa/red',
       name: 'mapa-red',
       component: () => import('@/views/mapa/RedMapView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Operaciones' }, { label: 'Mapa de Red' }] },
     },
     {
       path: '/mapa/clientes',
       name: 'mapa-clientes',
       component: () => import('@/views/mapa/ClientesMapView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Operaciones' }, { label: 'Mapa de Clientes' }] },
     },
     {
       path: '/mapa/importar',
       name: 'mapa-importar',
       component: () => import('@/views/mapa/ImportMapView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] },
+      meta: {
+        requiresAuth: true,
+        roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'],
+        breadcrumb: [{ label: 'Operaciones' }, { label: 'Importar mapa' }],
+      },
     },
     {
       path: '/inventario',
       name: 'inventario',
       component: () => import('@/views/inventario/InventarioView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario' }] },
     },
     {
       path: '/inventario/devoluciones',
       name: 'inventario-devoluciones',
       component: () => import('@/views/inventario/DevolucionesView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Devoluciones' }],
+      },
     },
     {
       path: '/inventario/album/:slug',
       name: 'inventario-album',
       component: () => import('@/views/inventario/InventarioAlbumView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Álbum' }],
+      },
     },
     {
       path: '/inventario/:id',
       name: 'inventario-detalle',
       component: () => import('@/views/inventario/InventarioProductoView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Detalle de producto' }],
+      },
     },
     {
       path: '/tr069',
       name: 'tr069',
       component: () => import('@/views/tr069/Tr069View.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Planta Interna' }, { label: 'TR-069' }] },
     },
     {
       path: '/reportes',
       name: 'reportes',
       component: () => import('@/views/reportes/ReportesView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Configuración' }, { label: 'Reportes' }] },
     },
     {
       path: '/facturacion',
@@ -188,49 +225,49 @@ const router = createRouter({
       component: () => import('@/views/facturacion/FacturacionView.vue'),
       // Comercial (Planes/Facturacion/Cortes/Caja Chica) es solo para
       // SUPERADMIN/ADMIN (pedido explicito) — FACTURACION ya no entra.
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'], breadcrumb: [{ label: 'Comercial' }, { label: 'Facturación' }] },
     },
     {
       path: '/cortes',
       name: 'cortes',
       component: () => import('@/views/facturacion/CortesView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'], breadcrumb: [{ label: 'Comercial' }, { label: 'Cortes por deuda' }] },
     },
     {
       path: '/caja-chica',
       name: 'caja-chica',
       component: () => import('@/views/caja-chica/CajaChicaView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'], breadcrumb: [{ label: 'Comercial' }, { label: 'Caja Chica' }] },
     },
     {
       path: '/usuarios',
       name: 'usuarios',
       component: () => import('@/views/usuarios/UsuariosView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN'] },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN'], breadcrumb: [{ label: 'Configuración' }, { label: 'Usuarios' }] },
     },
     {
       path: '/zonas',
       name: 'zonas',
       component: () => import('@/views/zonas/ZonasView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Operaciones' }, { label: 'Zonas' }] },
     },
     {
       path: '/planes',
       name: 'planes',
       component: () => import('@/views/planes/PlanesView.vue'),
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'], breadcrumb: [{ label: 'Comercial' }, { label: 'Planes' }] },
     },
     {
       path: '/flota',
       name: 'flota',
       component: () => import('@/views/flota/FlotaView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Operaciones' }, { label: 'Flota vehicular' }] },
     },
     {
       path: '/mikrotik',
       name: 'mikrotik',
       component: () => import('@/views/mikrotik/MikrotikDevicesView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Planta Interna' }, { label: 'MikroTik' }] },
     },
     {
       path: '/analitica',
@@ -238,13 +275,21 @@ const router = createRouter({
       component: () => import('@/views/analitica/AnaliticaView.vue'),
       // Vision global de consumo de TODA la red — solo administracion,
       // igual que /usuarios (ver server/src/routes/analytics.ts).
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
+      meta: {
+        requiresAuth: true,
+        roles: ['SUPERADMIN', 'ADMIN'],
+        breadcrumb: [{ label: 'Planta Interna' }, { label: 'Analítica de Tráfico' }],
+      },
     },
     {
       path: '/mikrotik/:id',
       name: 'mikrotik-detalle',
       component: () => import('@/views/mikrotik/MikrotikDetailView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO },
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Planta Interna' }, { label: 'MikroTik', to: '/mikrotik' }, { label: 'Detalle' }],
+      },
     },
     {
       path: '/servidores',
@@ -252,7 +297,7 @@ const router = createRouter({
       component: () => import('@/views/servidores/ServidoresView.vue'),
       // Pedido explicito: exclusivo ADMIN/SUPERADMIN (ni siquiera el resto
       // de NOT_TECNICO) — encender/apagar VMs no es para todo el staff.
-      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'] },
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'], breadcrumb: [{ label: 'Planta Interna' }, { label: 'Servidores' }] },
     },
   ],
 });

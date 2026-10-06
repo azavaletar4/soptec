@@ -4,11 +4,16 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import ToastHost from '@/components/ToastHost.vue';
 import ConfirmHost from '@/components/ConfirmHost.vue';
+import Breadcrumbs from '@/components/layout/Breadcrumbs.vue';
 import logoIcon from '@/assets/logo-icon.png';
+import { homePath } from '@/lib/navigation';
 
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
+
+// Logo clickeable al Dashboard/home del rol (Fase 114).
+const homeTo = computed(() => homePath(auth.role));
 
 const SUPERADMIN_ROLES = ['SUPERADMIN'];
 const ADMIN_ROLES = ['SUPERADMIN', 'ADMIN'];
@@ -220,10 +225,14 @@ async function handleLogout() {
 <template>
   <div class="min-h-screen md:flex">
     <div class="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur px-4 py-3 md:hidden">
-      <div class="flex items-center gap-2.5">
-        <img :src="logoIcon" alt="" class="w-7 h-7 shrink-0" />
+      <router-link
+        :to="homeTo"
+        class="flex items-center gap-2.5 transition-opacity duration-150 hover:opacity-75"
+        title="Ir al inicio"
+      >
+        <img :src="logoIcon" alt="" class="w-7 h-7 shrink-0 transition-[filter] duration-150 hover:drop-shadow-[0_0_8px_rgba(14,165,233,0.55)]" />
         <div class="text-base font-semibold">SmartRayco</div>
-      </div>
+      </router-link>
       <button
         class="p-2 rounded-lg text-slate-800 hover:bg-slate-100 active:scale-95 transition-transform"
         aria-label="Abrir menu"
@@ -246,13 +255,18 @@ async function handleLogout() {
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="flex items-center justify-between mb-8">
-        <div class="flex items-center gap-2.5">
-          <img :src="logoIcon" alt="" class="w-9 h-9 shrink-0" />
+        <router-link
+          :to="homeTo"
+          class="flex items-center gap-2.5 transition-opacity duration-150 hover:opacity-75"
+          title="Ir al inicio"
+          @click="sidebarOpen = false"
+        >
+          <img :src="logoIcon" alt="" class="w-9 h-9 shrink-0 transition-[filter] duration-150 hover:drop-shadow-[0_0_8px_rgba(14,165,233,0.55)]" />
           <div>
             <div class="text-base font-semibold leading-tight">SmartRayco</div>
             <div class="text-[11px] text-slate-500 leading-tight">Panel de gestión</div>
           </div>
-        </div>
+        </router-link>
         <button class="p-1 text-slate-600 hover:text-slate-900 md:hidden" aria-label="Cerrar menu" @click="sidebarOpen = false">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
@@ -359,6 +373,7 @@ async function handleLogout() {
     </aside>
 
     <main class="flex-1 p-4 md:p-8 min-w-0">
+      <Breadcrumbs />
       <slot />
     </main>
 

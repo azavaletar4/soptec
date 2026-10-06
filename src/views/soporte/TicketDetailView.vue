@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import CrewAssignEditor from '@/components/soporte/CrewAssignEditor.vue';
 import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
+import { useBreadcrumbExtra } from '@/composables/useBreadcrumb';
 import { useTicketsStore } from '@/stores/tickets';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useInventoryStore } from '@/stores/inventory';
@@ -69,6 +70,14 @@ const gpsMapsLink = computed(() => {
 
 const ticketId = computed(() => route.params.id as string);
 const ticket = ref<Ticket | null>(null);
+
+// Ultimo nivel de la miga de pan (Fase 114) — Breadcrumbs.vue arma el resto
+// (Inicio > Soporte > Operaciones de Hoy) desde route.meta, esto suma el
+// numero de ticket en vivo apenas carga. Se limpia al salir de la vista
+// para no dejarlo pegado en otra pagina.
+const { setBreadcrumbExtra } = useBreadcrumbExtra();
+watch(() => ticket.value?.ticket_number, (num) => setBreadcrumbExtra(num ?? null), { immediate: true });
+onUnmounted(() => setBreadcrumbExtra(null));
 const loading = ref(true);
 const notFound = ref(false);
 const comments = ref<TicketComment[]>([]);
