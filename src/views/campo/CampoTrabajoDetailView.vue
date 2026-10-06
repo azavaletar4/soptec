@@ -239,6 +239,7 @@ function onEquipmentFileChange(id: string, event: Event) {
 // slot unico que se pisaba solo.
 const CENSO_CATEGORIES: { value: ClientPhotoCategory; label: string; icon: string }[] = [
   { value: 'facade', label: 'Fachada de la vivienda', icon: '🏠' },
+  { value: 'service_sheet', label: 'Hoja de servicio firmada', icon: '📄' },
   { value: 'modem_position', label: 'Ubicación del módem/ONU/Mesh', icon: '📶' },
   { value: 'nap_box', label: 'Caja NAP y puerto asignado', icon: '📦' },
   { value: 'pon_power', label: 'Medición de potencia óptica (dBm)', icon: '🔋' },
@@ -768,10 +769,6 @@ const TICKET_PHOTO_CATEGORIES = [
   { value: 'evidencia_1', label: 'Evidencia 1' },
   { value: 'evidencia_2', label: 'Evidencia 2' },
 ];
-// Fase 105 — hoja de servicio / acta de conformidad firmada, antes exclusiva
-// de instalaciones (INSTALL_PHOTO_CATEGORIES ya la tenia). Para una averia
-// queda pendiente de aprobacion, igual que el resto del censo.
-const SERVICE_SHEET_CATEGORY = { value: 'service_sheet' as const, label: '📄 Hoja de Servicio / Acta de Conformidad' };
 
 const closureForm = ref({
   latitude: null as number | null,
@@ -912,7 +909,7 @@ async function handleCloseSubmit() {
   closeError.value = null;
   closeResult.value = null;
   try {
-    const censoYActa = jobType === 'ticket' ? [...CENSO_CATEGORIES.map((c) => c.value), SERVICE_SHEET_CATEGORY.value] : [];
+    const censoYActa = jobType === 'ticket' ? CENSO_CATEGORIES.map((c) => c.value) : [];
     const categories =
       jobType === 'installation'
         ? INSTALL_PHOTO_CATEGORIES.map((c) => c.value)
@@ -1498,11 +1495,7 @@ async function handleCloseSubmit() {
 
           <div class="grid grid-cols-2 gap-2 mb-3">
             <div
-              v-for="cat in jobType === 'installation'
-                ? INSTALL_PHOTO_CATEGORIES
-                : jobType === 'ticket'
-                  ? [...TICKET_PHOTO_CATEGORIES, SERVICE_SHEET_CATEGORY]
-                  : TICKET_PHOTO_CATEGORIES"
+              v-for="cat in jobType === 'installation' ? INSTALL_PHOTO_CATEGORIES : TICKET_PHOTO_CATEGORIES"
               :key="cat.value"
               class="relative"
             >
