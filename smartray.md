@@ -305,6 +305,13 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   centro del mapa se mueven solos si llega una ubicación más reciente mientras el modal sigue
   abierto (en vivo, vía Supabase Realtime).
 
+### App de Campo — borrador local del cierre de trabajo
+- Si Android mata el proceso en 2do plano (el técnico abre WhatsApp o la cámara a mitad de un
+  cierre), al reabrir la orden aparece un toast informativo **"Se recuperó un borrador guardado de
+  este cierre de trabajo"** y el formulario completo queda restaurado: notas, causa técnica,
+  justificación, dBm, caja NAP, fotos del Censo/Cierre (con su miniatura) y la firma del cliente
+  (se repinta como imagen fija sobre el lienzo).
+
 ---
 
 ## Cómo se sigue actualizando este archivo

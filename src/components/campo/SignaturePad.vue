@@ -92,7 +92,32 @@ function scrollIntoView() {
   canvasEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-defineExpose({ clear, scrollIntoView });
+// Restaura una firma guardada (borrador local, Fase 116) dibujandola sobre
+// el lienzo — no hay forma de "reproducir" los trazos originales, asi que
+// se pinta como imagen fija; igual sirve de prueba visual y el tecnico
+// puede "Borrar" y volver a firmar si lo necesita.
+async function loadImage(blob: Blob) {
+  const canvas = canvasEl.value;
+  if (!canvas || !ctx) return;
+  const rect = canvas.getBoundingClientRect();
+  const url = URL.createObjectURL(blob);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        ctx?.drawImage(img, 0, 0, rect.width, rect.height);
+        resolve();
+      };
+      img.onerror = () => reject(new Error('No se pudo cargar la firma guardada'));
+      img.src = url;
+    });
+    hasStroke.value = true;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+defineExpose({ clear, scrollIntoView, loadImage });
 
 onMounted(() => {
   resizeCanvas();

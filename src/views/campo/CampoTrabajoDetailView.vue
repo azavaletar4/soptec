@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import SignaturePad from '@/components/campo/SignaturePad.vue';
@@ -21,6 +21,7 @@ import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
+import { saveDraft, loadDraft, clearDraft } from '@/lib/formDrafts';
 import { MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
@@ -65,6 +66,9 @@ const canProvisionOnt = computed(() => auth.role !== 'TECNICO_RED');
 
 const jobType = route.params.tipo as JobType;
 const jobId = route.params.id as string;
+// Fase 116 — clave del borrador local de este cierre (persistencia offline
+// ante el sistema matando el proceso, ver seccion de "Borrador local" abajo).
+const draftKey = `${jobType}_${jobId}`;
 
 // Fase 98: un ticket 'open' sin tecnico asignado vive en
 // campoStore.availableTickets, no en trabajos (que solo trae lo del propio
@@ -253,6 +257,14 @@ const existingPhotoByCategory = computed(() => {
 const DOCUMENT_LABEL: Record<string, string> = { cedula: 'DNI', ruc: 'RUC', pasaporte: 'Pasaporte' };
 
 onMounted(async () => {
+  // Fase 116 — guardar el borrador justo antes de que el sistema mate el
+  // proceso en 2do plano (el tecnico abre la camara nativa o WhatsApp): el
+  // evento 'change' de un <input type=file> dispara DESPUES de que la app
+  // ya volvio a 1er plano, pero visibilitychange/pagehide cubren el instante
+  // en que se va, que es cuando Android puede matarla sin aviso.
+  document.addEventListener('visibilitychange', handleVisibilityOrHide);
+  window.addEventListener('pagehide', handleVisibilityOrHide);
+
   if (!campoStore.trabajos.length) await campoStore.fetchAll();
   oltStore.fetchDevices().catch(() => {});
   inventoryStore.fetchProducts().catch(() => {});
@@ -278,6 +290,7 @@ onMounted(async () => {
     fibra.fetchTodosNapPuertos().catch(() => {});
     await Promise.all([loadEquipos(), loadAssignees()]);
   }
+  await restoreDraft();
 });
 
 // ---- Diagnostico express ----
@@ -852,7 +865,118 @@ function clearPhoto(category: string) {
 onBeforeUnmount(() => {
   for (const url of Object.values(photoPreviewUrls.value)) URL.revokeObjectURL(url);
   for (const entry of equipmentEntries.value) if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+  document.removeEventListener('visibilitychange', handleVisibilityOrHide);
+  window.removeEventListener('pagehide', handleVisibilityOrHide);
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
 });
+
+// ---- Borrador local del cierre de trabajo (Fase 116) ----
+// Censo fotografico + Cierre de trabajo + Equipos/firma comparten esta misma
+// pantalla y los mismos refs (closureForm/closurePhotos/equipmentEntries/
+// signatureBlob) — un solo borrador por job alcanza para las tres "partes"
+// del formulario. Se guarda en IndexedDB (ver lib/formDrafts.ts) en cada
+// cambio (debounced) y de forma inmediata al perder visibilidad, y se borra
+// solo cuando el cierre de verdad llega a Supabase (no si quedo en la cola
+// offline — ahi sigue siendo el unico respaldo de esos datos hasta que
+// sincronice, ver campoStore.submitClosure).
+interface ClosureDraft {
+  closureForm: typeof closureForm.value;
+  closurePhotos: Record<string, File>;
+  equipmentEntries: { id: string; type: EquipmentPhotoType; file: File }[];
+  signatureBlob: Blob | null;
+}
+let restoringDraft = false;
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function buildDraftSnapshot(): ClosureDraft {
+  const photos: Record<string, File> = {};
+  for (const [cat, file] of Object.entries(closurePhotos.value)) {
+    if (file) photos[cat] = file;
+  }
+  return {
+    closureForm: { ...closureForm.value },
+    closurePhotos: photos,
+    equipmentEntries: equipmentEntries.value
+      .filter((e): e is EquipmentPhotoEntry & { file: File } => !!e.file)
+      .map((e) => ({ id: e.id, type: e.type, file: e.file })),
+    signatureBlob: signatureBlob.value,
+  };
+}
+
+function draftHasContent(draft: ClosureDraft): boolean {
+  const f = draft.closureForm;
+  return (
+    !!f.closureNotes ||
+    !!f.motivoAveria ||
+    !!f.motivoAveriaDetalle ||
+    !!f.justificacion ||
+    f.potenciaDbm != null ||
+    !!f.napElementoId ||
+    Object.keys(draft.closurePhotos).length > 0 ||
+    draft.equipmentEntries.length > 0 ||
+    !!draft.signatureBlob
+  );
+}
+
+async function persistDraft() {
+  if (restoringDraft || isLockedForTecnico.value || ticketFrozen.value) return;
+  const snapshot = buildDraftSnapshot();
+  if (!draftHasContent(snapshot)) {
+    await clearDraft(draftKey);
+    return;
+  }
+  await saveDraft(draftKey, snapshot);
+}
+
+function scheduleDraftSave() {
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => {
+    persistDraft();
+  }, 600);
+}
+
+// Guardado inmediato (sin esperar el debounce) ante visibilitychange/
+// pagehide — el momento exacto en que Android puede matar el proceso sin
+// avisar, a diferencia de un simple cambio de input que si puede esperar.
+// Se dispara en ambos sentidos (tambien al volver a 1er plano) a proposito:
+// es una escritura idempotente y barata, mejor de mas que arriesgar perder
+// el guardado por una lectura de visibilityState que no calzo justo a tiempo.
+function handleVisibilityOrHide() {
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  persistDraft();
+}
+
+watch([closureForm, closurePhotos, equipmentEntries, signatureBlob], scheduleDraftSave, { deep: true });
+
+async function restoreDraft() {
+  if (isLockedForTecnico.value || ticketFrozen.value) return;
+  const draft = await loadDraft<ClosureDraft>(draftKey);
+  if (!draft) return;
+  restoringDraft = true;
+  try {
+    // Merge selectivo (no Object.assign liso): closureForm ya puede traer un
+    // motivo_preliminar precargado por el watcher de arriba cuando se abrio
+    // el ticket (Fase 103) — si el borrador nunca llego a tocar ese campo
+    // (sigue en su default ''/null), no lo queremos pisar con vacio.
+    for (const [key, value] of Object.entries(draft.closureForm) as [keyof typeof closureForm.value, unknown][]) {
+      if (value !== null && value !== '') (closureForm.value as Record<string, unknown>)[key] = value;
+    }
+    for (const [cat, file] of Object.entries(draft.closurePhotos)) {
+      closurePhotos.value[cat] = file;
+      if (photoPreviewUrls.value[cat]) URL.revokeObjectURL(photoPreviewUrls.value[cat]);
+      photoPreviewUrls.value[cat] = URL.createObjectURL(file);
+    }
+    equipmentEntries.value = draft.equipmentEntries.map((eq) => ({ ...eq, previewUrl: URL.createObjectURL(eq.file) }));
+    if (draft.signatureBlob) {
+      signatureBlob.value = draft.signatureBlob;
+      await nextTick();
+      await signaturePadRef.value?.loadImage(draft.signatureBlob);
+    }
+    toast.info('Se recuperó un borrador guardado de este cierre de trabajo.');
+  } finally {
+    restoringDraft = false;
+  }
+}
 
 // ---- Lightbox (Fase 105): visor a pantalla completa para cualquier galeria
 // de solo lectura de esta pantalla (fotos anteriores, censo, equipos). ----
@@ -947,7 +1071,13 @@ async function handleCloseSubmit() {
       napElementoId: jobType === 'ticket' ? closureForm.value.napElementoId || null : null,
     });
     closeResult.value = result.queued ? 'queued' : 'ok';
-    if (!result.queued) setTimeout(() => router.push('/campo'), 1200);
+    // El borrador solo se borra cuando el cierre de verdad llego a Supabase —
+    // si quedo en la cola offline sigue siendo el unico respaldo de fotos/
+    // firma/notas hasta que haya señal y sincronice (Fase 116).
+    if (!result.queued) {
+      await clearDraft(draftKey);
+      setTimeout(() => router.push('/campo'), 1200);
+    }
   } catch (e) {
     closeError.value = getErrorMessage(e, 'Error al cerrar el trabajo');
   } finally {
