@@ -217,6 +217,12 @@ const filteredClients = computed(() => {
     .slice(0, 30);
 });
 
+// Fase 128: cuadrilla completa (lider + apoyos) de TODAS las ordenes, para
+// que "Tecnicos activos" (TechnicianStatusBar.vue) sepa que un APOYO
+// tambien esta trabajando en algo — job.assigned_to (columna de
+// tickets/installations/routines) solo refleja al LIDER.
+const crewAssignments = ref<{ job_type: JobType; job_id: string; technician_id: string }[]>([]);
+
 onMounted(async () => {
   await Promise.all([
     ticketsStore.fetchTickets(),
@@ -224,6 +230,7 @@ onMounted(async () => {
     routinesStore.fetchRoutines(),
     clientsStore.fetchClients(),
     catalogsStore.fetchStaff(),
+    jobAssigneesStore.fetchAllAssignments().then((rows) => (crewAssignments.value = rows)),
   ]);
   // Deep link desde la ficha de un servicio puntual (Fase 37):
   // /soporte?client_id=..&contract_id=.. abre el modal ya precargado.
@@ -384,6 +391,7 @@ function formatDate(value: string) {
     <TechnicianStatusBar
       :technicians="technicians"
       :jobs="allJobs"
+      :crew-assignments="crewAssignments"
       :now="now"
       :selected-tech-id="techFilterId"
       @select="handleTechSelect"

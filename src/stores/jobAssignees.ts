@@ -114,6 +114,20 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
   }
 
   /**
+   * Fase 128: TODA la cuadrilla de TODAS las ordenes — a diferencia de
+   * fetchMyAssignments (un solo tecnico), esto es para que "Tecnicos
+   * activos" (TechnicianStatusBar.vue) sepa que un APOYO tambien esta
+   * trabajando en una orden, no solo el lider (job.assigned_to solo
+   * refleja al lider, ver trigger sync_assigned_to_from_job_assignees —
+   * mismo motivo que isMyCrewJob en campo.ts).
+   */
+  async function fetchAllAssignments(): Promise<{ job_type: JobType; job_id: string; technician_id: string }[]> {
+    const { data, error } = await supabase.from('job_assignees').select('job_type, job_id, technician_id');
+    if (error) throw error;
+    return (data ?? []) as { job_type: JobType; job_id: string; technician_id: string }[];
+  }
+
+  /**
    * Fase 99: el tecnico devuelve un ticket que ya habia tomado (ej. el
    * cliente no estaba) — libera la cuadrilla completa y deja una nota
    * obligatoria (ticket_comments) con el motivo. Mismo patron que
@@ -135,6 +149,7 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
     selfAssignRoutine,
     addSupportTechnician,
     fetchMyAssignments,
+    fetchAllAssignments,
     returnTicket,
   };
 });

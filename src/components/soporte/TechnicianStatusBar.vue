@@ -6,7 +6,7 @@ import { teardropIcon } from '@/views/mapa/mapIcons';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { waLink, telLink } from '@/lib/phone';
 import { ACTIVE_STATUS, type UnifiedJob } from '@/composables/useUnifiedJobs';
-import type { StaffProfile } from '@/types/domain';
+import type { JobType, StaffProfile } from '@/types/domain';
 
 // Panel estilo despacho de campo (TOA-like): una tarjeta por tecnico con su
 // estado en vivo, derivado de SUS ordenes asignadas (averias/altas/rutinas,
@@ -22,6 +22,14 @@ const props = withDefaults(
   defineProps<{
     technicians: StaffProfile[];
     jobs: UnifiedJob[];
+    /**
+     * Fase 128: cuadrilla completa (lider + apoyos) — job.assignedId (la
+     * columna assigned_to de tickets/installations/routines) solo refleja al
+     * LIDER (trigger sync_assigned_to_from_job_assignees), asi que un
+     * tecnico sumado como APOYO (Fase 121) se veia "Disponible" aunque
+     * estuviera trabajando en la misma orden.
+     */
+    crewAssignments?: { job_type: JobType; job_id: string; technician_id: string }[];
     now: number;
     selectedTechId?: string | null;
     /** Minutos desde que entro "en progreso" a partir de los cuales se alerta demora (Fase 111). */
@@ -29,7 +37,7 @@ const props = withDefaults(
     /** Minutos sin un ping de telemetria a partir de los cuales se considera "sin señal" (Fase 115). */
     gpsStaleMinutes?: number;
   }>(),
-  { selectedTechId: null, slaThresholdMinutes: 60, gpsStaleMinutes: 15 },
+  { selectedTechId: null, slaThresholdMinutes: 60, gpsStaleMinutes: 15, crewAssignments: () => [] },
 );
 
 const emit = defineEmits<{
@@ -76,6 +84,22 @@ function isToday(iso: string | null, nowMs: number): boolean {
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 }
 
+// technician_id -> Set("jobType:jobId") de todas las ordenes donde es parte
+// de la cuadrilla (lider o apoyo) — lookup O(1) por tecnico en vez de recorrer
+// crewAssignments una vez por cada uno dentro de `cards`.
+const crewByTech = computed<Map<string, Set<string>>>(() => {
+  const map = new Map<string, Set<string>>();
+  for (const a of props.crewAssignments) {
+    let set = map.get(a.technician_id);
+    if (!set) {
+      set = new Set();
+      map.set(a.technician_id, set);
+    }
+    set.add(`${a.job_type}:${a.job_id}`);
+  }
+  return map;
+});
+
 const cards = computed<TechCard[]>(() =>
   props.technicians.map((tech) => {
     const name = tech.full_name || tech.email;
@@ -85,7 +109,8 @@ const cards = computed<TechCard[]>(() =>
       longitude: tech.longitude,
       lastPingAt: tech.last_ping_at,
     };
-    const assigned = props.jobs.filter((j) => j.assignedId === tech.id);
+    const crew = crewByTech.value.get(tech.id);
+    const assigned = props.jobs.filter((j) => j.assignedId === tech.id || crew?.has(`${j.jobType}:${j.id}`));
     const resolvedToday = assigned.filter((j) => isCompletedToday(j) && isToday(j.finishedAt, props.now)).length;
     const inProgress = assigned.find((j) => j.status === 'in_progress');
     if (inProgress) {
