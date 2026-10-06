@@ -68,7 +68,7 @@ export const useCatalogsStore = defineStore('catalogs', () => {
     if (staff.value.length) return;
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, role, phone')
+      .select('id, email, full_name, role, phone, battery_level, latitude, longitude, last_ping_at')
       .neq('role', 'CLIENTE')
       .eq('active', true)
       .order('full_name');
@@ -84,6 +84,39 @@ export const useCatalogsStore = defineStore('catalogs', () => {
     plans.value = [];
   }
 
+  // ---- Telemetria en vivo (Fase 115) — la tarjeta de un tecnico en
+  // TechnicianStatusBar.vue se actualiza sola (bateria/GPS) via Supabase
+  // Realtime, sin refetch. Un solo canal compartido para todo el store:
+  // suscribirse 2 veces no duplica nada (channelCount cuenta referencias),
+  // y solo se cierra cuando el ultimo interesado se desmonta.
+  let telemetryChannel: ReturnType<typeof supabase.channel> | null = null;
+  let telemetrySubscribers = 0;
+
+  function subscribeToStaffTelemetry() {
+    telemetrySubscribers += 1;
+    if (telemetryChannel) return;
+    telemetryChannel = supabase
+      .channel('profiles-telemetry')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const updated = payload.new as Partial<StaffProfile> & { id: string };
+          const idx = staff.value.findIndex((s) => s.id === updated.id);
+          if (idx !== -1) staff.value[idx] = { ...staff.value[idx], ...updated };
+        },
+      )
+      .subscribe();
+  }
+
+  function unsubscribeFromStaffTelemetry() {
+    telemetrySubscribers = Math.max(0, telemetrySubscribers - 1);
+    if (telemetrySubscribers === 0 && telemetryChannel) {
+      supabase.removeChannel(telemetryChannel);
+      telemetryChannel = null;
+    }
+  }
+
   return {
     zones,
     plans,
@@ -96,5 +129,7 @@ export const useCatalogsStore = defineStore('catalogs', () => {
     fetchStaff,
     resetZones,
     resetPlans,
+    subscribeToStaffTelemetry,
+    unsubscribeFromStaffTelemetry,
   };
 });

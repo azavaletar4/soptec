@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { teardropIcon } from '@/views/mapa/mapIcons';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { waLink, telLink } from '@/lib/phone';
 import type { StaffProfile, Ticket } from '@/types/domain';
@@ -20,8 +23,10 @@ const props = withDefaults(
     selectedTechId?: string | null;
     /** Minutos desde que entro "en progreso" a partir de los cuales se alerta demora (Fase 111). */
     slaThresholdMinutes?: number;
+    /** Minutos sin un ping de telemetria a partir de los cuales se considera "sin señal" (Fase 115). */
+    gpsStaleMinutes?: number;
   }>(),
-  { selectedTechId: null, slaThresholdMinutes: 60 },
+  { selectedTechId: null, slaThresholdMinutes: 60, gpsStaleMinutes: 15 },
 );
 
 const emit = defineEmits<{
@@ -41,6 +46,10 @@ interface TechCard {
   ticket: Ticket | null;
   elapsedMinutes: number | null;
   resolvedToday: number;
+  batteryLevel: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  lastPingAt: string | null;
 }
 
 const STATUS_META: Record<TechStatus, { dot: string; label: string }> = {
@@ -59,6 +68,12 @@ function isToday(iso: string | null, nowMs: number): boolean {
 const cards = computed<TechCard[]>(() =>
   props.technicians.map((tech) => {
     const name = tech.full_name || tech.email;
+    const telemetry = {
+      batteryLevel: tech.battery_level,
+      latitude: tech.latitude,
+      longitude: tech.longitude,
+      lastPingAt: tech.last_ping_at,
+    };
     const assigned = props.tickets.filter((t) => t.assigned_to === tech.id);
     const resolvedToday = assigned.filter(
       (t) => (t.status === 'resolved' || t.status === 'closed') && isToday(t.resolved_at ?? t.closed_at, props.now),
@@ -66,11 +81,11 @@ const cards = computed<TechCard[]>(() =>
     const inProgress = assigned.find((t) => t.status === 'in_progress');
     if (inProgress) {
       const elapsedMinutes = Math.max(0, props.now - new Date(inProgress.updated_at).getTime()) / 60000;
-      return { id: tech.id, name, phone: tech.phone, status: 'en_atencion', ticket: inProgress, elapsedMinutes, resolvedToday };
+      return { id: tech.id, name, phone: tech.phone, status: 'en_atencion', ticket: inProgress, elapsedMinutes, resolvedToday, ...telemetry };
     }
     const open = assigned.find((t) => t.status === 'open');
-    if (open) return { id: tech.id, name, phone: tech.phone, status: 'en_camino', ticket: open, elapsedMinutes: null, resolvedToday };
-    return { id: tech.id, name, phone: tech.phone, status: 'disponible', ticket: null, elapsedMinutes: null, resolvedToday };
+    if (open) return { id: tech.id, name, phone: tech.phone, status: 'en_camino', ticket: open, elapsedMinutes: null, resolvedToday, ...telemetry };
+    return { id: tech.id, name, phone: tech.phone, status: 'disponible', ticket: null, elapsedMinutes: null, resolvedToday, ...telemetry };
   }),
 );
 
@@ -81,6 +96,23 @@ function timerClass(card: TechCard): string {
   return 'text-slate-500';
 }
 
+function batteryClass(level: number | null): string {
+  if (level == null) return 'text-slate-400';
+  return level < 20 ? 'text-red-600 font-semibold' : 'text-slate-500';
+}
+
+// Señal/GPS (Fase 115): "hace N min" desde el ultimo ping de telemetria de
+// la App de Campo, o "Sin señal" si nunca reporto o lleva mas de
+// gpsStaleMinutes sin hacerlo (celular apagado, sin datos, app cerrada por
+// MIUI en 2do plano, etc).
+function signalInfo(card: TechCard): { label: string; stale: boolean } {
+  if (!card.lastPingAt) return { label: 'Sin señal', stale: true };
+  const minutes = Math.max(0, props.now - new Date(card.lastPingAt).getTime()) / 60000;
+  if (minutes > props.gpsStaleMinutes) return { label: '⚠️ Sin señal', stale: true };
+  const m = Math.round(minutes);
+  return { label: m < 1 ? '📍 ahora' : `📍 hace ${m} min`, stale: false };
+}
+
 function handleClick(card: TechCard) {
   emit('select', card.id, card.ticket?.id ?? null);
 }
@@ -88,6 +120,54 @@ function handleClick(card: TechCard) {
 function handleDblClick(card: TechCard) {
   if (card.ticket) emit('openTicket', card.ticket.id);
 }
+
+// ---- Modal de mapa (Fase 115) — guarda solo el ID, no una copia de la
+// tarjeta: asi mapTech queda derivado de `cards` y se mueve solo si llega
+// un ping de telemetria nuevo mientras el modal sigue abierto. ----
+const mapTechId = ref<string | null>(null);
+const mapTech = computed(() => cards.value.find((c) => c.id === mapTechId.value) ?? null);
+const mapEl = ref<HTMLDivElement | null>(null);
+let leafletMap: L.Map | null = null;
+let marker: L.Marker | null = null;
+
+function openMap(card: TechCard) {
+  if (card.latitude == null || card.longitude == null) return;
+  mapTechId.value = card.id;
+}
+function closeMap() {
+  mapTechId.value = null;
+}
+
+function destroyMap() {
+  if (leafletMap) leafletMap.remove();
+  leafletMap = null;
+  marker = null;
+}
+
+watch(mapTechId, async (id) => {
+  destroyMap();
+  if (!id) return;
+  await nextTick();
+  const tech = mapTech.value;
+  if (!mapEl.value || !tech || tech.latitude == null || tech.longitude == null) return;
+  leafletMap = L.map(mapEl.value, { zoomControl: true }).setView([tech.latitude, tech.longitude], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(leafletMap);
+  marker = L.marker([tech.latitude, tech.longitude], { icon: teardropIcon('#0ea5e9', '<circle cx="12" cy="12" r="5"/>') }).addTo(leafletMap);
+});
+
+// Si llega telemetria nueva (Realtime) mientras el modal esta abierto, el
+// marcador/mapa se mueven solos — esto es lo que hace que sea "en vivo".
+watch(
+  () => (mapTech.value && mapTech.value.latitude != null && mapTech.value.longitude != null ? [mapTech.value.latitude, mapTech.value.longitude] : null),
+  (coords) => {
+    if (!coords || !leafletMap || !marker) return;
+    const latlng = L.latLng(coords[0], coords[1]);
+    marker.setLatLng(latlng);
+    leafletMap.panTo(latlng);
+  },
+);
+
+onUnmounted(destroyMap);
 </script>
 
 <template>
@@ -131,10 +211,45 @@ function handleDblClick(card: TechCard) {
           </template>
           <template v-else>{{ STATUS_META.disponible.label }}</template>
         </div>
+
+        <!-- Telemetria (Fase 115): bateria + ultimo ping de GPS, clickeable a un mapa. -->
+        <div class="flex items-center justify-between gap-1.5 text-[11px]">
+          <span :class="batteryClass(card.batteryLevel)" :title="card.batteryLevel != null ? `Batería ${card.batteryLevel}%` : 'Sin dato de batería'">
+            🔋 {{ card.batteryLevel != null ? `${card.batteryLevel}%` : '—' }}
+          </span>
+          <button
+            v-if="card.latitude != null && card.longitude != null"
+            type="button"
+            class="hover:underline"
+            :class="signalInfo(card).stale ? 'text-amber-600 font-medium' : 'text-slate-500'"
+            title="Ver ubicación en el mapa"
+            @click.stop="openMap(card)"
+          >
+            {{ signalInfo(card).label }}
+          </button>
+          <span v-else class="text-slate-400">Sin ubicación</span>
+        </div>
+
         <div v-if="card.resolvedToday" class="badge text-[10px] self-start bg-green-500/15 text-green-700">
           ✓ {{ card.resolvedToday }} hoy
         </div>
       </button>
     </div>
+
+    <Teleport to="body">
+      <div v-if="mapTech" class="modal-overlay" @click.self="closeMap">
+        <div class="w-full max-w-lg modal-panel p-0 overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+            <div class="text-sm font-medium text-slate-800">📍 Ubicación de {{ mapTech.name }}</div>
+            <button type="button" class="text-slate-500 hover:text-slate-800" @click="closeMap">✕</button>
+          </div>
+          <div ref="mapEl" class="w-full h-80"></div>
+          <div class="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-200 flex items-center justify-between">
+            <span>{{ signalInfo(mapTech).label }}</span>
+            <span class="font-mono">{{ mapTech.latitude?.toFixed(5) }}, {{ mapTech.longitude?.toFixed(5) }}</span>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

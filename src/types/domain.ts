@@ -196,6 +196,11 @@ export interface StaffProfile {
   full_name: string | null;
   role: string;
   phone: string | null;
+  /** Telemetria de campo (Fase 115) — bateria/GPS autoreportados desde la App de Campo, null si nunca reporto. */
+  battery_level: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  last_ping_at: string | null;
 }
 
 export type StaffRole = 'SUPERADMIN' | 'ADMIN' | 'TECNICO_RED' | 'SOPORTE' | 'FACTURACION';

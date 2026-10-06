@@ -50,9 +50,11 @@ onMounted(() => {
   clockTimer = setInterval(() => {
     now.value = Date.now();
   }, 1000);
+  catalogsStore.subscribeToStaffTelemetry();
 });
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer);
+  catalogsStore.unsubscribeFromStaffTelemetry();
 });
 
 // Mismo criterio que TicketDetailView.vue: TECNICO_RED solo actua sobre lo
