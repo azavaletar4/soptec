@@ -113,10 +113,6 @@ function handleTechSelect(techId: string, ticketId: string | null) {
   techFilterTicketId.value = ticketId;
 }
 
-function handleTechOpenTicket(ticketId: string) {
-  router.push(`/soporte/${ticketId}`);
-}
-
 function clearTechFilter() {
   techFilterId.value = null;
   techFilterTicketId.value = null;
@@ -387,11 +383,11 @@ function formatDate(value: string) {
 
     <TechnicianStatusBar
       :technicians="technicians"
-      :tickets="ticketsStore.tickets"
+      :jobs="allJobs"
       :now="now"
       :selected-tech-id="techFilterId"
       @select="handleTechSelect"
-      @open-ticket="handleTechOpenTicket"
+      @open-job="goToJob"
     />
 
     <div v-if="techFilterId" class="flex items-center gap-2 mb-4 text-sm">

@@ -28,10 +28,12 @@ export interface UnifiedJob {
   createdAt: string;
   /** Fecha en que se liquido (resolved_at/closed_at/completed_at) — null si todavia esta activa. */
   finishedAt: string | null;
+  /** Usado como "desde cuando esta en_progress" (TechnicianStatusBar.vue) — se bumpea solo al cambiar status. */
+  updatedAt: string;
   raw: Ticket | Installation | Routine;
 }
 
-const ACTIVE_STATUS: Record<JobType, string[]> = {
+export const ACTIVE_STATUS: Record<JobType, string[]> = {
   ticket: ['open', 'in_progress', 'rescheduled'],
   installation: ['pending', 'scheduled', 'in_progress'],
   routine: ['pending', 'scheduled', 'in_progress'],
@@ -84,6 +86,7 @@ export function useUnifiedJobs() {
       fallbackDate: t.created_at.slice(0, 10),
       createdAt: t.created_at,
       finishedAt: t.resolved_at ?? t.closed_at,
+      updatedAt: t.updated_at,
       raw: t,
     }));
     // Una cancelada (installation/routine) no tiene su propia columna
@@ -104,6 +107,7 @@ export function useUnifiedJobs() {
       fallbackDate: (i.scheduled_date ?? i.created_at).slice(0, 10),
       createdAt: i.created_at,
       finishedAt: i.completed_at ?? (i.status === 'cancelled' ? i.updated_at : null),
+      updatedAt: i.updated_at,
       raw: i,
     }));
     const routines = routinesStore.routines.map<UnifiedJob>((r) => ({
@@ -119,6 +123,7 @@ export function useUnifiedJobs() {
       fallbackDate: (r.scheduled_date ?? r.created_at).slice(0, 10),
       createdAt: r.created_at,
       finishedAt: r.completed_at ?? (r.status === 'cancelled' ? r.updated_at : null),
+      updatedAt: r.updated_at,
       raw: r,
     }));
     return [...tickets, ...installations, ...routines];

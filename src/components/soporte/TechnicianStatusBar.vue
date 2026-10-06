@@ -5,20 +5,23 @@ import 'leaflet/dist/leaflet.css';
 import { teardropIcon } from '@/views/mapa/mapIcons';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { waLink, telLink } from '@/lib/phone';
-import type { StaffProfile, Ticket } from '@/types/domain';
+import { ACTIVE_STATUS, type UnifiedJob } from '@/composables/useUnifiedJobs';
+import type { StaffProfile } from '@/types/domain';
 
 // Panel estilo despacho de campo (TOA-like): una tarjeta por tecnico con su
-// estado en vivo, derivado de SUS tickets asignados (no de los que esten
-// filtrados/buscados en la tabla de abajo).
+// estado en vivo, derivado de SUS ordenes asignadas (averias/altas/rutinas,
+// Fase 126 — antes solo miraba tickets, asi que un tecnico "en atencion" de
+// una Alta o Rutina se veia incorrectamente como "Disponible").
 //
-// "En camino" no es un estado real en la tabla tickets (no hay un paso de
-// "aceptar" separado de "iniciar") — se aproxima como "tiene un ticket
-// asignado que sigue 'abierto'" (ya se lo dieron, todavia no marco en
-// progreso). Si tiene un 'en progreso', eso manda sobre cualquier 'abierto'.
+// "En camino" no es un estado real en las tablas (no hay un paso de
+// "aceptar" separado de "iniciar") — se aproxima como "tiene una orden
+// asignada que todavia no inicio" (ACTIVE_STATUS[jobType] sin 'in_progress':
+// ticket 'open', installation/routine 'pending'/'scheduled'). Si tiene una
+// 'in_progress', eso manda sobre cualquier otra activa.
 const props = withDefaults(
   defineProps<{
     technicians: StaffProfile[];
-    tickets: Ticket[];
+    jobs: UnifiedJob[];
     now: number;
     selectedTechId?: string | null;
     /** Minutos desde que entro "en progreso" a partir de los cuales se alerta demora (Fase 111). */
@@ -30,20 +33,28 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  /** Click simple: filtra la tabla de abajo. ticketId viene null si el tecnico esta "disponible". */
-  select: [techId: string, ticketId: string | null];
+  /** Click simple: filtra la tabla de abajo. jobId viene null si el tecnico esta "disponible". */
+  select: [techId: string, jobId: string | null];
   /** Doble click sobre un tecnico con orden activa: ir directo al detalle. */
-  openTicket: [ticketId: string];
+  openJob: [job: UnifiedJob];
 }>();
 
 type TechStatus = 'en_atencion' | 'en_camino' | 'disponible';
+
+function isNotStarted(job: UnifiedJob): boolean {
+  return ACTIVE_STATUS[job.jobType].includes(job.status) && job.status !== 'in_progress';
+}
+function isCompletedToday(job: UnifiedJob): boolean {
+  if (job.jobType === 'ticket') return job.status === 'resolved' || job.status === 'closed';
+  return job.status === 'completed';
+}
 
 interface TechCard {
   id: string;
   name: string;
   phone: string | null;
   status: TechStatus;
-  ticket: Ticket | null;
+  job: UnifiedJob | null;
   elapsedMinutes: number | null;
   resolvedToday: number;
   batteryLevel: number | null;
@@ -74,18 +85,16 @@ const cards = computed<TechCard[]>(() =>
       longitude: tech.longitude,
       lastPingAt: tech.last_ping_at,
     };
-    const assigned = props.tickets.filter((t) => t.assigned_to === tech.id);
-    const resolvedToday = assigned.filter(
-      (t) => (t.status === 'resolved' || t.status === 'closed') && isToday(t.resolved_at ?? t.closed_at, props.now),
-    ).length;
-    const inProgress = assigned.find((t) => t.status === 'in_progress');
+    const assigned = props.jobs.filter((j) => j.assignedId === tech.id);
+    const resolvedToday = assigned.filter((j) => isCompletedToday(j) && isToday(j.finishedAt, props.now)).length;
+    const inProgress = assigned.find((j) => j.status === 'in_progress');
     if (inProgress) {
-      const elapsedMinutes = Math.max(0, props.now - new Date(inProgress.updated_at).getTime()) / 60000;
-      return { id: tech.id, name, phone: tech.phone, status: 'en_atencion', ticket: inProgress, elapsedMinutes, resolvedToday, ...telemetry };
+      const elapsedMinutes = Math.max(0, props.now - new Date(inProgress.updatedAt).getTime()) / 60000;
+      return { id: tech.id, name, phone: tech.phone, status: 'en_atencion', job: inProgress, elapsedMinutes, resolvedToday, ...telemetry };
     }
-    const open = assigned.find((t) => t.status === 'open');
-    if (open) return { id: tech.id, name, phone: tech.phone, status: 'en_camino', ticket: open, elapsedMinutes: null, resolvedToday, ...telemetry };
-    return { id: tech.id, name, phone: tech.phone, status: 'disponible', ticket: null, elapsedMinutes: null, resolvedToday, ...telemetry };
+    const notStarted = assigned.find((j) => isNotStarted(j));
+    if (notStarted) return { id: tech.id, name, phone: tech.phone, status: 'en_camino', job: notStarted, elapsedMinutes: null, resolvedToday, ...telemetry };
+    return { id: tech.id, name, phone: tech.phone, status: 'disponible', job: null, elapsedMinutes: null, resolvedToday, ...telemetry };
   }),
 );
 
@@ -114,11 +123,11 @@ function signalInfo(card: TechCard): { label: string; stale: boolean } {
 }
 
 function handleClick(card: TechCard) {
-  emit('select', card.id, card.ticket?.id ?? null);
+  emit('select', card.id, card.job?.id ?? null);
 }
 
 function handleDblClick(card: TechCard) {
-  if (card.ticket) emit('openTicket', card.ticket.id);
+  if (card.job) emit('openJob', card.job);
 }
 
 // ---- Modal de mapa (Fase 115) — guarda solo el ID, no una copia de la
@@ -184,7 +193,7 @@ onUnmounted(destroyMap);
             ? 'border-sky-400 bg-sky-50 ring-1 ring-sky-300'
             : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
         "
-        :title="card.ticket ? 'Clic: filtrar · Doble clic: abrir el ticket' : 'Clic: ver sus órdenes de hoy'"
+        :title="card.job ? 'Clic: filtrar · Doble clic: abrir la orden' : 'Clic: ver sus órdenes de hoy'"
         @click="handleClick(card)"
         @dblclick="handleDblClick(card)"
       >
@@ -201,13 +210,13 @@ onUnmounted(destroyMap);
           </div>
         </div>
         <div class="text-[11px] text-slate-500">
-          <template v-if="card.status === 'en_atencion' && card.ticket">
-            <span class="font-mono">{{ card.ticket.ticket_number }}</span> ·
-            <span :class="timerClass(card)">⏱️ {{ formatElapsedTime(card.ticket.updated_at, now) }}</span>
+          <template v-if="card.status === 'en_atencion' && card.job">
+            <span class="font-mono">{{ card.job.number ?? card.job.label }}</span> ·
+            <span :class="timerClass(card)">⏱️ {{ formatElapsedTime(card.job.updatedAt, now) }}</span>
             <span v-if="card.elapsedMinutes! > slaThresholdMinutes" class="ml-0.5" title="Demora sobre el umbral configurado">⚠️</span>
           </template>
-          <template v-else-if="card.status === 'en_camino' && card.ticket">
-            <span class="font-mono">{{ card.ticket.ticket_number }}</span> · en camino
+          <template v-else-if="card.status === 'en_camino' && card.job">
+            <span class="font-mono">{{ card.job.number ?? card.job.label }}</span> · en camino
           </template>
           <template v-else>{{ STATUS_META.disponible.label }}</template>
         </div>
