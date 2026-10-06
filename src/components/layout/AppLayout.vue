@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth';
 import ToastHost from '@/components/ToastHost.vue';
 import ConfirmHost from '@/components/ConfirmHost.vue';
 import Breadcrumbs from '@/components/layout/Breadcrumbs.vue';
+import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
 import logoIcon from '@/assets/logo-icon.png';
 import { homePath } from '@/lib/navigation';
 
@@ -50,6 +51,7 @@ const ICONS: Record<string, string> = {
   reportes: 'M4 19V10m6 9V5m6 14v-8m-13 8h16',
   usuarios: 'M17 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 5 18.5V20M9.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM21 8v6M18 11h6',
   'caja-chica': 'M4 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1h1a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Zm0 0v10M16 12.5a1 1 0 1 0 2 0 1 1 0 0 0-2 0Z',
+  asistencia: 'M12 7v5l3 3M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
 };
 
 // Iconos de las categorias desplegables.
@@ -123,6 +125,7 @@ const GRUPOS: ModuloGrupo[] = [
     label: 'Configuración',
     items: [
       { key: 'inventario', label: 'Inventario', to: '/inventario' },
+      { key: 'asistencia', label: 'Control de Asistencia', to: '/asistencia', requiresAdmin: true },
       { key: 'reportes', label: 'Reportes', to: '/reportes' },
       { key: 'usuarios', label: 'Usuarios', to: '/usuarios', requiresSuperadmin: true },
     ],
@@ -206,6 +209,7 @@ const roleLabel = computed(() => (auth.role ? (ROLE_LABEL[auth.role] ?? auth.rol
 const initials = computed(() => (auth.user?.email ?? '?').slice(0, 2).toUpperCase());
 
 const sidebarOpen = ref(false);
+const showAsistenciaModal = ref(false);
 
 // Cierra el drawer movil al navegar (clic en cualquier router-link dentro
 // del nav) — delegado en el <nav> en vez de un watcher sobre la ruta,
@@ -347,6 +351,16 @@ async function handleLogout() {
         </div>
         <button
           class="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
+          aria-label="Marcar asistencia"
+          title="Marcar asistencia"
+          @click="showAsistenciaModal = true"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M12 7v5l3 3M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <button
+          class="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
           aria-label="Cambiar contraseña"
           title="Cambiar contraseña"
           @click="router.push('/cambiar-password')"
@@ -376,6 +390,22 @@ async function handleLogout() {
       <Breadcrumbs />
       <slot />
     </main>
+
+    <!-- Marcacion rapida de asistencia (Fase 117) — mismo widget que la App
+         de Campo, en un modal para el resto del staff que entra por el panel. -->
+    <Teleport to="body">
+      <div v-if="showAsistenciaModal" class="modal-overlay" @click.self="showAsistenciaModal = false">
+        <div class="w-full max-w-sm modal-panel p-0 overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+            <h2 class="text-sm font-semibold">Mi asistencia</h2>
+            <button type="button" class="text-slate-400 hover:text-slate-600" @click="showAsistenciaModal = false">✕</button>
+          </div>
+          <div class="p-3.5">
+            <AsistenciaPanel />
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <ToastHost />
     <ConfirmHost />

@@ -250,6 +250,12 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'], breadcrumb: [{ label: 'Comercial' }, { label: 'Caja Chica' }] },
     },
     {
+      path: '/asistencia',
+      name: 'asistencia',
+      component: () => import('@/views/asistencia/AsistenciaView.vue'),
+      meta: { requiresAuth: true, roles: ['SUPERADMIN', 'ADMIN'], breadcrumb: [{ label: 'Configuración' }, { label: 'Control de Asistencia' }] },
+    },
+    {
       path: '/usuarios',
       name: 'usuarios',
       component: () => import('@/views/usuarios/UsuariosView.vue'),

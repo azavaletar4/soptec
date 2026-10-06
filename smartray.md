@@ -331,6 +331,24 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   técnico" — se puede reservar fecha/turno dejando "Sin asignar" y asignar el técnico después. El
   texto de ayuda bajo el selector de técnico se actualizó para explicarlo.
 
+### Histórico de Atendidos — deep link a lo que llenó el técnico
+- Al hacer clic en una fila "Alta" ya completada, ahora lleva directo a la ficha del cliente,
+  pestaña "Fotos" (`?tab=fotos`), en vez de al listado de instalaciones filtrado por nombre.
+
+### Nuevo módulo "Control de Asistencia"
+- **App de Campo** (home del técnico, `/campo`): tarjeta nueva arriba de todo, "🕐 Marcación de
+  Jornada" — banner "📌 Hoy Lunes: Reunión Semanal — Ingreso 7:30 AM" (ámbar/celeste) o "⏰ Ingreso
+  8:00 AM" el resto de días, botones secuenciales 🟢 Marcar Ingreso → 🍲 Iniciar Almuerzo (2h) →
+  🛠️ Fin Almuerzo → 🔴 Marcar Salida, badge de estado (Puntual/Tardanza/En Almuerzo/Finalizado) y
+  cronómetro inverso grande (mono, rojo si se excede) durante el almuerzo.
+- **Panel Web**: ícono de reloj nuevo al pie del sidebar ("Marcar asistencia") que abre un modal
+  compacto con el mismo widget — disponible para todo el staff, no solo técnicos.
+- **Nueva página** `/asistencia` (menú Configuración → "Control de Asistencia", solo
+  SUPERADMIN/ADMIN): tablero en vivo del día (badges resumen Puntuales/Tardanzas/En almuerzo/
+  Faltas), tabla por colaborador con mapa flotante de ubicación (Leaflet, círculo celeste =
+  geocerca de oficina, pines verde/celeste/rojo = ingreso/fin de almuerzo/salida), reporte mensual
+  con exportar a CSV, gestión de feriados y configuración de geocerca/horarios/tolerancia.
+
 ---
 
 ## Cómo se sigue actualizando este archivo

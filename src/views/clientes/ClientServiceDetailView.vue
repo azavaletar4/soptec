@@ -144,7 +144,6 @@ async function loadContract() {
 }
 
 type Tab = 'resumen' | 'datos' | 'ubicacion' | 'facturacion' | 'fotos' | 'soporte';
-const activeTab = ref<Tab>('resumen');
 const TABS: { value: Tab; label: string }[] = [
   { value: 'resumen', label: 'Resumen' },
   { value: 'datos', label: 'Datos del servicio' },
@@ -153,6 +152,11 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'fotos', label: 'Fotos' },
   { value: 'soporte', label: 'Soporte' },
 ];
+// Deep link (?tab=fotos) desde "Histórico de Atendidos" al abrir una Alta
+// completada — así el admin cae directo en lo que registró el técnico
+// (fotos del censo) en vez de tener que buscar la pestaña a mano.
+const initialTab = TABS.find((t) => t.value === route.query.tab)?.value ?? 'resumen';
+const activeTab = ref<Tab>(initialTab);
 
 // ---- Tab General + Ubicación: un solo formulario, un solo guardado ----
 const savingContract = ref(false);

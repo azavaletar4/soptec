@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
+import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
 import { useCampoStore, type TrabajoEstadoUi, type TrabajoItem } from '@/stores/campo';
 import { useAuthStore } from '@/stores/auth';
 import { telLink, waLink } from '@/lib/phone';
@@ -84,6 +85,7 @@ onMounted(() => {
 
 <template>
   <CampoLayout title="Mis trabajos">
+    <AsistenciaPanel class="mb-3" />
     <input v-model="search" placeholder="Buscar cliente o dirección..." class="field-input mb-3" />
 
     <div class="grid gap-2 mb-3" :class="tabs.length > 2 ? 'grid-cols-3' : 'grid-cols-2'">

@@ -827,3 +827,56 @@ export interface CajaChicaMovimiento {
   caja_chica_categorias?: Pick<CajaChicaCategoria, 'id' | 'nombre' | 'permite_vehiculo'> | null;
   vehiculos?: Pick<Vehiculo, 'id' | 'placa' | 'marca' | 'modelo'> | null;
 }
+
+// ---- Control de Asistencia (Fase 117) ----
+export type AsistenciaEstado = 'Puntual' | 'Tardanza' | 'En Almuerzo' | 'Finalizado' | 'Falta';
+
+/** Configuracion unica (1 fila) de geocerca de oficina y horarios — editable solo por SUPERADMIN/ADMIN. */
+export interface CompanySettings {
+  id: 1;
+  oficina_lat: number;
+  oficina_lng: number;
+  oficina_radio_m: number;
+  tolerancia_min: number;
+  /** Formato HH:MM:SS (columna `time` de Postgres). */
+  lunes_hora_ingreso: string;
+  resto_hora_ingreso: string;
+  almuerzo_min: number;
+  updated_at: string;
+}
+
+export interface Feriado {
+  fecha: string;
+  nombre: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Marcacion de un dia (1 fila por user_id+fecha) — todos los calculos (tardanza,
+ *  exceso de almuerzo, fuera de geocerca) los hace el servidor (ver funciones
+ *  mark_attendance_* en Supabase), nunca el cliente. */
+export interface AsistenciaRegistro {
+  id: string;
+  user_id: string;
+  fecha: string;
+  es_lunes_reunion: boolean;
+  hora_ingreso: string | null;
+  lat_ingreso: number | null;
+  lng_ingreso: number | null;
+  fuera_oficina_ingreso: boolean | null;
+  inicio_almuerzo: string | null;
+  fin_almuerzo: string | null;
+  lat_fin_almuerzo: number | null;
+  lng_fin_almuerzo: number | null;
+  fuera_oficina_fin_almuerzo: boolean | null;
+  duracion_almuerzo_min: number | null;
+  exceso_almuerzo_min: number | null;
+  hora_salida: string | null;
+  lat_salida: number | null;
+  lng_salida: number | null;
+  minutos_tardanza: number;
+  estado: AsistenciaEstado;
+  created_at: string;
+  updated_at: string;
+  profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
