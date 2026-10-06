@@ -79,12 +79,14 @@ const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 
 const STATUS_LABEL: Record<InstallationStatus, string> = {
   pending: 'Pendiente',
   scheduled: 'Programada',
+  in_progress: 'En curso',
   completed: 'Completada',
   cancelled: 'Cancelada',
 };
 const STATUS_CLASS: Record<InstallationStatus, string> = {
   pending: 'bg-yellow-500/15 text-yellow-600',
   scheduled: 'bg-sky-500/15 text-sky-700',
+  in_progress: 'bg-sky-500/15 text-sky-700',
   completed: 'bg-green-500/15 text-green-600',
   cancelled: 'bg-slate-500/15 text-slate-600',
 };

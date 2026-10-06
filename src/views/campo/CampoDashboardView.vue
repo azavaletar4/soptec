@@ -6,16 +6,20 @@ import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
 import { useCampoStore, type TrabajoEstadoUi, type TrabajoItem } from '@/stores/campo';
 import { useAuthStore } from '@/stores/auth';
 import { useTicketsStore } from '@/stores/tickets';
+import { useInstallationsStore } from '@/stores/installations';
+import { useRoutinesStore } from '@/stores/routines';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { telLink, waLink } from '@/lib/phone';
-import type { Ticket } from '@/types/domain';
+import type { Installation, Routine, Ticket } from '@/types/domain';
 
 const router = useRouter();
 const campoStore = useCampoStore();
 const auth = useAuthStore();
 const ticketsStore = useTicketsStore();
+const installationsStore = useInstallationsStore();
+const routinesStore = useRoutinesStore();
 const { confirmDialog } = useConfirm();
 const toast = useToast();
 
@@ -89,28 +93,49 @@ function openTrabajo(t: TrabajoItem) {
 }
 
 // Botón de acción primario de la tarjeta: "Iniciar Orden" solo aplica a un
-// ticket YA asignado al técnico (no a "Disponibles", donde primero hay que
+// trabajo YA asignado al técnico (no a "Disponibles", donde primero hay que
 // "Tomar" la orden desde el detalle, Fase 98) y todavía no en curso —
-// 'open' (recien asignado por despacho) o 'rescheduled' (Cliente Ausente,
-// Fase 102, ya llegó la fecha). Dispara la misma transición que el botón
-// "Iniciar orden" del escritorio (OperacionesHoyView.vue): status='in_progress',
-// lo que a su vez hace que TechnicianStatusBar.vue (barra de "Técnicos
+// ticket 'open'/'rescheduled' (Cliente Ausente, Fase 102, ya llegó la fecha)
+// o instalación 'pending'/'scheduled'. Dispara la misma transición que el
+// botón "Iniciar orden" del escritorio (OperacionesHoyView.vue):
+// status='in_progress' — para instalaciones, ese valor no existia en el enum
+// hasta la Fase 126 (antes solo pending/scheduled/completed/cancelled), asi
+// que una Alta no tenia forma de marcarse "en curso" como un ticket. Para
+// tickets, ademas hace que TechnicianStatusBar.vue (barra de "Técnicos
 // Activos") lo muestre como "En atención" vía la suscripción Realtime de
-// tickets.ts.
+// tickets.ts. Rutinas ya traian 'in_progress' en su enum desde la Fase 101
+// (mantenimiento/peinado NAP), solo le faltaba el boton.
 const startingId = ref<string | null>(null);
-function canStartTicket(t: TrabajoItem): boolean {
-  if (t.jobType !== 'ticket' || activeTab.value === 'disponible') return false;
-  const status = (t.raw as Ticket).status;
-  return status === 'open' || status === 'rescheduled';
+function canStart(t: TrabajoItem): boolean {
+  if (activeTab.value === 'disponible') return false;
+  if (t.jobType === 'ticket') {
+    const status = (t.raw as Ticket).status;
+    return status === 'open' || status === 'rescheduled';
+  }
+  if (t.jobType === 'installation') {
+    const status = (t.raw as Installation).status;
+    return status === 'pending' || status === 'scheduled';
+  }
+  if (t.jobType === 'routine') {
+    const status = (t.raw as Routine).status;
+    return status === 'pending' || status === 'scheduled';
+  }
+  return false;
 }
-function isTicketInProgress(t: TrabajoItem): boolean {
-  return t.jobType === 'ticket' && activeTab.value !== 'disponible' && (t.raw as Ticket).status === 'in_progress';
+function isInProgress(t: TrabajoItem): boolean {
+  if (activeTab.value === 'disponible') return false;
+  if (t.jobType === 'ticket') return (t.raw as Ticket).status === 'in_progress';
+  if (t.jobType === 'installation') return (t.raw as Installation).status === 'in_progress';
+  if (t.jobType === 'routine') return (t.raw as Routine).status === 'in_progress';
+  return false;
 }
 
-async function startTicket(t: TrabajoItem): Promise<boolean> {
+async function startJob(t: TrabajoItem): Promise<boolean> {
   startingId.value = t.id;
   try {
-    await ticketsStore.updateTicketStatus(t.id, 'in_progress');
+    if (t.jobType === 'ticket') await ticketsStore.updateTicketStatus(t.id, 'in_progress');
+    else if (t.jobType === 'installation') await installationsStore.updateStatus(t.id, 'in_progress');
+    else if (t.jobType === 'routine') await routinesStore.updateStatus(t.id, 'in_progress');
     return true;
   } catch (e) {
     toast.error(getErrorMessage(e, 'No se pudo iniciar la orden'));
@@ -121,11 +146,11 @@ async function startTicket(t: TrabajoItem): Promise<boolean> {
 }
 
 async function handleStartClick(t: TrabajoItem) {
-  if (await startTicket(t)) openTrabajo(t);
+  if (await startJob(t)) openTrabajo(t);
 }
 
 async function handleCardClick(t: TrabajoItem) {
-  if (canStartTicket(t)) {
+  if (canStart(t)) {
     const ok = await confirmDialog({
       title: 'Iniciar atención',
       message: '¿Deseas iniciar la atención de esta orden?',
@@ -133,7 +158,7 @@ async function handleCardClick(t: TrabajoItem) {
       cancelLabel: 'Cancelar',
     });
     if (ok) {
-      if (await startTicket(t)) openTrabajo(t);
+      if (await startJob(t)) openTrabajo(t);
       return;
     }
   }
@@ -200,9 +225,9 @@ onMounted(() => {
         <p class="font-semibold text-sm text-slate-900">{{ t.clienteNombre }}</p>
         <p v-if="t.direccion" class="text-xs text-slate-500 mt-0.5">{{ t.direccion }}</p>
 
-        <div v-if="canStartTicket(t) || isTicketInProgress(t)" class="mt-3" @click.stop>
+        <div v-if="canStart(t) || isInProgress(t)" class="mt-3" @click.stop>
           <button
-            v-if="canStartTicket(t)"
+            v-if="canStart(t)"
             class="w-full py-2.5 rounded-lg bg-sky-500 text-slate-950 text-xs font-bold"
             :disabled="startingId === t.id"
             @click="handleStartClick(t)"

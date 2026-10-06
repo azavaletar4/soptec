@@ -63,8 +63,9 @@ function installationEstado(i: Installation): TrabajoEstadoUi {
   // distingue con su propio estado "Programada") se veia identica a una sin
   // tocar todavia en la app de Campo — el tecnico no podia distinguirlas.
   // 'en_proceso' ya existe para tickets "en curso"; es el bucket mas cercano
-  // a "esto ya esta en marcha" para una instalacion agendada.
-  if (i.status === 'scheduled') return 'en_proceso';
+  // a "esto ya esta en marcha" para una instalacion agendada o que el
+  // tecnico ya marco "Iniciar Orden" (Fase 126, mismo boton que en tickets).
+  if (i.status === 'scheduled' || i.status === 'in_progress') return 'en_proceso';
   return 'pendiente';
 }
 

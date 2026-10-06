@@ -33,7 +33,7 @@ export interface UnifiedJob {
 
 const ACTIVE_STATUS: Record<JobType, string[]> = {
   ticket: ['open', 'in_progress', 'rescheduled'],
-  installation: ['pending', 'scheduled'],
+  installation: ['pending', 'scheduled', 'in_progress'],
   routine: ['pending', 'scheduled', 'in_progress'],
 };
 

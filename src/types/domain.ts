@@ -24,7 +24,7 @@ export type TicketMotivoAveria =
 /** Categorias de ticket que cuentan como averia para el ranking de puntos (Fase 27) y el cierre con motivo (Fase 49). */
 export const AVERIA_TICKET_CATEGORIES: TicketCategory[] = ['no_service', 'slow_speed', 'equipment'];
 export type InvoiceStatus = 'pending' | 'paid' | 'cancelled' | 'exonerada';
-export type InstallationStatus = 'pending' | 'scheduled' | 'completed' | 'cancelled';
+export type InstallationStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type RoutineStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type RoutineCategory = 'peinado_nap' | 'mantenimiento_preventivo' | 'revision_zona' | 'otro';
 export type InventoryMovementType = 'ingreso' | 'egreso';

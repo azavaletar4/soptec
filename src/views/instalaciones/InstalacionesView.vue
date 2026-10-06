@@ -47,12 +47,14 @@ const form = ref(emptyForm());
 const STATUS_LABEL: Record<InstallationStatus, string> = {
   pending: 'Pendiente',
   scheduled: 'Programada',
+  in_progress: 'En curso',
   completed: 'Completada',
   cancelled: 'Cancelada',
 };
 const STATUS_CLASS: Record<InstallationStatus, string> = {
   pending: 'bg-yellow-500/15 text-yellow-600',
   scheduled: 'bg-sky-500/15 text-sky-700',
+  in_progress: 'bg-sky-500/15 text-sky-700',
   completed: 'bg-green-500/15 text-green-600',
   cancelled: 'bg-slate-500/15 text-slate-600',
 };
@@ -61,6 +63,7 @@ const STATUS_TABS: { value: InstallationStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'Todas' },
   { value: 'pending', label: 'Pendientes' },
   { value: 'scheduled', label: 'Programadas' },
+  { value: 'in_progress', label: 'En curso' },
   { value: 'completed', label: 'Completadas' },
   { value: 'cancelled', label: 'Canceladas' },
 ];
@@ -84,6 +87,7 @@ const filteredClients = computed(() => {
 const STATUS_SORT_TIER: Record<InstallationStatus, number> = {
   pending: 0,
   scheduled: 0,
+  in_progress: 0,
   completed: 1,
   cancelled: 1,
 };
