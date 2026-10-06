@@ -233,19 +233,28 @@ export const useCampoStore = defineStore('campo', () => {
   const queuedCount = ref(0);
   const syncing = ref(false);
 
+  // Fase 121: job_assignees.assigned_to solo refleja al LIDER (ver trigger
+  // sync_assigned_to_from_job_assignees) — un tecnico sumado como APOYO
+  // nunca aparece ahi, asi que sin esto una orden en cuadrilla era invisible
+  // en la propia App de Campo del apoyo (solo la veia el lider).
+  const myAssignments = ref<{ job_type: JobType; job_id: string }[]>([]);
+  function isMyCrewJob(jobType: JobType, jobId: string): boolean {
+    return myAssignments.value.some((a) => a.job_type === jobType && a.job_id === jobId);
+  }
+
   const trabajos = computed<TrabajoItem[]>(() => {
     const soloPropios = auth.role === 'TECNICO_RED';
     const uid = auth.user?.id;
     const instalaciones = installationsStore.installations
       .filter((i) => i.status !== 'cancelled')
-      .filter((i) => !soloPropios || i.assigned_to === uid)
+      .filter((i) => !soloPropios || i.assigned_to === uid || isMyCrewJob('installation', i.id))
       .map(fromInstallation);
     const tickets = ticketsStore.tickets
-      .filter((t) => !soloPropios || t.assigned_to === uid)
+      .filter((t) => !soloPropios || t.assigned_to === uid || isMyCrewJob('ticket', t.id))
       .map(fromTicket);
     const rutinas = routinesStore.routines
       .filter((r) => r.status !== 'cancelled')
-      .filter((r) => !soloPropios || r.assigned_to === uid)
+      .filter((r) => !soloPropios || r.assigned_to === uid || isMyCrewJob('routine', r.id))
       .map(fromRoutine);
     return [...instalaciones, ...tickets, ...rutinas].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? '') * -1);
   });
@@ -293,7 +302,11 @@ export const useCampoStore = defineStore('campo', () => {
   async function fetchAll() {
     loading.value = true;
     try {
-      await Promise.all([installationsStore.fetchInstallations(), ticketsStore.fetchTickets(), routinesStore.fetchRoutines()]);
+      const tasks: Promise<unknown>[] = [installationsStore.fetchInstallations(), ticketsStore.fetchTickets(), routinesStore.fetchRoutines()];
+      if (auth.role === 'TECNICO_RED' && auth.user?.id) {
+        tasks.push(jobAssigneesStore.fetchMyAssignments(auth.user.id).then((rows) => (myAssignments.value = rows)));
+      }
+      await Promise.all(tasks);
     } finally {
       loading.value = false;
     }

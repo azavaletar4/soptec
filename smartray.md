@@ -380,6 +380,15 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   correctamente") y una nota automática en "Seguimiento" (ej. "Actualizó el título y la
   descripción del ticket.", con el autor ya identificado ahí mismo por el timeline existente).
 
+### App de Campo — trabajo en cuadrilla (Líder + Apoyos)
+- Sección "Técnico asignado": botón nuevo "+ Agregar apoyo / acompañante" (visible para cualquier
+  integrante ya asignado) con un selector de técnicos disponibles — al confirmar, el apoyo queda
+  sumado a la cuadrilla y ve la orden en su propia App de Campo (antes solo la veía el líder).
+- Sincronización en vivo (Supabase Realtime): cambios de cuadrilla, materiales registrados y
+  equipos (serie saliente/entrante) se reflejan solos en la pantalla de todos los integrantes, sin
+  recargar. Las fotos del censo/evidencia siguen subiéndose recién al cerrar el trabajo (no hay
+  sync en vivo de fotos todavía — así funciona el borrador offline de la App de Campo).
+
 ---
 
 ## Cómo se sigue actualizando este archivo

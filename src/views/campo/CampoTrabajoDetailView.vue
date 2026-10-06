@@ -18,6 +18,8 @@ import { useContractsStore } from '@/stores/contracts';
 import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPhotos';
 import { useAuthStore } from '@/stores/auth';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
+import { useCatalogsStore } from '@/stores/catalogs';
+import { supabase } from '@/lib/supabase';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
@@ -55,6 +57,7 @@ const clientPhotosStore = useClientPhotosStore();
 const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 const jobAssigneesStore = useJobAssigneesStore();
+const catalogs = useCatalogsStore();
 const { confirmDialog } = useConfirm();
 const toast = useToast();
 
@@ -272,6 +275,8 @@ onMounted(async () => {
   if (!campoStore.trabajos.length) await campoStore.fetchAll();
   oltStore.fetchDevices().catch(() => {});
   inventoryStore.fetchProducts().catch(() => {});
+  catalogs.fetchStaff().catch(() => {});
+  setupRealtimeSync();
   // Pre-carga del Diagnostico express: se dispara apenas el tecnico ABRE
   // esta orden puntual (una sola, la que esta viendo — no todo su listado),
   // en paralelo, sin bloquear el resto de la pantalla. Para cuando
@@ -626,6 +631,84 @@ async function handleTakeTicket() {
   }
 }
 
+// ---- Agregar apoyo a la cuadrilla (Fase 121): cualquier integrante ya
+// asignado (lider o apoyo) puede sumar a otro tecnico desde la misma App de
+// Campo, sin depender de que despacho lo arme desde el panel web. ----
+const showAddSupport = ref(false);
+const supportTechnicianId = ref('');
+const addingSupport = ref(false);
+const addSupportError = ref<string | null>(null);
+
+const availableSupportTechnicians = computed(() =>
+  catalogs.staff.filter((s) => s.role === 'TECNICO_RED' && !assignees.value.some((a) => a.technician_id === s.id)),
+);
+
+function toggleAddSupport() {
+  showAddSupport.value = !showAddSupport.value;
+  supportTechnicianId.value = '';
+  addSupportError.value = null;
+}
+
+async function handleAddSupport() {
+  if (!supportTechnicianId.value) return;
+  addingSupport.value = true;
+  addSupportError.value = null;
+  try {
+    await jobAssigneesStore.addSupportTechnician(jobType, jobId, supportTechnicianId.value);
+    await loadAssignees();
+    showAddSupport.value = false;
+    supportTechnicianId.value = '';
+    toast.success('Apoyo agregado a la cuadrilla');
+  } catch (e) {
+    addSupportError.value = getErrorMessage(e, 'No se pudo agregar el apoyo');
+  } finally {
+    addingSupport.value = false;
+  }
+}
+
+// ---- Sincronizacion en tiempo real (Fase 121) — si el apoyo registra un
+// material, un cambio de equipo (serie saliente/entrante) o la cuadrilla
+// cambia desde otro celular, esta pantalla se refresca sola (los 3 se
+// guardan de inmediato en Supabase apenas se tocan, sin esperar un submit).
+// Las fotos del censo/evidencia son la EXCEPCION: no se suben de inmediato,
+// se juntan en el dispositivo y recien se mandan todas juntas al cerrar el
+// trabajo (ver handleCloseSubmit) — es lo que permite el borrador offline de
+// la Fase 116, asi que no hay "foto que aparezca en vivo" en esta pantalla
+// todavia (se veria en el panel web recien cuando el que cierra envia todo). ----
+let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+
+function setupRealtimeSync() {
+  if (jobType !== 'ticket' && jobType !== 'installation' && jobType !== 'routine') return;
+  let channel = supabase
+    .channel(`campo-job-${jobType}-${jobId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'job_assignees', filter: `job_id=eq.${jobId}` }, () => {
+      loadAssignees();
+    });
+  if (jobType !== 'routine') {
+    const materialColumn = jobType === 'installation' ? 'installation_id' : 'ticket_id';
+    channel = channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'inventory_movements', filter: `${materialColumn}=eq.${jobId}` },
+      () => {
+        loadMaterials();
+      },
+    );
+  }
+  if (jobType === 'ticket') {
+    channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_units', filter: `ticket_id=eq.${jobId}` }, () => {
+      loadEquipos();
+    });
+  }
+  realtimeChannel = channel.subscribe();
+}
+
+function teardownRealtimeSync() {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+}
+
 // ---- Devolver un ticket ya tomado (Fase 99): el tecnico no puede
 // continuar (emergencia, se equivoco de orden, etc). Deja una nota
 // obligatoria (ticket_comments) y el ticket vuelve a la bolsa de
@@ -890,6 +973,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', handleVisibilityOrHide);
   window.removeEventListener('pagehide', handleVisibilityOrHide);
   if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  teardownRealtimeSync();
 });
 
 // ---- Borrador local del cierre de trabajo (Fase 116) ----
@@ -1210,6 +1294,37 @@ async function handleCloseSubmit() {
           </button>
           <p v-else class="text-xs text-slate-400">Sin técnicos asignados.</p>
           <p v-if="selfAssignError" class="text-xs text-red-600 mt-2">{{ selfAssignError }}</p>
+
+          <!-- Agregar apoyo a la cuadrilla (Fase 121) — cualquier integrante
+               ya asignado puede sumar a otro tecnico, para trabajar de a 2. -->
+          <div v-if="isMyAssignment" class="mt-3 pt-3 border-t border-slate-100">
+            <button v-if="!showAddSupport" type="button" class="btn-secondary w-full text-xs" @click="toggleAddSupport">
+              + Agregar apoyo / acompañante
+            </button>
+            <div v-else class="space-y-2">
+              <select v-model="supportTechnicianId" class="field-input text-sm">
+                <option value="" disabled>Selecciona un técnico...</option>
+                <option v-for="s in availableSupportTechnicians" :key="s.id" :value="s.id">{{ s.full_name || s.email }}</option>
+              </select>
+              <p v-if="!availableSupportTechnicians.length" class="text-[11px] text-slate-400">
+                No hay otros técnicos disponibles para sumar.
+              </p>
+              <div class="flex gap-2">
+                <button type="button" class="btn-secondary text-xs flex-1" :disabled="addingSupport" @click="toggleAddSupport">
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  class="btn-primary text-xs flex-1"
+                  :disabled="addingSupport || !supportTechnicianId"
+                  @click="handleAddSupport"
+                >
+                  {{ addingSupport ? 'Agregando...' : 'Confirmar' }}
+                </button>
+              </div>
+              <p v-if="addSupportError" class="text-xs text-red-600">{{ addSupportError }}</p>
+            </div>
+          </div>
 
           <div v-if="canMarkAusente" class="mt-3 pt-3 border-t border-slate-100">
             <button v-if="!showAusenteForm" type="button" class="btn-secondary w-full text-xs !bg-amber-500/15 !text-amber-700 !border-amber-300" @click="toggleAusenteForm">

@@ -91,6 +91,29 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
   }
 
   /**
+   * Fase 121: un integrante de la cuadrilla (lider o apoyo) suma a otro
+   * tecnico como apoyo desde la App de Campo — job_assignees_write_dispatch
+   * le sigue negando a TECNICO_RED escribir job_assignees directo (a
+   * proposito), esto pasa por una funcion SECURITY DEFINER angosta que solo
+   * deja sumar apoyo a quien ya es parte de esa orden.
+   */
+  async function addSupportTechnician(jobType: JobType, jobId: string, technicianId: string) {
+    const { error } = await supabase.rpc('add_support_technician', {
+      p_job_type: jobType,
+      p_job_id: jobId,
+      p_technician_id: technicianId,
+    });
+    if (error) throw error;
+  }
+
+  /** Fase 121: todas las ordenes (de los 3 tipos) donde el propio tecnico es parte de la cuadrilla (lider o apoyo). */
+  async function fetchMyAssignments(technicianId: string): Promise<{ job_type: JobType; job_id: string }[]> {
+    const { data, error } = await supabase.from('job_assignees').select('job_type, job_id').eq('technician_id', technicianId);
+    if (error) throw error;
+    return (data ?? []) as { job_type: JobType; job_id: string }[];
+  }
+
+  /**
    * Fase 99: el tecnico devuelve un ticket que ya habia tomado (ej. el
    * cliente no estaba) — libera la cuadrilla completa y deja una nota
    * obligatoria (ticket_comments) con el motivo. Mismo patron que
@@ -101,5 +124,17 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
     if (error) throw error;
   }
 
-  return { loading, fetchAssignees, addAssignee, removeAssignee, setLeader, selfAssignTicket, selfAssignInstallation, selfAssignRoutine, returnTicket };
+  return {
+    loading,
+    fetchAssignees,
+    addAssignee,
+    removeAssignee,
+    setLeader,
+    selfAssignTicket,
+    selfAssignInstallation,
+    selfAssignRoutine,
+    addSupportTechnician,
+    fetchMyAssignments,
+    returnTicket,
+  };
 });
