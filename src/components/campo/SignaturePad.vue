@@ -135,6 +135,18 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
+    <!-- "Limpiar firma" vive en la cabecera (no abajo a la derecha) porque esa
+         esquina la tapan los FAB nativos de Inicio/Actualizar del APK
+         (mobile_app/lib/main.dart) — quedaba inalcanzable/confuso justo
+         encima de donde el cliente firma. -->
+    <div class="flex items-center justify-between gap-2 mb-1.5">
+      <label class="text-xs text-slate-600">
+        Firma del cliente<span v-if="required" class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria)</span></span>
+      </label>
+      <button type="button" class="text-xs text-red-500/80 hover:text-red-600 shrink-0 flex items-center gap-1" @click="clear">
+        🗑️ Limpiar firma
+      </button>
+    </div>
     <canvas
       ref="canvasEl"
       class="w-full h-40 rounded-lg border-2 border-dashed bg-slate-50 touch-none"
@@ -146,9 +158,6 @@ onBeforeUnmount(() => {
       @pointerleave="onPointerUp"
       @pointercancel="onPointerUp"
     ></canvas>
-    <div class="flex items-center justify-between mt-1.5">
-      <p class="text-[11px] text-slate-500">Firma del cliente confirmando conformidad</p>
-      <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="clear">Borrar</button>
-    </div>
+    <p class="text-[11px] text-slate-500 mt-1.5">Firma del cliente confirmando conformidad</p>
   </div>
 </template>

@@ -356,6 +356,18 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   (mismo candado amarillo que ya tenían las averías libres, bloqueando materiales/cierre hasta
   tomarla).
 
+### App de Campo — conflicto de UX en "Firma del cliente"
+- El botón "Borrar" (ahora "🗑️ Limpiar firma") se movió de la esquina inferior derecha del
+  recuadro de firma a la cabecera, junto al label "Firma del cliente *(obligatoria)" — quedaba
+  tapado por los FAB nativos de Inicio/Actualizar del APK, justo donde el cliente apoya el dedo
+  para firmar.
+- `CampoLayout.vue`: padding inferior de la página de `pb-8` a `pb-32`, para que el botón
+  principal (Completar instalación / Resolver avería...) nunca quede bajo esos FAB al hacer
+  scroll hasta el final.
+- APK (`mobile_app/lib/main.dart`): los FAB de Inicio/Actualizar pasaron de la esquina inferior
+  derecha (default de Flutter) a la inferior izquierda. APK reconstruido y copiado a
+  `C:\Users\USER\Desktop\SmartRayco.apk`.
+
 ---
 
 ## Cómo se sigue actualizando este archivo

@@ -94,7 +94,13 @@ onBeforeUnmount(() => {
       </button>
     </header>
 
-    <main class="flex-1 p-3 pb-8 max-w-lg w-full mx-auto">
+    <!-- pb-32 (no pb-8): deja espacio de sobra para que el boton principal
+         ("Completar instalación"/"Resolver avería"...) nunca quede tapado
+         por los FAB nativos de Inicio/Actualizar del APK (siempre flotan
+         sobre el WebView, el padding de la pagina no los mueve — solo
+         garantiza que el scroll maximo deje el contenido por encima de
+         donde ellos se dibujan). -->
+    <main class="flex-1 p-3 pb-32 max-w-lg w-full mx-auto">
       <slot />
     </main>
 

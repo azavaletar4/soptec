@@ -1730,9 +1730,6 @@ async function handleCloseSubmit() {
             </template>
           </template>
 
-          <label class="block text-xs text-slate-600 mb-1">
-            Firma del cliente<span v-if="jobType === 'installation'" class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatoria)</span></span>
-          </label>
           <SignaturePad
             ref="signaturePadRef"
             :required="jobType === 'installation'"
