@@ -55,17 +55,20 @@ const installation = ref<Installation | null>(null);
 const loading = ref(true);
 const notFound = ref(false);
 
-// Mismas reglas de permiso que tenia InstalacionesView.vue — una instalacion
-// (a diferencia de un ticket) SI se puede seguir gestionando desde el Panel
-// Web ademas de la App de Campo, por eso el tecnico asignado no queda en
-// solo-lectura aqui como si pasa en TicketDetailView.
+// El tecnico gestiona sus altas desde la App de Campo, no desde el Panel Web
+// — igual que TicketDetailView, esta vista queda SOLO LECTURA para
+// TECNICO_RED (materiales, equipos, completar, cancelar e instrucciones).
+// Antes el tecnico asignado SI podia editar aqui ademas de en la App de
+// Campo; se cerro esa puerta para evitar un cierre/edicion duplicado desde
+// el Panel Web sin la validacion de permisos administrativos.
+const isTecnico = computed(() => auth.role === 'TECNICO_RED');
 function canDelete(inst: Installation) {
   return inst.status === 'cancelled' && auth.role !== 'TECNICO_RED';
 }
 const canEditCrew = computed(() => ['SUPERADMIN', 'ADMIN', 'SOPORTE'].includes(auth.role ?? ''));
-function canEdit(inst: Installation) {
-  if (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') return true;
-  return auth.role === 'TECNICO_RED' && inst.assigned_to === auth.user?.id;
+function canEdit(_inst: Installation) {
+  if (isTecnico.value) return false;
+  return auth.role === 'SUPERADMIN' || auth.role === 'ADMIN';
 }
 function canEditMaterials(inst: Installation) {
   if (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') return true;
@@ -632,6 +635,10 @@ onMounted(async () => {
           <div v-else-if="installation.status === 'cancelled'" class="surface p-4 text-sm bg-slate-50 border border-slate-200">
             <h2 class="text-sm font-semibold mb-1">🚫 Instalación cancelada</h2>
           </div>
+          <div v-else-if="isTecnico" class="surface p-4 text-sm bg-sky-50 border border-sky-200">
+            <h2 class="text-sm font-semibold mb-1">🔒 Vista de solo lectura</h2>
+            <p class="text-xs text-slate-600">Gestiona esta orden (materiales, equipos, completar) desde la App de Campo.</p>
+          </div>
 
           <div class="surface p-4 text-sm">
             <div class="text-slate-500 text-xs mb-2">Tipo de instalación / servicio</div>
@@ -732,6 +739,7 @@ onMounted(async () => {
               </form>
               <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
             </template>
+            <p v-else-if="isTecnico" class="text-xs text-slate-400">Gestiona materiales desde la App de Campo</p>
             <p v-else-if="!canEdit(installation)" class="text-xs text-slate-400">Materiales (solo admin)</p>
           </div>
 

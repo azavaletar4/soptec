@@ -191,8 +191,10 @@ export interface ClosureInput {
   justificacionCierre: string | null;
   /** Fase 95 — lectura manual de potencia optica (dBm), solo tickets. */
   potenciaDbm: number | null;
-  /** Fase 95 — caja NAP nueva si hubo cambio de puerto, solo tickets. */
+  /** Fase 95 (tickets, opcional) / obligatoria al completar una instalación — caja NAP asignada al servicio. */
   napElementoId: string | null;
+  /** Zona/Sector de la Planta Externa, obligatoria al completar una instalación — se guarda en contracts.zone_id. */
+  zoneId: string | null;
 }
 
 /**
@@ -528,9 +530,17 @@ export const useCampoStore = defineStore('campo', () => {
     );
     if (closureErr) throw closureErr;
 
-    // Cambio de puerto NAP (Fase 95, solo si la averia exigio recablear):
-    // mismo assignContractToNap que usa una instalacion nueva — libera el
-    // puerto anterior del contrato (si tenia) y ocupa uno en la caja elegida.
+    // Zona/Sector de Planta Externa, obligatoria al completar una instalacion
+    // (ver CampoTrabajoDetailView) — queda en el contrato, igual que ya hacia
+    // InstalacionDetailView.vue desde el Panel Web.
+    if (input.zoneId && input.contractId) {
+      await contractsStore.updateContract(input.contractId, { zone_id: input.zoneId });
+    }
+
+    // Cambio de puerto NAP (Fase 95, solo si la averia exigio recablear) u
+    // obligatoria al completar una instalacion: mismo assignContractToNap —
+    // libera el puerto anterior del contrato (si tenia) y ocupa uno en la
+    // caja elegida.
     if (input.napElementoId && input.contractId && input.clientId) {
       if (!infraStore.elementos.length) await infraStore.fetchElementos();
       const elemento = infraStore.elementos.find((e) => e.id === input.napElementoId);
@@ -599,6 +609,7 @@ export const useCampoStore = defineStore('campo', () => {
       justificacionCierre: item.justificacionCierre,
       potenciaDbm: item.potenciaDbm,
       napElementoId: item.napElementoId,
+      zoneId: item.zoneId,
     });
   }
 
@@ -624,6 +635,7 @@ export const useCampoStore = defineStore('campo', () => {
         justificacionCierre: input.justificacionCierre,
         potenciaDbm: input.potenciaDbm,
         napElementoId: input.napElementoId,
+        zoneId: input.zoneId,
       });
       await refreshQueuedCount();
       return { queued: true };
@@ -654,6 +666,7 @@ export const useCampoStore = defineStore('campo', () => {
           justificacionCierre: input.justificacionCierre,
           potenciaDbm: input.potenciaDbm,
           napElementoId: input.napElementoId,
+          zoneId: input.zoneId,
         });
         await refreshQueuedCount();
         return { queued: true };

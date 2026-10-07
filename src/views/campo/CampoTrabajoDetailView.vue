@@ -303,6 +303,11 @@ onMounted(async () => {
     // "Disponibles" de la App de Campo) — necesitan la misma cuadrilla/lock
     // que ya tenian los tickets libres (Fase 98), sin el resto de carga
     // propia de una averia (equipos, infra NAP).
+    if (jobType === 'installation') {
+      // Zona/Caja NAP de Planta Externa, obligatorias para completar el alta.
+      await Promise.all([catalogs.fetchZones(), infraStore.fetchElementos(), fibra.fetchTodosNapPuertos()]);
+      initInstallZoneNap();
+    }
     await Promise.all([loadAssignees(), loadInstallEquipos()]);
   }
   await restoreDraft();
@@ -1013,16 +1018,43 @@ async function handleIncomingUnit() {
   }
 }
 
-// ---- dBm + cambio de puerto NAP opcionales (Fase 95, solo averias) ----
-const napOptions = computed(() =>
+// ---- dBm + cambio de puerto NAP opcionales (Fase 95, solo averias) / Zona +
+// Caja NAP obligatorias al completar una instalacion (Planta Externa) ----
+const napElementosAll = computed(() =>
   infraStore.elementos
     .filter((e) => e.tipo === 'caja_nap')
     .map((e) => {
       const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
       const used = puertos.filter((p) => p.estado === 'ocupado').length;
-      return { id: e.id, name: e.name, used, capacity: e.puertos_total ?? NAP_CLIENT_LIMIT };
+      return { id: e.id, name: e.name, used, capacity: e.puertos_total ?? NAP_CLIENT_LIMIT, zoneId: e.zone_id };
     })
     .sort((a, b) => a.name.localeCompare(b.name)),
+);
+// Averias: cualquier caja NAP (el tecnico ya sabe a cual recableo). Altas:
+// se filtra por la Zona elegida, igual que InstalacionDetailView.vue.
+const napOptions = computed(() => napElementosAll.value);
+const installNapOptions = computed(() => napElementosAll.value.filter((n) => n.zoneId === closureForm.value.zoneId));
+
+function findContractNapId(contractId: string): string {
+  for (const puertos of Object.values(fibra.napPuertosPorElemento)) {
+    const found = puertos.find((p) => p.contract_id === contractId && p.estado === 'ocupado');
+    if (found) return found.infra_elemento_id;
+  }
+  return '';
+}
+function onInstallZoneChange() {
+  if (closureForm.value.napElementoId && !installNapOptions.value.some((n) => n.id === closureForm.value.napElementoId)) {
+    closureForm.value.napElementoId = '';
+  }
+}
+function initInstallZoneNap() {
+  if (!closureForm.value.zoneId) closureForm.value.zoneId = activeContract.value?.zone_id ?? '';
+  if (!closureForm.value.napElementoId && activeContract.value?.id) {
+    closureForm.value.napElementoId = findContractNapId(activeContract.value.id);
+  }
+}
+const installZoneNapMissing = computed(
+  () => jobType === 'installation' && (!closureForm.value.zoneId || !closureForm.value.napElementoId),
 );
 
 // ---- Cierre de trabajo ----
@@ -1047,8 +1079,11 @@ const closureForm = ref({
   motivoAveriaDetalle: '',
   justificacion: '',
   // Fase 95 — opcionales, solo si la averia exigio recablear/revisar fibra.
+  // En instalaciones, napElementoId es obligatorio (ver zoneId abajo).
   potenciaDbm: null as number | null,
   napElementoId: '',
+  // Zona/Sector de Planta Externa, obligatoria al completar una instalacion.
+  zoneId: '',
 });
 // Causa preliminar (Fase 103): si admin/soporte dejo una sospecha al crear
 // el ticket, se pre-carga aca apenas se conoce el ticket — el tecnico la ve
@@ -1258,6 +1293,13 @@ async function handleCloseSubmit() {
   }
   signatureMissing.value = false;
 
+  // Planta Externa (Zona + Caja NAP) es obligatoria al completar un alta —
+  // sin esto no queda registrado donde quedo conectado el cliente.
+  if (jobType === 'installation' && (!closureForm.value.zoneId || !closureForm.value.napElementoId)) {
+    closeError.value = 'Selecciona la Zona y la Caja NAP antes de completar la instalación.';
+    return;
+  }
+
   // Averia: el motivo de cierre es obligatorio para poder liquidarla (alimenta
   // el ranking de puntos, Fase 49) — no aplica a instalaciones ni a rutinas.
   // Si el motivo exime al tecnico, ademas exige justificacion y al menos una
@@ -1324,7 +1366,8 @@ async function handleCloseSubmit() {
         jobType === 'ticket' && closureForm.value.motivoAveria === 'other' ? closureForm.value.motivoAveriaDetalle.trim() || null : null,
       justificacionCierre: jobType === 'ticket' ? closureForm.value.justificacion.trim() || null : null,
       potenciaDbm: jobType === 'ticket' ? closureForm.value.potenciaDbm : null,
-      napElementoId: jobType === 'ticket' ? closureForm.value.napElementoId || null : null,
+      napElementoId: jobType === 'ticket' || jobType === 'installation' ? closureForm.value.napElementoId || null : null,
+      zoneId: jobType === 'installation' ? closureForm.value.zoneId || null : null,
     });
     closeResult.value = result.queued ? 'queued' : 'ok';
     // El borrador solo se borra cuando el cierre de verdad llego a Supabase —
@@ -2024,6 +2067,34 @@ async function handleCloseSubmit() {
             </div>
           </div>
 
+          <template v-if="jobType === 'installation'">
+            <p class="text-xs font-medium text-slate-600 mb-1">
+              Datos de red / Planta externa<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-1">
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Zona / Sector</label>
+                <select v-model="closureForm.zoneId" required class="field-input text-sm" @change="onInstallZoneChange">
+                  <option value="" disabled>Selecciona...</option>
+                  <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Caja NAP</label>
+                <select v-model="closureForm.napElementoId" required class="field-input text-sm" :disabled="!closureForm.zoneId">
+                  <option value="" disabled>{{ closureForm.zoneId ? 'Selecciona...' : 'Elige primero una zona' }}</option>
+                  <option v-for="n in installNapOptions" :key="n.id" :value="n.id">
+                    {{ n.name }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity && n.id !== closureForm.napElementoId ? ' (LLENA)' : '' }}
+                  </option>
+                </select>
+                <p v-if="closureForm.zoneId && !installNapOptions.length" class="text-[11px] text-amber-700 mt-1">
+                  Esa zona no tiene cajas NAP registradas — pide a un administrador que cree una en el Mapa de Red.
+                </p>
+              </div>
+            </div>
+            <p v-if="installZoneNapMissing" class="text-[11px] text-red-600 mb-2">Debes elegir la Zona y la Caja NAP para poder completar.</p>
+          </template>
+
           <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
 
           <template v-if="jobType === 'ticket'">
@@ -2092,7 +2163,7 @@ async function handleCloseSubmit() {
           </p>
           <p v-if="closeResult === 'ok'" class="text-sm text-green-600 mt-3">Trabajo cerrado correctamente.</p>
 
-          <button type="button" :disabled="closing" class="btn-primary w-full text-sm mt-3" @click="handleCloseSubmit">
+          <button type="button" :disabled="closing || installZoneNapMissing" class="btn-primary w-full text-sm mt-3" @click="handleCloseSubmit">
             {{
               closing
                 ? 'Guardando...'

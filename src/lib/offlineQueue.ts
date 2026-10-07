@@ -44,8 +44,10 @@ export interface QueuedClosure {
   justificacionCierre: string | null;
   /** Lectura manual de potencia optica (dBm) si la averia exigio recablear (Fase 95) — solo tickets. */
   potenciaDbm: number | null;
-  /** Caja NAP nueva si hubo cambio de puerto (Fase 95) — solo tickets. */
+  /** Caja NAP — cambio de puerto opcional en tickets (Fase 95) u obligatoria al completar una instalación. */
   napElementoId: string | null;
+  /** Zona/Sector de la Planta Externa, obligatoria al completar una instalación — se guarda en el contrato. */
+  zoneId: string | null;
   lastError?: string;
 }
 
