@@ -123,6 +123,20 @@ const router = createRouter({
       meta: { requiresAuth: true, breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Rutinas' }] },
     },
     {
+      // Fase 133: detalle de solo lectura de una rutina (cierre de campo +
+      // evidencias) — mismo motivo que InstalacionDetailView (Fase 122):
+      // antes "ver detalle" de una rutina desde el Historico solo reabria el
+      // modal de creacion/edicion, sin mostrar lo que el tecnico registro al
+      // cerrarla en la App de Campo.
+      path: '/soporte/rutinas/:id',
+      name: 'rutina-detalle',
+      component: () => import('@/views/soporte/RoutineDetailView.vue'),
+      meta: {
+        requiresAuth: true,
+        breadcrumb: [{ label: 'Soporte', to: '/soporte' }, { label: 'Rutinas', to: '/soporte/rutinas' }, { label: 'Detalle' }],
+      },
+    },
+    {
       // Fase 101-B: tablero de despacho Timeline/Calendario (TOA) — cruza
       // los 3 tipos de orden por tecnico/hora, con agendamiento de hora
       // exacta. Vista alternativa a las tablas de arriba, no un 4to tipo.

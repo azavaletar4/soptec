@@ -482,6 +482,17 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   Pendientes de Hoy", con badge de prioridad a color (🔵 Baja / 🟡 Media / 🟠 Alta / 🔴 Urgente).
   Solo aparece para trabajos que todavía no se iniciaron.
 
+### Detalle de Rutinas en el Histórico (Fase 133)
+- Click en una rutina desde "Histórico de Atendidos" ya no vuelve a la lista de Rutinas con una
+  búsqueda — abre una **página de detalle propia** (`/soporte/rutinas/:id`, solo lectura), con el
+  mismo nivel de información que ya tenían Averías/Altas: destino, programación, descripción,
+  cuadrilla asignada y un bloque **"✅ Cierre registrado en campo"** con quién la completó, fecha y
+  hora exacta, notas de cierre, ubicación GPS (link a Google Maps) y una nota de que las rutinas
+  todavía no registran materiales. Las fotos de evidencia ahora se ven como miniaturas en la misma
+  página (antes solo con el botón "Evidencias" aparte).
+- "Exportar a CSV" del Histórico suma dos columnas nuevas — "Notas de cierre" y "Evidencias"
+  (conteo de fotos) — para las 3 clases de orden.
+
 ---
 
 ## Cómo se sigue actualizando este archivo

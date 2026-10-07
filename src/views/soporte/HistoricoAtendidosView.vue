@@ -14,7 +14,8 @@ import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { EQUIPMENT_TYPE_LABEL } from '@/lib/equipmentPhotoType';
 import { JOB_STATUS_CLASS, JOB_STATUS_LABEL, useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
-import type { JobType, Ticket } from '@/types/domain';
+import { supabase } from '@/lib/supabase';
+import type { JobType, Routine, Ticket } from '@/types/domain';
 
 // Fase 107: todo lo resuelto/cerrado/completado vive aca aparte — asi
 // "Operaciones de Hoy" solo tiene que mostrar lo que de verdad hace falta
@@ -86,7 +87,11 @@ function goToJob(job: UnifiedJob) {
     // un acceso directo a la ficha del cliente para ver las fotos.
     router.push(`/soporte/instalaciones/${job.id}`);
   } else {
-    router.push(`/soporte/rutinas?q=${encodeURIComponent(job.label)}`);
+    // Fase 133: detalle dedicado (cierre de campo + evidencias) — antes
+    // volvia a la lista de Rutinas con una busqueda, que solo reabria el
+    // modal de creacion/edicion sin mostrar nada del cierre registrado por
+    // el tecnico en la App de Campo.
+    router.push(`/soporte/rutinas/${job.id}`);
   }
 }
 
@@ -128,26 +133,77 @@ function slaPlainLabel(job: UnifiedJob): string {
   return slaInfo(job)?.label.replace('⏱️ ', '') ?? '';
 }
 
-function exportCsv() {
-  const header = ['Orden', 'Cliente', 'Tipo', 'Estado', 'Asignado', 'Creado', 'Atendido', 'Tiempo de respuesta'];
-  const rows = filteredJobs.value.map((j) => [
-    j.number ?? '',
-    j.label,
-    TYPE_META[j.jobType].label,
-    JOB_STATUS_LABEL[j.status] ?? j.status,
-    j.assignedName ?? 'Sin asignar',
-    formatDateTime(j.createdAt),
-    formatDateTime(j.finishedAt),
-    slaPlainLabel(j),
-  ]);
-  const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `historico-atendidos-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+// Notas de cierre: mismo campo que ya muestra cada detalle dedicado —
+// tickets.observacion_cierre (TicketDetailView) / routines.closure_notes
+// (RoutineDetailView, Fase 133). Instalaciones no tiene un campo de notas de
+// cierre propio (Fase 64b aplica fotos/GPS directo, sin texto aparte) — la
+// celda queda vacia para ese tipo, no es un dato faltante.
+function closureNotesFor(job: UnifiedJob): string {
+  if (job.jobType === 'ticket') return (job.raw as Ticket).observacion_cierre ?? '';
+  if (job.jobType === 'routine') return (job.raw as Routine).closure_notes ?? '';
+  return '';
+}
+
+/** Conteo de evidencias (work_order_photos, sin contar rechazadas) por orden — una sola consulta por tipo en vez de una por fila. */
+async function fetchEvidenceCounts(jobs: UnifiedJob[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  const idsByType: Record<JobType, string[]> = { ticket: [], installation: [], routine: [] };
+  for (const j of jobs) idsByType[j.jobType].push(j.id);
+  for (const jobType of Object.keys(idsByType) as JobType[]) {
+    const ids = idsByType[jobType];
+    if (!ids.length) continue;
+    const { data } = await supabase.from('work_order_photos').select('job_id').eq('job_type', jobType).in('job_id', ids).neq('status', 'rejected');
+    for (const row of data ?? []) {
+      const key = `${jobType}:${row.job_id}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+const exportingCsv = ref(false);
+
+async function exportCsv() {
+  exportingCsv.value = true;
+  try {
+    const counts = await fetchEvidenceCounts(filteredJobs.value);
+    const header = [
+      'Orden',
+      'Cliente',
+      'Tipo',
+      'Estado',
+      'Asignado',
+      'Creado',
+      'Atendido',
+      'Tiempo de respuesta',
+      'Notas de cierre',
+      'Evidencias',
+    ];
+    const rows = filteredJobs.value.map((j) => [
+      j.number ?? '',
+      j.label,
+      TYPE_META[j.jobType].label,
+      JOB_STATUS_LABEL[j.status] ?? j.status,
+      j.assignedName ?? 'Sin asignar',
+      formatDateTime(j.createdAt),
+      formatDateTime(j.finishedAt),
+      slaPlainLabel(j),
+      closureNotesFor(j),
+      String(counts.get(`${j.jobType}:${j.id}`) ?? 0),
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `historico-atendidos-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    toast.error(getErrorMessage(e, 'Error al exportar el CSV'));
+  } finally {
+    exportingCsv.value = false;
+  }
 }
 
 // ---- Acceso rapido a evidencias (fotos de campo), via el mismo PhotoLightbox
@@ -201,7 +257,9 @@ async function openEvidencias(job: UnifiedJob) {
         <p class="text-slate-600 text-sm mt-1">{{ filteredJobs.length }} órdenes resueltas / cerradas / completadas / canceladas</p>
       </div>
       <div class="flex items-center gap-2">
-        <button class="btn-secondary text-sm" :disabled="!filteredJobs.length" @click="exportCsv">⬇️ Exportar a CSV</button>
+        <button class="btn-secondary text-sm" :disabled="!filteredJobs.length || exportingCsv" @click="exportCsv">
+          {{ exportingCsv ? 'Exportando...' : '⬇️ Exportar a CSV' }}
+        </button>
       </div>
     </div>
 
