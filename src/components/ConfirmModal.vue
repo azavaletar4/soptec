@@ -19,11 +19,13 @@ const props = withDefaults(
     message: string;
     /** true = accion irreversible (Eliminar definitivamente): boton rojo + texto de advertencia. */
     danger?: boolean;
+    /** true = caja ambar con ⚠️ alrededor del mensaje — advertencia no destructiva (ej. choque de horario) que de todos modos se puede confirmar. */
+    warning?: boolean;
     confirmLabel?: string;
     cancelLabel?: string;
     loading?: boolean;
   }>(),
-  { danger: false, confirmLabel: 'Confirmar', cancelLabel: 'Cancelar', loading: false },
+  { danger: false, warning: false, confirmLabel: 'Confirmar', cancelLabel: 'Cancelar', loading: false },
 );
 
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
@@ -106,8 +108,11 @@ onBeforeUnmount(() => {
     <div v-if="open" class="modal-overlay" role="dialog" aria-modal="true" :aria-labelledby="titleId">
       <div ref="panelRef" class="w-full max-w-sm modal-panel max-h-[90vh] overflow-y-auto">
         <h2 :id="titleId" class="text-lg font-semibold mb-1">{{ title }}</h2>
-        <p class="text-sm text-slate-600 mb-1">{{ message }}</p>
+        <p v-if="!warning" class="text-sm text-slate-600 mb-1">{{ message }}</p>
         <p v-if="danger" class="text-xs text-red-600 font-medium mb-3">Esta acción no se puede deshacer.</p>
+        <p v-if="warning" class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-1">
+          ⚠️ {{ message }}
+        </p>
         <div class="flex justify-end gap-2 mt-4">
           <button ref="cancelBtnRef" type="button" class="btn-ghost" :disabled="loading" @click="$emit('cancel')">
             {{ cancelLabel }}

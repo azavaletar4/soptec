@@ -14,11 +14,13 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useAuthStore } from '@/stores/auth';
 import { JOB_STATUS_CLASS, JOB_STATUS_LABEL, useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { MOTIVO_AVERIA_OPTIONS } from '@/lib/ticketMotivoAveria';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
+import { findScheduleConflict, conflictConfirmMessage } from '@/lib/scheduleConflict';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
 import type { JobType, ServiceContract, Ticket, TicketCategory, TicketMotivoAveria, TicketPriority } from '@/types/domain';
 
@@ -39,6 +41,7 @@ const catalogsStore = useCatalogsStore();
 const jobAssigneesStore = useJobAssigneesStore();
 const auth = useAuthStore();
 const { allJobs, activeJobs } = useUnifiedJobs();
+const { confirmDialog } = useConfirm();
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
 
@@ -297,10 +300,29 @@ async function handleSubmit() {
     formError.value = 'Asignaste un técnico — selecciona también el turno de la cita.';
     return;
   }
+  const turno = TURNOS.find((t) => t.value === form.value.schedule_turno);
+  // Fase 131 — choque de horario: el tecnico ya tiene algo agendado dentro
+  // de +/-1h de este turno. No bloquea, solo pide confirmar (puede ser
+  // intencional, ej. una visita corta entre dos citas).
+  if (turno && form.value.schedule_tech_id) {
+    const startIso = dateTimeToIso(form.value.schedule_date, turno.start);
+    const endIso = dateTimeToIso(form.value.schedule_date, turno.end);
+    const conflict = await findScheduleConflict(form.value.schedule_tech_id, startIso, endIso);
+    if (conflict) {
+      const techName = technicians.value.find((t) => t.id === form.value.schedule_tech_id)?.full_name || 'el técnico';
+      const ok = await confirmDialog({
+        title: 'Choque de horario',
+        message: conflictConfirmMessage(techName, conflict),
+        warning: true,
+        confirmLabel: 'Confirmar asignación simultánea',
+        cancelLabel: 'Cancelar',
+      });
+      if (!ok) return;
+    }
+  }
   saving.value = true;
   formError.value = null;
   try {
-    const turno = TURNOS.find((t) => t.value === form.value.schedule_turno);
     const created = await ticketsStore.createTicket({
       client_id: form.value.client_id,
       contract_id: form.value.contract_id || null,

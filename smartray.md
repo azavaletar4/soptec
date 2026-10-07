@@ -461,6 +461,16 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   puntaje de cualquier orden con cuadrilla (instalación, ticket o rutina) se reparte en partes
   iguales entre los técnicos que participaron.
 
+### Cronograma de Campo (Soporte → Agenda)
+- Dos o más órdenes del mismo técnico que se cruzan en hora ya no se pintan una encima de la otra
+  (antes quedaban ilegibles) — ahora se reparten en **carriles apilados verticalmente** dentro de
+  la fila de ese técnico; con más de 3 carriles, la celda deja de crecer y scrollea internamente.
+- Cuando hay un cruce, la fila del técnico muestra un **borde rojo a la izquierda** y, debajo de su
+  nombre, el badge **"⚠️ N eventos a la misma hora"**.
+- Nueva advertencia amarilla de confirmación al crear un ticket, instalación o rutina con técnico +
+  fecha/turno: si ese técnico ya tiene algo agendado dentro de ±1 hora, un modal ámbar pregunta
+  "¿Confirmar asignación simultánea?" antes de guardar (no bloquea, solo avisa).
+
 ---
 
 ## Cómo se sigue actualizando este archivo

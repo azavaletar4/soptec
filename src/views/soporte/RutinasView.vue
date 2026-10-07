@@ -11,9 +11,11 @@ import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
+import { findScheduleConflict, conflictConfirmMessage } from '@/lib/scheduleConflict';
 import type { Routine, RoutineStatus, RoutineTipo, TicketPriority } from '@/types/domain';
 
 // Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de orden
@@ -31,6 +33,7 @@ const infraStore = useInfraElementosStore();
 const jobAssigneesStore = useJobAssigneesStore();
 const auth = useAuthStore();
 const toast = useToast();
+const { confirmDialog } = useConfirm();
 
 // Armar la cuadrilla y crear/borrar rutinas es una decision de despacho,
 // mismo set de roles que ya abre job_assignees (Fase 94) e Instalaciones.
@@ -258,12 +261,30 @@ async function handleSubmit() {
     formError.value = 'Asignaste un técnico — selecciona también el turno / hora estimada.';
     return;
   }
-  saving.value = true;
-  formError.value = null;
   const turno =
     form.value.schedule_turno && form.value.scheduled_date
       ? TURNOS.find((t) => t.value === form.value.schedule_turno)
       : undefined;
+  // Fase 131 — choque de horario: el tecnico ya tiene algo agendado dentro
+  // de +/-1h de este turno. No bloquea, solo pide confirmar.
+  if (turno && form.value.schedule_tech_id) {
+    const startIso = dateTimeToIso(form.value.scheduled_date, turno.start);
+    const endIso = dateTimeToIso(form.value.scheduled_date, turno.end);
+    const conflict = await findScheduleConflict(form.value.schedule_tech_id, startIso, endIso);
+    if (conflict) {
+      const techName = technicians.value.find((t) => t.id === form.value.schedule_tech_id)?.full_name || 'el técnico';
+      const ok = await confirmDialog({
+        title: 'Choque de horario',
+        message: conflictConfirmMessage(techName, conflict),
+        warning: true,
+        confirmLabel: 'Confirmar asignación simultánea',
+        cancelLabel: 'Cancelar',
+      });
+      if (!ok) return;
+    }
+  }
+  saving.value = true;
+  formError.value = null;
   const adicionales_json =
     targetKind.value === 'client' && form.value.client_id
       ? {

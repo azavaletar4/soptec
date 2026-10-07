@@ -11,6 +11,8 @@ export interface ConfirmOptions {
   message: string;
   /** true = boton de confirmar en rojo solido + "Esta accion no se puede deshacer." */
   danger?: boolean;
+  /** true = caja ambar con icono ⚠️ alrededor del mensaje — advertencia no destructiva (ej. choque de horario) que de todos modos se puede confirmar. */
+  warning?: boolean;
   confirmLabel?: string;
   cancelLabel?: string;
 }
@@ -25,6 +27,7 @@ const state = reactive<ConfirmState>({
   title: '',
   message: '',
   danger: false,
+  warning: false,
   confirmLabel: undefined,
   cancelLabel: undefined,
   resolve: null,
@@ -47,6 +50,7 @@ export function useConfirm() {
       state.title = options.title;
       state.message = options.message;
       state.danger = options.danger ?? false;
+      state.warning = options.warning ?? false;
       state.confirmLabel = options.confirmLabel;
       state.cancelLabel = options.cancelLabel;
       state.resolve = resolve;

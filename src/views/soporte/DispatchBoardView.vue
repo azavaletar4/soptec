@@ -139,6 +139,57 @@ const unscheduledItems = computed(() =>
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
 
+// Fase 131 — antes todos los bloques de un tecnico se pintaban con la misma
+// position:absolute top/bottom, asi que si dos se cruzaban en hora quedaban
+// literalmente encima uno del otro (texto ilegible). Reparte los bloques en
+// "carriles" (mismo algoritmo que un calendario tipo Google/Outlook):
+// mientras no se cruce con el ultimo del carril, entra ahi; si no, abre un
+// carril nuevo. El layout horizontal (hora) sigue siendo blockStyle() tal
+// cual — esto solo decide en que carril (fila vertical dentro de la celda
+// del tecnico) va cada bloque.
+interface TechLayout {
+  laneItems: BoardItem[][];
+  conflictCount: number;
+}
+
+function computeTechLayout(techId: string): TechLayout {
+  const list = itemsForTechnician(techId)
+    .map((item) => ({
+      item,
+      startMs: new Date(item.scheduledStartAt!).getTime(),
+      endMs: new Date(item.scheduledEndAt!).getTime(),
+    }))
+    .sort((a, b) => a.startMs - b.startMs);
+
+  const laneEndMs: number[] = [];
+  const laneItems: BoardItem[][] = [];
+  for (const entry of list) {
+    let laneIdx = laneEndMs.findIndex((end) => end <= entry.startMs);
+    if (laneIdx === -1) {
+      laneIdx = laneEndMs.length;
+      laneEndMs.push(entry.endMs);
+      laneItems.push([]);
+    } else {
+      laneEndMs[laneIdx] = entry.endMs;
+    }
+    laneItems[laneIdx].push(entry.item);
+  }
+
+  let conflictCount = 0;
+  for (let a = 0; a < list.length; a++) {
+    const hasOverlap = list.some((b, bi) => bi !== a && list[a].startMs < b.endMs && b.startMs < list[a].endMs);
+    if (hasOverlap) conflictCount++;
+  }
+
+  return { laneItems: laneItems.length ? laneItems : [[]], conflictCount };
+}
+
+const techLayouts = computed(() => {
+  const map = new Map<string, TechLayout>();
+  for (const tech of technicians.value) map.set(tech.id, computeTechLayout(tech.id));
+  return map;
+});
+
 // Switch "Ocultar Resueltos" (Fase 106) — deja visible solo la carga de
 // trabajo pendiente del dia en la matriz; "Sin horario asignado" ya excluye
 // finalizados siempre, sin importar este switch.
@@ -321,30 +372,49 @@ async function confirmSchedule(item: BoardItem) {
         <p v-if="!technicians.length" class="text-center text-sm text-slate-500 py-6">No hay técnicos registrados.</p>
 
         <div v-for="tech in technicians" :key="tech.id" class="flex items-stretch py-1.5 border-b border-slate-100 last:border-0">
-          <div class="w-36 shrink-0 flex items-center text-xs font-medium text-slate-700 truncate pr-2">
-            {{ tech.full_name || tech.email }}
+          <div class="w-36 shrink-0 flex flex-col justify-center pr-2">
+            <span class="text-xs font-medium text-slate-700 truncate">{{ tech.full_name || tech.email }}</span>
+            <span v-if="techLayouts.get(tech.id)?.conflictCount" class="text-[10px] font-semibold text-red-600 mt-0.5">
+              ⚠️ {{ techLayouts.get(tech.id)?.conflictCount }}
+              {{ techLayouts.get(tech.id)?.conflictCount === 1 ? 'evento' : 'eventos' }} a la misma hora
+            </span>
           </div>
           <div
-            class="relative flex-1 h-11 bg-slate-50 rounded-md"
-            :class="canCreateTickets ? 'cursor-pointer hover:bg-sky-50' : ''"
+            class="relative flex-1 bg-slate-50 rounded-md"
+            :class="[
+              canCreateTickets ? 'cursor-pointer hover:bg-sky-50' : '',
+              techLayouts.get(tech.id)?.conflictCount ? 'border-l-[3px] border-red-500' : '',
+            ]"
             :title="canCreateTickets ? 'Click para crear un ticket en este horario' : undefined"
             @click="handleCellClick($event, tech)"
           >
             <!-- lineas guia por hora -->
-            <div class="absolute inset-0 grid" :style="{ gridTemplateColumns: `repeat(${HOURS.length - 1}, 1fr)` }">
+            <div class="absolute inset-0 grid pointer-events-none" :style="{ gridTemplateColumns: `repeat(${HOURS.length - 1}, 1fr)` }">
               <div v-for="h in HOURS.slice(0, -1)" :key="h" class="border-l border-slate-200 first:border-l-0"></div>
             </div>
+            <!-- carriles: cada carril es una franja horizontal propia, asi dos
+                 bloques que se cruzan en hora caen en carriles distintos en
+                 vez de superponerse. Mas de 3 carriles: la celda crece hasta
+                 un tope y de ahi scrollea en vez de aplastar la fila de los
+                 demas tecnicos. -->
             <div
-              v-for="item in itemsForTechnician(tech.id)"
-              :key="itemKey(item)"
-              class="absolute top-1 bottom-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium truncate cursor-pointer transition-transform hover:z-10 hover:scale-[1.03]"
-              :class="[TYPE_META[item.jobType].bg, TYPE_META[item.jobType].border]"
-              :style="blockStyle(item)"
-              :title="`${TYPE_META[item.jobType].label}: ${item.label} (${timeLabel(item.scheduledStartAt!)}–${timeLabel(item.scheduledEndAt!)})`"
-              @click.stop="item.jobType === 'ticket' ? goToDetail(item) : openSchedule(item)"
+              class="relative flex flex-col gap-0.5 py-0.5"
+              :class="(techLayouts.get(tech.id)?.laneItems.length ?? 1) > 3 ? 'max-h-[150px] overflow-y-auto' : ''"
             >
-              {{ item.label }}
-              <template v-if="item.inProgress"> · ⏱️ {{ formatElapsedTime(item.updatedAt, now) }}</template>
+              <div v-for="(lane, laneIdx) in techLayouts.get(tech.id)?.laneItems ?? [[]]" :key="laneIdx" class="relative h-9 shrink-0">
+                <div
+                  v-for="item in lane"
+                  :key="itemKey(item)"
+                  class="absolute top-0.5 bottom-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-medium truncate cursor-pointer transition-transform hover:z-10 hover:scale-[1.03]"
+                  :class="[TYPE_META[item.jobType].bg, TYPE_META[item.jobType].border]"
+                  :style="blockStyle(item)"
+                  :title="`${TYPE_META[item.jobType].label}: ${item.label} (${timeLabel(item.scheduledStartAt!)}–${timeLabel(item.scheduledEndAt!)})`"
+                  @click.stop="item.jobType === 'ticket' ? goToDetail(item) : openSchedule(item)"
+                >
+                  {{ item.label }}
+                  <template v-if="item.inProgress"> · ⏱️ {{ formatElapsedTime(item.updatedAt, now) }}</template>
+                </div>
+              </div>
             </div>
           </div>
         </div>

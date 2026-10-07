@@ -9,8 +9,11 @@ import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
+import { dateTimeToIso, addMinutesToTime } from '@/lib/turnos';
+import { findScheduleConflict, conflictConfirmMessage } from '@/lib/scheduleConflict';
 import type { Installation, InstallationStatus, ServiceContract, TicketPriority } from '@/types/domain';
 
 const route = useRoute();
@@ -21,6 +24,7 @@ const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
 const auth = useAuthStore();
+const { confirmDialog } = useConfirm();
 
 const showModal = ref(false);
 const saving = ref(false);
@@ -156,6 +160,26 @@ async function handleSubmit() {
   if (!form.value.client_id) {
     formError.value = 'Selecciona un cliente';
     return;
+  }
+  // Fase 131 — choque de horario: el formulario solo pide una hora puntual
+  // (no un turno con fin, a diferencia de Tickets/Rutinas), asi que se
+  // sintetiza una ventana de 1h para el chequeo contra lo que el tecnico ya
+  // tiene agendado. No bloquea, solo pide confirmar.
+  if (form.value.assigned_to && form.value.scheduled_date && form.value.scheduled_time) {
+    const startIso = dateTimeToIso(form.value.scheduled_date, form.value.scheduled_time);
+    const endIso = dateTimeToIso(form.value.scheduled_date, addMinutesToTime(form.value.scheduled_time, 60));
+    const conflict = await findScheduleConflict(form.value.assigned_to, startIso, endIso);
+    if (conflict) {
+      const techName = technicians.value.find((t) => t.id === form.value.assigned_to)?.full_name || 'el técnico';
+      const ok = await confirmDialog({
+        title: 'Choque de horario',
+        message: conflictConfirmMessage(techName, conflict),
+        warning: true,
+        confirmLabel: 'Confirmar asignación simultánea',
+        cancelLabel: 'Cancelar',
+      });
+      if (!ok) return;
+    }
   }
   saving.value = true;
   formError.value = null;

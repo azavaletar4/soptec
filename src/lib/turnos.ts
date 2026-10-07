@@ -27,3 +27,10 @@ export function todayStr(): string {
 export function dateTimeToIso(dateStr: string, time: string): string {
   return new Date(`${dateStr}T${time}:00`).toISOString();
 }
+
+/** Suma minutos a una hora "HH:mm" (puede cruzar medianoche). Usado para sintetizar un rango [hora, hora+N] en formularios que solo piden una hora puntual (ej. Instalaciones) y necesitan igual un fin para el chequeo de choque de horario (Fase 131). */
+export function addMinutesToTime(time: string, minutes: number): string {
+  const [h, m] = time.split(':').map(Number);
+  const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
