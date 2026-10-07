@@ -24,6 +24,7 @@ import { startMikrotikReconcileScheduler } from './services/mikrotikReconcileSch
 import { startInvoiceScheduler } from './services/invoiceScheduler';
 import { startTrafficAnalyticsScheduler } from './services/trafficAnalyticsScheduler';
 import { startOltSyncScheduler } from './services/oltSyncScheduler';
+import { startScheduleAlertScheduler } from './services/scheduleAlertScheduler';
 
 const app = new Hono();
 
@@ -75,3 +76,4 @@ startMikrotikReconcileScheduler();
 startInvoiceScheduler();
 startTrafficAnalyticsScheduler();
 startOltSyncScheduler();
+startScheduleAlertScheduler();

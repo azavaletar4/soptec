@@ -258,6 +258,8 @@ export interface Ticket {
   /** Agendamiento de hora exacta (Fase 101/B) — nullable, lo asigna despacho desde el tablero Timeline. */
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
+  /** Fase 132 — true una vez que el backend ya mando el aviso de "faltan 30 min" (evita duplicarlo); se resetea sola si scheduled_start_at cambia. */
+  alerta_enviada: boolean;
   /** Cliente Ausente / re-agendamiento prioritario (Fase 102) — solo tiene sentido cuando status='rescheduled'. */
   rescheduled_to: string | null;
   reschedule_reason: string | null;
@@ -277,6 +279,8 @@ export interface Installation {
   /** Agendamiento de hora exacta (Fase 101/B) — nullable, lo asigna despacho desde el tablero Timeline. */
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
+  /** Fase 132 — true una vez que el backend ya mando el aviso de "faltan 30 min" (evita duplicarlo); se resetea sola si scheduled_start_at cambia. */
+  alerta_enviada: boolean;
   assigned_to: string | null;
   notes: string | null;
   /** Nota libre del tecnico para instalaciones "Solo IPTV" (Fase 45) — cuenta/usuario IPTV en el Smart TV del cliente. */
@@ -319,6 +323,8 @@ export interface Routine {
   scheduled_date: string | null;
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
+  /** Fase 132 — true una vez que el backend ya mando el aviso de "faltan 30 min" (evita duplicarlo); se resetea sola si scheduled_start_at cambia. */
+  alerta_enviada: boolean;
   closure_notes: string | null;
   created_by: string | null;
   created_at: string;

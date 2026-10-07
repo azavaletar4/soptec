@@ -471,6 +471,17 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   fecha/turno: si ese técnico ya tiene algo agendado dentro de ±1 hora, un modal ámbar pregunta
   "¿Confirmar asignación simultánea?" antes de guardar (no bloquea, solo avisa).
 
+### Alertas preventivas de 30 minutos (Fase 132)
+- **Panel Web**: campana 🔔 flotante arriba a la derecha (visible para SUPERADMIN/ADMIN/SOPORTE en
+  cualquier pantalla) con contador rojo de alertas sin leer. Al llegar una orden a 30 min de su
+  hora, aparece además un toast ámbar propio (distinto del toast gris de abajo a la derecha que ya
+  usa el resto del panel) con el técnico, cliente/rutina y badge de prioridad; se autodescarta a
+  los 8s o con el botón ✕. Click en la campana abre un listado de las últimas alertas y limpia el
+  contador.
+- **App de Campo**: banner ámbar "⏰ Atención Próxima en 30 min" arriba de la lista en "Mis
+  Pendientes de Hoy", con badge de prioridad a color (🔵 Baja / 🟡 Media / 🟠 Alta / 🔴 Urgente).
+  Solo aparece para trabajos que todavía no se iniciaron.
+
 ---
 
 ## Cómo se sigue actualizando este archivo

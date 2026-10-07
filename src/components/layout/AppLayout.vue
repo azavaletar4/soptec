@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import ToastHost from '@/components/ToastHost.vue';
 import ConfirmHost from '@/components/ConfirmHost.vue';
+import ScheduleAlertBell from '@/components/layout/ScheduleAlertBell.vue';
 import Breadcrumbs from '@/components/layout/Breadcrumbs.vue';
 import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
 import logoIcon from '@/assets/logo-icon.png';
@@ -409,5 +410,6 @@ async function handleLogout() {
 
     <ToastHost />
     <ConfirmHost />
+    <ScheduleAlertBell />
   </div>
 </template>

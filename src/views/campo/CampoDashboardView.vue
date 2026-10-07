@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
@@ -12,6 +12,7 @@ import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { telLink, waLink } from '@/lib/phone';
+import { PRIORITY_CLASS, PRIORITY_ICON, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import type { Installation, Routine, Ticket } from '@/types/domain';
 
 const router = useRouter();
@@ -171,8 +172,34 @@ function formatFecha(value: string | null) {
   return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
 }
 
+// Fase 132 — alerta preventiva 30 min antes de la hora programada: el
+// backend (scheduleAlertScheduler.ts) marca raw.alerta_enviada=true, y este
+// banner se apoya en canStart() (ya existe) para solo mostrar trabajos que
+// todavia no se iniciaron — una vez "en atencion" ya no tiene sentido
+// seguir avisando que "esta por empezar".
+function hasAlert(t: TrabajoItem): boolean {
+  return canStart(t) && (t.raw as Ticket | Installation | Routine).alerta_enviada;
+}
+const upcomingAlerts = computed(() => campoStore.trabajos.filter(hasAlert));
+
+// Refetch liviano cada 60s mientras esta pantalla esta abierta — es como
+// este banner se entera de que el backend marco una alerta nueva (sin
+// Realtime propio en la App de Campo: un WebView en celular no es el mejor
+// lugar para mantener un canal persistente, y 60s es mas que suficiente
+// frente a una ventana de 30 min). A proposito NO usa campoStore.fetchAll()
+// para este refresco periodico: esa funcion prende loading=true y hace
+// parpadear toda la lista con "Cargando..." cada minuto.
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
   campoStore.fetchAll();
+  refreshTimer = setInterval(() => {
+    void ticketsStore.fetchTickets();
+    void installationsStore.fetchInstallations();
+    void routinesStore.fetchRoutines();
+  }, 60_000);
+});
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer);
 });
 </script>
 
@@ -192,6 +219,25 @@ onMounted(() => {
         {{ tab.label }}
         <span class="block text-[15px] font-bold mt-0.5">{{ counts[tab.value] }}</span>
       </button>
+    </div>
+
+    <!-- Alerta preventiva 30 min (Fase 132) — solo en "Mis Pendientes de Hoy", arriba de la lista. -->
+    <div v-if="activeTab === 'pendiente' && upcomingAlerts.length" class="space-y-2 mb-3">
+      <div
+        v-for="t in upcomingAlerts"
+        :key="`alerta-${t.jobType}-${t.id}`"
+        class="rounded-xl bg-amber-50 border border-amber-300 px-3.5 py-3 flex items-center justify-between gap-3 cursor-pointer"
+        @click="openTrabajo(t)"
+      >
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-amber-800">⏰ Atención Próxima en 30 min</p>
+          <p class="text-xs text-amber-700 truncate mt-0.5">{{ t.clienteNombre }}</p>
+        </div>
+        <span class="badge text-[11px] font-semibold shrink-0" :class="PRIORITY_CLASS[(t.raw as Ticket | Installation | Routine).priority]">
+          {{ PRIORITY_ICON[(t.raw as Ticket | Installation | Routine).priority] }}
+          {{ PRIORITY_LABEL[(t.raw as Ticket | Installation | Routine).priority] }}
+        </span>
+      </div>
     </div>
 
     <p v-if="campoStore.loading" class="text-center text-sm text-slate-500 py-8">Cargando...</p>

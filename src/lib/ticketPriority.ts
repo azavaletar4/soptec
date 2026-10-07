@@ -16,6 +16,14 @@ export const PRIORITY_CLASS: Record<TicketPriority, string> = {
   urgent: 'bg-red-500/15 text-red-600',
 };
 
+/** Fase 132 — icono de color para el banner de alerta preventiva (App de Campo) y cualquier otro lugar que quiera un indicador mas llamativo que el badge de texto. */
+export const PRIORITY_ICON: Record<TicketPriority, string> = {
+  low: '🔵',
+  medium: '🟡',
+  high: '🟠',
+  urgent: '🔴',
+};
+
 export const PRIORITY_OPTIONS: { value: TicketPriority; label: string }[] = [
   { value: 'low', label: 'Baja' },
   { value: 'medium', label: 'Media' },
