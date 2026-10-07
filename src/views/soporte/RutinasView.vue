@@ -8,11 +8,13 @@ import { useRoutinesStore } from '@/stores/routines';
 import { useClientsStore } from '@/stores/clients';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useInfraElementosStore } from '@/stores/infraElementos';
+import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
-import type { Routine, RoutineCategory, RoutineStatus, TicketPriority } from '@/types/domain';
+import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
+import type { Routine, RoutineStatus, RoutineTipo, TicketPriority } from '@/types/domain';
 
 // Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de orden
 // junto a Tickets (averias) e Instalaciones (altas). Reusa job_assignees
@@ -26,6 +28,7 @@ const routinesStore = useRoutinesStore();
 const clientsStore = useClientsStore();
 const catalogsStore = useCatalogsStore();
 const infraStore = useInfraElementosStore();
+const jobAssigneesStore = useJobAssigneesStore();
 const auth = useAuthStore();
 const toast = useToast();
 
@@ -39,13 +42,37 @@ function canEdit(r: Routine): boolean {
 }
 
 const napElementos = computed(() => infraStore.elementos.filter((e) => e.tipo === 'caja_nap'));
+const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
 
-const CATEGORY_LABEL: Record<RoutineCategory, string> = {
-  peinado_nap: 'Peinado de NAP',
-  mantenimiento_preventivo: 'Mantenimiento preventivo',
-  revision_zona: 'Revisión de zona',
-  otro: 'Otro',
+// Fase 129: clasificacion amplia (tipo_rutina) + subtipo especifico dentro
+// del grupo — reemplaza al selector de `category` (Fase 101) en el modal de
+// creacion/edicion, que solo cubria trabajo de Planta Interna.
+const TIPO_RUTINA_LABEL: Record<RoutineTipo, string> = {
+  servicio_cliente: 'Servicio a Cliente / Adicional',
+  logistica: 'Logística / Trámites',
+  planta_interna: 'PEXT / Planta Interna',
 };
+const SUBTIPOS: Record<RoutineTipo, { value: string; label: string }[]> = {
+  servicio_cliente: [
+    { value: 'tv_box', label: 'Instalación de TV Box' },
+    { value: 'mesh', label: 'Instalación de Repetidor Mesh' },
+    { value: 'inspeccion', label: 'Inspección' },
+  ],
+  logistica: [
+    { value: 'recojo', label: 'Recojo de encomienda' },
+    { value: 'cobranza', label: 'Cobranza' },
+    { value: 'publicidad', label: 'Publicidad' },
+    { value: 'compras', label: 'Compras' },
+  ],
+  planta_interna: [
+    { value: 'instalacion_nap', label: 'Instalación de NAP' },
+    { value: 'trabajos_olt', label: 'Trabajos en OLT' },
+    { value: 'cableado_ramal', label: 'Cableado de Ramal' },
+    { value: 'clivar', label: 'Clivar' },
+    { value: 'otro', label: 'Otro' },
+  ],
+};
+
 const STATUS_LABEL: Record<RoutineStatus, string> = {
   pending: 'Pendiente',
   scheduled: 'Programada',
@@ -84,6 +111,7 @@ function targetLabel(r: Routine): string {
   if (r.clients) return `${r.clients.first_name} ${r.clients.last_name}`;
   if (r.nap_elemento) return `Caja NAP · ${r.nap_elemento.name}`;
   if (r.zones) return `Zona · ${r.zones.name}`;
+  if (r.direccion_destino) return r.direccion_destino;
   return '—';
 }
 
@@ -134,20 +162,36 @@ const formError = ref<string | null>(null);
 const editingRoutine = ref<Routine | null>(null);
 const clientFilter = ref('');
 
-type TargetKind = 'none' | 'client' | 'zone' | 'nap';
+type TargetKind = 'none' | 'client' | 'zone' | 'nap' | 'direccion';
 const targetKind = ref<TargetKind>('none');
 
 const emptyForm = () => ({
   title: '',
   description: '',
-  category: 'mantenimiento_preventivo' as RoutineCategory,
+  tipo_rutina: 'planta_interna' as RoutineTipo,
+  subtipo: SUBTIPOS.planta_interna[0].value,
   priority: 'medium' as TicketPriority,
   client_id: '',
   zone_id: '',
   nap_elemento_id: '',
-  scheduled_date: '',
+  direccion_destino: '',
+  wants_tv_box: false,
+  tv_box_qty: 1,
+  wants_mesh: false,
+  mesh_qty: 1,
+  // Mismo default que el agendamiento de Tickets (Fase 104) — asi un turno
+  // elegido sin tocar la fecha siempre cae en un dia valido (hoy).
+  scheduled_date: todayStr(),
+  schedule_turno: '',
+  schedule_tech_id: '',
 });
 const form = ref(emptyForm());
+
+// Al cambiar de grupo, el subtipo elegido deja de pertenecer a ese grupo —
+// se reposiciona en la primera opcion del grupo nuevo.
+function onTipoRutinaChange() {
+  form.value.subtipo = SUBTIPOS[form.value.tipo_rutina][0].value;
+}
 
 const filteredClients = computed(() => {
   const q = clientFilter.value.trim().toLowerCase();
@@ -170,14 +214,22 @@ function openEdit(r: Routine) {
   form.value = {
     title: r.title,
     description: r.description ?? '',
-    category: r.category,
+    tipo_rutina: r.tipo_rutina,
+    subtipo: r.subtipo ?? SUBTIPOS[r.tipo_rutina][0].value,
     priority: r.priority,
     client_id: r.client_id ?? '',
     zone_id: r.zone_id ?? '',
     nap_elemento_id: r.nap_elemento_id ?? '',
+    direccion_destino: r.direccion_destino ?? '',
+    wants_tv_box: !!r.adicionales_json?.tv_box,
+    tv_box_qty: r.adicionales_json?.tv_box || 1,
+    wants_mesh: !!r.adicionales_json?.mesh,
+    mesh_qty: r.adicionales_json?.mesh || 1,
     scheduled_date: r.scheduled_date ?? '',
+    schedule_turno: '',
+    schedule_tech_id: '',
   };
-  targetKind.value = r.client_id ? 'client' : r.nap_elemento_id ? 'nap' : r.zone_id ? 'zone' : 'none';
+  targetKind.value = r.client_id ? 'client' : r.nap_elemento_id ? 'nap' : r.zone_id ? 'zone' : r.direccion_destino ? 'direccion' : 'none';
   clientFilter.value = '';
   formError.value = null;
   showModal.value = true;
@@ -188,24 +240,56 @@ async function handleSubmit() {
     formError.value = 'Ingresa un título';
     return;
   }
+  // Mismo criterio que el agendamiento directo de Tickets (Fase 104): un
+  // turno sin tecnico es valido (queda reservado), un tecnico sin turno no.
+  if (form.value.schedule_tech_id && !form.value.schedule_turno) {
+    formError.value = 'Asignaste un técnico — selecciona también el turno / hora estimada.';
+    return;
+  }
   saving.value = true;
   formError.value = null;
+  const turno =
+    form.value.schedule_turno && form.value.scheduled_date
+      ? TURNOS.find((t) => t.value === form.value.schedule_turno)
+      : undefined;
+  const adicionales_json =
+    targetKind.value === 'client' && form.value.client_id
+      ? {
+          ...(form.value.wants_tv_box ? { tv_box: Number(form.value.tv_box_qty) || 1 } : {}),
+          ...(form.value.wants_mesh ? { mesh: Number(form.value.mesh_qty) || 1 } : {}),
+        }
+      : {};
   const payload = {
     title: form.value.title.trim(),
     description: form.value.description.trim() || null,
-    category: form.value.category,
+    tipo_rutina: form.value.tipo_rutina,
+    subtipo: form.value.subtipo || null,
     priority: form.value.priority,
     client_id: targetKind.value === 'client' ? form.value.client_id || null : null,
     zone_id: targetKind.value === 'zone' ? form.value.zone_id || null : null,
     nap_elemento_id: targetKind.value === 'nap' ? form.value.nap_elemento_id || null : null,
+    direccion_destino: targetKind.value === 'direccion' ? form.value.direccion_destino.trim() || null : null,
+    adicionales_json,
     scheduled_date: form.value.scheduled_date || null,
+    scheduled_start_at: turno ? dateTimeToIso(form.value.scheduled_date, turno.start) : null,
+    scheduled_end_at: turno ? dateTimeToIso(form.value.scheduled_date, turno.end) : null,
   };
   try {
     if (editingRoutine.value) {
       await routinesStore.updateRoutine(editingRoutine.value.id, payload);
       toast.success('Rutina actualizada');
     } else {
-      await routinesStore.createRoutine({ ...payload, status: form.value.scheduled_date ? 'scheduled' : 'pending' });
+      const created = await routinesStore.createRoutine({
+        ...payload,
+        assigned_to: form.value.schedule_tech_id || null,
+        status: turno || form.value.scheduled_date ? 'scheduled' : 'pending',
+      });
+      // El insert de arriba solo deja el "espejo" assigned_to — para que la
+      // cuadrilla (job_assignees) quede consistente desde el inicio (igual
+      // patron que Instalaciones/Tickets, Fase 94/104).
+      if (form.value.schedule_tech_id) {
+        await jobAssigneesStore.addAssignee('routine', created.id, form.value.schedule_tech_id, []);
+      }
       toast.success('Rutina creada');
     }
     showModal.value = false;
@@ -293,7 +377,7 @@ function formatDate(value: string | null) {
             </span>
           </div>
           <div class="text-slate-900 font-medium mb-1">{{ r.title }}</div>
-          <div class="text-xs text-slate-500 mb-1">{{ CATEGORY_LABEL[r.category] }} · {{ targetLabel(r) }}</div>
+          <div class="text-xs text-slate-500 mb-1">{{ TIPO_RUTINA_LABEL[r.tipo_rutina] }} · {{ targetLabel(r) }}</div>
           <div class="text-xs text-slate-500">
             {{ formatDate(r.scheduled_date) }} · {{ r.assigned_profile?.full_name || r.assigned_profile?.email || 'Sin asignar' }}
           </div>
@@ -306,7 +390,7 @@ function formatDate(value: string | null) {
           <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
             <tr>
               <th class="text-left px-4 py-3">Rutina</th>
-              <th class="text-left px-4 py-3">Categoría</th>
+              <th class="text-left px-4 py-3">Tipo</th>
               <th class="text-left px-4 py-3">Destino</th>
               <th class="text-left px-4 py-3">Fecha</th>
               <th class="text-left px-4 py-3">Prioridad</th>
@@ -327,7 +411,10 @@ function formatDate(value: string | null) {
                 <div class="font-mono text-xs text-slate-500">{{ r.routine_number }}</div>
                 <div class="text-slate-900">{{ r.title }}</div>
               </td>
-              <td class="px-4 py-3 text-slate-600">{{ CATEGORY_LABEL[r.category] }}</td>
+              <td class="px-4 py-3 text-slate-600">
+                {{ TIPO_RUTINA_LABEL[r.tipo_rutina] }}
+                <span v-if="r.subtipo" class="text-slate-400">· {{ r.subtipo }}</span>
+              </td>
               <td class="px-4 py-3 text-slate-600">{{ targetLabel(r) }}</td>
               <td class="px-4 py-3 text-slate-600">{{ formatDate(r.scheduled_date) }}</td>
               <td class="px-4 py-3">
@@ -370,14 +457,30 @@ function formatDate(value: string | null) {
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label class="block text-xs text-slate-600 mb-1">Categoría</label>
-              <select v-model="form.category" class="field-input">
-                <option v-for="(label, value) in CATEGORY_LABEL" :key="value" :value="value">{{ label }}</option>
+              <label class="block text-xs text-slate-600 mb-1">Tipo de rutina</label>
+              <select v-model="form.tipo_rutina" class="field-input" @change="onTipoRutinaChange">
+                <option v-for="(label, value) in TIPO_RUTINA_LABEL" :key="value" :value="value">{{ label }}</option>
               </select>
             </div>
             <div>
+              <label class="block text-xs text-slate-600 mb-1">Subtipo</label>
+              <select v-model="form.subtipo" class="field-input">
+                <option v-for="s in SUBTIPOS[form.tipo_rutina]" :key="s.value" :value="s.value">{{ s.label }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 mb-3">
+            <div>
               <label class="block text-xs text-slate-600 mb-1">Fecha programada</label>
               <input v-model="form.scheduled_date" type="date" class="field-input" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Turno / hora estimada</label>
+              <select v-model="form.schedule_turno" class="field-input">
+                <option value="">Sin agendar</option>
+                <option v-for="t in TURNOS" :key="t.value" :value="t.value">{{ t.label }}</option>
+              </select>
             </div>
           </div>
 
@@ -395,6 +498,7 @@ function formatDate(value: string | null) {
               <option value="client">Cliente puntual</option>
               <option value="zone">Zona</option>
               <option value="nap">Caja NAP</option>
+              <option value="direccion">Dirección de texto libre</option>
             </select>
 
             <input
@@ -415,6 +519,49 @@ function formatDate(value: string | null) {
             <select v-if="targetKind === 'nap'" v-model="form.nap_elemento_id" class="field-input">
               <option value="">Selecciona la caja NAP...</option>
               <option v-for="n in napElementos" :key="n.id" :value="n.id">{{ n.name }}</option>
+            </select>
+
+            <input
+              v-if="targetKind === 'direccion'"
+              v-model="form.direccion_destino"
+              placeholder="Ej. Agencia de Transportes Flores, Sector 4 Alto Trujillo..."
+              class="field-input"
+            />
+
+            <!-- Adicionales de stock (Fase 129): solo tiene sentido con un cliente puntual seleccionado. -->
+            <div v-if="targetKind === 'client' && form.client_id" class="mt-3 pt-3 border-t border-slate-100">
+              <p class="text-xs font-semibold text-slate-700 mb-2">Adicionales a llevar de stock</p>
+              <div class="flex items-center gap-2 mb-2">
+                <input id="wants_tv_box" v-model="form.wants_tv_box" type="checkbox" />
+                <label for="wants_tv_box" class="text-sm text-slate-700">Agregar TV Box</label>
+                <input
+                  v-if="form.wants_tv_box"
+                  v-model.number="form.tv_box_qty"
+                  type="number"
+                  min="1"
+                  class="field-input w-20 text-sm"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <input id="wants_mesh" v-model="form.wants_mesh" type="checkbox" />
+                <label for="wants_mesh" class="text-sm text-slate-700">Agregar Repetidor Mesh</label>
+                <input
+                  v-if="form.wants_mesh"
+                  v-model.number="form.mesh_qty"
+                  type="number"
+                  min="1"
+                  class="field-input w-20 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Asignacion directa al crear (Fase 129, mismo patron que Tickets/Fase 104) — al editar se usa la Cuadrilla de abajo. -->
+          <div v-if="!editingRoutine" class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Técnico / cuadrilla asignada (opcional)</label>
+            <select v-model="form.schedule_tech_id" class="field-input">
+              <option value="">Sin asignar</option>
+              <option v-for="t in technicians" :key="t.id" :value="t.id">{{ t.full_name || t.email }}</option>
             </select>
           </div>
 

@@ -429,6 +429,30 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
 
 ---
 
+## 2026-10-07
+
+### Rutinas (Soporte → Rutinas → "+ Nueva rutina")
+- El selector único de "Categoría" (Peinado de NAP / Mantenimiento preventivo / Revisión de zona /
+  Otro) se reemplaza por dos selectores encadenados: **Tipo de rutina** (Servicio a Cliente /
+  Adicional · Logística / Trámites · PEXT / Planta Interna) y **Subtipo**, cuyas opciones cambian
+  según el tipo elegido (ej. "Instalación de TV Box"/"Repetidor Mesh"/"Inspección" para Servicio a
+  Cliente; "Recojo de encomienda"/"Cobranza"/"Publicidad"/"Compras" para Logística;
+  "Instalación de NAP"/"Trabajos en OLT"/"Cableado de Ramal"/"Clivar"/"Otro" para Planta Interna).
+- El selector "Destino" ganó una 5ta opción, **"Dirección de texto libre"**, para rutinas sin
+  cliente ni zona/NAP puntual (ej. "Agencia de Transportes Flores") — antes solo dejaba elegir
+  cliente, zona o caja NAP.
+- Si el destino es "Cliente puntual" y se elige un cliente, aparece un bloque nuevo **"Adicionales
+  a llevar de stock"** con dos checkboxes + contador numérico: "Agregar TV Box" y "Agregar
+  Repetidor Mesh" (cantidad editable solo cuando la casilla está marcada).
+- Se agregó el bloque **"Turno / hora estimada"** junto a la fecha programada (mismos 5 bloques de
+  2 horas que Tickets, 08:00-18:00) y, solo al crear (no al editar), el selector **"Técnico /
+  cuadrilla asignada"** — deja la rutina ya agendada y con técnico desde el inicio, igual que
+  "Nuevo ticket" (Fase 104).
+- En la tabla y las tarjetas de la lista, la columna "Categoría" ahora se llama "Tipo" y muestra
+  el tipo de rutina + subtipo en vez de la categoría anterior.
+
+---
+
 ## Cómo se sigue actualizando este archivo
 
 Cada vez que se aplique un cambio visual nuevo (color, layout, componente, texto de interfaz,

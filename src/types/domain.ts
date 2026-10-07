@@ -27,6 +27,13 @@ export type InvoiceStatus = 'pending' | 'paid' | 'cancelled' | 'exonerada';
 export type InstallationStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type RoutineStatus = 'pending' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type RoutineCategory = 'peinado_nap' | 'mantenimiento_preventivo' | 'revision_zona' | 'otro';
+/** Clasificacion amplia de rutina (Fase 129) — `category` (arriba) sigue existiendo solo para datos historicos de Planta Interna. */
+export type RoutineTipo = 'servicio_cliente' | 'logistica' | 'planta_interna';
+/** Equipos que el tecnico debe llevar de su stock cuando la rutina es una visita comercial a un cliente (Fase 129, V1 sin descuento automatico de stock). */
+export interface RoutineAdicionales {
+  tv_box?: number;
+  mesh?: number;
+}
 export type InventoryMovementType = 'ingreso' | 'egreso';
 export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired' | 'en_recupero' | 'pending_approval';
 export type WorkOrderPhotoStatus = 'pending_approval' | 'approved' | 'rejected';
@@ -293,9 +300,16 @@ export interface Routine {
   title: string;
   description: string | null;
   category: RoutineCategory;
+  /** Fase 129 — clasificacion amplia + subtipo especifico dentro del grupo (texto libre, ver SUBTIPOS en RutinasView.vue). */
+  tipo_rutina: RoutineTipo;
+  subtipo: string | null;
   zone_id: string | null;
   nap_elemento_id: string | null;
   client_id: string | null;
+  /** Fase 129 — destino en texto libre cuando no hay cliente/zona/NAP puntual (ej. "Agencia de Transportes Flores"). */
+  direccion_destino: string | null;
+  /** Fase 129 — equipos a llevar de stock cuando la rutina es una visita comercial (ver RoutineAdicionales). */
+  adicionales_json: RoutineAdicionales;
   status: RoutineStatus;
   /** Prioridad de despacho (Fase 108) — mismo enum/significado que Ticket.priority. */
   priority: TicketPriority;

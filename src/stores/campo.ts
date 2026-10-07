@@ -121,6 +121,7 @@ function routineTargetLabel(r: Routine): string {
   if (r.clients) return `${r.clients.first_name} ${r.clients.last_name}`;
   if (r.nap_elemento) return `Caja NAP · ${r.nap_elemento.name}`;
   if (r.zones) return `Zona · ${r.zones.name}`;
+  if (r.direccion_destino) return r.direccion_destino;
   return r.title;
 }
 
@@ -133,7 +134,7 @@ function fromRoutine(r: Routine): TrabajoItem {
     clientId: r.client_id,
     clienteNombre: routineTargetLabel(r),
     telefono: r.clients?.phone ?? null,
-    direccion: null,
+    direccion: r.direccion_destino,
     latitude: r.clients?.latitude ?? null,
     longitude: r.clients?.longitude ?? null,
     fecha: r.scheduled_date ?? r.created_at,
