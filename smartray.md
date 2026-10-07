@@ -450,6 +450,16 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
   "Nuevo ticket" (Fase 104).
 - En la tabla y las tarjetas de la lista, la columna "Categoría" ahora se llama "Tipo" y muestra
   el tipo de rutina + subtipo en vez de la categoría anterior.
+- Nuevo campo obligatorio **"Puntaje asignado \*"** (input numérico, al lado de Prioridad) — sin un
+  valor mayor a 0 el formulario no deja guardar (mensaje de error debajo del botón). Deshabilitado
+  para TECNICO_RED (solo admin/soporte lo fijan), igual criterio visual que el campo Prioridad.
+
+### Ranking de técnicos (Soporte → Ranking de técnicos)
+- Nueva columna **"Rutinas"** en la tabla principal, entre "Reconexiones" y "Reincidencias" —
+  también se agregó al resumen del "Técnico del mes" y a la exportación CSV.
+- El pie de página de reglas ahora menciona el puntaje personalizado de Rutinas y aclara que el
+  puntaje de cualquier orden con cuadrilla (instalación, ticket o rutina) se reparte en partes
+  iguales entre los técnicos que participaron.
 
 ---
 

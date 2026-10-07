@@ -43,13 +43,14 @@ function handlePrint() {
 
 // Export simple a CSV, sin dependencias — el navegador lo descarga solo.
 function handleExportCsv() {
-  const header = ['Ranking', 'Tecnico', 'Instalaciones', 'Averias', 'Reconexiones', 'Reincidencias', 'Puntos'];
+  const header = ['Ranking', 'Tecnico', 'Instalaciones', 'Averias', 'Reconexiones', 'Rutinas', 'Reincidencias', 'Puntos'];
   const rows = rankingStore.ranking.map((r) => [
     r.ranking,
     r.technician_name,
     r.installations_count,
     r.averias_count,
     r.reconexiones_count,
+    r.rutinas_count,
     r.reincidencias_count,
     r.total_points,
   ]);
@@ -73,7 +74,7 @@ function handleExportCsv() {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6 print:hidden">
       <div>
         <h1 class="text-2xl font-semibold">Ranking de técnicos</h1>
-        <p class="text-slate-600 text-sm mt-1">Puntaje mensual — instalaciones, averías, reconexiones y reincidencias</p>
+        <p class="text-slate-600 text-sm mt-1">Puntaje mensual — instalaciones, averías, reconexiones, rutinas y reincidencias</p>
       </div>
       <div class="flex gap-2">
         <button class="btn-ghost text-xs" :disabled="!rankingStore.ranking.length" @click="handleExportCsv">Exportar CSV</button>
@@ -119,7 +120,7 @@ function handleExportCsv() {
           <div class="text-2xl font-bold">{{ winner.technician_name }}</div>
           <div class="text-sm text-white/90 mt-1">
             {{ winner.installations_count }} instalaciones · {{ winner.averias_count }} averías ·
-            {{ winner.reconexiones_count }} reconexiones
+            {{ winner.reconexiones_count }} reconexiones · {{ winner.rutinas_count }} rutinas
             <span v-if="winner.reincidencias_count"> · {{ winner.reincidencias_count }} reincidencias</span>
           </div>
         </div>
@@ -138,6 +139,7 @@ function handleExportCsv() {
               <th class="text-right px-4 py-3">Instalaciones</th>
               <th class="text-right px-4 py-3">Averías</th>
               <th class="text-right px-4 py-3">Reconexiones</th>
+              <th class="text-right px-4 py-3">Rutinas</th>
               <th class="text-right px-4 py-3">Reincidencias</th>
               <th class="text-right px-4 py-3">Puntos</th>
             </tr>
@@ -149,6 +151,7 @@ function handleExportCsv() {
               <td class="px-4 py-3 text-right text-slate-600">{{ r.installations_count }}</td>
               <td class="px-4 py-3 text-right text-slate-600">{{ r.averias_count }}</td>
               <td class="px-4 py-3 text-right text-slate-600">{{ r.reconexiones_count }}</td>
+              <td class="px-4 py-3 text-right text-slate-600">{{ r.rutinas_count }}</td>
               <td class="px-4 py-3 text-right" :class="r.reincidencias_count ? 'text-red-600' : 'text-slate-600'">
                 {{ r.reincidencias_count || '—' }}
               </td>
@@ -160,9 +163,11 @@ function handleExportCsv() {
 
       <p class="text-xs text-slate-500 mt-3">
         Reglas: +10 instalación nueva completada, +5 avería/mantenimiento resuelto, +3 reconexión/traslado resuelto,
-        −5 por reincidencia (mismo cliente reporta otra avería dentro de los 7 días de haberse resuelto la anterior).
+        −5 por reincidencia (mismo cliente reporta otra avería dentro de los 7 días de haberse resuelto la anterior)
+        + Puntaje personalizado asignado obligatoriamente por el administrador en Rutinas.
         Si un ticket tiene puntos asignados a mano (desde "Asignar técnico"), esos puntos mandan sobre la regla
-        automática de avería/reconexión.
+        automática de avería/reconexión. Si una orden (instalación, ticket o rutina) tuvo cuadrilla, el puntaje se
+        reparte en partes iguales entre los técnicos que participaron.
       </p>
     </template>
   </AppLayout>

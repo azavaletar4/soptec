@@ -313,6 +313,8 @@ export interface Routine {
   status: RoutineStatus;
   /** Prioridad de despacho (Fase 108) — mismo enum/significado que Ticket.priority. */
   priority: TicketPriority;
+  /** Fase 130 — puntaje para el Ranking de tecnicos, obligatorio (>0) desde el formulario; nullable en BD solo por rutinas historicas previas a esta fase. */
+  points: number | null;
   assigned_to: string | null;
   scheduled_date: string | null;
   scheduled_start_at: string | null;

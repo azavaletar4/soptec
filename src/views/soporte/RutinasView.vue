@@ -171,6 +171,9 @@ const emptyForm = () => ({
   tipo_rutina: 'planta_interna' as RoutineTipo,
   subtipo: SUBTIPOS.planta_interna[0].value,
   priority: 'medium' as TicketPriority,
+  // Fase 130 — puntaje para el Ranking de tecnicos, obligatorio (>0): sin
+  // regla automatica como Tickets, el admin decide cuanto vale cada rutina.
+  points: '' as number | '',
   client_id: '',
   zone_id: '',
   nap_elemento_id: '',
@@ -217,6 +220,7 @@ function openEdit(r: Routine) {
     tipo_rutina: r.tipo_rutina,
     subtipo: r.subtipo ?? SUBTIPOS[r.tipo_rutina][0].value,
     priority: r.priority,
+    points: r.points ?? '',
     client_id: r.client_id ?? '',
     zone_id: r.zone_id ?? '',
     nap_elemento_id: r.nap_elemento_id ?? '',
@@ -238,6 +242,14 @@ function openEdit(r: Routine) {
 async function handleSubmit() {
   if (!form.value.title.trim()) {
     formError.value = 'Ingresa un título';
+    return;
+  }
+  // Fase 130 — sin esto la rutina no suma al Ranking de tecnicos. Solo se
+  // exige a quien puede tocar el campo (admin/soporte, ver :disabled abajo);
+  // un TECNICO_RED editando una rutina historica sin puntaje (el campo que
+  // no puede tocar) no debe quedar bloqueado para guardar otros cambios.
+  if (canManage.value && (!form.value.points || Number(form.value.points) <= 0)) {
+    formError.value = 'Ingresa el puntaje de la rutina (mayor a 0) — lo necesita el Ranking de técnicos.';
     return;
   }
   // Mismo criterio que el agendamiento directo de Tickets (Fase 104): un
@@ -265,6 +277,7 @@ async function handleSubmit() {
     tipo_rutina: form.value.tipo_rutina,
     subtipo: form.value.subtipo || null,
     priority: form.value.priority,
+    points: form.value.points === '' ? null : Number(form.value.points),
     client_id: targetKind.value === 'client' ? form.value.client_id || null : null,
     zone_id: targetKind.value === 'zone' ? form.value.zone_id || null : null,
     nap_elemento_id: targetKind.value === 'nap' ? form.value.nap_elemento_id || null : null,
@@ -484,11 +497,26 @@ function formatDate(value: string | null) {
             </div>
           </div>
 
-          <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Prioridad</label>
-            <select v-model="form.priority" class="field-input" :disabled="!canManage">
-              <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
-            </select>
+          <div class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Prioridad</label>
+              <select v-model="form.priority" class="field-input" :disabled="!canManage">
+                <option v-for="(label, value) in PRIORITY_LABEL" :key="value" :value="value">{{ label }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Puntaje asignado *</label>
+              <input
+                v-model.number="form.points"
+                type="number"
+                min="1"
+                step="1"
+                required
+                placeholder="Ej. 2 trámite simple, 15 mantenimiento NAP"
+                class="field-input"
+                :disabled="!canManage"
+              />
+            </div>
           </div>
 
           <div class="mb-3">

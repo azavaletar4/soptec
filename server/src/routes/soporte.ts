@@ -17,6 +17,7 @@ export interface TechnicianRankingRow {
   installations_count: number;
   averias_count: number;
   reconexiones_count: number;
+  rutinas_count: number;
   reincidencias_count: number;
   total_points: number;
   ranking: number;
