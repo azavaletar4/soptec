@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth';
 import ToastHost from '@/components/ToastHost.vue';
 import ConfirmHost from '@/components/ConfirmHost.vue';
 import ScheduleAlertBell from '@/components/layout/ScheduleAlertBell.vue';
+import ScheduleAlertToasts from '@/components/layout/ScheduleAlertToasts.vue';
 import Breadcrumbs from '@/components/layout/Breadcrumbs.vue';
 import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
 import logoIcon from '@/assets/logo-icon.png';
@@ -238,15 +239,22 @@ async function handleLogout() {
         <img :src="logoIcon" alt="" class="w-7 h-7 shrink-0 transition-[filter] duration-150 hover:drop-shadow-[0_0_8px_rgba(14,165,233,0.55)]" />
         <div class="text-base font-semibold">SmartRayco</div>
       </router-link>
-      <button
-        class="p-2 rounded-lg text-slate-800 hover:bg-slate-100 active:scale-95 transition-transform"
-        aria-label="Abrir menu"
-        @click="sidebarOpen = true"
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
-        </svg>
-      </button>
+      <!-- Campana + menu agrupados a la derecha con separacion fija (Fase
+           134): antes la campana flotaba fixed encima del boton ☰ y lo
+           bloqueaba — ahora es un icono mas de esta barra, con gap-3 (12px)
+           de por medio para evitar toques accidentales entre los dos. -->
+      <div class="flex items-center gap-3">
+        <ScheduleAlertBell variant="inline" />
+        <button
+          class="p-2 rounded-lg text-slate-800 hover:bg-slate-100 active:scale-95 transition-transform"
+          aria-label="Abrir menu"
+          @click="sidebarOpen = true"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div
@@ -410,6 +418,9 @@ async function handleLogout() {
 
     <ToastHost />
     <ConfirmHost />
-    <ScheduleAlertBell />
+    <!-- Flotante solo en desktop (Fase 134) — en movil la campana ya va
+         integrada en la barra superior, ver arriba. -->
+    <ScheduleAlertBell variant="floating" class="hidden md:block" />
+    <ScheduleAlertToasts />
   </div>
 </template>

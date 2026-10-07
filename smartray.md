@@ -493,6 +493,16 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
 - "Exportar a CSV" del Histórico suma dos columnas nuevas — "Notas de cierre" y "Evidencias"
   (conteo de fotos) — para las 3 clases de orden.
 
+### Fix: campana tapaba el menú ☰ en móvil (Fase 134)
+- Bug: la campana 🔔 de alertas (Fase 132) flotaba `fixed` arriba a la derecha en TODAS las
+  pantallas — en el Panel Web móvil eso caía exactamente encima del botón de menú hamburguesa,
+  bloqueándolo.
+- La campana ahora vive **dentro** de la barra superior móvil, como un ícono más al lado del menú:
+  `[ Logo SmartRayco ] ·········· [ 🔔 ] [ ☰ ]`, con 12px de separación entre ambos. En escritorio
+  (sin barra superior propia) sigue flotando como antes. El toast "faltan 30 min" se movió a su
+  propio componente (`ScheduleAlertToasts.vue`) para no duplicarse entre las dos versiones de la
+  campana, y en móvil aparece debajo de la barra superior en vez de superpuesto a ella.
+
 ---
 
 ## Cómo se sigue actualizando este archivo
