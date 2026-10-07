@@ -120,6 +120,40 @@ export const useAsistenciaStore = defineStore('asistencia', () => {
     return (data ?? []) as unknown as AsistenciaRegistro[];
   }
 
+  let tableroChannel: ReturnType<typeof supabase.channel> | null = null;
+  let tableroSubscribers = 0;
+
+  /**
+   * Sincroniza en vivo el tablero de HOY — sin esto, "Técnicos Activos"
+   * (TechnicianStatusBar.vue) solo se enteraba de un "Iniciar/Fin Almuerzo"
+   * marcado desde la App de Campo al volver a entrar a la pantalla. Mismo
+   * patron de contador de referencias que subscribeToRealtime (tickets.ts)
+   * / subscribeToStaffTelemetry (catalogs.ts). Solo aplica a filas de HOY —
+   * el unico consumidor (OperacionesHoyView) siempre mira el dia actual.
+   */
+  function subscribeToTableroRealtime() {
+    tableroSubscribers += 1;
+    if (tableroChannel) return;
+    tableroChannel = supabase
+      .channel('asistencia-tablero-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'asistencia_registros' }, (payload) => {
+        const row = payload.new as AsistenciaRegistro | undefined;
+        if (!row || row.fecha !== fechaLimaISO()) return;
+        const idx = tablero.value.findIndex((r) => r.id === row.id);
+        if (idx !== -1) tablero.value[idx] = { ...tablero.value[idx], ...row };
+        else tablero.value.push(row);
+      })
+      .subscribe();
+  }
+
+  function unsubscribeFromTableroRealtime() {
+    tableroSubscribers = Math.max(0, tableroSubscribers - 1);
+    if (tableroSubscribers === 0 && tableroChannel) {
+      supabase.removeChannel(tableroChannel);
+      tableroChannel = null;
+    }
+  }
+
   return {
     settings,
     feriados,
@@ -139,5 +173,7 @@ export const useAsistenciaStore = defineStore('asistencia', () => {
     markSalida,
     fetchTablero,
     fetchRango,
+    subscribeToTableroRealtime,
+    unsubscribeFromTableroRealtime,
   };
 });

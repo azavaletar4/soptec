@@ -5,6 +5,7 @@ import CampoLayout from '@/components/campo/CampoLayout.vue';
 import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
 import { useCampoStore, type TrabajoEstadoUi, type TrabajoItem } from '@/stores/campo';
 import { useAuthStore } from '@/stores/auth';
+import { useAsistenciaStore } from '@/stores/asistencia';
 import { useTicketsStore } from '@/stores/tickets';
 import { useInstallationsStore } from '@/stores/installations';
 import { useRoutinesStore } from '@/stores/routines';
@@ -18,11 +19,17 @@ import type { Installation, Routine, Ticket } from '@/types/domain';
 const router = useRouter();
 const campoStore = useCampoStore();
 const auth = useAuthStore();
+const asistenciaStore = useAsistenciaStore();
 const ticketsStore = useTicketsStore();
 const installationsStore = useInstallationsStore();
 const routinesStore = useRoutinesStore();
 const { confirmDialog } = useConfirm();
 const toast = useToast();
+
+// Fase 135: mientras el tecnico este "En Almuerzo" (Control de Asistencia)
+// no puede iniciar ninguna orden — ver startJob() mas abajo.
+const enAlmuerzo = computed(() => asistenciaStore.hoy?.estado === 'En Almuerzo');
+const ALMUERZO_BLOCKED_MESSAGE = 'Debes finalizar tu tiempo de almuerzo antes de iniciar una atención.';
 
 // 'disponible' (Fase 98) no es un estado de TrabajoEstadoUi — es una lista
 // aparte (tickets 'open' sin tecnico, campoStore.availableTickets), solo
@@ -132,6 +139,10 @@ function isInProgress(t: TrabajoItem): boolean {
 }
 
 async function startJob(t: TrabajoItem): Promise<boolean> {
+  if (enAlmuerzo.value) {
+    toast.error(ALMUERZO_BLOCKED_MESSAGE);
+    return false;
+  }
   startingId.value = t.id;
   try {
     if (t.jobType === 'ticket') await ticketsStore.updateTicketStatus(t.id, 'in_progress');
@@ -151,6 +162,11 @@ async function handleStartClick(t: TrabajoItem) {
 }
 
 async function handleCardClick(t: TrabajoItem) {
+  if (canStart(t) && enAlmuerzo.value) {
+    toast.error(ALMUERZO_BLOCKED_MESSAGE);
+    openTrabajo(t);
+    return;
+  }
   if (canStart(t)) {
     const ok = await confirmDialog({
       title: 'Iniciar atención',
@@ -192,6 +208,9 @@ const upcomingAlerts = computed(() => campoStore.trabajos.filter(hasAlert));
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
   campoStore.fetchAll();
+  // No depende de que AsistenciaPanel ya haya montado/resuelto su propio
+  // fetchHoy — startJob() necesita saber desde ya si esta "En Almuerzo".
+  asistenciaStore.fetchHoy().catch(() => {});
   refreshTimer = setInterval(() => {
     void ticketsStore.fetchTickets();
     void installationsStore.fetchInstallations();

@@ -13,10 +13,12 @@ import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useAuthStore } from '@/stores/auth';
+import { useAsistenciaStore } from '@/stores/asistencia';
 import { JOB_STATUS_CLASS, JOB_STATUS_LABEL, useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
+import { fechaLimaISO } from '@/lib/asistenciaReglas';
 import { MOTIVO_AVERIA_OPTIONS } from '@/lib/ticketMotivoAveria';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
@@ -40,6 +42,7 @@ const contractsStore = useContractsStore();
 const catalogsStore = useCatalogsStore();
 const jobAssigneesStore = useJobAssigneesStore();
 const auth = useAuthStore();
+const asistenciaStore = useAsistenciaStore();
 const { allJobs, activeJobs } = useUnifiedJobs();
 const { confirmDialog } = useConfirm();
 
@@ -55,11 +58,16 @@ onMounted(() => {
   }, 1000);
   catalogsStore.subscribeToStaffTelemetry();
   ticketsStore.subscribeToRealtime();
+  // "En Almuerzo" manda sobre cualquier orden activa en la tarjeta de
+  // Técnicos Activos — ver TechnicianStatusBar.vue.
+  asistenciaStore.fetchTablero(fechaLimaISO());
+  asistenciaStore.subscribeToTableroRealtime();
 });
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer);
   catalogsStore.unsubscribeFromStaffTelemetry();
   ticketsStore.unsubscribeFromRealtime();
+  asistenciaStore.unsubscribeFromTableroRealtime();
 });
 
 // Mismo criterio que TicketDetailView.vue: TECNICO_RED solo actua sobre lo
@@ -414,6 +422,7 @@ function formatDate(value: string) {
       :technicians="technicians"
       :jobs="allJobs"
       :crew-assignments="crewAssignments"
+      :asistencia="asistenciaStore.tablero"
       :now="now"
       :selected-tech-id="techFilterId"
       @select="handleTechSelect"
