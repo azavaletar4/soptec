@@ -18,6 +18,17 @@
 // el siguiente paso. Nunca interrumpe un comando Telnet YA EN VUELO (eso
 // seguiria siendo peligroso contra este equipo) — solo decide que arranca
 // DESPUES de que el actual termine.
+//
+// OJO — ALCANCE REAL DEL LOCK (Fase 1, auditoria Telnet): "queues" es un
+// Map en memoria de ESTE proceso Node, nada mas. Solo serializa Telnet
+// contra una OLT dentro del mismo proceso; NO protege entre procesos
+// distintos (ej. dos "node" corriendo este codigo a la vez, o PM2 en modo
+// "cluster"/varias instancias). Hoy esto es seguro porque ambos
+// ecosystem*.config.cjs corren un solo proceso backend sin cluster (ver
+// smartrayco-api / smartrayco) — si eso cambia alguna vez (mas instancias,
+// cluster mode, multiples deploys hablandole a la misma OLT), este lock
+// YA NO alcanza y habria que coordinarlo afuera del proceso (ej. un lock
+// en la base de datos) antes de escalar.
 export type OltLockPriority = 'interactive' | 'background';
 type Priority = OltLockPriority;
 

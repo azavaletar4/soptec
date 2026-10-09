@@ -1,0 +1,34 @@
+
+> smartrayco@0.1.0 test:telnet
+> node --import tsx --test server/src/telnet/__tests__/*.test.ts
+
+✔ ejecucion completa exitosa: resuelve con el output de cada comando, en orden (21.1477ms)
+✔ cierre antes de terminar los comandos: rechaza, nunca resuelve exito parcial (4.5249ms)
+✔ error CLI detectado: detiene la secuencia y NO manda el comando siguiente (3.2386ms)
+[telnet] TIMEOUT — fase=comandos comando=#0/1 duracionMs=308 bytesPendientes=0
+✔ timeout: rechaza si la OLT nunca responde (310.9792ms)
+✔ negociacion IAC fragmentada entre paquetes TCP: login y comandos funcionan igual (123.7529ms)
+✔ fakeOltServer: respuestas de negociacion tardias o mezcladas con el login/comandos se separan del texto real (2.773ms)
+✔ respuesta de un comando dividida en varios paquetes TCP se reensambla completa (58.9886ms)
+✔ paginacion --More-- con paginas entregadas en paquetes separados: se acumula sin perder filas (30.3982ms)
+✔ timeout: el log y el error nunca incluyen el comando ni el buffer crudo (solo metadatos seguros) (311.4545ms)
+✔ timeout durante el login: una credencial "recibida" en el buffer (Password:\nSECRETO) nunca aparece en logs ni en el error (311.4948ms)
+✔ "terminal length 0" rechazado: no aborta la conexion, deja constancia y sigue con paginacion generica (31.347ms)
+✔ una linea de estadisticas que empieza con "Error" (ej. contador de paquetes) no aborta la secuencia (2.219ms)
+✔ detecta errores CLI confirmados contra el equipo real (ver zteCommands.ts) (1.9248ms)
+✔ detecta las variantes estilo Cisco como fallback (0.1475ms)
+✔ no hay error cuando la secuencia termino sin problemas (0.1192ms)
+✔ no genera falso positivo con texto libre que contiene la palabra "error" en medio de la linea (0.1209ms)
+✔ no confunde el estado normal de una ONU (columna admin-state "disable") con un error (0.1304ms)
+✔ no clasifica como error una linea de estadisticas que empieza con "Error" pero no es un codigo de rechazo (0.121ms)
+✔ no clasifica como error una linea de configuracion/contadores que menciona "error" sin ser un codigo de rechazo (0.1087ms)
+✔ una salida larga con lineas de estadisticas "Error ..." y el prompt real sigue sin disparar nada (0.1553ms)
+✔ redactSensitive oculta password y username sin tocar el resto del comando (0.4518ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1375.326

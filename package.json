@@ -16,7 +16,8 @@
     "audit:smartolt": "tsx server/scripts/audit-smartolt.ts",
     "backfill:smartolt": "tsx server/scripts/backfill-smartolt.ts",
     "compress:storage-photos": "tsx server/scripts/compress-storage-photos.ts",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:telnet": "node --import tsx --test server/src/telnet/__tests__/*.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.1",

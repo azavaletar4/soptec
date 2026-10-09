@@ -1,0 +1,1589 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartRayco — Fase 1: Confiabilidad del cliente Telnet</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#121b2e; --panel2:#182543; --border:#26355c;
+    --text:#e7ecf7; --muted:#9fb0d0; --accent:#3ea6ff; --accent2:#5be8b5;
+    --warn:#ffb454; --danger:#ff6b6b; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b1220,#0e1730 400px, #0b1220);
+    color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    line-height:1.55; padding-bottom:60px;
+  }
+  header{padding:48px 24px 32px; max-width:1040px; margin:0 auto; border-bottom:1px solid var(--border)}
+  header .tag{
+    display:inline-block; background:var(--panel2); color:var(--accent2);
+    border:1px solid var(--border); padding:4px 12px; border-radius:999px;
+    font-size:12px; letter-spacing:.04em; text-transform:uppercase; margin-bottom:14px;
+  }
+  h1{font-size:32px; margin:0 0 8px; letter-spacing:-.01em}
+  header p.sub{color:var(--muted); font-size:16px; margin:0; max-width:760px}
+  main{max-width:1040px; margin:0 auto; padding:32px 24px}
+  section{margin-bottom:40px}
+  h2{font-size:22px; margin:0 0 4px; display:flex; align-items:center; gap:10px}
+  h2 .num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:8px; background:var(--panel2);
+    color:var(--accent); font-size:14px; border:1px solid var(--border);
+  }
+  h2 + p.lead{color:var(--muted); margin:6px 0 18px; max-width:760px}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; margin-bottom:14px}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  h3{font-size:16px; margin:0 0 8px; color:var(--text)}
+  ul{margin:8px 0; padding-left:20px}
+  li{margin-bottom:4px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em}
+  code, .mono{font-family:Consolas,Menlo,monospace; font-size:13px}
+  pre{background:#0a1120; border:1px solid var(--border); border-radius:10px; padding:16px; overflow-x:auto; font-size:13px; color:#cfe0ff}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); margin-left:6px}
+  .pill.ok{color:var(--accent2); border-color:#1f5c46; background:#0f2a20}
+  .pill.warn{color:var(--warn); border-color:#5c4a1f; background:#2a1f0c}
+  .pill.danger{color:var(--danger); border-color:#5c2626; background:#2a1414}
+  details{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:hidden}
+  summary{cursor:pointer; padding:16px 20px; font-weight:600; font-size:15px; list-style:none; display:flex; align-items:center; justify-content:space-between}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--muted); transition:transform .15s ease; font-size:13px}
+  details[open] summary .chev{transform:rotate(90deg)}
+  details .body{padding:0 20px 20px; color:var(--muted); border-top:1px solid var(--border)}
+  details .body ul{color:var(--text)}
+  .callout{border-radius:var(--radius); padding:20px 22px; border:1px solid}
+  .callout.danger{background:#2a1414; border-color:#5c2626}
+  .callout.danger h3{color:var(--danger)}
+  .callout.warn{background:#2a1f0c; border-color:#5c4a1f}
+  .callout.warn h3{color:var(--warn)}
+  .callout.ok{background:#0f2a20; border-color:#1f5c46}
+  .callout.ok h3{color:var(--accent2)}
+  .check{color:var(--accent2)}
+  .cross{color:var(--muted)}
+  .timeline{border-left:2px solid var(--border); margin-left:8px; padding-left:20px}
+  .timeline .step{margin-bottom:16px; position:relative}
+  .timeline .step::before{content:''; position:absolute; left:-25px; top:4px; width:9px; height:9px; border-radius:50%; background:var(--accent)}
+  .timeline .step b{display:block; color:var(--text); font-size:14px; margin-bottom:2px}
+  .timeline .step span{color:var(--muted); font-size:13px}
+  .diff{font-family:Consolas,Menlo,monospace; font-size:12.5px; white-space:pre; overflow-x:auto; background:#0a1120; border:1px solid var(--border); border-radius:10px; padding:16px; line-height:1.5}
+  .diff .add{color:#8fe3b0}
+  .diff .del{color:#ff9a9a}
+  .diff .meta{color:var(--muted)}
+  footer{max-width:1040px; margin:0 auto; padding:24px; color:var(--muted); font-size:13px; border-top:1px solid var(--border)}
+  ol{padding-left:22px}
+  ol li{margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="tag">SmartRayco · Fase 1 — Confiabilidad del cliente Telnet</span>
+  <h1>Auditoría del cliente Telnet (ZTE C300)</h1>
+  <p class="sub">Confirmación de 4 hallazgos de la auditoría original sobre
+  <code>server/src/telnet/client.ts</code>, más 4 hallazgos adicionales de dos rondas de revisión
+  externa (ChatGPT) sobre las entregas previas — correcciones aplicadas en las 3 rondas, y 21
+  pruebas automatizadas contra un servidor Telnet simulado (sin tocar el equipo real, sin
+  escrituras). Alcance: solo confiabilidad del transporte Telnet — no se tocó el flujo de
+  aprovisionamiento ni la UI.</p>
+  <span class="pill warn" style="margin-left:0">Ronda 3 — pendiente de aprobación</span>
+</header>
+
+<main>
+
+  <section>
+    <h2><span class="num">1</span> Hallazgos confirmados</h2>
+    <p class="lead">Los 4 puntos de la auditoría se confirmaron leyendo el código real antes de tocar nada.</p>
+
+    <div class="card">
+      <h3>1. El evento <code>close</code> resolvía éxito aunque faltaran comandos <span class="pill danger">confirmado</span></h3>
+      <p><code>socket.on('close', () =&gt; { if (!settled) finish(); })</code> — si la OLT cortaba la
+      conexión a mitad de la secuencia (red, sesión expirada, lo que sea), el cliente igual
+      resolvía la promesa con <code>outputs</code> incompleto, como si todo hubiera salido bien.
+      Cualquier caller (rutas, sync) recibía "éxito" con datos a medio aplicar.</p>
+    </div>
+
+    <div class="card">
+      <h3>2. Recibir un prompt no confirmaba que el comando fue aceptado <span class="pill danger">confirmado</span></h3>
+      <p>La única condición para avanzar al siguiente comando era <code>PROMPT_RE.test(buffer)</code>
+      (línea terminada en <code>#</code> o <code>&gt;</code>). La ZXA10 C300 vuelve a mostrar el
+      mismo prompt tanto si el comando fue aceptado como si lo rechazó con un error CLI
+      (<code>%Error 20204</code>, <code>Invalid input detected</code>, <code>Incomplete command</code> —
+      todos ya documentados como reales en los comentarios de <code>zteCommands.ts</code>). No había
+      ninguna detección de esos errores: el cliente seguía mandando el resto de la secuencia como
+      si el comando rechazado hubiera funcionado.</p>
+    </div>
+
+    <div class="card">
+      <h3>3. Los logs de timeout podían exponer comandos/respuestas sensibles <span class="pill danger">confirmado</span></h3>
+      <p>El único log con contenido crudo (<code>console.error</code> en el <code>setTimeout</code> del
+      timer) imprimía <code>commands[commandIndex]</code> y <code>accumulated + buffer</code> tal
+      cual. Comandos reales como <code>configureWanPppoeCommands</code> incluyen la clave PPPoE del
+      cliente en texto plano (<code>wan-ip ... username X password Y ...</code>) — un timeout
+      durante ese comando habría impreso la clave completa en los logs del backend.</p>
+    </div>
+
+    <div class="card">
+      <h3>4. El filtrado IAC no soportaba fragmentación entre paquetes TCP <span class="pill danger">confirmado</span></h3>
+      <p><code>stripIac()</code> procesaba cada <code>chunk</code> de forma aislada, sin ningún
+      estado compartido entre llamadas. Un <code>IAC</code> suelto al final de un paquete, un
+      <code>DO</code>/<code>WILL</code> sin su byte de opción todavía, o sobre todo una
+      subnegociación (<code>IAC SB ... IAC SE</code>, que puede ser larga) cortada justo en el
+      límite de un paquete, se interpretaban mal — en el peor caso, bytes de control colados en el
+      texto que después se compara contra <code>PROMPT_RE</code>/<code>MORE_RE</code>.</p>
+    </div>
+
+    <p class="lead" style="margin-top:28px">Ronda 2 — 3 hallazgos adicionales de la revisión externa (ChatGPT), confirmados y corregidos:</p>
+
+    <div class="card">
+      <h3>5. La redacción de la ronda 1 no cubría una credencial filtrada FUERA de un comando <span class="pill danger">confirmado</span></h3>
+      <p><code>redactSensitive()</code> solo enmascaraba texto con la forma literal
+      <code>password &lt;valor&gt;</code>/<code>username &lt;valor&gt;</code> — pero el log de
+      timeout también imprimía el <b>buffer crudo</b> recibido del equipo, que durante el login
+      puede contener texto como <code>Password:\n&lt;lo que sea&gt;</code> sin la palabra
+      "password" pegada al valor en la misma línea. Caso concreto señalado: un timeout ocurriendo
+      justo después de que el equipo mandara <code>Password:</code> seguido de más texto, con ese
+      texto todavía en el buffer — el regex de redacción no lo detectaba y se imprimía tal cual.</p>
+    </div>
+
+    <div class="card">
+      <h3>6. <code>detectCliError</code> clasificaba estadísticas normales como rechazo <span class="pill danger">confirmado</span></h3>
+      <p>El regex de la ronda 1 (<code>^%?\s*error\b</code>) hacía match con <b>cualquier línea que
+      empezara con la palabra "Error"</b>, sin exigir que fuera realmente un código de rechazo.
+      Caso concreto señalado: una línea de contador tipo <code>Error packets: 0</code> (común en
+      salidas de <code>show interface</code>/<code>show pon power</code>) se clasificaba como un
+      error CLI real y abortaba la secuencia completa, aunque el comando en realidad se hubiera
+      ejecutado bien.</p>
+    </div>
+
+    <div class="card">
+      <h3>7. La respuesta a "terminal length 0" nunca se validaba <span class="pill danger">confirmado</span></h3>
+      <p>El cliente mandaba <code>terminal length 0</code> y, con solo ver <em>cualquier</em> prompt
+      de vuelta, asumía que había funcionado — sin pasar esa respuesta por ninguna detección de
+      error. Si algún firmware/variante rechazara esa sintaxis puntual, el cliente seguiría en
+      silencio con la paginación aún activa (el mismo bug de fondo de "646/675 vs 675/675" ya
+      documentado en <code>client.ts</code>), sin que nadie se enterara.</p>
+    </div>
+
+    <p class="lead" style="margin-top:28px">Ronda 3 — 1 hallazgo adicional, esta vez en el <b>arnés de pruebas</b> (no en el cliente de producción):</p>
+
+    <div class="card">
+      <h3>8. <code>fakeOltServer.ts</code> (servidor simulado) era flaky con negociación tardía <span class="pill danger">confirmado</span></h3>
+      <p>ChatGPT corrió las 20 pruebas con Node 24 y obtuvo 19/20 — el test "negociación IAC
+      fragmentada" falló de forma aislada, con cierre durante <code>login:clave</code>. Causa
+      real: el simulador solo descartaba bytes de negociación <b>antes</b> de escribir
+      "Username:" (bandera <code>acceptInput</code>) — pero las respuestas de negociación del
+      cliente (declina <code>DO</code>/<code>WILL</code> con <code>WONT</code>/<code>DONT</code>)
+      viajan en un flujo de bytes independiente del que escribe el simulador, sin ningún orden
+      garantizado entre ambos. Una respuesta tardía que llegara <b>después</b> de que el simulador
+      ya hubiera escrito "Username:"/"Password:" se colaba cruda en el buffer de línea, rompiendo
+      la comparación de usuario/clave. Esto es un bug del <b>arnés de pruebas</b>, no del cliente
+      real (<code>client.ts</code>) — se confirmó deliberadamente revirtiendo el fix y viendo
+      fallar la nueva prueba determinista (ver sección 5), antes de restaurarlo.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span> Correcciones implementadas</h2>
+    <p class="lead">Todas en <code>server/src/telnet/client.ts</code> (rondas 1-2) salvo la nota de
+    alcance del lock y, en esta ronda 3, el fix vive <b>solo en el arnés de pruebas</b>
+    (<code>fakeOltServer.ts</code>) — <code>client.ts</code> no se tocó porque no se identificó
+    ningún fallo suyo, solo del simulador que lo pone a prueba.</p>
+    <ol>
+      <li><b>Cierre antes de completar = siempre rechazo.</b> <code>socket.on('close', ...)</code> ya
+      no llama <code>finish()</code> — ahora rechaza con un error explícito indicando en qué
+      comando (de cuántos) se cortó. La única forma de resolver éxito sigue siendo terminar la
+      secuencia completa normalmente.</li>
+      <li><b>Detección centralizada de errores CLI</b> (<code>detectCliError</code>, exportada): revisa
+      cada línea de la respuesta de un comando contra patrones <b>ya confirmados</b> contra el
+      equipo real (<code>%Error 20204</code>, <code>Invalid input detected</code>,
+      <code>Incomplete command</code>) más variantes estilo Cisco como respaldo
+      (<code>Unrecognized command</code>, <code>Ambiguous command</code>). Solo revisa el
+      <b>inicio</b> de cada línea — el eco del comando enviado queda siempre después del prompt en
+      la misma línea, nunca al principio de una línea nueva, así que un valor de texto libre que
+      contenga la palabra "error" en medio (ej. una descripción de cliente) no dispara un falso
+      positivo.</li>
+      <li><b>Detener la secuencia al primer error</b>: si <code>detectCliError</code> encuentra algo,
+      se llama <code>fail()</code> inmediatamente — el socket se destruye ahí mismo y
+      <b>nunca se llega a mandar</b> el siguiente comando de la lista.</li>
+      <li><b>Filtro IAC con estado persistente entre paquetes</b>: <code>stripIac</code> ahora es una
+      máquina de estados (<code>data / iac / negotiate / sub / subIac</code>) declarada en el mismo
+      scope que el resto del estado de la conexión, así que sobrevive entre llamadas — una
+      secuencia IAC partida en cualquier punto entre dos o más paquetes TCP se resuelve
+      correctamente apenas llega el resto. Se preservó el mismo comportamiento de siempre
+      (declinar <code>DO</code>/<code>WILL</code> con <code>WONT</code>/<code>DONT</code>, ignorar
+      el contenido de las subnegociaciones) y se corrigió además un caso no cubierto antes:
+      <code>IAC IAC</code> (byte de datos 0xFF escapado) ya no se interpretaba bien.</li>
+      <li><b>Ronda 2 — logs de timeout/error con metadatos, nunca contenido crudo</b>: en vez de
+      intentar enmascarar el comando/buffer con un regex (<code>redactSensitive</code>, que la
+      ronda 1 aplicaba ahí y que no cubría el caso de una credencial filtrada por el propio equipo
+      durante el login, fuera de la forma <code>password &lt;valor&gt;</code>), el log de timeout y
+      el error de cierre prematuro <b>ya no imprimen ningún comando ni buffer</b> — solo 4
+      metadatos seguros: <code>fase</code> (<code>login:usuario</code> / <code>login:clave</code> /
+      <code>post-login:terminal-length</code> / <code>comandos</code>), <code>comando</code>
+      (índice/total), <code>duracionMs</code> (desde que se empezó a esperar esa respuesta) y
+      <code>bytesPendientes</code> (tamaño del buffer sin contenido). Esto elimina la clase entera
+      de bug, no solo el caso puntual reportado. <code>redactSensitive</code> se conserva solo como
+      defensa adicional sobre la línea de error que <i>devuelve el equipo</i> (no sobre comandos
+      propios) y <code>commandVerb()</code> (nuevo) identifica el comando rechazado por su primer
+      token (ej. <code>wan-ip</code>) — nunca puede ser una credencial, así que es seguro mostrarlo
+      sin redacción.</li>
+      <li><b>Ronda 2 — <code>CLI_ERROR_LINE_RE</code> acotado a rechazos reales</b>: ya no basta con
+      que una línea empiece con la palabra "Error" — ahora se exige un <b>código numérico pegado</b>
+      (<code>Error 20202:</code>), que es el formato real confirmado contra el equipo. Las variantes
+      "Unrecognized command"/"Ambiguous command" (nunca confirmadas en este equipo, puro respaldo
+      estilo Cisco) ahora exigen el <code>%</code> inicial típico de esa convención, para no ampliar
+      de más la superficie de falsos positivos con algo ya especulativo de por sí. Una línea de
+      estadísticas como <code>Error packets: 0</code> ya no dispara nada.</li>
+      <li><b>Ronda 2 — respuesta a "terminal length 0" verificada explícitamente</b>: ahora pasa por
+      <code>detectCliError</code> igual que cualquier otro comando. Si el equipo la rechaza, <b>no
+      se aborta la conexión</b> (la paginación "--More--" ya es genérica para cualquier comando, así
+      que la sesión sigue siendo funcional, solo sin el atajo de desactivarla) — se deja constancia
+      explícita en un log (sin contenido sensible posible, esa respuesta nunca trae una credencial)
+      en vez de ignorarlo en silencio como antes.</li>
+      <li><b>Ronda 3 — filtro IAC persistente en <code>fakeOltServer.ts</code> durante TODA la
+      conexión</b> (no en <code>client.ts</code>, ver hallazgo 8): se reemplazó la bandera
+      <code>acceptInput</code> (que solo descartaba bytes antes de "Username:") por una máquina de
+      estados IAC (<code>data/iac/opt/sub/subIac</code>) que corre sobre <b>cada</b> chunk entrante
+      durante toda la vida de la conexión, con estado persistente entre chunks — el mismo patrón
+      que ya usa <code>stripIac()</code> en el cliente real. Así, una respuesta de negociación del
+      cliente que llegue en cualquier momento (incluso pegada en el mismo paquete que el usuario o
+      la clave) se separa del texto real antes de buscar líneas, sin depender de que llegue antes o
+      después de ningún prompt.</li>
+      <li><b>Paginación y prompts de la C300</b>: sin cambios de comportamiento — se conserva
+      <code>MORE_RE</code>/<code>MORE_CLEAN_RE</code> y la heurística de prompt ya validada.</li>
+      <li><b>Serialización de sesiones por OLT</b> (<code>oltTelnetLock.ts</code>): sin cambios de
+      código — se agregó un comentario documentando que el candado es un <code>Map</code> en
+      memoria de <b>un solo proceso Node</b>, no distribuido. Hoy es seguro porque ambos
+      <code>ecosystem*.config.cjs</code> corren un único proceso backend sin modo cluster; si eso
+      cambiara, el candado dejaría de alcanzar y haría falta coordinarlo afuera del proceso.</li>
+      <li><b>Propagación de errores en rutas y sync</b>: revisado — <code>routes/olt.ts</code>,
+      <code>oltSyncService.ts</code> y <code>debtHoldService.ts</code> ya envuelven cada
+      <code>runTelnetCommands</code> en <code>try/catch</code> y propagan el error (502 al
+      frontend, o <code>console.error</code> + conteo de <code>failedPorts</code> en el sync). El
+      problema real nunca estuvo en cómo propagan el error estos callers, sino en que el cliente
+      Telnet no rechazaba cuando debía — con las correcciones de arriba, esas rutas ahora reciben
+      el rechazo correcto sin necesitar cambios propios.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span> Archivos modificados</h2>
+    <table>
+      <tr><th>Archivo</th><th>Cambio</th></tr>
+      <tr><td class="mono">server/src/telnet/client.ts</td><td>Reescrito en rondas 1-2 (estado persistente de IAC, detección de errores CLI acotada, cierre prematuro = rechazo, logs/errores con solo metadatos seguros, "terminal length 0" verificado) — <b>sin cambios en esta ronda 3</b>, no se identificó ningún fallo suyo.</td></tr>
+      <tr><td class="mono">server/src/services/oltTelnetLock.ts</td><td>Solo comentario: alcance real del lock (por proceso, no distribuido).</td></tr>
+      <tr><td class="mono">package.json</td><td>Nuevo script <code>test:telnet</code> (corre las pruebas con el runner nativo de Node).</td></tr>
+      <tr><td class="mono">server/src/telnet/__tests__/client.test.ts</td><td>12 pruebas de integración — ronda 3 agrega la prueba determinista de negociación tardía/mezclada con login y comandos.</td></tr>
+      <tr><td class="mono">server/src/telnet/__tests__/detectCliError.test.ts</td><td>9 pruebas puras de <code>detectCliError</code>/<code>redactSensitive</code> — sin cambios en esta ronda.</td></tr>
+      <tr><td class="mono">server/src/telnet/__tests__/fakeOltServer.ts</td><td><b>Ronda 3:</b> filtro IAC persistente durante toda la conexión (ver hallazgo 8), reemplaza la bandera <code>acceptInput</code> que solo cubría el tramo antes del login.</td></tr>
+    </table>
+    <p style="color:var(--muted); font-size:13px; margin-top:10px">Sin cambios en
+    <code>zteCommands.ts</code>, <code>zteParsers.ts</code>, <code>routes/olt.ts</code> ni
+    <code>oltSyncService.ts</code> — se revisaron y ya propagan errores correctamente (ver punto 2
+    arriba); no hacía falta tocarlos para esta fase.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span> Diff completo</h2>
+    <p class="lead">Diff REAL y completo (<code>git diff</code>, incluye los 3 archivos de test) — las 3 rondas de correccion sobre el mismo baseline original, sin recortar ni parafrasear.</p>
+    <details open>
+      <summary>Ver diff completo (1041 lineas) <span class="chev">▸</span></summary>
+      <div class="body">
+        <pre style="max-height:600px; overflow-y:auto; font-size:12px; line-height:1.45">diff --git a/package.json b/package.json
+index 725db30..b36c0a6 100644
+--- a/package.json
++++ b/package.json
+@@ -16,7 +16,8 @@
+     "audit:smartolt": "tsx server/scripts/audit-smartolt.ts",
+     "backfill:smartolt": "tsx server/scripts/backfill-smartolt.ts",
+     "compress:storage-photos": "tsx server/scripts/compress-storage-photos.ts",
+-    "lint": "eslint ."
++    "lint": "eslint .",
++    "test:telnet": "node --import tsx --test server/src/telnet/__tests__/*.test.ts"
+   },
+   "dependencies": {
+     "@hono/node-server": "^1.13.1",
+diff --git a/server/src/services/oltTelnetLock.ts b/server/src/services/oltTelnetLock.ts
+index 233508d..8f420a7 100644
+--- a/server/src/services/oltTelnetLock.ts
++++ b/server/src/services/oltTelnetLock.ts
+@@ -18,6 +18,17 @@
+ // el siguiente paso. Nunca interrumpe un comando Telnet YA EN VUELO (eso
+ // seguiria siendo peligroso contra este equipo) — solo decide que arranca
+ // DESPUES de que el actual termine.
++//
++// OJO — ALCANCE REAL DEL LOCK (Fase 1, auditoria Telnet): "queues" es un
++// Map en memoria de ESTE proceso Node, nada mas. Solo serializa Telnet
++// contra una OLT dentro del mismo proceso; NO protege entre procesos
++// distintos (ej. dos "node" corriendo este codigo a la vez, o PM2 en modo
++// "cluster"/varias instancias). Hoy esto es seguro porque ambos
++// ecosystem*.config.cjs corren un solo proceso backend sin cluster (ver
++// smartrayco-api / smartrayco) — si eso cambia alguna vez (mas instancias,
++// cluster mode, multiples deploys hablandole a la misma OLT), este lock
++// YA NO alcanza y habria que coordinarlo afuera del proceso (ej. un lock
++// en la base de datos) antes de escalar.
+ export type OltLockPriority = 'interactive' | 'background';
+ type Priority = OltLockPriority;
+ 
+diff --git a/server/src/telnet/__tests__/client.test.ts b/server/src/telnet/__tests__/client.test.ts
+new file mode 100644
+index 0000000..3177fb9
+--- /dev/null
++++ b/server/src/telnet/__tests__/client.test.ts
+@@ -0,0 +1,403 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { createServer, connect, type Socket } from 'node:net';
++import { runTelnetCommands, type TelnetTarget } from '../client';
++import { startFakeOlt, writeChunksFragmented, TEST_USERNAME, TEST_PASSWORD, TEST_PROMPT } from './fakeOltServer';
++
++const IAC = 255;
++const DONT = 254;
++const DO = 253;
++const WONT = 252;
++const WILL = 251;
++const SB = 250;
++const SE = 240;
++
++/** Espera hasta que el texto acumulado recibido por `socket` contenga `needle`
++ * (busqueda simple, sin preocuparse por bytes de control: alcanza para
++ * ubicar los prompts de texto plano "Username:"/"Password:"/el prompt). */
++function waitForText(socket: Socket, needle: string, timeoutMs = 2000): Promise&lt;void&gt; {
++  return new Promise((resolve, reject) =&gt; {
++    let buf = '';
++    const timer = setTimeout(() =&gt; {
++      socket.off('data', onData);
++      reject(new Error(`timeout esperando "${needle}" (recibido hasta ahora: ${JSON.stringify(buf)})`));
++    }, timeoutMs);
++    function onData(chunk: Buffer) {
++      buf += chunk.toString('latin1');
++      if (buf.includes(needle)) {
++        clearTimeout(timer);
++        socket.off('data', onData);
++        resolve();
++      }
++    }
++    socket.on('data', onData);
++  });
++}
++
++function target(port: number): TelnetTarget {
++  return { host: '127.0.0.1', port, username: TEST_USERNAME, password: TEST_PASSWORD };
++}
++
++test('ejecucion completa exitosa: resuelve con el output de cada comando, en orden', async () =&gt; {
++  const { port, close } = await startFakeOlt({
++    handleCommand(cmd, socket) {
++      if (cmd === 'enable') {
++        socket.write(`\r\n${TEST_PROMPT}`);
++      } else if (cmd === 'show gpon onu uncfg') {
++        socket.write(`\r\nOnuIndex                 Sn                  State\r\ngpon-onu_1/2/4:1         MSTC8CBF86B4        unknown\r\n${TEST_PROMPT}`);
++      } else {
++        socket.write(`\r\n${TEST_PROMPT}`);
++      }
++    },
++  });
++  try {
++    const outputs = await runTelnetCommands(target(port), ['enable', 'show gpon onu uncfg'], { timeoutMs: 2000 });
++    assert.equal(outputs.length, 2);
++    assert.match(outputs[1], /MSTC8CBF86B4/);
++  } finally {
++    await close();
++  }
++});
++
++test('cierre antes de terminar los comandos: rechaza, nunca resuelve exito parcial', async () =&gt; {
++  const { port, close } = await startFakeOlt({
++    handleCommand(cmd, socket) {
++      if (cmd === 'enable') {
++        socket.write(`\r\n${TEST_PROMPT}`);
++        return;
++      }
++      // El 2do comando nunca recibe respuesta: la OLT corta la conexion.
++      socket.end();
++    },
++  });
++  try {
++    await assert.rejects(
++      runTelnetCommands(target(port), ['enable', 'configure terminal'], { timeoutMs: 2000 }),
++      /se cerro antes de completar/,
++    );
++  } finally {
++    await close();
++  }
++});
++
++test('error CLI detectado: detiene la secuencia y NO manda el comando siguiente', async () =&gt; {
++  const received: string[] = [];
++  const { port, close } = await startFakeOlt({
++    receivedCommands: received,
++    handleCommand(cmd, socket) {
++      if (cmd === 'enable') socket.write(`\r\n${TEST_PROMPT}`);
++      else if (cmd === 'configure terminal') socket.write('\r\nZXAN(config)#');
++      else if (cmd === 'bogus-command') {
++        socket.write("\r\n%Error 20204: Unrecognized command found at '^' marker.\r\nZXAN(config)#");
++      } else socket.write('\r\nZXAN(config)#');
++    },
++  });
++  try {
++    await assert.rejects(
++      runTelnetCommands(target(port), ['enable', 'configure terminal', 'bogus-command', 'exit'], { timeoutMs: 2000 }),
++      /rechazo el comando #3\/4/,
++    );
++    assert.ok(!received.includes('exit'), 'el comando posterior al error jamas debio mandarse');
++  } finally {
++    await close();
++  }
++});
++
++test('timeout: rechaza si la OLT nunca responde', async () =&gt; {
++  const { port, close } = await startFakeOlt({
++    handleCommand() {
++      // 'enable' nunca recibe respuesta a proposito.
++    },
++  });
++  try {
++    await assert.rejects(runTelnetCommands(target(port), ['enable'], { timeoutMs: 300 }), /Timeout de 300ms/);
++  } finally {
++    await close();
++  }
++});
++
++test('negociacion IAC fragmentada entre paquetes TCP: login y comandos funcionan igual', async () =&gt; {
++  // Cada secuencia de negociacion se manda partida en varios chunks chicos
++  // (incluso byte a byte), para forzar que stripIac() reciba trozos
++  // incompletos en distintos eventos 'data', igual que fragmentaria TCP real.
++  const negotiationChunks = [
++    Buffer.from([IAC]),
++    Buffer.from([DO]),
++    Buffer.from([24]), // IAC DO 24 (terminal-type), partido en 3 chunks de 1 byte
++    Buffer.from([IAC, WILL]),
++    Buffer.from([1]), // IAC WILL 1 (echo), partido en 2
++    Buffer.from([IAC, SB, 24, 0]),
++    Buffer.from('ANSI'),
++    Buffer.from([IAC, SE]), // subnegociacion partida en 3 chunks
++  ];
++  const { port, close } = await startFakeOlt({
++    negotiationChunks,
++    handleCommand(cmd, socket) {
++      socket.write(`\r\n${TEST_PROMPT}`);
++    },
++  });
++  try {
++    const outputs = await runTelnetCommands(target(port), ['enable'], { timeoutMs: 2000 });
++    assert.equal(outputs.length, 1);
++    // Ningun byte de control de la negociacion debe colarse en el texto.
++    assert.ok(!/[\x00-\x08\x0e-\x1f]/.test(outputs[0]));
++  } finally {
++    await close();
++  }
++});
++
++test('fakeOltServer: respuestas de negociacion tardias o mezcladas con el login/comandos se separan del texto real', async () =&gt; {
++  // Bug real encontrado (revision externa, ChatGPT): el test anterior
++  // ("negociacion IAC fragmentada...") dependia de que las respuestas de
++  // negociacion del CLIENTE llegaran antes de que fakeOltServer mandara
++  // "Username:" — una carrera de timing que fallaba de forma aislada en
++  // otras corridas/maquinas (Node 24, "cierre durante login:clave"). Esta
++  // prueba fuerza el caso de forma DETERMINISTA, sin depender de ninguna
++  // pausa: actuamos como el "cliente" nosotros mismos y mandamos bytes de
++  // negociacion IAC (declinaciones WONT/DONT, como las que mandaria el
++  // cliente real) PEGADOS en el mismo chunk, antes y despues del usuario,
++  // la clave y un comando — exactamente lo que antes contaminaba lineBuf.
++  const { port, close } = await startFakeOlt({
++    handleCommand(cmd, socket) {
++      socket.write(`\r\n${TEST_PROMPT}`);
++    },
++  });
++
++  const socket = connect({ host: '127.0.0.1', port });
++  try {
++    await new Promise&lt;void&gt;((resolve, reject) =&gt; {
++      socket.once('connect', resolve);
++      socket.once('error', reject);
++    });
++
++    await waitForText(socket, 'Username:');
++    // Negociacion tardia ANTES y DESPUES del usuario, en el mismo escrito.
++    socket.write(
++      Buffer.concat([
++        Buffer.from([IAC, WONT, 24]),
++        Buffer.from(`${TEST_USERNAME}\r\n`),
++        Buffer.from([IAC, DONT, 1]),
++      ]),
++    );
++
++    await waitForText(socket, 'Password:');
++    // Mas negociacion tardia alrededor de la clave.
++    socket.write(
++      Buffer.concat([Buffer.from([IAC, WILL, 3, IAC, WONT, 31]), Buffer.from(`${TEST_PASSWORD}\r\n`)]),
++    );
++
++    await waitForText(socket, TEST_PROMPT);
++
++    // Y otra vez alrededor de un comando real, para probar que no es algo
++    // exclusivo de la fase de login.
++    socket.write(Buffer.concat([Buffer.from([IAC, DO, 1]), Buffer.from('enable\r\n')]));
++    await waitForText(socket, TEST_PROMPT);
++  } finally {
++    socket.destroy();
++    await close();
++  }
++});
++
++test('respuesta de un comando dividida en varios paquetes TCP se reensambla completa', async () =&gt; {
++  const { port, close } = await startFakeOlt({
++    handleCommand(cmd, socket) {
++      if (cmd !== 'show gpon onu uncfg') {
++        socket.write(`\r\n${TEST_PROMPT}`);
++        return;
++      }
++      void writeChunksFragmented(
++        socket,
++        ['\r\nOnuIndex', '                 Sn                  State\r\n', 'gpon-onu_1/2/4:1         MSTC8CBF86B4', `        unknown\r\n${TEST_PROMPT}`],
++        10,
++      );
++    },
++  });
++  try {
++    const outputs = await runTelnetCommands(target(port), ['show gpon onu uncfg'], { timeoutMs: 2000 });
++    assert.equal(outputs.length, 1);
++    assert.match(outputs[0], /gpon-onu_1\/2\/4:1\s+MSTC8CBF86B4\s+unknown/);
++  } finally {
++    await close();
++  }
++});
++
++test('paginacion --More-- con paginas entregadas en paquetes separados: se acumula sin perder filas', async () =&gt; {
++  const { port, close } = await startFakeOlt({
++    handleCommand(cmd, socket) {
++      if (cmd !== 'show gpon onu state') {
++        socket.write(`\r\n${TEST_PROMPT}`);
++        return;
++      }
++      void writeChunksFragmented(
++        socket,
++        ['\r\n1/2/4:1    enable   enable   working   1(GPON)\r\n--More--', '\r', `1/2/4:2    enable   enable   working   1(GPON)\r\n${TEST_PROMPT}`],
++        10,
++      );
++    },
++  });
++  try {
++    const outputs = await runTelnetCommands(target(port), ['show gpon onu state'], { timeoutMs: 3000 });
++    assert.equal(outputs.length, 1);
++    assert.match(outputs[0], /1\/2\/4:1/);
++    assert.match(outputs[0], /1\/2\/4:2/);
++    assert.ok(!/more/i.test(outputs[0]), 'el marcador "--More--" no debe quedar en el resultado final');
++  } finally {
++    await close();
++  }
++});
++
++test('timeout: el log y el error nunca incluyen el comando ni el buffer crudo (solo metadatos seguros)', async () =&gt; {
++  const originalError = console.error;
++  const logs: string[] = [];
++  // eslint-disable-next-line no-console
++  console.error = (...args: unknown[]) =&gt; {
++    logs.push(args.map((a) =&gt; String(a)).join(' '));
++  };
++  const SECRET = 'MiClaveSuperSecreta123';
++
++  const { port, close } = await startFakeOlt({
++    handleCommand(cmd, socket) {
++      if (cmd === 'enable') {
++        socket.write(`\r\n${TEST_PROMPT}`);
++        return;
++      }
++      // El comando con password nunca recibe respuesta -&gt; timeout.
++    },
++  });
++  let caught: Error | undefined;
++  try {
++    await runTelnetCommands(
++      target(port),
++      ['enable', `wan-ip 1 mode pppoe username cliente1 password ${SECRET} vlan-profile 120 host 1`],
++      { timeoutMs: 300 },
++    );
++  } catch (e) {
++    caught = e as Error;
++  } finally {
++    console.error = originalError;
++    await close();
++  }
++
++  assert.ok(caught, 'runTelnetCommands debio rechazar por timeout');
++  const joined = logs.join('\n');
++  // Ni el log ni el mensaje de error deben incluir la clave, el comando
++  // completo, o siquiera la palabra "password" (que delataria que el
++  // comando se imprimio) — solo metadatos (fase/comando/duracion/bytes).
++  assert.ok(!joined.includes(SECRET), 'la clave en texto plano nunca debe aparecer en los logs de timeout');
++  assert.ok(!joined.toLowerCase().includes('password'), 'el log de timeout ya no debe imprimir el comando completo');
++  assert.ok(!(caught as Error).message.includes(SECRET), 'el mensaje de error tampoco debe incluir la clave');
++  assert.match(joined, /fase=comandos/);
++  assert.match(joined, /comando=#1\/2/);
++  assert.match(joined, /duracionMs=\d+/);
++  assert.match(joined, /bytesPendientes=\d+/);
++});
++
++test('timeout durante el login: una credencial "recibida" en el buffer (Password:\\nSECRETO) nunca aparece en logs ni en el error', async () =&gt; {
++  // Escenario pedido en la revision: el equipo manda el prompt "Password:"
++  // seguido de texto que JAMAS deberia terminar en un log (ac aqui
++  // simulamos algo que luce como una credencial filtrada por el propio
++  // equipo) y despues se queda callado — el cliente se queda esperando en
++  // plena fase de login hasta el timeout, con ese texto todavia en el
++  // buffer interno.
++  const originalError = console.error;
++  const logs: string[] = [];
++  // eslint-disable-next-line no-console
++  console.error = (...args: unknown[]) =&gt; {
++    logs.push(args.map((a) =&gt; String(a)).join(' '));
++  };
++  const FAKE_SECRET = 'DEMO_SECRET_123';
++
++  let responded = false;
++  const server = createServer((socket) =&gt; {
++    socket.write('Username:');
++    socket.on('data', () =&gt; {
++      if (responded) return;
++      responded = true;
++      // "Password:" + la credencial fantasma pegada, en un solo chunk, y
++      // nunca se manda el prompt final -&gt; el cliente se queda esperando.
++      socket.write(`Password:\r\n${FAKE_SECRET}`);
++    });
++  });
++  const port: number = await new Promise((resolve) =&gt; {
++    server.listen(0, '127.0.0.1', () =&gt; resolve((server.address() as { port: number }).port));
++  });
++
++  let caught: Error | undefined;
++  try {
++    await runTelnetCommands({ host: '127.0.0.1', port, username: TEST_USERNAME, password: TEST_PASSWORD }, ['enable'], {
++      timeoutMs: 300,
++    });
++  } catch (e) {
++    caught = e as Error;
++  } finally {
++    console.error = originalError;
++    await new Promise&lt;void&gt;((r) =&gt; server.close(() =&gt; r()));
++  }
++
++  assert.ok(caught, 'runTelnetCommands debio rechazar por timeout durante el login');
++  const joined = logs.join('\n');
++  assert.ok(!joined.includes(FAKE_SECRET), 'la credencial fantasma nunca debe aparecer en los logs');
++  assert.ok(!(caught as Error).message.includes(FAKE_SECRET), 'la credencial fantasma tampoco debe aparecer en el mensaje de error');
++  assert.match(joined, /fase=login:clave/);
++});
++
++test('"terminal length 0" rechazado: no aborta la conexion, deja constancia y sigue con paginacion generica', async () =&gt; {
++  const originalError = console.error;
++  const logs: string[] = [];
++  // eslint-disable-next-line no-console
++  console.error = (...args: unknown[]) =&gt; {
++    logs.push(args.map((a) =&gt; String(a)).join(' '));
++  };
++
++  const { port, close } = await startFakeOlt({
++    rejectTerminalLength: true,
++    handleCommand(cmd, socket) {
++      if (cmd !== 'show gpon onu state') {
++        socket.write(`\r\n${TEST_PROMPT}`);
++        return;
++      }
++      // La paginacion sigue viva pese al rechazo de arriba: esto prueba que
++      // el fallback generico (MORE_RE) sigue funcionando igual.
++      void writeChunksFragmented(
++        socket,
++        ['\r\n1/2/4:1    enable   enable   working   1(GPON)\r\n--More--', '\r', `1/2/4:2    enable   enable   working   1(GPON)\r\n${TEST_PROMPT}`],
++        10,
++      );
++    },
++  });
++  try {
++    const outputs = await runTelnetCommands(target(port), ['show gpon onu state'], { timeoutMs: 3000 });
++    assert.equal(outputs.length, 1);
++    assert.match(outputs[0], /1\/2\/4:1/);
++    assert.match(outputs[0], /1\/2\/4:2/);
++  } finally {
++    console.error = originalError;
++    await close();
++  }
++
++  assert.ok(
++    logs.some((l) =&gt; l.includes('terminal length 0') &amp;&amp; l.includes('rechazo')),
++    'debe quedar constancia explicita de que "terminal length 0" fue rechazado',
++  );
++});
++
++test('una linea de estadisticas que empieza con "Error" (ej. contador de paquetes) no aborta la secuencia', async () =&gt; {
++  const { port, close } = await startFakeOlt({
++    handleCommand(cmd, socket) {
++      if (cmd !== 'show pon power onu-rx gpon-olt_1/2/2') {
++        socket.write(`\r\n${TEST_PROMPT}`);
++        return;
++      }
++      socket.write(
++        `\r\nOnu                 Rx power\r\ngpon-onu_1/2/2:1    -21.368(dbm)\r\nError packets       : 0\r\n${TEST_PROMPT}`,
++      );
++    },
++  });
++  try {
++    const outputs = await runTelnetCommands(target(port), ['show pon power onu-rx gpon-olt_1/2/2'], { timeoutMs: 2000 });
++    assert.equal(outputs.length, 1);
++    assert.match(outputs[0], /-21\.368\(dbm\)/);
++  } finally {
++    await close();
++  }
++});
+diff --git a/server/src/telnet/__tests__/detectCliError.test.ts b/server/src/telnet/__tests__/detectCliError.test.ts
+new file mode 100644
+index 0000000..e3b239c
+--- /dev/null
++++ b/server/src/telnet/__tests__/detectCliError.test.ts
+@@ -0,0 +1,72 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { detectCliError, redactSensitive } from '../client';
++
++// Pruebas puras (sin sockets) de los dos helpers centrales de la Fase 1:
++// deteccion de errores CLI y redaccion de credenciales en logs/mensajes.
++
++test('detecta errores CLI confirmados contra el equipo real (ver zteCommands.ts)', () =&gt; {
++  assert.equal(
++    detectCliError('ZXAN(config)#onu 5 type F660 sn X\r\n%Error 20204: Ambiguous command found\r\nZXAN(config)#'),
++    '%Error 20204: Ambiguous command found',
++  );
++  assert.equal(detectCliError('Error 20202: Invalid input detected\r\nZXAN#'), 'Error 20202: Invalid input detected');
++  assert.equal(detectCliError('Incomplete command.\r\nZXAN(config)#'), 'Incomplete command.');
++});
++
++test('detecta las variantes estilo Cisco como fallback', () =&gt; {
++  assert.equal(detectCliError('% Unrecognized command\r\nZXAN#'), '% Unrecognized command');
++  assert.equal(detectCliError('% Ambiguous command: "sh"\r\nZXAN#'), '% Ambiguous command: "sh"');
++});
++
++test('no hay error cuando la secuencia termino sin problemas', () =&gt; {
++  assert.equal(detectCliError('ZXAN(config)#exit\r\nZXAN#'), null);
++});
++
++test('no genera falso positivo con texto libre que contiene la palabra "error" en medio de la linea', () =&gt; {
++  // El eco del comando enviado queda SIEMPRE despues del prompt, en la misma
++  // linea (nunca al inicio de una linea nueva) — una descripcion de cliente
++  // como esta no debe disparar nada.
++  const output = 'ZXAN(config)#description "Error de instalacion reportado por el cliente"\r\nZXAN(config)#';
++  assert.equal(detectCliError(output), null);
++});
++
++test('no confunde el estado normal de una ONU (columna admin-state "disable") con un error', () =&gt; {
++  const output = '1/2/4:23    disable      disable     OffLine      1(GPON)\r\nZXAN#';
++  assert.equal(detectCliError(output), null);
++});
++
++// Bug real encontrado por revision externa (ChatGPT): el regex original
++// ("^%?\s*error\b") clasificaba como rechazo CUALQUIER linea de
++// estadisticas/configuracion que empezara con la palabra "Error" sin serlo
++// (ej. un contador en una salida de "show interface"/"show pon power"). Un
++// rechazo real de este equipo SIEMPRE trae un codigo numerico pegado a
++// "Error" (ej. "Error 20202:") — una palabra despues no cuenta.
++test('no clasifica como error una linea de estadisticas que empieza con "Error" pero no es un codigo de rechazo', () =&gt; {
++  assert.equal(detectCliError('Error packets: 0\r\nZXAN#'), null);
++  assert.equal(detectCliError('Error Frames: 12\r\nZXAN#'), null);
++  assert.equal(detectCliError('Error Disable Count        : 0\r\nZXAN#'), null);
++});
++
++test('no clasifica como error una linea de configuracion/contadores que menciona "error" sin ser un codigo de rechazo', () =&gt; {
++  assert.equal(detectCliError('errored seconds: 0\r\nZXAN#'), null);
++  assert.equal(detectCliError('CRC Errors                 : 0\r\nZXAN#'), null);
++});
++
++test('una salida larga con lineas de estadisticas "Error ..." y el prompt real sigue sin disparar nada', () =&gt; {
++  const output = [
++    'Rx power                  : -18.432(dbm)',
++    'Error packets             : 0',
++    'Error Frames              : 0',
++    'ZXAN#',
++  ].join('\r\n');
++  assert.equal(detectCliError(output), null);
++});
++
++test('redactSensitive oculta password y username sin tocar el resto del comando', () =&gt; {
++  const cmd = 'wan-ip 1 mode pppoe username cliente1 password MiClaveSuperSecreta123 vlan-profile 120 host 1';
++  const redacted = redactSensitive(cmd);
++  assert.ok(!redacted.includes('MiClaveSuperSecreta123'));
++  assert.ok(!redacted.includes('cliente1'));
++  assert.equal(redacted, 'wan-ip 1 mode pppoe username [REDACTED] password [REDACTED] vlan-profile 120 host 1');
++});
+diff --git a/server/src/telnet/__tests__/fakeOltServer.ts b/server/src/telnet/__tests__/fakeOltServer.ts
+new file mode 100644
+index 0000000..f162ec2
+--- /dev/null
++++ b/server/src/telnet/__tests__/fakeOltServer.ts
+@@ -0,0 +1,177 @@
++import { createServer, type Socket, type Server } from 'node:net';
++
++// Servidor Telnet simulado para las pruebas de server/src/telnet/client.ts —
++// imita lo minimo necesario del flujo real de la ZXA10 C300 (login
++// Username/Password, "terminal length 0", prompt terminado en # o &gt;) sin
++// conectarse al equipo real. Ver docs/auditoria/fase-1-telnet.html.
++
++export const TEST_USERNAME = 'admin';
++export const TEST_PASSWORD = 'S3cr3t-Pass';
++export const TEST_PROMPT = 'ZXAN#';
++
++const IAC = 255;
++const DONT = 254;
++const DO = 253;
++const WONT = 252;
++const WILL = 251;
++const SB = 250;
++const SE = 240;
++
++/**
++ * Escribe cada chunk en una llamada socket.write() SEPARADA, con una
++ * pequeña espera entre cada una — el objetivo es forzar que el cliente los
++ * reciba como eventos 'data' distintos (simula fragmentacion real de
++ * paquetes TCP), no un solo buffer completo de una vez.
++ */
++export function writeChunksFragmented(socket: Socket, chunks: (string | Buffer)[], delayMs = 5): Promise&lt;void&gt; {
++  return new Promise((resolve) =&gt; {
++    let i = 0;
++    const next = () =&gt; {
++      if (socket.destroyed || i &gt;= chunks.length) {
++        resolve();
++        return;
++      }
++      socket.write(chunks[i]);
++      i += 1;
++      setTimeout(next, delayMs);
++    };
++    next();
++  });
++}
++
++export interface FakeOltOptions {
++  username?: string;
++  password?: string;
++  prompt?: string;
++  /** Bytes de negociacion IAC a mandar justo despues de conectar (antes del login), opcional. */
++  negotiationChunks?: (string | Buffer)[];
++  /** Cada comando recibido (string, sin \r\n) se entrega aqui para decidir la respuesta. */
++  handleCommand: (command: string, socket: Socket) =&gt; void | Promise&lt;void&gt;;
++  /** Comandos realmente recibidos por el server, en orden (para que el test verifique que NO se mando algo). */
++  receivedCommands?: string[];
++  /** Si true, "terminal length 0" se responde con un rechazo CLI (estilo Cisco)
++   * en vez de aceptarlo en silencio — para probar que el cliente lo detecta y
++   * sigue la sesion de todas formas (ver runTelnetCommands). */
++  rejectTerminalLength?: boolean;
++}
++
++export function startFakeOlt(opts: FakeOltOptions): Promise&lt;{ port: number; server: Server; close: () =&gt; Promise&lt;void&gt; }&gt; {
++  const username = opts.username ?? TEST_USERNAME;
++  const password = opts.password ?? TEST_PASSWORD;
++  const prompt = opts.prompt ?? TEST_PROMPT;
++
++  const server = createServer((socket) =&gt; {
++    let stage: 'username' | 'password' | 'commands' = 'username';
++    let lineBuf = '';
++
++    // Filtro IAC persistente para TODA la conexion, no solo "antes del
++    // login" — bug real encontrado (revision externa): las respuestas de
++    // negociacion del cliente real (declina DO/WILL con WONT/DONT) pueden
++    // llegar en cualquier momento, inclusive DESPUES de que este server ya
++    // mando "Username:"/"Password:" (son dos flujos de bytes independientes
++    // sobre el mismo socket, sin orden garantizado entre lo que este server
++    // escribe y lo que el cliente responde). La version anterior solo
++    // descartaba bytes ANTES de escribir "Username:" (via una bandera
++    // "acceptInput"), asi que una respuesta de negociacion tardia quedaba
++    // sin filtrar y se colaba cruda en "lineBuf", rompiendo la comparacion
++    // de usuario/clave (sintoma real reportado: cierre durante
++    // "login:clave" en corridas aisladas). Con este filtro corriendo SIEMPRE
++    // sobre cada chunk entrante (con estado persistente entre chunks, igual
++    // que stripIac() en client.ts), cualquier byte de negociacion se separa
++    // del texto real sin importar cuando llegue.
++    let negState: 'data' | 'iac' | 'opt' | 'sub' | 'subIac' = 'data';
++    function stripIacFromClient(chunk: Buffer): string {
++      const out: number[] = [];
++      for (let i = 0; i &lt; chunk.length; i += 1) {
++        const b = chunk[i];
++        switch (negState) {
++          case 'data':
++            if (b === IAC) negState = 'iac';
++            else out.push(b);
++            break;
++          case 'iac':
++            if (b === IAC) {
++              out.push(IAC); // IAC IAC =&gt; byte de datos 0xFF literal
++              negState = 'data';
++            } else if (b === SB) {
++              negState = 'sub';
++            } else if (b === DO || b === WILL || b === WONT || b === DONT) {
++              negState = 'opt';
++            } else {
++              negState = 'data'; // otros comandos de 2 bytes (NOP, GA, etc.)
++            }
++            break;
++          case 'opt':
++            // Byte de opcion de un DO/WILL/WONT/DONT — este server no
++            // necesita responder (son declinaciones del cliente a algo que
++            // este server propuso, o viceversa), solo consumirlo.
++            negState = 'data';
++            break;
++          case 'sub':
++            if (b === IAC) negState = 'subIac';
++            break;
++          case 'subIac':
++            if (b === SE) negState = 'data';
++            else negState = 'sub'; // IAC IAC escapado u otro byte: seguir en la subnegociacion
++            break;
++        }
++      }
++      return Buffer.from(out).toString('utf8');
++    }
++
++    const start = async () =&gt; {
++      if (opts.negotiationChunks?.length) {
++        await writeChunksFragmented(socket, opts.negotiationChunks);
++      }
++      socket.write('Username:');
++    };
++
++    socket.on('data', (chunk: Buffer) =&gt; {
++      lineBuf += stripIacFromClient(chunk);
++      let idx = lineBuf.indexOf('\n');
++      while (idx !== -1) {
++        const line = lineBuf.slice(0, idx).replace(/\r$/, '');
++        lineBuf = lineBuf.slice(idx + 1);
++
++        if (stage === 'username') {
++          if (line !== username) {
++            socket.end();
++            return;
++          }
++          socket.write('Password:');
++          stage = 'password';
++        } else if (stage === 'password') {
++          if (line !== password) {
++            socket.end();
++            return;
++          }
++          socket.write(`\r\n${prompt}`);
++          stage = 'commands';
++        } else if (stage === 'commands') {
++          if (line === 'terminal length 0') {
++            if (opts.rejectTerminalLength) {
++              socket.write(`\r\n% Unrecognized command\r\n${prompt}`);
++            } else {
++              socket.write(`\r\n${prompt}`);
++            }
++          } else {
++            opts.receivedCommands?.push(line);
++            void opts.handleCommand(line, socket);
++          }
++        }
++
++        idx = lineBuf.indexOf('\n');
++      }
++    });
++
++    void start();
++  });
++
++  return new Promise((resolve) =&gt; {
++    server.listen(0, '127.0.0.1', () =&gt; {
++      const addr = server.address();
++      const port = typeof addr === 'object' &amp;&amp; addr ? addr.port : 0;
++      resolve({ port, server, close: () =&gt; new Promise&lt;void&gt;((r) =&gt; server.close(() =&gt; r())) });
++    });
++  });
++}
+diff --git a/server/src/telnet/client.ts b/server/src/telnet/client.ts
+index 5d8499f..616de42 100644
+--- a/server/src/telnet/client.ts
++++ b/server/src/telnet/client.ts
+@@ -22,6 +22,67 @@ const MORE_CLEAN_RE = /--\s*more\s*--/gi;
+ const USERNAME_RE = /username\s*:?\s*$/i;
+ const PASSWORD_RE = /password\s*:?\s*$/i;
+ 
++/**
++ * Detecta errores CLI conocidos/verificados en la salida de la ZXA10 C300.
++ *
++ * Patrones confirmados contra el equipo real (ver zteCommands.ts/zteParsers.ts):
++ * "%Error 20204: ..." (comando ambiguo), "Error 20202: Invalid input detected"
++ * (comando inexistente en este firmware), "Incomplete command." (ej. "tcont 1
++ * name ..." sin perfil). Se agregan ademas las variantes estilo Cisco
++ * ("Unrecognized command"/"Ambiguous command") que la C300 hereda de esa
++ * convencion de CLI, por si otra version de firmware las usa — para esas DOS
++ * ultimas (nunca confirmadas contra este equipo, son puro respaldo) se exige
++ * el "%" inicial tipico de Cisco, para no ampliar de mas la superficie de
++ * falsos positivos con algo que ni siquiera esta confirmado.
++ *
++ * A proposito NO se usa un simple "^%?\s*error\b": eso clasificaba como error
++ * cualquier linea de ESTADISTICAS que arranca con la palabra "Error" sin
++ * serlo (ej. "Error packets: 0" en una salida de contadores) — confirmado
++ * como falso positivo real. Un rechazo real de este equipo siempre trae un
++ * CODIGO NUMERICO pegado a "Error" (ej. "Error 20202:"), nunca una palabra.
++ *
++ * Solo se revisa el INICIO de cada linea (tras recortar espacios) — el eco
++ * del comando enviado queda SIEMPRE despues del prompt en la misma linea
++ * (ej. 'ZXAN(config)#description "Error de instalacion"'), nunca al
++ * principio de una linea nueva, asi que un valor de texto libre que
++ * contenga la palabra "error" en medio de la linea tampoco puede disparar
++ * un falso positivo aqui. No es una lista exhaustiva (no hay manual oficial
++ * ZTE disponible, ver advertencia en zteCommands.ts) — mantenerla acotada a
++ * salidas ya confirmadas en vez de adivinar evita falsos positivos nuevos.
++ */
++const CLI_ERROR_LINE_RE =
++  /^(%\s*error\s+\d+\s*:|error\s+\d+\s*:|%?\s*incomplete command\b|%?\s*invalid input detected\b|%\s*unrecognized command\b|%\s*ambiguous command\b)/i;
++
++export function detectCliError(output: string): string | null {
++  for (const rawLine of output.split(/\r?\n/)) {
++    const line = rawLine.trim();
++    if (!line) continue;
++    if (CLI_ERROR_LINE_RE.test(line)) return line;
++  }
++  return null;
++}
++
++/**
++ * Oculta credenciales en texto que SI se expone (la linea de error que
++ * devuelve el propio equipo, ver uso mas abajo) — defensa adicional por si
++ * algun firmware llega a repetir el comando rechazado dentro del mensaje de
++ * error. El log de timeout y el resto de mensajes de error YA NO imprimen
++ * comandos ni buffers crudos (ver runTelnetCommands) — esto ya no es la
++ * unica barrera contra filtrar una clave, solo una capa extra.
++ */
++export function redactSensitive(text: string): string {
++  return text.replace(/(password\s+)\S+/gi, '$1[REDACTED]').replace(/(username\s+)\S+/gi, '$1[REDACTED]');
++}
++
++/** Primer token de un comando CLI (ej. "wan-ip" de "wan-ip 1 mode pppoe username X password Y ...")
++ * — nunca puede ser una credencial (esas son siempre VALORES de argumentos,
++ * nunca el verbo), asi que es seguro usarlo en logs/mensajes de error sin
++ * redaccion, a diferencia del comando completo. */
++function commandVerb(cmd: string | undefined): string {
++  if (!cmd) return '(desconocido)';
++  return cmd.trim().split(/\s+/)[0] || '(desconocido)';
++}
++
+ /**
+  * Cliente Telnet minimo para automatizar la CLI de la OLT ZTE C300.
+  *
+@@ -29,10 +90,25 @@ const PASSWORD_RE = /password\s*:?\s*$/i;
+  * confirmado manualmente: banner real "Welcome to ZXAN product C300 of
+  * ZTE Corporation"). Este cliente:
+  * - filtra/declina la negociacion Telnet (IAC) sin bloquear el flujo,
++ *   manteniendo estado entre paquetes TCP (ver stripIac mas abajo),
+  * - hace login automatico (Username / Password),
+  * - maneja paginacion "--More--",
+  * - detecta el prompt igual que el cliente SSH (misma limitacion conocida:
+- *   heuristica de linea terminada en # o &gt;).
++ *   heuristica de linea terminada en # o &gt;),
++ * - detecta errores CLI centralizados (detectCliError) y NUNCA manda el
++ *   siguiente comando de la secuencia si el actual fue rechazado,
++ * - solo resuelve exitosamente si TODOS los comandos terminaron; un cierre
++ *   de conexion a mitad de la secuencia (o un timeout) siempre rechaza la
++ *   promesa, nunca devuelve exito parcial,
++ * - si el equipo rechaza "terminal length 0" (desactivar paginacion), NO
++ *   aborta la conexion ni lo ignora en silencio: lo deja constancia en un
++ *   log (sin contenido sensible) y sigue — la paginacion "--More--" ya se
++ *   maneja de forma generica para cualquier comando, asi que la sesion
++ *   sigue siendo funcional aunque mas lenta,
++ * - nunca imprime comandos completos ni buffers crudos en logs/errores
++ *   (podrian llevar una clave, ej. wan-ip ... password ...) — solo
++ *   metadatos seguros: fase de la conexion, indice del comando, duracion y
++ *   cantidad de bytes pendientes.
+  */
+ export function runTelnetCommands(
+   target: TelnetTarget,
+@@ -56,13 +132,40 @@ export function runTelnetCommands(
+     let warmupDone = false;
+     let settled = false;
+ 
++    // Metadatos seguros para logs/errores (nunca contenido crudo, ver
++    // comentario de la funcion arriba): en que fase de la conexion estamos
++    // y desde cuando estamos esperando una respuesta en esa fase.
++    let phaseStartedAt = Date.now();
++    function currentPhase(): string {
++      if (!loggedIn) return usernameSent ? 'login:clave' : 'login:usuario';
++      if (!warmupDone) return 'post-login:terminal-length';
++      return 'comandos';
++    }
++
++    // Estado del filtro de negociacion Telnet (IAC), persistente ENTRE
++    // llamadas a stripIac (es decir, entre paquetes TCP distintos) — antes
++    // cada chunk se procesaba de forma aislada, asi que una secuencia IAC
++    // (sobre todo IAC SB ... IAC SE, que puede ser larga) cortada justo en
++    // el limite de un paquete se interpretaba mal o dejaba bytes de control
++    // colados en el texto. Ver docs/auditoria/fase-1-telnet.html.
++    let negState: 'data' | 'iac' | 'negotiate' | 'sub' | 'subIac' = 'data';
++    let pendingNegotiation = 0;
++
+     const timer = setTimeout(() =&gt; {
++      // Solo metadatos — JAMAS el comando ni el buffer crudo: un timeout
++      // puede caer en medio del login (ver PASSWORD_RE arriba), con la
++      // clave real ya tecleada y pendiente de eco en "buffer" — imprimirla
++      // tal cual (como hacia la version anterior, incluso con redactSensitive
++      // encima) la expone si el equipo la repite de un modo que el regex de
++      // redaccion no cubre. Con solo estos 4 datos ya se puede diagnosticar
++      // donde se atasco la sesion sin arriesgar nada.
++      const pendingBytes = Buffer.byteLength(accumulated + buffer, 'utf8');
+       // eslint-disable-next-line no-console
+       console.error(
+-        `[telnet] TIMEOUT en comando #${commandIndex} ("${commands[commandIndex]}"). ` +
+-          `Buffer pendiente sin coincidir con prompt:\n---\n${accumulated + buffer}\n---`,
++        `[telnet] TIMEOUT — fase=${currentPhase()} comando=#${commandIndex}/${commands.length} ` +
++          `duracionMs=${Date.now() - phaseStartedAt} bytesPendientes=${pendingBytes}`,
+       );
+-      fail(new Error(`Timeout de ${timeoutMs}ms esperando respuesta del equipo`));
++      fail(new Error(`Timeout de ${timeoutMs}ms esperando respuesta del equipo (fase=${currentPhase()})`));
+     }, timeoutMs);
+ 
+     function fail(err: Error) {
+@@ -81,35 +184,57 @@ export function runTelnetCommands(
+       resolve(outputs);
+     }
+ 
+-    /** Filtra secuencias IAC del buffer y declina toda negociacion Telnet. */
++    /**
++     * Filtra secuencias IAC del buffer y declina toda negociacion Telnet,
++     * manteniendo estado entre invocaciones (ver negState arriba) para
++     * tolerar fragmentacion arbitraria entre paquetes TCP: un IAC suelto al
++     * final de un chunk, un DO/WILL sin su byte de opcion todavia, o una
++     * subnegociacion (IAC SB ... IAC SE) partida a la mitad, todos quedan
++     * resueltos correctamente en el/los proximos chunk(s).
++     */
+     function stripIac(chunk: Buffer): string {
+       const out: number[] = [];
+-      let i = 0;
+-      while (i &lt; chunk.length) {
+-        if (chunk[i] === IAC &amp;&amp; i + 1 &lt; chunk.length) {
+-          const cmd = chunk[i + 1];
+-
+-          if ((cmd === DO || cmd === WILL) &amp;&amp; i + 2 &lt; chunk.length) {
+-            const option = chunk[i + 2];
+-            const reply = cmd === DO ? WONT : DONT;
+-            socket.write(Buffer.from([IAC, reply, option]));
+-            i += 3;
+-            continue;
++      for (let i = 0; i &lt; chunk.length; i += 1) {
++        const b = chunk[i];
++        switch (negState) {
++          case 'data':
++            if (b === IAC) negState = 'iac';
++            else out.push(b);
++            break;
++          case 'iac':
++            if (b === IAC) {
++              // IAC IAC =&gt; byte de datos 0xFF literal (muy raro en la salida
++              // de este equipo, pero es lo que exige el protocolo).
++              out.push(IAC);
++              negState = 'data';
++            } else if (b === SB) {
++              negState = 'sub';
++            } else if (b === DO || b === WILL || b === WONT || b === DONT) {
++              pendingNegotiation = b;
++              negState = 'negotiate';
++            } else {
++              // Otros comandos Telnet de 2 bytes (NOP, GA, AYT, etc.): no
++              // llevan byte de opcion, se descartan sin responder.
++              negState = 'data';
++            }
++            break;
++          case 'negotiate': {
++            const option = b;
++            if (pendingNegotiation === DO) socket.write(Buffer.from([IAC, WONT, option]));
++            else if (pendingNegotiation === WILL) socket.write(Buffer.from([IAC, DONT, option]));
++            // WONT/DONT que manda el equipo no requieren respuesta.
++            negState = 'data';
++            break;
+           }
+-
+-          if (cmd === SB) {
+-            let j = i + 2;
+-            while (j &lt; chunk.length - 1 &amp;&amp; !(chunk[j] === IAC &amp;&amp; chunk[j + 1] === SE)) j += 1;
+-            i = j + 2;
+-            continue;
+-          }
+-
+-          // WONT/DONT u otros comandos de 3 bytes; si no hay suficientes bytes, cortar aqui.
+-          i += 3;
+-          continue;
++          case 'sub':
++            // Datos de subnegociacion: no le interesan al CLI, se descartan.
++            if (b === IAC) negState = 'subIac';
++            break;
++          case 'subIac':
++            if (b === SE) negState = 'data';
++            else negState = 'sub'; // IAC IAC (0xFF escapado) u otro byte: seguir dentro de la subnegociacion
++            break;
+         }
+-        out.push(chunk[i]);
+-        i += 1;
+       }
+       return Buffer.from(out).toString('utf8');
+     }
+@@ -128,17 +253,20 @@ export function runTelnetCommands(
+         if (!usernameSent &amp;&amp; USERNAME_RE.test(buffer)) {
+           usernameSent = true;
+           buffer = '';
++          phaseStartedAt = Date.now();
+           socket.write(`${target.username}\r\n`);
+           return;
+         }
+         if (usernameSent &amp;&amp; PASSWORD_RE.test(buffer)) {
+           buffer = '';
++          phaseStartedAt = Date.now();
+           socket.write(`${target.password}\r\n`);
+           return;
+         }
+         if (usernameSent &amp;&amp; PROMPT_RE.test(buffer)) {
+           loggedIn = true;
+           buffer = '';
++          phaseStartedAt = Date.now();
+           // "terminal length 0" desactiva la paginacion "--More--" para toda
+           // la sesion. Sin esto, un bug real encontrado en produccion: en
+           // comandos largos y paginados (ej. "show gpon onu state" sin
+@@ -146,7 +274,7 @@ export function runTelnetCommands(
+           // pagina (24 lineas), descuadrando los conteos silenciosamente
+           // (confirmado contra el equipo real: 646/675 ONUs capturadas sin
+           // esto, 675/675 con esto). Se envia una sola vez por conexion,
+-          // antes de los comandos del caller, y su respuesta no se expone.
++          // antes de los comandos del caller.
+           socket.write('terminal length 0\r\n');
+           return;
+         }
+@@ -155,8 +283,26 @@ export function runTelnetCommands(
+ 
+       if (!warmupDone) {
+         if (PROMPT_RE.test(buffer)) {
++          // Verificacion explicita de la respuesta a "terminal length 0" —
++          // antes se ignoraba en silencio. Si el firmware lo rechaza (otra
++          // sintaxis, version distinta, etc.) NO se aborta la conexion: la
++          // paginacion "--More--" ya se maneja de forma generica para
++          // CUALQUIER comando (ver MORE_RE arriba), asi que la sesion sigue
++          // siendo funcional sin este atajo, solo un poco mas lenta en
++          // comandos largos. Se deja constancia con un log sin contenido
++          // sensible (esta respuesta nunca puede traer una credencial).
++          const terminalLengthError = detectCliError(buffer);
++          if (terminalLengthError) {
++            // eslint-disable-next-line no-console
++            console.error(
++              `[telnet] La OLT rechazo "terminal length 0" (paginacion seguira activa, se maneja por pagina) — ` +
++                `duracionMs=${Date.now() - phaseStartedAt}`,
++            );
++          }
++
+           warmupDone = true;
+           buffer = '';
++          phaseStartedAt = Date.now();
+           if (commands.length === 0) {
+             finish();
+             return;
+@@ -167,10 +313,28 @@ export function runTelnetCommands(
+       }
+ 
+       if (PROMPT_RE.test(buffer)) {
+-        outputs.push(accumulated + buffer);
++        const fullOutput = accumulated + buffer;
++
++        // Error CLI detectado en la respuesta de ESTE comando: se detiene la
++        // secuencia aqui mismo (fail() destruye el socket, nunca se llega a
++        // mandar commands[commandIndex + 1]) en vez de seguir como si nada
++        // y terminar resolviendo un "exito" con comandos a medio aplicar.
++        const cliError = detectCliError(fullOutput);
++        if (cliError) {
++          fail(
++            new Error(
++              `La OLT rechazo el comando #${commandIndex + 1}/${commands.length} ` +
++                `(verbo "${commandVerb(commands[commandIndex])}"): ${redactSensitive(cliError)}`,
++            ),
++          );
++          return;
++        }
++
++        outputs.push(fullOutput);
+         accumulated = '';
+         buffer = '';
+         commandIndex += 1;
++        phaseStartedAt = Date.now();
+ 
+         if (commandIndex &gt;= commands.length) {
+           finish();
+@@ -182,7 +346,19 @@ export function runTelnetCommands(
+ 
+     socket.on('error', (err) =&gt; fail(err));
+     socket.on('close', () =&gt; {
+-      if (!settled) finish();
++      // Antes: un close siempre resolvia exito si todavia no se habia
++      // "settled" (p.ej. la OLT corta la conexion a mitad de la secuencia de
++      // comandos por un problema de red/sesion) — el caller recibia
++      // outputs incompleto como si todo hubiera salido bien. Ahora cualquier
++      // close que llegue ANTES de que la secuencia termine normalmente
++      // (finish()) es siempre un fallo.
++      if (settled) return;
++      fail(
++        new Error(
++          `La conexion Telnet se cerro antes de completar los comandos ` +
++            `(fase=${currentPhase()}, comando #${commandIndex + 1}/${commands.length}).`,
++        ),
++      );
+     });
+ 
+     socket.connect(target.port, target.host);
+</pre>
+      </div>
+    </details>
+    <p style="color:var(--muted); font-size:13px">Tambien disponible como archivo plano en
+    <code class="mono">docs/auditoria/fase-1-telnet.diff</code>, o regenerable con
+    <code class="mono">git diff -- package.json server/src/services/oltTelnetLock.ts server/src/telnet/client.ts server/src/telnet/__tests__/*.ts</code>.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span> Pruebas ejecutadas y resultados reales</h2>
+    <p class="lead">Contra un servidor Telnet simulado local (<code>server/src/telnet/__tests__/fakeOltServer.ts</code>)
+    — nunca contra el equipo real, sin escrituras.</p>
+    <div class="card">
+      <h3>Comando</h3>
+      <pre>npm run test:telnet
+&gt; node --import tsx --test server/src/telnet/__tests__/*.test.ts</pre>
+      <h3>Resultado real (consola, sin editar) — corrida final, ronda 3</h3>
+      <pre>✔ ejecucion completa exitosa: resuelve con el output de cada comando, en orden (21.1ms)
+✔ cierre antes de terminar los comandos: rechaza, nunca resuelve exito parcial (4.5ms)
+✔ error CLI detectado: detiene la secuencia y NO manda el comando siguiente (3.2ms)
+[telnet] TIMEOUT — fase=comandos comando=#0/1 duracionMs=308 bytesPendientes=0
+✔ timeout: rechaza si la OLT nunca responde (310.9ms)
+✔ negociacion IAC fragmentada entre paquetes TCP: login y comandos funcionan igual (123.7ms)
+✔ fakeOltServer: respuestas de negociacion tardias o mezcladas con el login/comandos se separan del texto real (2.7ms)
+✔ respuesta de un comando dividida en varios paquetes TCP se reensambla completa (58.9ms)
+✔ paginacion --More-- con paginas entregadas en paquetes separados: se acumula sin perder filas (30.3ms)
+✔ timeout: el log y el error nunca incluyen el comando ni el buffer crudo (solo metadatos seguros) (311.4ms)
+✔ timeout durante el login: una credencial "recibida" en el buffer (Password:\nSECRETO) nunca aparece en logs ni en el error (311.4ms)
+✔ "terminal length 0" rechazado: no aborta la conexion, deja constancia y sigue con paginacion generica (31.3ms)
+✔ una linea de estadisticas que empieza con "Error" (ej. contador de paquetes) no aborta la secuencia (2.2ms)
+✔ detecta errores CLI confirmados contra el equipo real (ver zteCommands.ts) (1.9ms)
+✔ detecta las variantes estilo Cisco como fallback (0.1ms)
+✔ no hay error cuando la secuencia termino sin problemas (0.1ms)
+✔ no genera falso positivo con texto libre que contiene la palabra "error" en medio de la linea (0.1ms)
+✔ no confunde el estado normal de una ONU (columna admin-state "disable") con un error (0.1ms)
+✔ no clasifica como error una linea de estadisticas que empieza con "Error" pero no es un codigo de rechazo (0.1ms)
+✔ no clasifica como error una linea de configuracion/contadores que menciona "error" sin ser un codigo de rechazo (0.1ms)
+✔ una salida larga con lineas de estadisticas "Error ..." y el prompt real sigue sin disparar nada (0.1ms)
+✔ redactSensitive oculta password y username sin tocar el resto del comando (0.4ms)
+ℹ tests 21
+ℹ pass 21
+ℹ fail 0
+ℹ duration_ms 1375.3</pre>
+      <p style="color:var(--muted); font-size:13px">La línea "[telnet] TIMEOUT ..." es <b>intencional</b>:
+      es el propio log de producción disparándose dentro del test de timeout — nótese que ya no
+      imprime ningún comando ni buffer, solo <code>fase/comando/duracionMs/bytesPendientes</code>
+      (ver hallazgo 5 y su corrección).</p>
+    </div>
+    <div class="card">
+      <h3>Estabilidad del escenario reportado como flaky (hallazgo 8)</h3>
+      <p>Pedido explícito de la revisión: comprobar que el test de negociación IAC ya no falla de
+      forma aislada. Se corrió <b>8 veces en aislamiento</b> (<code>--test-name-pattern</code>, sin
+      el resto de la suite alrededor) y las 8 pasaron:</p>
+      <pre>for i in 1 2 3 4 5 6 7 8; do
+  node --import tsx --test --test-name-pattern="negociacion IAC fragmentada" \
+    server/src/telnet/__tests__/client.test.ts
+done
+→ 8/8 corridas: ✔ pass 1, fail 0 (cada una)</pre>
+      <p>La nueva prueba determinista ("respuestas de negociacion tardias...") también se corrió 5
+      veces aislada: 5/5 ✔. Además, para demostrar que el fix era realmente necesario (y no solo
+      que la prueba nueva "pasaba porque sí"), se revirtió <code>fakeOltServer.ts</code> a la
+      versión anterior (bandera <code>acceptInput</code>) y se corrió la prueba determinista
+      nueva contra esa versión:</p>
+      <pre>✖ fakeOltServer: respuestas de negociacion tardias o mezcladas con el login/comandos se separan del texto real
+  Error: timeout esperando "Password:" (recibido hasta ahora: "")</pre>
+      <p>Confirmado: con el código viejo, la prueba falla exactamente como predice el diagnóstico
+      (el servidor nunca llega a "Password:" porque la negociación mezclada rompió la comparación
+      del usuario). Se restauró el fix inmediatamente después de esta demostración.</p>
+    </div>
+    <div class="card">
+      <h3>Cobertura por escenario pedido (original + 2 rondas de revisión externa)</h3>
+      <table>
+        <tr><th>Escenario</th><th>Cubierto por</th></tr>
+        <tr><td>Ejecución completa exitosa</td><td class="check">✓</td></tr>
+        <tr><td>Cierre antes de terminar los comandos</td><td class="check">✓</td></tr>
+        <tr><td>Error CLI que impide enviar el siguiente comando</td><td class="check">✓ (incluye verificación de que el comando posterior nunca llega al servidor)</td></tr>
+        <tr><td>Timeout</td><td class="check">✓</td></tr>
+        <tr><td>Negociación IAC fragmentada</td><td class="check">✓ (DO/WILL y subnegociación SB...SE partidos byte a byte)</td></tr>
+        <tr><td>Paginación y respuestas divididas entre paquetes</td><td class="check">✓ (sin paginación + con "--More--")</td></tr>
+        <tr><td>Ausencia de credenciales en logs de error</td><td class="check">✓ + 1 prueba pura de <code>redactSensitive</code></td></tr>
+        <tr><td><b>Ronda 2:</b> timeout durante el login con credencial fantasma en el buffer (<code>Password:\nSECRETO</code>)</td><td class="check">✓</td></tr>
+        <tr><td><b>Ronda 2:</b> línea de estadísticas "Error ..." no se clasifica como rechazo (3 pruebas unitarias + 1 de integración)</td><td class="check">✓</td></tr>
+        <tr><td><b>Ronda 2:</b> "terminal length 0" rechazado no aborta y deja constancia</td><td class="check">✓</td></tr>
+        <tr><td><b>Ronda 3:</b> negociación tardía/mezclada con login y comandos, de forma determinista (no dependiente de timing)</td><td class="check">✓ nuevo</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Type-check</h3>
+      <pre>npx tsc -p tsconfig.server.json --noEmit   →  sin errores (exit 0)</pre>
+      <p style="color:var(--muted); font-size:13px">Sin cambios en el frontend en ninguna ronda, así
+      que no hizo falta repetir <code>vue-tsc</code> (ya confirmado limpio en la ronda 1).</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">6</span> Limitaciones y dudas pendientes</h2>
+    <div class="callout warn">
+      <h3>Lista de errores CLI no exhaustiva</h3>
+      <p><code>CLI_ERROR_LINE_RE</code> cubre los patrones ya confirmados contra el equipo real
+      más variantes genéricas estilo Cisco. No hay manual oficial ZTE disponible (ver advertencia
+      ya existente en <code>zteCommands.ts</code>), así que podría haber un mensaje de error real
+      de otra versión de firmware que no coincida con ninguno de estos patrones — en ese caso el
+      cliente seguiría tratando esa respuesta como éxito (falso negativo), igual que antes de esta
+      fase. Si aparece un caso real, agregar el patrón confirmado a <code>CLI_ERROR_LINE_RE</code>.</p>
+    </div>
+    <div class="callout warn">
+      <h3>El candado solo protege un proceso</h3>
+      <p>Documentado en el código (ver sección 2, punto 7) — hoy es seguro porque solo corre un
+      proceso backend, pero no es una garantía distribuida. Si algún día se corre en cluster o con
+      más de una instancia, hace falta coordinación externa (ej. un lock en la base de datos).</p>
+    </div>
+    <div class="callout warn">
+      <h3>No validado aún contra el equipo real</h3>
+      <p>Por instrucción explícita de esta fase, no me conecté a la OLT real ni ejecuté ninguna
+      escritura. Las 20 pruebas corren contra un servidor Telnet simulado. El procedimiento de la
+      sección 7 es <b>solo lectura</b> para que valides en vivo que el cliente corregido sigue
+      hablando bien con el equipo real.</p>
+      <p><b>Corrección (ronda 2):</b> antes decía que probar la detección de error CLI contra el
+      equipo real "exige una escritura deliberada" — <b>eso no es correcto</b>. Un comando de
+      <i>lectura</i> mal escrito a propósito (ej. un "show" con un typo) también dispara el mismo
+      rechazo sin tocar la configuración de la OLT, porque la detección vive en el transporte
+      Telnet genérico, no en qué tipo de comando se mandó. Lo que sí sigue siendo cierto: esta app
+      no expone hoy un botón/endpoint para mandar un comando arbitrario (todos los que ya existen
+      están bien formados) — para probarlo en vivo tendrías que conectarte por telnet directo
+      (fuera de esta app, ej. PuTTY o el cliente telnet de Windows) a 10.15.15.2:23, loguearte a
+      mano, y mandar un "show" mal escrito para ver qué texto de error real devuelve tu firmware y
+      compararlo contra <code>CLI_ERROR_LINE_RE</code> (sección 2). El rechazo por cierre prematuro
+      sí es más difícil de forzar de forma segura (necesitarías cortar la conexión a mitad de una
+      secuencia real), así que ese camino sigue validado solo contra el simulador.</p>
+    </div>
+    <div class="callout warn">
+      <h3>El resumen de un sync no distingue "completo" de "completo pero con huecos"</h3>
+      <p><code>scanComplete</code> (lo que ves en el panel/<code>GET /:id/summary</code>) solo
+      refleja si el escaneo global de estado (<code>show gpon onu state</code>) funcionó — <b>no</b>
+      dice nada sobre si la señal óptica Rx/Tx se leyó en todos los puertos.
+      <code>oltSyncService.ts</code> sí registra qué puertos fallaron (<code>failedPorts</code>),
+      pero ese dato <b>no se expone en ningún endpoint ni se guarda en <code>olt_sync_cache</code></b>
+      — solo existe en el valor de retorno de <code>runOltFullSync()</code>, que el endpoint manual
+      (<code>POST /:id/sync/full</code>) descarta (responde "queued" antes de que el sync termine).
+      La única forma real de verlo hoy es en los logs del backend (ver sección 7, ya corregido) —
+      esto no es un hallazgo que haya corregido en el código (sería ampliar la API, fuera de
+      alcance de esta fase), solo una imprecisión que tenía el informe anterior al decir que
+      <code>scanComplete</code>/<code>checked_at</code> alcanzaban para confirmar un sync sano.</p>
+    </div>
+    <div class="callout warn">
+      <h3>Referencia a un "cliente SSH" que no existe en el repo</h3>
+      <p>Los comentarios de <code>client.ts</code> y <code>zteCommands.ts</code> mencionan
+      "server/src/ssh/client.ts" como referencia de la heurística de prompt — ese archivo no
+      existe en el repo actual (<code>server/src/ssh/</code> solo tiene
+      <code>zteCommands.ts</code>/<code>zteParsers.ts</code>). Es un comentario desactualizado, sin
+      impacto funcional; no lo toqué porque no estaba en el alcance de esta fase y no quería
+      inventar qué pasó con ese archivo.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">7</span> Procedimiento de validación manual (solo lectura <u>contra la OLT</u>)</h2>
+    <p class="lead">Para que lo ejecutes tú contra la OLT real (10.15.15.2) — <b>ningún paso cambia
+    la configuración del equipo</b>. Pero "solo lectura" es sobre la OLT, no sobre tu base de
+    datos: varios pasos SÍ escriben en Supabase (cache local, metadata del dispositivo) — se marca
+    explícitamente en cada uno (corrección pedida en la revisión: no mezclar ambas cosas).</p>
+
+    <div class="callout danger">
+      <h3>Antes de nada: identifica tu ONU de prueba por su serial, no por un ID "libre"</h3>
+      <p>Memoria del proyecto: un incidente real (2026-09-11) pasó por asumir que un sufijo de
+      <code>onu-id</code> visto en un escaneo estaba libre, cuando en realidad ya pertenecía a una
+      clienta real. Para este procedimiento (sin cambios de config en la OLT) ese riesgo específico
+      no aplica porque no se registra nada nuevo en el equipo — pero de todas formas, antes de
+      ejecutar el paso 5, confirma a mano cuál es el <code>id</code> (de <code>olt_onts</code>, no
+      el <code>onu-id</code> de la OLT) de tu ONU de pruebas ya conocida, buscándola por su serial
+      físico en la sección OLT del panel o con <code>GET /api/olt/onts/search?serial=&lt;tu-serial&gt;</code>.</p>
+    </div>
+
+    <table style="margin-bottom:18px">
+      <tr><th>Paso</th><th>¿Toca la config. de la OLT?</th><th>¿Escribe en Supabase?</th></tr>
+      <tr><td>1. Reiniciar backend</td><td class="check">No</td><td>No</td></tr>
+      <tr><td>2. Probar conexión</td><td class="check">No</td><td class="pill warn" style="margin:0">Sí — <code>olt_devices.last_test_ok/last_tested_at</code></td></tr>
+      <tr><td>3. Escaneo de perfiles</td><td class="check">No</td><td class="check">No</td></tr>
+      <tr><td>4. Sync completo manual</td><td class="check">No</td><td class="pill warn" style="margin:0">Sí — <code>olt_sync_cache</code> + bulk update de <code>olt_onts</code> (status/admin_state/rx_power/tx_power)</td></tr>
+      <tr><td>5. Señal óptica de la ONU de prueba</td><td class="check">No</td><td class="pill warn" style="margin:0">Sí — <code>olt_onts.rx_power/tx_power</code> de esa fila</td></tr>
+      <tr><td>6. Running-config de esa ONU</td><td class="check">No</td><td class="check">No (solo devuelve texto, no guarda nada)</td></tr>
+      <tr><td>7. Revisión de logs</td><td class="check">No</td><td class="check">No</td></tr>
+    </table>
+
+    <ol>
+      <li><b>Reinicia el backend</b> para cargar el código corregido:
+        <pre>pm2 restart smartrayco-api</pre>
+        (ver memoria: PM2 no observa cambios en <code>server/src/**</code> solo).
+      </li>
+      <li><b>Prueba de conexión básica</b> (<code>enable</code> + <code>show gpon onu uncfg</code>,
+        no cambia nada en la OLT): en el panel, sección OLT → tu dispositivo → "Probar conexión".
+        Debe seguir respondiendo igual que siempre (mismas ONUs sin configurar).
+      </li>
+      <li><b>Escaneo de perfiles</b>: <code>GET /api/olt/:id/profiles</code> — debe devolver la
+        misma lista de perfiles tcont/traffic que antes.
+      </li>
+      <li><b>Sync completo manual</b> (dispara varios comandos de lectura en secuencia contra la
+        OLT, el escenario más parecido a la fragmentación/paginación real): botón "Actualizar
+        ahora" en el panel, o <code>POST /api/olt/:id/sync/full</code>. <b>Corrección (ronda 2):</b>
+        <code>scanComplete</code>/<code>checked_at</code> NO alcanzan por sí solos para confirmar
+        que todo salió bien — <code>scanComplete</code> solo cubre el escaneo global de
+        online/offline, no la señal óptica por puerto. Verifica en cambio:
+        <ul>
+          <li><code>pm2 logs smartrayco-api --lines 300</code> buscando líneas con el prefijo
+            <code>[olt-sync]</code> — ahí aparece CADA etapa que falló individualmente (ONUs sin
+            autorizar, escaneo global, señal por puerto — uno por puerto fallido —, el bulk update,
+            o la salud del chasis). Esto aparece tanto si el sync lo disparó el botón manual como
+            el scheduler automático de cada 20 min.</li>
+          <li>Si el sync que estás mirando lo disparó el scheduler automático (no el botón manual),
+            además vas a ver una línea de resumen <code>[olt-sync-scheduler]</code> con
+            <code>puertos=N (fallaron: 1/2/3, ...)</code> si algún puerto falló — el botón manual
+            NO imprime ese resumen (su resultado se descarta al responder "queued" de inmediato),
+            así que para un sync manual la única fuente real son las líneas <code>[olt-sync]</code>
+            individuales, no una sola bandera.</li>
+          <li>Ningún <code>[telnet] TIMEOUT</code> inesperado durante el sync.</li>
+        </ul>
+      </li>
+      <li><b>Señal óptica de tu ONU de prueba</b>: en la ficha de esa ONT en el panel, botón de
+        refrescar señal (o <code>GET /api/olt/:id/onts/:ontDbId/signal</code> con el
+        <code>id</code> que confirmaste arriba). Debe devolver <code>rxPower</code>/<code>txPower</code>
+        coherentes con lo que ya veías antes de esta fase.
+      </li>
+      <li><b>Running-config de esa misma ONU</b>:
+        <code>GET /api/olt/:id/onts/:ontDbId/running-config</code> — confirma que el texto crudo
+        sigue llegando completo (sin cortes a mitad de línea, sin <code>--More--</code> colado).
+      </li>
+      <li><b>Revisión de logs</b>: <code>pm2 logs smartrayco-api --lines 200</code> — no debería
+        aparecer ningún texto de contraseña/clave en texto plano en ninguna línea. A diferencia de
+        la ronda 1, ya no corresponde buscar un marcador <code>[REDACTED]</code> en el log de
+        timeout (ya no imprime comandos en absoluto, ver hallazgo 5) — lo que deberías ver si algo
+        se atasca es una línea <code>[telnet] TIMEOUT — fase=... comando=... duracionMs=... bytesPendientes=...</code>,
+        sin texto de ningún comando ni respuesta.
+      </li>
+    </ol>
+
+    <div class="callout ok">
+      <h3>Si todo lo anterior se ve igual que antes de esta fase</h3>
+      <p>El cliente corregido es compatible con el comportamiento real de la OLT en el camino
+      feliz. El camino de error (detección de CLI) también se puede validar en vivo sin escribir
+      nada en la OLT (ver corrección en la sección 6) si quieres hacerlo por tu cuenta, fuera de
+      esta app; el rechazo por cierre prematuro sigue siendo más difícil de forzar de forma segura
+      y queda validado solo contra el simulador.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  SmartRayco — Fase 1 (auditoría Telnet), ronda 3 (correcciones de revisión externa), generado
+  2026-10-09. Sin credenciales. Sin conexión al equipo real. Sin escrituras en la OLT.
+</footer>
+
+</body>
+</html>
