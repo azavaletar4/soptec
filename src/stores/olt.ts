@@ -280,10 +280,46 @@ export const useOltStore = defineStore('olt', () => {
     await apiFetch(`/api/olt-devices/${deviceId}/onts/${ontDbId}`, { method: 'DELETE' });
   }
 
+  // "Consultar señal" hace DOS sesiones Telnet completas y seguidas contra la
+  // OLT real (Rx y Tx, ver readOntSignal() en server/src/routes/olt.ts), cada
+  // una con hasta 30s de timeout propio del backend, mas lo que haga falta
+  // esperar en la cola compartida (oltTelnetLock.ts) si el sync automatico u
+  // otra accion esta en curso. 90s da margen de sobra para el caso lento
+  // pero sano (hasta 60s de Telnet + holgura de cola) sin esperar los 180s
+  // completos que tolera nginx (deploy/nginx.conf) — bug real reportado:
+  // sin este limite, la ficha se quedaba en "Consultando..." sin ninguna
+  // señal de si seguia viva o estaba realmente colgada.
+  const SIGNAL_TIMEOUT_MS = 90_000;
+
   async function getSignal(deviceId: string, ontDbId: string) {
     return apiFetch<{ rxPower: number | null; txPower: number | null }>(
       `/api/olt-devices/${deviceId}/onts/${ontDbId}/signal`,
+      {},
+      SIGNAL_TIMEOUT_MS,
     );
+  }
+
+  /**
+   * Aplica rx/tx YA LEIDOS (ej. la respuesta de getSignal(), que el backend
+   * ya persistio en Supabase antes de responder) sobre la ONU en memoria,
+   * sin ninguna llamada de red. Evita recargar el listado COMPLETO del
+   * dispositivo (fetchOnts) solo para reflejar el cambio de una sola fila —
+   * esa llamada llego a pesar 627KB en produccion para ~700 ONTs, y
+   * `refreshSignal()` en OntDetailModal.vue la esperaba antes de soltar el
+   * boton "Consultar señal", dejando "Consultando..." visible mucho mas de
+   * lo necesario (bug real reportado tras la Fase 1 Telnet).
+   *
+   * Muta el objeto EXISTENTE dentro de `onts.value` (no lo reemplaza) para
+   * que una prop como `:ont="detailOnt"` en OltDetailView.vue (un computed
+   * que busca por id dentro de este mismo array) vea el cambio de inmediato
+   * sin que el componente necesite re-suscribirse a nada nuevo.
+   */
+  function patchOntSignal(ontDbId: string, rxPower: number | null, txPower: number | null) {
+    const ont = onts.value.find((o) => o.id === ontDbId);
+    if (ont) {
+      ont.rx_power = rxPower;
+      ont.tx_power = txPower;
+    }
   }
 
   function fetchSummary(deviceId: string) {
@@ -508,6 +544,7 @@ export const useOltStore = defineStore('olt', () => {
     configureWanPppoe,
     deleteOnt,
     getSignal,
+    patchOntSignal,
     fetchSummary,
     fetchHealth,
     fetchProfiles,

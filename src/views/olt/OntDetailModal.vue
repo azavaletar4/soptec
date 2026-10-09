@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useOltStore, type OltOnt, type OltDevice } from '@/stores/olt';
 import { getErrorMessage } from '@/lib/errors';
+import { runSignalRefresh } from '@/lib/signalRefreshFlow';
 
 // Replica el layout del panel de detalle de ONU estilo SmartOLT (columna de
 // identidad/config a la izquierda, grafico + estado en vivo a la derecha,
@@ -73,14 +74,18 @@ function formatDate(value: string) {
 async function refreshSignal() {
   signalLoading.value = true;
   signalError.value = null;
-  try {
-    await oltStore.getSignal(props.device.id, props.ont.id);
-    await oltStore.fetchOnts(props.device.id);
-  } catch (e) {
-    signalError.value = getErrorMessage(e, 'Error al leer la señal óptica');
-  } finally {
-    signalLoading.value = false;
-  }
+  // runSignalRefresh() usa el rx/tx que devuelve getSignal() para actualizar
+  // esta ONU en memoria (sin red) y dispara el refresco del listado completo
+  // EN SEGUNDO PLANO, sin esperarlo — asi "Consultando..." se libera apenas
+  // termina la consulta de señal (que ya tiene su propio timeout), nunca
+  // detras de una recarga de todo el listado (ver src/lib/signalRefreshFlow.ts).
+  const result = await runSignalRefresh({
+    getSignal: () => oltStore.getSignal(props.device.id, props.ont.id),
+    patchOntSignal: (rx, tx) => oltStore.patchOntSignal(props.ont.id, rx, tx),
+    refreshList: () => oltStore.fetchOnts(props.device.id),
+  });
+  if (!result.ok) signalError.value = result.error ?? 'Error al leer la señal óptica';
+  signalLoading.value = false;
 }
 
 async function submitWanPppoe() {

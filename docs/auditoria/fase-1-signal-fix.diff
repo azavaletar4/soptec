@@ -1,0 +1,607 @@
+diff --git a/package.json b/package.json
+index b36c0a6..4cb1c4a 100644
+--- a/package.json
++++ b/package.json
+@@ -17,7 +17,8 @@
+     "backfill:smartolt": "tsx server/scripts/backfill-smartolt.ts",
+     "compress:storage-photos": "tsx server/scripts/compress-storage-photos.ts",
+     "lint": "eslint .",
+-    "test:telnet": "node --import tsx --test server/src/telnet/__tests__/*.test.ts"
++    "test:telnet": "node --import tsx --test server/src/telnet/__tests__/*.test.ts",
++    "test:fetch-timeout": "node --import tsx --test src/lib/__tests__/*.test.ts"
+   },
+   "dependencies": {
+     "@hono/node-server": "^1.13.1",
+diff --git a/src/lib/__tests__/fetchWithTimeout.test.ts b/src/lib/__tests__/fetchWithTimeout.test.ts
+new file mode 100644
+index 0000000..049a589
+--- /dev/null
++++ b/src/lib/__tests__/fetchWithTimeout.test.ts
+@@ -0,0 +1,181 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { createServer, type Server } from 'node:http';
++import { fetchWithTimeout } from '../fetchWithTimeout';
++
++/** onResponse por defecto para la mayoria de las pruebas: lee el body como texto. */
++const readText = (res: Response) => res.text();
++
++/** Servidor que manda las cabeceras de inmediato y recien termina el body tras `bodyDelayMs`. */
++function startSlowBodyServer(bodyDelayMs: number, body = 'tarde'): Promise<{ url: string; close: () => Promise<void> }> {
++  const server: Server = createServer((_req, res) => {
++    res.writeHead(200, { 'Content-Type': 'text/plain' });
++    res.flushHeaders();
++    setTimeout(() => res.end(body), bodyDelayMs);
++  });
++  return new Promise((resolve) => {
++    server.listen(0, '127.0.0.1', () => {
++      const addr = server.address();
++      const port = typeof addr === 'object' && addr ? addr.port : 0;
++      resolve({ url: `http://127.0.0.1:${port}`, close: () => new Promise<void>((r) => server.close(() => r())) });
++    });
++  });
++}
++
++/** Servidor que tarda `headerDelayMs` en mandar siquiera las cabeceras. */
++function startSlowHeaderServer(headerDelayMs: number, body = 'ok'): Promise<{ url: string; close: () => Promise<void> }> {
++  const server: Server = createServer((_req, res) => {
++    setTimeout(() => {
++      res.writeHead(200, { 'content-type': 'text/plain' });
++      res.end(body);
++    }, headerDelayMs);
++  });
++  return new Promise((resolve) => {
++    server.listen(0, '127.0.0.1', () => {
++      const addr = server.address();
++      const port = typeof addr === 'object' && addr ? addr.port : 0;
++      resolve({ url: `http://127.0.0.1:${port}`, close: () => new Promise<void>((r) => server.close(() => r())) });
++    });
++  });
++}
++
++test('sin timeoutMs: se comporta igual que fetch normal (no aborta nunca)', async () => {
++  const { url, close } = await startSlowHeaderServer(20, 'hola');
++  try {
++    const text = await fetchWithTimeout(url, {}, undefined, readText);
++    assert.equal(text, 'hola');
++  } finally {
++    await close();
++  }
++});
++
++test('respuesta rapida (cabeceras y body) dentro del timeout: resuelve normal', async () => {
++  const { url, close } = await startSlowHeaderServer(20, 'rapido');
++  try {
++    const text = await fetchWithTimeout(url, {}, 2000, readText);
++    assert.equal(text, 'rapido');
++  } finally {
++    await close();
++  }
++});
++
++test('timeout mientras se esperan las cabeceras: rechaza con el mensaje preciso, sin esperar al servidor', async () => {
++  const { url, close } = await startSlowHeaderServer(2000, 'tarde'); // el servidor tarda 2s en mandar cabeceras
++  try {
++    const start = Date.now();
++    await assert.rejects(fetchWithTimeout(url, {}, 150, readText), /superó el tiempo de espera/i);
++    const elapsed = Date.now() - start;
++    assert.ok(elapsed < 1000, `tardo ${elapsed}ms en rechazar, esperado bien por debajo de los 2000ms del servidor`);
++  } finally {
++    await close();
++  }
++});
++
++// Hallazgo de la revision: el timer se limpiaba apenas llegaban las
++// cabeceras (cuando fetch() resuelve), asi que una lectura de BODY que se
++// quedara a medio camino quedaba sin ninguna proteccion de timeout. Esta
++// prueba reproduce exactamente eso: cabeceras casi instantaneas, body que
++// nunca termina de llegar dentro del limite.
++test('timeout con cabeceras rapidas pero BODY lento: tambien rechaza, no se queda esperando el body', async () => {
++  const { url, close } = await startSlowBodyServer(2000, 'tarde'); // cabeceras ya, body recien a los 2s
++  try {
++    const start = Date.now();
++    await assert.rejects(fetchWithTimeout(url, {}, 150, readText), /superó el tiempo de espera/i);
++    const elapsed = Date.now() - start;
++    assert.ok(elapsed < 1000, `tardo ${elapsed}ms en rechazar, esperado bien por debajo de los 2000ms del body`);
++  } finally {
++    await close();
++  }
++});
++
++test('body lento pero DENTRO del timeout: resuelve normal con el contenido completo', async () => {
++  const { url, close } = await startSlowBodyServer(100, 'completo-tarde');
++  try {
++    const text = await fetchWithTimeout(url, {}, 2000, readText);
++    assert.equal(text, 'completo-tarde');
++  } finally {
++    await close();
++  }
++});
++
++test('el mensaje de timeout es preciso: no le atribuye la causa a la OLT ni a la cola Telnet', async () => {
++  const { url, close } = await startSlowHeaderServer(500, 'tarde');
++  try {
++    try {
++      await fetchWithTimeout(url, {}, 50, readText);
++      assert.fail('debio rechazar');
++    } catch (e) {
++      assert.ok(e instanceof Error, 'debe ser un Error normal, compatible con getErrorMessage');
++      assert.match(e.message, /superó el tiempo de espera/i);
++      assert.ok(!/ocupad|cola|sync automático/i.test(e.message), 'no debe inventar una causa (OLT/cola) sin evidencia');
++    }
++  } finally {
++    await close();
++  }
++});
++
++test('cancelacion EXTERNA (signal del caller) mientras se esperan cabeceras: se distingue del timeout', async () => {
++  const { url, close } = await startSlowHeaderServer(2000, 'tarde');
++  try {
++    const controller = new AbortController();
++    setTimeout(() => controller.abort(), 50); // el CALLER cancela, no nuestro timer
++    await assert.rejects(
++      fetchWithTimeout(url, { signal: controller.signal }, 5000, readText), // timeoutMs generoso: si dispara, es un bug
++      (e: unknown) => {
++        assert.ok(e instanceof Error || (e as { name?: string })?.name === 'AbortError');
++        const msg = e instanceof Error ? e.message : String(e);
++        assert.ok(!/superó el tiempo de espera/i.test(msg), 'una cancelacion externa no debe reportarse como timeout');
++        return true;
++      },
++    );
++  } finally {
++    await close();
++  }
++});
++
++test('cancelacion EXTERNA mientras se lee el BODY: tambien se distingue del timeout', async () => {
++  const { url, close } = await startSlowBodyServer(2000, 'tarde');
++  try {
++    const controller = new AbortController();
++    setTimeout(() => controller.abort(), 50);
++    await assert.rejects(
++      fetchWithTimeout(url, { signal: controller.signal }, 5000, readText),
++      (e: unknown) => {
++        const msg = e instanceof Error ? e.message : String(e);
++        assert.ok(!/superó el tiempo de espera/i.test(msg), 'una cancelacion externa durante el body no debe reportarse como timeout');
++        return true;
++      },
++    );
++  } finally {
++    await close();
++  }
++});
++
++test('signal externo YA cancelado antes de empezar: rechaza de inmediato, sin llegar a conectar', async () => {
++  const controller = new AbortController();
++  controller.abort();
++  await assert.rejects(fetchWithTimeout('http://127.0.0.1:1', { signal: controller.signal }, 5000, readText));
++});
++
++test('un error de red real (no por timeout ni cancelacion) se propaga tal cual', async () => {
++  // Puerto cerrado -> ECONNREFUSED, no un abort.
++  await assert.rejects(fetchWithTimeout('http://127.0.0.1:1', {}, 5000, readText), (e: unknown) => {
++    assert.ok(e instanceof Error);
++    assert.ok(!/superó el tiempo de espera/i.test(e.message), 'un error de conexion real no debe confundirse con un timeout');
++    return true;
++  });
++});
++
++test('un error propio de onResponse (no un abort) se propaga sin reinterpretarse como timeout', async () => {
++  const { url, close } = await startSlowHeaderServer(10, 'ok');
++  try {
++    await assert.rejects(
++      fetchWithTimeout(url, {}, 5000, async () => {
++        throw new Error('fallo al parsear, nada que ver con timeouts');
++      }),
++      /fallo al parsear/,
++    );
++  } finally {
++    await close();
++  }
++});
+diff --git a/src/lib/__tests__/signalRefreshFlow.test.ts b/src/lib/__tests__/signalRefreshFlow.test.ts
+new file mode 100644
+index 0000000..4d5f7c8
+--- /dev/null
++++ b/src/lib/__tests__/signalRefreshFlow.test.ts
+@@ -0,0 +1,91 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { runSignalRefresh, type SignalRefreshDeps } from '../signalRefreshFlow';
++
++function delay(ms: number): Promise<void> {
++  return new Promise((resolve) => setTimeout(resolve, ms));
++}
++
++test('consulta exitosa: aplica rxPower/txPower a la ONU mostrada y resuelve ok', async () => {
++  const patched: { rx: number | null; tx: number | null }[] = [];
++  const deps: SignalRefreshDeps = {
++    getSignal: async () => ({ rxPower: -16.87, txPower: 2.53 }),
++    patchOntSignal: (rx, tx) => patched.push({ rx, tx }),
++    refreshList: async () => {},
++  };
++
++  const result = await runSignalRefresh(deps);
++
++  assert.deepEqual(result, { ok: true });
++  assert.deepEqual(patched, [{ rx: -16.87, tx: 2.53 }], 'debe aplicar exactamente el rx/tx devuelto por getSignal()');
++});
++
++test('timeout o error en getSignal: libera con ok=false y el mensaje real, sin tocar la ONU ni refrescar el listado', async () => {
++  let patchCalls = 0;
++  let refreshCalls = 0;
++  const deps: SignalRefreshDeps = {
++    getSignal: async () => {
++      throw new Error('La consulta superó el tiempo de espera (90s) y se canceló desde el navegador.');
++    },
++    patchOntSignal: () => {
++      patchCalls += 1;
++    },
++    refreshList: async () => {
++      refreshCalls += 1;
++    },
++  };
++
++  const result = await runSignalRefresh(deps);
++
++  assert.equal(result.ok, false);
++  assert.match(result.error ?? '', /superó el tiempo de espera/);
++  assert.equal(patchCalls, 0, 'un getSignal fallido no debe tocar la ONU mostrada');
++  assert.equal(refreshCalls, 0, 'un getSignal fallido no debe disparar el refresco del listado (nada cambio)');
++});
++
++test('un refresco secundario del listado LENTO nunca mantiene bloqueada la consulta', async () => {
++  let refreshStarted = false;
++  let refreshFinished = false;
++  const deps: SignalRefreshDeps = {
++    getSignal: async () => ({ rxPower: -20, txPower: 2 }),
++    patchOntSignal: () => {},
++    refreshList: async () => {
++      refreshStarted = true;
++      await delay(500); // mucho mas lento que lo que runSignalRefresh debe tardar en resolver
++      refreshFinished = true;
++    },
++  };
++
++  const start = Date.now();
++  const result = await runSignalRefresh(deps);
++  const elapsed = Date.now() - start;
++
++  assert.deepEqual(result, { ok: true });
++  assert.ok(elapsed < 100, `runSignalRefresh tardo ${elapsed}ms — no debio esperar los 500ms de refreshList`);
++  assert.ok(refreshStarted, 'el refresco del listado si debe dispararse');
++  assert.ok(!refreshFinished, 'en este punto el refresco todavia no debio terminar (prueba de que no se esperó)');
++
++  // Dejar que el refresco en segundo plano termine antes de que el test cierre.
++  await delay(600);
++  assert.ok(refreshFinished, 'el refresco en segundo plano si debe completarse eventualmente');
++});
++
++test('un refresco secundario del listado que FALLA tampoco se reporta como error de la consulta', async () => {
++  const deps: SignalRefreshDeps = {
++    getSignal: async () => ({ rxPower: -18, txPower: 3 }),
++    patchOntSignal: () => {},
++    refreshList: async () => {
++      throw new Error('fallo de red al refrescar el listado completo');
++    },
++  };
++
++  // No debe lanzar (ni como excepcion sincrona ni como unhandled rejection) —
++  // runSignalRefresh ya resolvio con exito antes de que refreshList fallara.
++  const result = await runSignalRefresh(deps);
++  assert.deepEqual(result, { ok: true });
++
++  // Deja un tick para que el .catch() interno de refreshList se resuelva
++  // (si no existiera, esto generaria un unhandled rejection que node:test
++  // reportaria como fallo del proceso).
++  await delay(10);
++});
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index 4807497..f893bf4 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -1,11 +1,18 @@
+ import { supabase } from './supabase';
++import { fetchWithTimeout } from './fetchWithTimeout';
+ 
+ /**
+  * Cliente para llamar al backend Hono (rutas privadas: OLT, MikroTik, TR-069...).
+  * Usa rutas relativas: en dev, el proxy de Vite las redirige a localhost:3001;
+  * en produccion, Hono sirve el frontend y la API desde el mismo origen.
++ *
++ * `timeoutMs` es opcional y queda SIN valor por defecto a proposito: la
++ * mayoria de las rutas (clientes, contratos, facturacion...) no deberian
++ * tener un limite de tiempo propio distinto del que ya impone el navegador/
++ * red. Los callers que si lo necesitan (operaciones que pasan por Telnet
++ * contra la OLT real, ver oltStore.getSignal) lo piden explicitamente.
+  */
+-export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
++export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}, timeoutMs?: number): Promise<T> {
+   const { data } = await supabase.auth.getSession();
+   const token = data.session?.access_token;
+ 
+@@ -15,8 +22,22 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
+     ...(options.headers ?? {}),
+   };
+ 
+-  const res = await fetch(path, { ...options, headers });
+-  const body = await res.json().catch(() => null);
++  const { res, body } = await fetchWithTimeout(path, { ...options, headers }, timeoutMs, async (response) => {
++    let parsed: unknown = null;
++    try {
++      parsed = await response.json();
++    } catch (e) {
++      // Un body vacio o no-JSON (ej. 204, o una ruta que no devuelve nada)
++      // SI se trata como "sin body" — comportamiento ya existente. Pero un
++      // abort (por timeout o por cancelacion externa) NO es "body invalido":
++      // es un fallo real que debe propagarse, no esconderse detras de un
++      // `null` silencioso (antes `res.json().catch(() => null)` ocultaba
++      // esto por igual, dejando a quien llama sin saber que la consulta
++      // realmente se cancelo a medio leer la respuesta).
++      if (!(e instanceof SyntaxError)) throw e;
++    }
++    return { res: response, body: parsed };
++  });
+ 
+   if (!res.ok) {
+     // Distintas rutas usan 'error' (la mayoria) o 'message' (ej. /olt-devices/:id/test).
+diff --git a/src/lib/fetchWithTimeout.ts b/src/lib/fetchWithTimeout.ts
+new file mode 100644
+index 0000000..a65e2d9
+--- /dev/null
++++ b/src/lib/fetchWithTimeout.ts
+@@ -0,0 +1,88 @@
++/**
++ * Envoltorio de `fetch` con límite de tiempo propio del cliente, via
++ * AbortController. Sin dependencias (ni Supabase ni Vite) a propósito, para
++ * poder probarlo con el runner nativo de Node (ver __tests__/fetchWithTimeout.test.ts).
++ *
++ * Por que hace falta: `apiFetch` (src/lib/api.ts) usaba un `fetch()` sin
++ * ningun timeout propio — si el backend se queda esperando, la UI se queda
++ * mostrando "Consultando..." indefinidamente, dependiendo solo del timeout
++ * de nginx (180s, ver deploy/nginx.conf) para recuperarse, sin ninguna señal
++ * de si sigue "viva" o esta realmente colgada. Bug real reportado:
++ * "Consultar señal" en una ONT se quedo en "Consultando..." tras el
++ * despliegue de la Fase 1 Telnet.
++ *
++ * OJO — lo que este modulo NO afirma: abortar el fetch en el navegador NO
++ * garantiza que la tarea equivalente en el backend (la sesion Telnet contra
++ * la OLT, ver readOntSignal() en server/src/routes/olt.ts) se haya
++ * cancelado — Node sigue corriendola igual hasta que termine o timee-out por
++ * su cuenta, el cliente simplemente deja de esperarla. Por eso el mensaje de
++ * timeout no le atribuye la causa a la OLT ni a la cola Telnet: eso no esta
++ * confirmado desde el lado del navegador.
++ *
++ * `onResponse(res)` recibe la Response ya con las cabeceras listas y hace lo
++ * que haga falta con el body (ej. `res.json()`) — el timeout/AbortController
++ * sigue activo durante ESE paso tambien, no solo mientras se esperan las
++ * cabeceras. Antes, el timer se limpiaba en cuanto `fetch()` resolvia (justo
++ * al llegar las cabeceras), dejando la lectura del body sin ninguna
++ * proteccion — si el body se quedaba a medio enviar, nada lo cancelaba.
++ */
++export async function fetchWithTimeout<T>(
++  input: string,
++  init: RequestInit,
++  timeoutMs: number | undefined,
++  onResponse: (res: Response) => Promise<T>,
++): Promise<T> {
++  const externalSignal = init.signal ?? null;
++
++  if (!timeoutMs) {
++    // Sin timeout propio: se respeta tal cual cualquier signal externo que
++    // haya mandado el caller, pero no hay nada mas que gestionar aqui.
++    const res = await fetch(input, init);
++    return onResponse(res);
++  }
++
++  // Un AbortController propio (no el signal externo directo) para poder
++  // distinguir DESPUES, en el catch, si quien aborto fue nuestro timer o el
++  // caller — y porque un signal ya puede venir "consumido" si se reusa.
++  const controller = new AbortController();
++  let timedOut = false;
++  const timer = setTimeout(() => {
++    timedOut = true;
++    controller.abort();
++  }, timeoutMs);
++
++  const onExternalAbort = () => controller.abort();
++  if (externalSignal) {
++    if (externalSignal.aborted) controller.abort();
++    else externalSignal.addEventListener('abort', onExternalAbort);
++  }
++
++  try {
++    // El mismo controller.signal cubre TANTO la espera de cabeceras
++    // (fetch(...)) COMO la lectura del body dentro de onResponse(...): si se
++    // llama a controller.abort() mientras `res.json()` sigue leyendo el
++    // stream, esa lectura tambien se rechaza — por eso el timer solo se
++    // limpia en el finally de aqui abajo, despues de que onResponse termino,
++    // no apenas llegan las cabeceras.
++    const res = await fetch(input, { ...init, signal: controller.signal });
++    return await onResponse(res);
++  } catch (e) {
++    if (controller.signal.aborted) {
++      if (timedOut) {
++        const seconds = Math.round(timeoutMs / 1000);
++        throw new Error(
++          `La consulta superó el tiempo de espera (${seconds}s) y se canceló desde el navegador. ` +
++            `Esto no garantiza que la operación equivalente en el backend/OLT se haya detenido.`,
++        );
++      }
++      // Lo abortó el signal externo del caller, no nuestro timer — se
++      // propaga tal cual para que el caller lo distinga del timeout (puede
++      // revisar su propio signal.reason si lo necesita).
++      throw e;
++    }
++    throw e;
++  } finally {
++    clearTimeout(timer);
++    if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
++  }
++}
+diff --git a/src/lib/signalRefreshFlow.ts b/src/lib/signalRefreshFlow.ts
+new file mode 100644
+index 0000000..0e47ac3
+--- /dev/null
++++ b/src/lib/signalRefreshFlow.ts
+@@ -0,0 +1,60 @@
++import { getErrorMessage } from './errors';
++
++/**
++ * Flujo de "Consultar señal", extraido de OntDetailModal.vue como funcion
++ * pura (sin Vue/Pinia/Supabase) para poder probarlo con el runner nativo de
++ * Node — ver __tests__/signalRefreshFlow.test.ts.
++ *
++ * Bug real reportado (ronda de revision): la version anterior esperaba
++ * `getSignal()` Y DESPUES `fetchOnts()` (recarga del listado COMPLETO del
++ * dispositivo, ~627KB en produccion) antes de soltar el boton
++ * "Consultar señal" — el timeout que se le agrego a `getSignal()` no cubria
++ * esa segunda espera, asi que un `fetchOnts()` lento (o sin su propio
++ * timeout) podia dejar "Consultando..." colgado igual.
++ *
++ * Esta version: usa el rx/tx que YA devolvio `getSignal()` (el backend ya
++ * los persistio en Supabase antes de responder) para actualizar la ONU en
++ * memoria sin ninguna llamada de red adicional, y dispara el refresco del
++ * listado completo EN SEGUNDO PLANO, sin esperarlo nunca ni dejar que su
++ * fallo se reporte como un error de esta consulta puntual.
++ */
++export interface SignalReading {
++  rxPower: number | null;
++  txPower: number | null;
++}
++
++export interface SignalRefreshDeps {
++  /** Ej. oltStore.getSignal(deviceId, ontDbId) — ya tiene su propio timeout. */
++  getSignal: () => Promise<SignalReading>;
++  /** Ej. oltStore.patchOntSignal(ontDbId, rx, tx) — mutacion local, sin red. */
++  patchOntSignal: (rxPower: number | null, txPower: number | null) => void;
++  /**
++   * Ej. oltStore.fetchOnts(deviceId) — refresco del listado completo, EN
++   * SEGUNDO PLANO. Nunca se espera ni se deja que bloquee o haga fallar el
++   * resultado de runSignalRefresh (ver abajo: se dispara con `void` + su
++   * propio `.catch()`).
++   */
++  refreshList: () => Promise<void>;
++}
++
++export interface SignalRefreshResult {
++  ok: boolean;
++  /** Mensaje legible, solo presente cuando ok=false. */
++  error?: string;
++}
++
++export async function runSignalRefresh(deps: SignalRefreshDeps): Promise<SignalRefreshResult> {
++  try {
++    const { rxPower, txPower } = await deps.getSignal();
++    deps.patchOntSignal(rxPower, txPower);
++
++    // A proposito NUNCA se espera: si refreshList() tarda o falla, no debe
++    // retrasar ni hacer fallar esta consulta puntual, que ya se resolvio
++    // arriba con el valor real que devolvio la OLT via getSignal().
++    void deps.refreshList().catch(() => {});
++
++    return { ok: true };
++  } catch (e) {
++    return { ok: false, error: getErrorMessage(e, 'Error al leer la señal óptica') };
++  }
++}
+diff --git a/src/stores/olt.ts b/src/stores/olt.ts
+index 7e00de2..9ed8d65 100644
+--- a/src/stores/olt.ts
++++ b/src/stores/olt.ts
+@@ -280,12 +280,48 @@ export const useOltStore = defineStore('olt', () => {
+     await apiFetch(`/api/olt-devices/${deviceId}/onts/${ontDbId}`, { method: 'DELETE' });
+   }
+ 
++  // "Consultar señal" hace DOS sesiones Telnet completas y seguidas contra la
++  // OLT real (Rx y Tx, ver readOntSignal() en server/src/routes/olt.ts), cada
++  // una con hasta 30s de timeout propio del backend, mas lo que haga falta
++  // esperar en la cola compartida (oltTelnetLock.ts) si el sync automatico u
++  // otra accion esta en curso. 90s da margen de sobra para el caso lento
++  // pero sano (hasta 60s de Telnet + holgura de cola) sin esperar los 180s
++  // completos que tolera nginx (deploy/nginx.conf) — bug real reportado:
++  // sin este limite, la ficha se quedaba en "Consultando..." sin ninguna
++  // señal de si seguia viva o estaba realmente colgada.
++  const SIGNAL_TIMEOUT_MS = 90_000;
++
+   async function getSignal(deviceId: string, ontDbId: string) {
+     return apiFetch<{ rxPower: number | null; txPower: number | null }>(
+       `/api/olt-devices/${deviceId}/onts/${ontDbId}/signal`,
++      {},
++      SIGNAL_TIMEOUT_MS,
+     );
+   }
+ 
++  /**
++   * Aplica rx/tx YA LEIDOS (ej. la respuesta de getSignal(), que el backend
++   * ya persistio en Supabase antes de responder) sobre la ONU en memoria,
++   * sin ninguna llamada de red. Evita recargar el listado COMPLETO del
++   * dispositivo (fetchOnts) solo para reflejar el cambio de una sola fila —
++   * esa llamada llego a pesar 627KB en produccion para ~700 ONTs, y
++   * `refreshSignal()` en OntDetailModal.vue la esperaba antes de soltar el
++   * boton "Consultar señal", dejando "Consultando..." visible mucho mas de
++   * lo necesario (bug real reportado tras la Fase 1 Telnet).
++   *
++   * Muta el objeto EXISTENTE dentro de `onts.value` (no lo reemplaza) para
++   * que una prop como `:ont="detailOnt"` en OltDetailView.vue (un computed
++   * que busca por id dentro de este mismo array) vea el cambio de inmediato
++   * sin que el componente necesite re-suscribirse a nada nuevo.
++   */
++  function patchOntSignal(ontDbId: string, rxPower: number | null, txPower: number | null) {
++    const ont = onts.value.find((o) => o.id === ontDbId);
++    if (ont) {
++      ont.rx_power = rxPower;
++      ont.tx_power = txPower;
++    }
++  }
++
+   function fetchSummary(deviceId: string) {
+     return apiFetch<{
+       unconfigured: number;
+@@ -508,6 +544,7 @@ export const useOltStore = defineStore('olt', () => {
+     configureWanPppoe,
+     deleteOnt,
+     getSignal,
++    patchOntSignal,
+     fetchSummary,
+     fetchHealth,
+     fetchProfiles,
+diff --git a/src/views/olt/OntDetailModal.vue b/src/views/olt/OntDetailModal.vue
+index 5cabf9d..3607588 100644
+--- a/src/views/olt/OntDetailModal.vue
++++ b/src/views/olt/OntDetailModal.vue
+@@ -2,6 +2,7 @@
+ import { computed, ref } from 'vue';
+ import { useOltStore, type OltOnt, type OltDevice } from '@/stores/olt';
+ import { getErrorMessage } from '@/lib/errors';
++import { runSignalRefresh } from '@/lib/signalRefreshFlow';
+ 
+ // Replica el layout del panel de detalle de ONU estilo SmartOLT (columna de
+ // identidad/config a la izquierda, grafico + estado en vivo a la derecha,
+@@ -73,14 +74,18 @@ function formatDate(value: string) {
+ async function refreshSignal() {
+   signalLoading.value = true;
+   signalError.value = null;
+-  try {
+-    await oltStore.getSignal(props.device.id, props.ont.id);
+-    await oltStore.fetchOnts(props.device.id);
+-  } catch (e) {
+-    signalError.value = getErrorMessage(e, 'Error al leer la señal óptica');
+-  } finally {
+-    signalLoading.value = false;
+-  }
++  // runSignalRefresh() usa el rx/tx que devuelve getSignal() para actualizar
++  // esta ONU en memoria (sin red) y dispara el refresco del listado completo
++  // EN SEGUNDO PLANO, sin esperarlo — asi "Consultando..." se libera apenas
++  // termina la consulta de señal (que ya tiene su propio timeout), nunca
++  // detras de una recarga de todo el listado (ver src/lib/signalRefreshFlow.ts).
++  const result = await runSignalRefresh({
++    getSignal: () => oltStore.getSignal(props.device.id, props.ont.id),
++    patchOntSignal: (rx, tx) => oltStore.patchOntSignal(props.ont.id, rx, tx),
++    refreshList: () => oltStore.fetchOnts(props.device.id),
++  });
++  if (!result.ok) signalError.value = result.error ?? 'Error al leer la señal óptica';
++  signalLoading.value = false;
+ }
+ 
+ async function submitWanPppoe() {
