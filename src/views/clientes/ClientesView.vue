@@ -8,6 +8,9 @@ import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
 import { useAuthStore } from '@/stores/auth';
 import { useReferidosStore } from '@/stores/referidos';
 import { useProspectsStore } from '@/stores/prospects';
+import { useInstallationsStore } from '@/stores/installations';
+import { useToast } from '@/composables/useToast';
+import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import type { Client, ClientStatus, ContractPriority, DocumentType } from '@/types/domain';
 
@@ -19,12 +22,23 @@ const mikrotikStore = useMikrotikStore();
 const auth = useAuthStore();
 const referidosStore = useReferidosStore();
 const prospectsStore = useProspectsStore();
+const installationsStore = useInstallationsStore();
+const toast = useToast();
+const { confirmDialog } = useConfirm();
 
 // Fase 140 — conversion de un prospecto (ver ProspectosView.vue):
 // /clientes?prospect_id=..&name=..&phone=..&address=.. precarga el modal de
 // "+ Nuevo cliente" y, recien si el alta tiene exito, marca el prospecto
 // 'convertido' con la referencia al cliente real (punto 8/9 del pedido).
+// Fase 145: ademas se deja visible un aviso en el propio modal (el
+// prospecto no trae documento, asi que SIEMPRE falta un dato obligatorio
+// para poder guardar) y, tras el alta, se genera la orden de Alta en
+// Instalaciones y se navega directo a la ficha del cliente — antes el
+// flujo terminaba en silencio justo despues del redirect a este modal, sin
+// dejar rastro si el usuario no llegaba a guardar (caso real: prospecto
+// "prueba2", 2026-10-10 — quedo en Supabase sin cliente ni orden alguna).
 const convertingProspectId = ref<string | null>(null);
+const convertingProspectName = ref<string | null>(null);
 
 // TECNICO_RED puede ver/editar clientes (GPS, fotos), pero no crearlos ni
 // eliminarlos — eso queda para SOPORTE/ADMIN/FACTURACION.
@@ -182,6 +196,7 @@ onMounted(async () => {
     openCreate();
     convertingProspectId.value = prospectId;
     const fullName = ((route.query.name as string) ?? '').trim();
+    convertingProspectName.value = fullName || null;
     const [first, ...rest] = fullName.split(/\s+/).filter(Boolean);
     form.value.first_name = first ?? '';
     form.value.last_name = rest.join(' ');
@@ -195,9 +210,10 @@ onMounted(async () => {
 
 function openCreate(fromSecret?: PppSecret) {
   editing.value = null;
+  convertingProspectId.value = null;
+  convertingProspectName.value = null;
   form.value = emptyForm();
   pendingPppoeHint.value = fromSecret ? fromSecret.name : null;
-  convertingProspectId.value = null;
   formError.value = null;
   referenteId.value = '';
   referenteFilter.value = '';
@@ -226,6 +242,28 @@ async function handleSubmit() {
     formError.value = `Ya existe un cliente con ese documento (${duplicateClient.value.first_name} ${duplicateClient.value.last_name}). Ve a su ficha y usa "+ Nuevo contrato" para agregarle otro servicio.`;
     return;
   }
+
+  // Fase 145 — el telefono de clients NUNCA fue unique (ver migracion Fase
+  // 140, mismo criterio ahi para prospects), asi que no se puede bloquear
+  // como el documento — pero si avisar antes de crear un duplicado real,
+  // en vez de "sin validacion". Solo aplica al convertir un prospecto: en
+  // el alta manual normal dos clientes pueden compartir telefono a
+  // proposito (pareja, oficina) y no corresponde interrumpirla.
+  if (!editing.value && convertingProspectId.value && form.value.phone) {
+    const dupPhone = clientsStore.clients.find(
+      (c) => c.phone === form.value.phone || c.phone_2 === form.value.phone,
+    );
+    if (dupPhone) {
+      const ok = await confirmDialog({
+        title: 'Posible cliente duplicado',
+        message: `Ya existe un cliente con este teléfono: ${dupPhone.first_name} ${dupPhone.last_name}. ¿Seguro que quieres crear uno nuevo de todas formas?`,
+        warning: true,
+        confirmLabel: 'Crear de todas formas',
+      });
+      if (!ok) return;
+    }
+  }
+
   saving.value = true;
   formError.value = null;
   try {
@@ -254,6 +292,25 @@ async function handleSubmit() {
         }
       }
 
+      // Fase 145 — al convertir un prospecto, ademas del cliente se genera
+      // la orden de Alta correspondiente, usando el mismo store/flujo que
+      // "Nueva instalación" en Soporte (InstalacionesView.vue): mismo
+      // payload minimo (solo client_id), mismos defaults reales de la
+      // tabla (status 'pending', priority 'medium') — sin agendar fecha ni
+      // asignar tecnico, eso lo decide el staff despues por el
+      // procedimiento normal. Si falla, el cliente igual queda creado
+      // (mismo criterio que el referido arriba) — se avisa y se puede
+      // crear la Alta a mano desde Soporte → Instalaciones.
+      let installationCreated = false;
+      if (convertingProspectId.value) {
+        try {
+          await installationsStore.createInstallation({ client_id: savedId });
+          installationCreated = true;
+        } catch (e) {
+          toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo generar la orden de Alta. Puedes crearla manualmente desde Soporte → Instalaciones.'));
+        }
+      }
+
       // Fase 140 — el cliente YA se creo correctamente (savedId real, no
       // supuesto): recien aca se marca el prospecto 'convertido', nunca
       // antes (punto 9 del pedido). Si falla, el cliente igual queda
@@ -261,10 +318,19 @@ async function handleSubmit() {
       if (convertingProspectId.value) {
         try {
           await prospectsStore.markConverted(convertingProspectId.value, savedId);
+          toast.success(
+            installationCreated
+              ? `Prospecto convertido: se creó el cliente y su orden de Alta.`
+              : `Prospecto convertido: se creó el cliente (falta crear la orden de Alta a mano).`,
+          );
         } catch (e) {
-          alert(getErrorMessage(e, 'El cliente se creó, pero no se pudo marcar el prospecto como convertido'));
+          toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo marcar el prospecto como convertido'));
         }
         convertingProspectId.value = null;
+        convertingProspectName.value = null;
+        showModal.value = false;
+        router.push(`/clientes/${savedId}`);
+        return;
       }
     }
 
@@ -424,7 +490,12 @@ function goToDetail(client: Client) {
           @submit.prevent="handleSubmit"
         >
           <h2 class="text-lg font-semibold mb-1">{{ editing ? 'Editar cliente' : 'Nuevo cliente' }}</h2>
-          <p v-if="pendingPppoeHint" class="text-xs text-sky-700/80 mb-3">
+          <p v-if="convertingProspectId" class="text-xs font-medium text-amber-700 bg-amber-500/10 rounded-lg px-2.5 py-1.5 mb-3">
+            Convirtiendo el prospecto{{ convertingProspectName ? ` "${convertingProspectName}"` : '' }} en cliente —
+            completa el documento y los datos que falten, y guarda para terminar. Esto también crea su orden de Alta
+            en Soporte. Si cierras sin guardar, no queda nada registrado.
+          </p>
+          <p v-else-if="pendingPppoeHint" class="text-xs text-sky-700/80 mb-3">
             Vinculado a partir del usuario PPPoE <span class="font-mono">{{ pendingPppoeHint }}</span> — el vinculo se completa al crear el contrato.
           </p>
           <div v-else class="mb-3"></div>
