@@ -1,3 +1,4 @@
+import { reserveContractNap } from '@/lib/napAssignment';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
@@ -268,39 +269,16 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     }
   }
 
-  /**
-   * Asigna UN SERVICIO puntual (contractId) a una caja NAP: libera solo el
-   * puerto que esa linea ya tuviera en otra NAP (nunca los de otras lineas
-   * del mismo cliente — ese era el bug real de assignClientToNap con
-   * clientes multi-servicio), reutiliza el primer puerto 'libre' de la NAP
-   * destino, o crea uno nuevo si hay cupo (bajo `capacity`).
-   */
-  async function assignContractToNap(infraElementoId: string, contractId: string, clientId: string, capacity: number) {
-    await unassignContract(contractId);
-
-    const puertos = napPuertosPorElemento.value[infraElementoId] ?? (await fetchNapPuertos(infraElementoId));
-    const libre = puertos.find((p) => p.estado === 'libre');
-    if (libre) {
-      return upsertNapPuerto({
-        infra_elemento_id: infraElementoId,
-        puerto_numero: libre.puerto_numero,
-        estado: 'ocupado',
-        client_id: clientId,
-        contract_id: contractId,
-      });
-    }
-
-    if (puertos.length >= capacity) {
-      throw new Error(`La caja NAP ya alcanzó su capacidad máxima (${capacity} clientes). Libera un puerto antes de asignar este servicio.`);
-    }
-    const nextPuerto = puertos.reduce((max, p) => Math.max(max, p.puerto_numero), 0) + 1;
-    return upsertNapPuerto({
-      infra_elemento_id: infraElementoId,
-      puerto_numero: nextPuerto,
-      estado: 'ocupado',
-      client_id: clientId,
-      contract_id: contractId,
+  /** Reserves the destination transactionally before releasing the previous port. */
+  async function assignContractToNap(infraElementoId: string, contractId: string, clientId: string, _capacity: number) {
+    const reservedId = await reserveContractNap((name, args) => supabase.rpc(name, args), {
+      napId: infraElementoId, contractId, clientId,
     });
+    try { await fetchTodosNapPuertos(); }
+    catch { throw new Error('La NAP se reservó, pero no se pudo actualizar el listado. Consulta antes de reintentar.'); }
+    const assigned = Object.values(napPuertosPorElemento.value).flat().find(port => port.id === reservedId);
+    if (!assigned) throw new Error('La reserva NAP fue confirmada; actualiza el listado para ver su puerto');
+    return assigned;
   }
 
   /**

@@ -1,3 +1,5 @@
+import { validateProvisioningContract } from '../services/provisioningContract';
+import { createOltProvisioningRoutes } from './oltProvisioning';
 import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -17,7 +19,6 @@ import {
   listOntsCommands,
   listAllOntsCommands,
   listUnconfiguredOntsCommands,
-  registerOntCommands,
   configureWanPppoeCommands,
   changeOntProfileCommands,
   setAdminStateCommands,
@@ -40,6 +41,12 @@ import {
   parseUnconfiguredOnts,
   parseProfileNames,
 } from '../ssh/zteParsers';
+import { createSupabaseProvisioningStore } from '../services/oltProvisioningStore';
+import {
+  type ProvisionHandlerDeps,
+  type ProvisionRequestBody,
+} from '../services/oltProvisioningHandler';
+import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 
 export const oltRoutes = new Hono();
 
@@ -50,11 +57,7 @@ const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
 // Gestionar ONTs (activar/desactivar, eliminar, autorizar, TR-069) si es
 // trabajo del tecnico de campo con el equipo ya dado de alta.
 const ONT_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
-// Dar de alta una ONT DESDE CERO en la OLT (slot/puerto/serial/perfiles a
-// mano, el formulario "Provisionar en OLT") es aprovisionamiento de red —
-// solo administracion. El tecnico de campo sigue autorizando/activando
-// equipo que ya este visible en la OLT (eso usa ONT_WRITE, no esto).
-const ONT_PROVISION = ['SUPERADMIN', 'ADMIN'] as const;
+// New authorization and reconciliation roles live in oltProvisioning.ts.
 
 const DEVICE_PUBLIC_FIELDS = 'id, name, host, brand, telnet_port, username, zone_id, is_active, created_at';
 // extra_params solo se pide en el listado para sacar lat/lng (capa OLT del
@@ -783,111 +786,113 @@ oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) =
   }
 });
 
-oltRoutes.post('/:id/onts', requireRole(...ONT_PROVISION), async (c) => {
-  const device = await getDeviceOrNull(c.req.param('id'));
-  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+// ---- Aprovisionamiento confiable (Fase 2) — ver oltProvisioningService.ts,
+// oltProvisioningStore.ts, oltProvisioningHandler.ts y
+// docs/auditoria/fase-2-aprovisionamiento.html ----
 
-  const body = await c.req.json();
-  const shelf = body.shelf ?? 1;
-  const { slot, port, serial, onuType, description, vlan, clientId, tcontProfile, trafficProfile } = body;
-  if (!tcontProfile || !trafficProfile) {
-    return c.json({ error: 'tcontProfile y trafficProfile son requeridos (ver "show gpon profile tcont/traffic" en la OLT)' }, 400);
-  }
+const provisioningStore = createSupabaseProvisioningStore(supabaseAdmin);
 
-  const ref = { shelf, slot, port };
-  let onuId: number;
+interface MikrotikDeviceRowForProvision {
+  id: string;
+  host: string;
+  port: number;
+  use_tls: boolean;
+  username: string;
+  password: string;
+}
 
-  try {
-    onuId = await withOltLock(device.id, async () => {
-      let resolvedOnuId: number = body.onuId;
+async function getMikrotikDeviceOrNull(id: string): Promise<MikrotikDeviceRowForProvision | null> {
+  const { data, error } = await supabaseAdmin.from('mikrotik_devices').select('*').eq('id', id).single();
+  if (error || !data) return null;
+  return data as MikrotikDeviceRowForProvision;
+}
 
-      if (resolvedOnuId == null) {
-        // El ID libre se calcula contra la OLT EN VIVO, no solo contra
-        // nuestra cache local (olt_onts) — la cache puede estar incompleta
-        // y reusar un ID que ya pertenece a una ONT real existente en el
-        // equipo.
-        const outputs = await runTelnetCommands(telnetTargetFor(device), listOntsCommands({ shelf, slot, port }), {
-          timeoutMs: 20000,
-        });
-        const usedLive = new Set(parseOntList(outputs.join('\n')).map((o) => o.onuId));
-        const { data: existing } = await supabaseAdmin
-          .from('olt_onts')
-          .select('ont_id')
-          .eq('olt_device_id', device.id)
-          .eq('slot', slot)
-          .eq('port', port);
-        for (const r of existing ?? []) usedLive.add((r as { ont_id: number }).ont_id);
+/**
+ * Fabrica del paso de WAN/PPPoE por OMCI — a diferencia de MikroTik, SI
+ * necesita el onu-id (se conoce solo despues de que la OLT responde), por
+ * eso es una funcion que recibe `onuId` en vez de una funcion ya armada
+ * (ver buildSyncWan en oltProvisioningHandler.ts, que la llama justo a
+ * tiempo). La clave en texto plano SOLO vive en este closure, nunca se
+ * persiste en ningun lado (ni en `requested` ni en `steps`).
+ */
+function buildWanSyncFactory(
+  device: OltDeviceRow,
+  ref: ZteInterfaceRef,
+  body: Record<string, unknown>,
+): ((onuId: number) => () => Promise<void>) | undefined {
+  const wan = body.wan as Record<string, unknown> | undefined;
+  if (!wan?.username || !wan?.password || !wan?.vlanProfile) return undefined;
 
-        resolvedOnuId = 1;
-        while (usedLive.has(resolvedOnuId)) resolvedOnuId += 1;
-      }
-
-      await runTelnetCommands(
+  return (onuId: number) => async () => {
+    await withOltLock(device.id, () =>
+      runTelnetCommands(
         telnetTargetFor(device),
-        registerOntCommands({ ref, onuId: resolvedOnuId, serial, onuType, vlan, description, tcontProfile, trafficProfile }),
-      );
+        configureWanPppoeCommands({
+          ref,
+          onuId,
+          username: String(wan.username),
+          password: String(wan.password),
+          vlanProfile: String(wan.vlanProfile),
+        }),
+        { timeoutMs: 20000 },
+      ),
+    );
+  };
+}
 
-      return resolvedOnuId;
-    });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : 'Error al registrar la ONT en la OLT' }, 502);
-  }
+function buildLinkDeps(body: ProvisionRequestBody): Pick<ProvisionHandlerDeps, 'preflight' | 'syncLinks'> {
+  return {
+    preflight: async () => {
+      await validateProvisioningContract({
+        getContract: async id => {
+          const { data, error } = await supabaseAdmin.from('service_contracts')
+            .select('id, client_id, mikrotik_device_id, pppoe_username, mikrotik_profile').eq('id', id).maybeSingle();
+          if (error) throw new Error('No se pudo validar el contrato');
+          return data;
+        },
+        hasOtherContract: async (routerId, username, contractId) => {
+          const { data, error } = await supabaseAdmin.from('service_contracts').select('id')
+            .eq('mikrotik_device_id', routerId).eq('pppoe_username', username).neq('id', contractId);
+          if (error) throw new Error('No se pudo validar la referencia PPPoE');
+          return !!data?.length;
+        },
+        readSecrets: async routerId => {
+          const router = await getMikrotikDeviceOrNull(routerId);
+          if (!router) throw new Error('Router del contrato no encontrado');
+          const target: MikrotikTarget = { host: router.host, port: router.port, useTls: router.use_tls, username: router.username, password: router.password };
+          try { return await mikrotikRequest(target, '/ppp/secret', { method: 'GET', retries: 0 }); }
+          catch { throw new Error('No se pudo consultar la referencia PPPoE del contrato'); }
+        },
+      }, body);
+    },
+    syncLinks: async () => {
+      if (!body.napId) return;
+      const linked = await supabaseAdmin.rpc('assign_provisioning_nap', {
+        p_nap_id: body.napId, p_contract_id: body.contractId, p_client_id: body.clientId,
+      });
+      if (linked.error) throw new Error('No se pudo asignar la NAP: ' + linked.error.message);
+    },
+  };
+}
 
-  const { data, error } = await supabaseAdmin
-    .from('olt_onts')
-    .upsert(
-      {
-        olt_device_id: device.id,
-        client_id: clientId ?? null,
-        frame: shelf,
-        slot,
-        port,
-        ont_id: onuId,
-        serial,
-        description,
-        onu_type: onuType,
-        vlan,
-        tcont_profile: tcontProfile,
-        traffic_profile: trafficProfile,
-        status: 'unknown',
-        last_synced_at: new Date().toISOString(),
-      },
-      { onConflict: 'olt_device_id,frame,slot,port,ont_id' },
-    )
-    .select()
-    .single();
-
-  if (error) return c.json({ error: error.message }, 400);
-
-  oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
-
-  // Best-effort, EN SEGUNDO PLANO (la ONT de arriba YA quedo registrada y la
-  // respuesta ya se mando): solo leer la senal optica inicial. YA NO asigna
-  // TR-069 automaticamente (decision del usuario, 2026-09-30) — ademas de no
-  // quererlo por defecto, el sleep fijo de 8s + hasta 25s de comando
-  // mantenia ocupada la OLT y ponia en cola cualquier otra accion (ej.
-  // "Eliminar" en otra ONT) detras de esta espera. TR-069 se sigue pudiendo
-  // asignar a mano por ONT desde el boton "TR-069" de la tabla. Usa oltEvents
-  // (mismo bus SSE de siempre) para que la fila se actualice sola si el
-  // tecnico sigue mirando la pantalla cuando termine.
-  void (async () => {
-    try {
-      const signal = await withOltLock(device.id, () => readOntSignal(device, ref, onuId));
-      const { data: finalData } = await supabaseAdmin
-        .from('olt_onts')
-        .update({ rx_power: signal.rxPower, tx_power: signal.txPower })
-        .eq('id', data.id)
-        .select()
-        .single();
-      if (finalData) oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: finalData });
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[olt/register] No se pudo leer la senal inicial:', e);
-    }
-  })();
-
-  return c.json(data, 201);
-});
+oltRoutes.route('/', createOltProvisioningRoutes({
+  store: provisioningStore,
+  buildDeps: async (deviceId, body, rawBody) => {
+    const device = await getDeviceOrNull(deviceId);
+    if (!device) return null;
+    const links = buildLinkDeps(body);
+    // Only a read-only reference stage is allowed, including legacy replays.
+    return {
+      store: provisioningStore, ...links, deviceId: device.id,
+      sensitiveValues: [String((rawBody.wan as Record<string, unknown> | undefined)?.password ?? '')].filter(Boolean),
+      withOltLock: fn => withOltLock(device.id, fn),
+      runTelnet: (commands, opts) => runTelnetCommands(telnetTargetFor(device), commands, opts),
+      syncMikrotik: body.mikrotik ? links.preflight : undefined,
+      buildSyncWan: buildWanSyncFactory(device, { shelf: body.shelf ?? 1, slot: body.slot, port: body.port }, rawBody),
+      onOntChanged: ont => oltEvents.emitOntChanged({ oltDeviceId: device.id, ont }),
+    };
+  },
+}));
 
 async function getOntOrNull(id: string | undefined) {
   if (!id) return null;
@@ -986,7 +991,7 @@ oltRoutes.post('/:id/onts/:ontDbId/wan-pppoe', requireRole(...ONT_WRITE), async 
   if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
 
   const body = await c.req.json();
-  const { username, password, vlanProfile, gemport, wanId, host } = body;
+  const { username, password, vlanProfile, wanId, host } = body;
   if (!username || !password || !vlanProfile) {
     return c.json({ error: 'username, password y vlanProfile son requeridos (el vlan-profile debe existir ya en la OLT)' }, 400);
   }
@@ -998,11 +1003,9 @@ oltRoutes.post('/:id/onts/:ontDbId/wan-pppoe', requireRole(...ONT_WRITE), async 
         configureWanPppoeCommands({
           ref: { shelf: ont.frame, slot: ont.slot, port: ont.port },
           onuId: ont.ont_id,
-          vlan: ont.vlan,
           username,
           password,
           vlanProfile,
-          gemport,
           wanId,
           host,
         }),

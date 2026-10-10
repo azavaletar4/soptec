@@ -248,11 +248,11 @@ async function toggleConfig() {
               </div>
               <div>
                 <label class="block text-xs text-slate-600 mb-1">Clave PPPoE</label>
-                <input v-model="wanPppoeForm.password" required class="field-input text-sm" />
+                <input v-model="wanPppoeForm.password" type="password" autocomplete="new-password" required class="field-input text-sm" />
               </div>
               <div>
                 <label class="block text-xs text-slate-600 mb-1">VLAN-profile (ya existente en la OLT)</label>
-                <input v-model="wanPppoeForm.vlanProfile" required class="field-input text-sm" placeholder="ej. V120" />
+                <input v-model="wanPppoeForm.vlanProfile" required class="field-input text-sm" placeholder="Nombre real del perfil, ej. 120" />
               </div>
               <div class="sm:col-span-3">
                 <button type="submit" :disabled="wanPppoeSaving" class="btn-secondary text-sm">

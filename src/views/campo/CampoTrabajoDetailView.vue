@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import SignaturePad from '@/components/campo/SignaturePad.vue';
-import QrScannerModal from '@/components/campo/QrScannerModal.vue';
+import AuthorizeOnuModal from '@/views/olt/AuthorizeOnuModal.vue';
 import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
 import { useCampoStore, isNetworkError, type DiagnosticoResult } from '@/stores/campo';
 import { useTicketsStore } from '@/stores/tickets';
@@ -65,7 +65,7 @@ const toast = useToast();
 // administracion, no del tecnico de campo — el backend ya lo exige
 // (olt.ts, ONT_PROVISION); esto solo evita mostrarle el formulario a quien
 // la API igual va a rechazar.
-const canProvisionOnt = computed(() => auth.role !== 'TECNICO_RED');
+const canProvisionOnt = computed(() => ['SUPERADMIN', 'ADMIN'].includes(auth.role ?? ''));
 
 const jobType = route.params.tipo as JobType;
 const jobId = route.params.id as string;
@@ -369,74 +369,14 @@ function signalClass(rx: number | null) {
 // sin conectarse nunca con el equipo serializado real (inventory_units) que
 // ya registra "Equipos asignados" — duplicaba el dato sin ningun uso
 // posterior, se quito (Fase 66).
-const qrOpen = ref(false);
-
-function openQr() {
-  qrOpen.value = true;
-}
-function onQrScan(value: string) {
-  provisionForm.value.serial = value;
-}
-
-// ---- Provisionamiento en OLT (solo instalaciones) ----
-const provisionForm = ref({
-  oltDeviceId: '',
-  shelf: 1,
-  slot: 1,
-  port: 1,
-  serial: '',
-  onuType: '',
-  vlan: 100,
-  description: '',
-  tcontProfile: '',
-  trafficProfile: '',
-});
-const profiles = ref<{ tcontProfiles: string[]; trafficProfiles: string[] }>({ tcontProfiles: [], trafficProfiles: [] });
-const profilesLoading = ref(false);
-const provisioning = ref(false);
-const provisionError = ref<string | null>(null);
-const provisionResult = ref<{ rxPower: number | null; txPower: number | null } | null>(null);
-
-watch(
-  () => provisionForm.value.oltDeviceId,
-  async (deviceId) => {
-    profiles.value = { tcontProfiles: [], trafficProfiles: [] };
-    if (!deviceId) return;
-    profilesLoading.value = true;
-    try {
-      profiles.value = await oltStore.fetchProfiles(deviceId);
-    } finally {
-      profilesLoading.value = false;
-    }
-  },
-);
-
-async function handleProvision() {
-  if (!trabajo.value || !provisionForm.value.oltDeviceId) return;
-  provisioning.value = true;
-  provisionError.value = null;
-  try {
-    const result = await oltStore.registerOnt(provisionForm.value.oltDeviceId, {
-      shelf: provisionForm.value.shelf,
-      slot: provisionForm.value.slot,
-      port: provisionForm.value.port,
-      serial: provisionForm.value.serial,
-      onuType: provisionForm.value.onuType,
-      vlan: provisionForm.value.vlan,
-      description: provisionForm.value.description || trabajo.value.clienteNombre,
-      tcontProfile: provisionForm.value.tcontProfile,
-      trafficProfile: provisionForm.value.trafficProfile,
-      clientId: trabajo.value.clientId,
-    });
-    provisionResult.value = { rxPower: result.rx_power, txPower: result.tx_power };
-  } catch (e) {
-    provisionError.value = isNetworkError(e)
-      ? 'Sin señal por ahora — el registro en la OLT necesita conexión en el momento, no se puede dejar pendiente. Revisa tu señal y toca "Registrar" de nuevo.'
-      : getErrorMessage(e, 'Error al registrar la ONT en la OLT (revisa perfiles y puerto)');
-  } finally {
-    provisioning.value = false;
-  }
-}
+const provisionDeviceId = ref('');
+const showAuthorizeModal = ref(false);
+const provisionConfirmed = ref(false);
+const fieldPrefill = computed(() => ({
+  serial: '', slot: 1, port: 1,
+  clientId: trabajo.value?.clientId ?? undefined,
+  contractId: trabajo.value?.contractId ?? undefined,
+}));
 
 // ---- Materiales usados ----
 const materials = ref<InventoryMovement[]>([]);
@@ -1747,45 +1687,18 @@ async function handleCloseSubmit() {
       <!-- Provisionamiento OLT (solo instalaciones, solo admin/super) -->
       <section v-if="jobType === 'installation' && canProvisionOnt" class="surface p-3.5 mb-3">
         <h2 class="text-sm font-semibold mb-2">Provisionar en OLT</h2>
-        <form class="space-y-2.5" @submit.prevent="handleProvision">
-          <select v-model="provisionForm.oltDeviceId" required class="field-input text-sm">
+        <div class="space-y-2.5">
+          <select v-model="provisionDeviceId" class="field-input text-sm">
             <option value="" disabled>Selecciona la OLT...</option>
             <option v-for="d in oltStore.devices" :key="d.id" :value="d.id">{{ d.name }}</option>
           </select>
-
-          <div class="grid grid-cols-3 gap-2">
-            <input v-model.number="provisionForm.shelf" type="number" min="1" placeholder="Shelf" class="field-input text-sm" />
-            <input v-model.number="provisionForm.slot" type="number" min="1" required placeholder="Slot" class="field-input text-sm" />
-            <input v-model.number="provisionForm.port" type="number" min="1" required placeholder="Puerto" class="field-input text-sm" />
-          </div>
-
-          <div class="flex gap-2">
-            <input v-model="provisionForm.serial" required placeholder="Serial de la ONT" class="field-input text-sm font-mono flex-1" />
-            <button type="button" class="btn-secondary text-xs shrink-0" @click="openQr()">📷 QR</button>
-          </div>
-
-          <input v-model="provisionForm.onuType" required placeholder="Tipo de ONU (ej. ZTE-F660)" class="field-input text-sm" />
-          <input v-model.number="provisionForm.vlan" type="number" placeholder="VLAN" class="field-input text-sm" />
-          <input v-model="provisionForm.description" placeholder="Descripción (nombre del cliente)" class="field-input text-sm" />
-
-          <select v-model="provisionForm.tcontProfile" required class="field-input text-sm" :disabled="profilesLoading">
-            <option value="" disabled>{{ profilesLoading ? 'Cargando perfiles...' : 'Perfil de subida (tcont)' }}</option>
-            <option v-for="p in profiles.tcontProfiles" :key="p" :value="p">{{ p }}</option>
-          </select>
-          <select v-model="provisionForm.trafficProfile" required class="field-input text-sm" :disabled="profilesLoading">
-            <option value="" disabled>{{ profilesLoading ? 'Cargando perfiles...' : 'Perfil de bajada (traffic)' }}</option>
-            <option v-for="p in profiles.trafficProfiles" :key="p" :value="p">{{ p }}</option>
-          </select>
-
-          <p v-if="provisionError" class="text-xs text-red-600">{{ provisionError }}</p>
-          <p v-if="provisionResult" class="text-xs text-green-600">
-            Registrada. Señal inicial: Rx {{ provisionResult.rxPower ?? '—' }} dBm
-          </p>
-
-          <button type="submit" :disabled="provisioning || !provisionForm.oltDeviceId" class="btn-primary w-full text-sm">
-            {{ provisioning ? 'Registrando en la OLT...' : 'Registrar ONT' }}
+          <p class="text-xs text-slate-500">Autoriza con el contrato del trabajo y sus referencias PPPoE. La WAN se configura manualmente por defecto.</p>
+          <p v-if="provisionConfirmed" class="text-xs text-green-700">Registro y vínculo confirmados. Verifica la navegación desde la ONT.</p>
+          <button type="button" :disabled="!provisionDeviceId || !trabajo.contractId" class="btn-primary w-full text-sm" @click="showAuthorizeModal = true">
+            Abrir autorización de ONU
           </button>
-        </form>
+          <p v-if="!trabajo.contractId" class="text-xs text-amber-700">Vincula primero un contrato a este trabajo.</p>
+        </div>
       </section>
 
       <!-- Materiales -->
@@ -2178,7 +2091,8 @@ async function handleCloseSubmit() {
       </template>
     </template>
 
-    <QrScannerModal :open="qrOpen" @close="qrOpen = false" @scan="onQrScan" />
+    <AuthorizeOnuModal v-if="showAuthorizeModal && provisionDeviceId" :device-id="provisionDeviceId" :prefill="fieldPrefill"
+      @close="showAuthorizeModal = false" @authorized="provisionConfirmed = true; showAuthorizeModal = false" />
     <PhotoLightbox v-if="lightboxPhotos.length" :photos="lightboxPhotos" :start-index="lightboxIndex" @close="lightboxPhotos = []" />
   </CampoLayout>
 </template>

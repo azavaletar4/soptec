@@ -187,39 +187,22 @@ export function disableTr069Commands(ref: ZteInterfaceRef, onuId: number, veip: 
 }
 
 /**
- * VALIDADO contra el equipo real una vez (2026-10-02, ONT de prueba
- * HWTCB5AE49B4, gpon-onu_1/2/2:50, vlanProfile="120" — el nombre del perfil
- * resulto ser el mismo numero de VLAN como texto, ya existente en esta OLT).
- * Sintaxis sacada de documentacion de campo de terceros para ZTE C300/C320
- * (no el manual oficial ZTE), ver Fase 75. Confirma la hipotesis: para una
- * ONT router/HGU (ej. GPT-2741GNAC) que hace su propio PPPoE, el
- * `service-port` normal (registerOntCommands) solo declara el servicio GPON
- * del lado OLT, pero el ONT nunca arma su WAN si nadie le manda el `wan-ip`
- * por OMCI — aunque el tecnico ya haya puesto las mismas credenciales a mano
- * en la pagina web local del equipo. `vlanProfile` tiene que ser un perfil
- * YA EXISTENTE en esta OLT — este comando no lo crea; probar primero con
- * `String(vlan)` (funciono para VLAN 120) antes de inventar otro nombre.
- *
- * Una sola confirmacion real no es "siempre funciona" — seguir probando en
- * instalaciones nuevas (ahora integrado al PASO 6 de handleAuthorize en
- * AuthorizeOnuModal.vue) antes de asumirlo 100% confiable en todas las
- * zonas/VLANs.
+ * Configura exclusivamente la WAN PPPoE por OMCI. La asociación del
+ * servicio de transporte (service/GEM/VLAN) se configura aparte y siempre,
+ * incluso cuando la WAN/PPPoE queda en modo manual en la ONT.
+ * `vlanProfile` debe existir previamente en esta OLT.
  */
 export function configureWanPppoeCommands(params: {
   ref: ZteInterfaceRef;
   onuId: number;
-  gemport?: number;
-  vlan: number;
   username: string;
   password: string;
   vlanProfile: string;
   wanId?: number;
   host?: number;
 }): string[] {
-  const { ref, onuId, vlan, username, password, vlanProfile } = params;
+  const { ref, onuId, username, password, vlanProfile } = params;
   const safeOnuId = sanitizeInt(onuId, 'onuId', { min: 0, max: 127 });
-  const safeGemport = sanitizeInt(params.gemport ?? 1, 'gemport', { min: 1, max: 8 });
-  const safeVlan = sanitizeInt(vlan, 'vlan', { min: 1, max: 4094 });
   const safeUsername = sanitizeCliToken(username, 'username', 64);
   const safePassword = sanitizeCliToken(password, 'password', 64);
   const safeVlanProfile = sanitizeIdentifier(vlanProfile, 'vlanProfile', 64);
@@ -229,8 +212,31 @@ export function configureWanPppoeCommands(params: {
     'enable',
     'configure terminal',
     `pon-onu-mng ${onuInterface(ref, safeOnuId)}`,
-    `service ${safeWanId} gemport ${safeGemport} vlan ${safeVlan}`,
     `wan-ip ${safeWanId} mode pppoe username ${safeUsername} password ${safePassword} vlan-profile ${safeVlanProfile} host ${safeHost}`,
+    'exit',
+  ];
+}
+
+/**
+ * Comandos de servicio GEM/VLAN sin WAN/PPPoE ni credenciales. El comando
+ * `service 1 gemport 1 vlan 120` ya se validó en esta ZTE C300 real.
+ */
+export function configureOntInternetServiceCommands(params: {
+  ref: ZteInterfaceRef;
+  onuId: number;
+  gemport?: number;
+  vlan: number;
+  serviceId?: number;
+}): string[] {
+  const safeOnuId = sanitizeInt(params.onuId, 'onuId', { min: 0, max: 127 });
+  const safeGemport = sanitizeInt(params.gemport ?? 1, 'gemport', { min: 1, max: 8 });
+  const safeVlan = sanitizeInt(params.vlan, 'vlan', { min: 1, max: 4094 });
+  const safeServiceId = sanitizeInt(params.serviceId ?? 1, 'serviceId', { min: 1, max: 8 });
+  return [
+    'enable',
+    'configure terminal',
+    `pon-onu-mng ${onuInterface(params.ref, safeOnuId)}`,
+    `service ${safeServiceId} gemport ${safeGemport} vlan ${safeVlan}`,
     'exit',
   ];
 }
@@ -279,6 +285,9 @@ export function registerOntCommands(params: {
     'gemport 1 tcont 1',
     `gemport 1 traffic-limit downstream ${safeTrafficProfile}`,
     `service-port 1 vport 1 user-vlan ${safeVlan} vlan ${safeVlan}`,
+    'exit',
+    `pon-onu-mng ${onuInterface(ref, safeOnuId)}`,
+    `service 1 gemport 1 vlan ${safeVlan}`,
     'exit',
   ];
 }
@@ -347,6 +356,31 @@ export function runningConfigCommands(ref: ZteInterfaceRef, onuId: number): stri
  */
 export function fullRunningConfigCommand(): string[] {
   return ['enable', 'show running-config'];
+}
+
+/**
+ * NO CONFIRMADO contra el equipo real — NO USAR para decidir nada todavia.
+ *
+ * La intencion original era un running-config acotado a un solo puerto PON
+ * (mas barato que fullRunningConfigCommand()), asumiendo que
+ * "show running-config interface gpon-olt_S/L/P" devuelve, igual que el
+ * dump completo, tanto el bloque gpon-olt_* (binding tipo/serial) COMO los
+ * bloques gpon-onu_*:N de servicio (VLAN/tcont/traffic) de ese puerto. Esa
+ * suposicion NUNCA se verifico contra la ZXA10 C300 real — es perfectamente
+ * posible que el equipo real, al acotar por interfaz, devuelva SOLO el
+ * bloque de esa interfaz puntual (sin los bloques gpon-onu_* asociados, que
+ * son objetos de interfaz distintos), o que la sintaxis ni siquiera sea
+ * valida. Por eso oltProvisioningService.ts (Fase 2, revision posterior)
+ * NO usa esta funcion para verificar una escritura — usa
+ * fullRunningConfigCommand() (el dump completo), que SI esta confirmado.
+ *
+ * Antes de usar esto para algo real: comparar a mano, por Telnet directo,
+ * la salida de este comando contra "show running-config" completo para el
+ * MISMO puerto (ver procedimiento de validacion manual en
+ * docs/auditoria/fase-2-aprovisionamiento.html) — solo lectura, sin riesgo.
+ */
+export function portRunningConfigCommand(ref: ZteInterfaceRef): string[] {
+  return ['enable', `show running-config interface ${oltInterface(ref)}`];
 }
 
 /**

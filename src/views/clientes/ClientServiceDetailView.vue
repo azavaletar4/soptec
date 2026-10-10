@@ -24,6 +24,7 @@ import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from 
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
+import { resolveOntPlanName } from '@/lib/ontPlanDisplay';
 import {
   NAP_CLIENT_LIMIT,
   ZONE_CLIENT_LIMIT,
@@ -477,6 +478,10 @@ const contractOtherUnits = computed(() => {
   // linea del mismo cliente) en el selector de reasignacion.
   return hasOntForContract.value ? others.filter((u) => u.product?.inventory_categories?.slug !== 'onu') : others;
 });
+
+function ontPlanName(ont: OltOnt): string | null {
+  return resolveOntPlanName(ont, contract.value?.plans ?? null);
+}
 
 const reassignOntId = ref('');
 const reassignUnitId = ref('');
@@ -1657,7 +1662,7 @@ onMounted(async () => {
           >
             <div>
               <span class="font-mono text-xs">{{ ont.serial }}</span>
-              <span class="text-slate-500 text-xs ml-2">{{ ont.plans?.name || 'Sin plan asignado' }}</span>
+              <span class="text-slate-500 text-xs ml-2">{{ ontPlanName(ont) || 'Sin plan asignado' }}</span>
               <span
                 class="badge ml-2"
                 :class="ont.status === 'online' ? 'bg-green-500/15 text-green-600' : ont.status === 'offline' ? 'bg-red-500/15 text-red-600' : 'bg-slate-500/15 text-slate-600'"

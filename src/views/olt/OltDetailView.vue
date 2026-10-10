@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { filterStalePendingOnus } from '@/lib/provisioningUi';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -203,8 +204,12 @@ function goToDisabledTab() {
 // registro perdido) — separarlas evita que un tecnico tenga que adivinar
 // cual es cual, y deja reconectar sin volver a escribir los datos del
 // cliente.
-const newUnconfiguredOnts = computed(() => unconfiguredOnts.value.filter((o) => !o.existingClient));
-const reconnectOnts = computed(() => unconfiguredOnts.value.filter((o) => o.existingClient));
+const visibleUnconfiguredOnts = computed(() => filterStalePendingOnus(
+  unconfiguredOnts.value, oltStore.onts.filter(o => o.olt_device_id === deviceId.value),
+  unconfiguredCheckedAt.value, unconfiguredLive.value,
+));
+const newUnconfiguredOnts = computed(() => visibleUnconfiguredOnts.value.filter((o) => !o.existingClient));
+const reconnectOnts = computed(() => visibleUnconfiguredOnts.value.filter((o) => o.existingClient));
 
 const disabledOnts = ref<DisabledOnt[]>([]);
 const disabledLoading = ref(false);

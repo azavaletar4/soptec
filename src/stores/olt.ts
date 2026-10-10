@@ -80,6 +80,69 @@ export interface OntMetaUpdate {
   contract_id?: string | null;
 }
 
+// ---- Aprovisionamiento confiable (Fase 2) — ver server/src/services/
+// oltProvisioningService.ts y docs/auditoria/fase-2-aprovisionamiento.html.
+// Mismas formas que devuelve POST /:id/onts/provision.
+
+export interface ProvisionMismatch {
+  field: string;
+  expected: string;
+  actual: string | null;
+}
+
+export interface ProvisionOutcome {
+  kind:
+    | 'invalid'
+    | 'already_registered'
+    | 'registered'
+    | 'verify_mismatch'
+    | 'conflict_same_position_different_config'
+    | 'conflict_elsewhere'
+    | 'capacity_full'
+    | 'rejected'
+    | 'uncertain'
+    | 'verify_uncertain'
+    | 'scan_unreliable';
+  onuId?: number;
+  message?: string;
+  mismatches?: ProvisionMismatch[];
+  at?: { shelf: number; slot: number; port: number; onuId: number };
+}
+
+export interface ProvisioningStep {
+  stage: string;
+  status: string;
+  at: string;
+  detail: string | null;
+}
+
+export interface ProvisioningOperation {
+  id: string;
+  frame: number;
+  serial: string;
+  slot: number;
+  port: number;
+  client_id: string | null;
+  contract_id: string | null;
+  requested: Record<string, unknown>;
+  status: string;
+  steps: ProvisioningStep[];
+  onu_id: number | null;
+  error: string | null;
+  ont_db_id: string | null;
+}
+
+export interface ProvisionResponse {
+  operation: ProvisioningOperation;
+  outcome: ProvisionOutcome;
+  ont: OltOnt | null;
+  persistenceWarning?: string;
+  mikrotikOk?: boolean;
+  mikrotikError?: string;
+  wanOk?: boolean;
+  wanError?: string;
+}
+
 export interface UnlinkedOnt {
   id: string;
   olt_device_id: string;
@@ -251,11 +314,45 @@ export const useOltStore = defineStore('olt', () => {
     );
   }
 
-  async function registerOnt(deviceId: string, payload: Record<string, unknown>) {
-    return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+  // El escaneo previo (serial-existe/ID-libre) puede incluir un "show
+  // running-config" de TODO el equipo (hasta 120s de margen en el backend,
+  // ver oltProvisioningService.ts) mas la escritura y la relectura de
+  // verificacion — varias sesiones Telnet seguidas, no solo una. 170s deja
+  // margen bajo el limite real de nginx (proxy_read_timeout 180s, ver
+  // deploy/nginx.conf) para que, si algo se atasca de verdad, el aviso
+  // venga de aqui con un mensaje claro en vez de un 504 generico silencioso.
+  const PROVISION_TIMEOUT_MS = 170_000;
+
+  /**
+   * Aprovisiona una ONT de forma idempotente y verificada (Fase 2). El backend reescanea la OLT en vivo antes de
+   * escribir, reconoce si esta MISMA solicitud (idempotencyKey) ya se
+   * aplico antes, y lee de vuelta lo que quedo en la OLT para confirmar que
+   * coincide con lo pedido — ver outcome.kind para el resultado real
+   * (nunca asumir "exito" solo porque la llamada no lanzo error).
+   */
+  async function provisionOnt(deviceId: string, payload: Record<string, unknown> & { idempotencyKey: string }) {
+    return apiFetch<ProvisionResponse>(
+      `/api/olt-devices/${deviceId}/onts/provision`,
+      { method: 'POST', body: JSON.stringify(payload) },
+      PROVISION_TIMEOUT_MS,
+    );
+  }
+
+  /** Reintenta SOLO lo que quedo pendiente de una operacion ya existente (ver reconcile en routes/olt.ts) — nunca repite un alta ya confirmada. */
+  async function reconcileProvisioning(deviceId: string, operationId: string, payload: Record<string, unknown> = {}) {
+    return apiFetch<ProvisionResponse>(
+      `/api/olt-devices/${deviceId}/onts/operations/${operationId}/reconcile`,
+      { method: 'POST', body: JSON.stringify(payload) },
+      PROVISION_TIMEOUT_MS,
+    );
+  }
+
+  function fetchProvisioningOperationByKey(deviceId: string, key: string) {
+    return apiFetch<ProvisioningOperation | null>(`/api/olt-devices/${deviceId}/onts/provisioning-operation?key=${encodeURIComponent(key)}`);
+  }
+
+  function fetchProvisioningOperation(deviceId: string, operationId: string) {
+    return apiFetch<ProvisioningOperation>(`/api/olt-devices/${deviceId}/onts/operations/${operationId}`);
   }
 
   async function toggleOnt(deviceId: string, ontDbId: string, activate: boolean) {
@@ -539,7 +636,10 @@ export const useOltStore = defineStore('olt', () => {
     fetchOnts,
     importExistingOnts,
     syncOnts,
-    registerOnt,
+    provisionOnt,
+    reconcileProvisioning,
+    fetchProvisioningOperation,
+    fetchProvisioningOperationByKey,
     toggleOnt,
     configureWanPppoe,
     deleteOnt,

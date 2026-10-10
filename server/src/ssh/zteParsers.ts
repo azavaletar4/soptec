@@ -137,6 +137,8 @@ export interface FullConfigOnt {
   tcontProfile: string | null;
   trafficProfile: string | null;
   vlan: number | null;
+  serviceGemport: number | null;
+  serviceVlan: number | null;
 }
 
 /**
@@ -151,9 +153,11 @@ export interface FullConfigOnt {
 export function parseFullRunningConfig(raw: string): Map<string, FullConfigOnt> {
   const result = new Map<string, FullConfigOnt>();
   const bindings = new Map<string, { onuType: string; serial: string }>();
+  const services = new Map<string, { gemport: number; vlan: number }>();
 
   let oltRef: string | null = null; // "shelf/slot/port" mientras estamos dentro de un bloque gpon-olt_*
   let onuKey: string | null = null; // "shelf/slot/port:id" mientras estamos dentro de un bloque gpon-onu_*:N
+  let onuMngKey: string | null = null;
   let current: Partial<FullConfigOnt> = {};
 
   for (const line of raw.split('\n')) {
@@ -171,12 +175,20 @@ export function parseFullRunningConfig(raw: string): Map<string, FullConfigOnt> 
       current = {};
       continue;
     }
+    const onuMngHeader = line.match(/^pon-onu-mng gpon-onu_(\d+\/\d+\/\d+):(\d+)\s*$/);
+    if (onuMngHeader) {
+      onuKey = null;
+      oltRef = null;
+      onuMngKey = `${onuMngHeader[1]}:${onuMngHeader[2]}`;
+      continue;
+    }
     if (line.trim() === '!') {
       if (onuKey) {
         result.set(onuKey, current as FullConfigOnt);
         onuKey = null;
         current = {};
       }
+      onuMngKey = null;
       oltRef = null;
       continue;
     }
@@ -199,6 +211,10 @@ export function parseFullRunningConfig(raw: string): Map<string, FullConfigOnt> 
       const vlan = line.match(/^\s*service-port\s+\d+\s+vport\s+\d+\s+user-vlan\s+(\d+)/);
       if (vlan) current.vlan = Number(vlan[1]);
     }
+    if (onuMngKey) {
+      const service = line.match(/^\s*service\s+\S+(?:\s+type\s+\S+)?\s+gemport\s+(\d+)(?:\s+cos\s+\d+)?\s+vlan\s+(\d+)/i);
+      if (service) services.set(onuMngKey, { gemport: Number(service[1]), vlan: Number(service[2]) });
+    }
   }
   if (onuKey) result.set(onuKey, current as FullConfigOnt);
 
@@ -211,12 +227,25 @@ export function parseFullRunningConfig(raw: string): Map<string, FullConfigOnt> 
     entry.tcontProfile = entry.tcontProfile ?? null;
     entry.trafficProfile = entry.trafficProfile ?? null;
     entry.vlan = entry.vlan ?? null;
+    const service = services.get(key);
+    entry.serviceGemport = service?.gemport ?? null;
+    entry.serviceVlan = service?.vlan ?? null;
   }
   // ONUs que solo tienen binding (type/sn) pero ningun bloque de servicio
   // (ej. autorizadas pero sin tcont/vlan configurado todavia).
   for (const [key, b] of bindings) {
     if (!result.has(key)) {
-      result.set(key, { ...b, name: null, description: null, tcontProfile: null, trafficProfile: null, vlan: null });
+      const service = services.get(key);
+      result.set(key, {
+        ...b,
+        name: null,
+        description: null,
+        tcontProfile: null,
+        trafficProfile: null,
+        vlan: null,
+        serviceGemport: service?.gemport ?? null,
+        serviceVlan: service?.vlan ?? null,
+      });
     }
   }
 

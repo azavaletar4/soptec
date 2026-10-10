@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useOltStore, type OltOnt } from '@/stores/olt';
+import QrScannerModal from '@/components/campo/QrScannerModal.vue';
+import { useOltStore, type ProvisionResponse, type ProvisionOutcome } from '@/stores/olt';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
-import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
+import { useMikrotikStore } from '@/stores/mikrotik';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { NAP_CLIENT_LIMIT, type ServiceContract } from '@/types/domain';
 import { getErrorMessage } from '@/lib/errors';
+import { createProvisioningKey, classifyProvisioningResult, validateProvisioningWan } from '@/lib/provisioningUi';
 
 const props = defineProps<{
   deviceId: string;
   oltName?: string;
-  prefill?: { serial: string; slot: number; port: number; clientId?: string; contractId?: string } | null;
+  prefill?: { serial: string; shelf?: number; slot: number; port: number; clientId?: string; contractId?: string } | null;
 }>();
 const emit = defineEmits<{ close: []; authorized: [] }>();
 
@@ -32,16 +34,18 @@ const fibra = useFoFibraStore();
 // modo manual ("+ Registrar ONT") puede traer slot/port heredados del
 // selector PON pero el serial siempre se escribe a mano.
 const isLocked = computed(() => !!props.prefill?.serial);
+const shelf = ref(props.prefill?.shelf ?? 1);
 const slot = ref(props.prefill?.slot ?? 1);
 const port = ref(props.prefill?.port ?? 1);
 const serial = ref(props.prefill?.serial ?? '');
+const qrOpen = ref(false);
 
 // Limite de hardware GPON tipico en tarjetas ZTE (onu-id 1-128 por puerto
 // PON) — puramente informativo, nunca bloquea el registro (la OLT real es la
 // que decide si acepta o no el onu-id).
 const PON_PORT_MAX_ONUS = 128;
 const ponUsed = computed(
-  () => oltStore.onts.filter((o) => o.olt_device_id === props.deviceId && o.slot === slot.value && o.port === port.value).length,
+  () => oltStore.onts.filter((o) => o.olt_device_id === props.deviceId && o.frame === shelf.value && o.slot === slot.value && o.port === port.value).length,
 );
 
 // ---- 2) Red / OLT ----
@@ -74,7 +78,8 @@ function mostCommonOnuType(): string {
 }
 const onuType = ref(mostCommonOnuType());
 const description = ref('');
-const vlan = ref(100);
+// VLAN de servicio habitual de la red Rayco; editable antes de autorizar.
+const vlan = ref(120);
 const tcontProfile = ref('');
 const trafficProfile = ref('');
 const profiles = ref<{ tcontProfiles: string[]; trafficProfiles: string[] }>({ tcontProfiles: [], trafficProfiles: [] });
@@ -167,7 +172,7 @@ function findContractNapId(contractId: string): string {
 // — ver ClientServiceDetailView.vue) se jala todo lo que ya existe, para que
 // este modal sea solo "activar" y no repetir datos que el tecnico ya cargo
 // antes. Si algo no esta configurado en el contrato, se deja el campo
-// editable (ver "manualNap"/"manualMikrotik" en el template) como fallback.
+// editable para NAP como fallback. PPPoE siempre se toma del contrato.
 watch(selectedContractId, async () => {
   const contract = selectedContract.value;
   zoneId.value = contract?.zone_id ?? '';
@@ -197,15 +202,10 @@ watch(selectedContractId, async () => {
 
   if (contract?.mikrotik_device_id && contract?.pppoe_username) {
     mikrotikDeviceId.value = contract.mikrotik_device_id;
-    secretMode.value = 'existing';
-    manualMikrotik.value = false;
-    await onMikrotikDeviceChange();
     selectedSecretName.value = contract.pppoe_username;
-    mikrotikProfile.value = contract.mikrotik_profile || plan?.mikrotik_profile || '';
+    mikrotikProfile.value = contract.mikrotik_profile || '';
   } else {
     mikrotikDeviceId.value = '';
-    secretMode.value = 'create';
-    manualMikrotik.value = true;
     mikrotikProfile.value = plan?.mikrotik_profile ?? '';
   }
 });
@@ -254,117 +254,122 @@ const napOptionsAll = computed(() =>
 );
 const napOptions = computed(() => napOptionsAll.value.filter((n) => n.zoneId === zoneId.value));
 
-// ---- 7) Modo ONU — los equipos reales de esta red (ej. GPT-2741GNAC) son
-// router/HGU operando en Routing, no en Bridging: el ONT marca su propio
-// PPPoE por su WAN (VLAN de servicio) y reparte LAN/NAT el mismo, como
-// confirma SmartOLT en cada equipo real ("ONU mode: Routing", "WAN setup
-// mode: Setup via ONU webpage"). SmartRayco NO configura eso — ni este
-// proyecto ni el equipo real tienen implementado un comando OMCI que
-// empuje la config de WAN/PPPoE al ONT (confirmado: ni los clientes reales
-// ni el de prueba muestran "TR069 Profile" activo). Ese paso lo hace el
-// tecnico a mano, entrando a la pagina web local del equipo (normalmente
-// 192.168.1.1 desde su puerto LAN) despues de autorizarlo aqui — lo unico
-// que este modal provisiona es el servicio GPON (gemport/tcont/VLAN) mas
-// abajo, igual sea bridge o routing. Automatizar ese paso via TR-069 (como
-// ya funciona con el ONT F670L) queda pendiente como mejora aparte.
+// ---- 7) Modo ONU ----
+// ONUs router/HGU: el backend envia WAN/PPPoE por OMCI si se solicita.
+// La aceptacion del comando no confirma una sesion PPPoE ni navegacion.
 
 // ---- 8) MikroTik ----
 const mikrotikDeviceId = ref('');
-// true cuando el contrato NO trae ya router+usuario PPPoE (o el tecnico pidio
-// cambiarlo) — mismo patron que manualProfiles/manualNap: si el contrato ya
-// tiene todo, esta seccion solo se muestra como resumen de solo lectura.
-const manualMikrotik = ref(true);
-async function toggleManualMikrotik() {
-  manualMikrotik.value = !manualMikrotik.value;
-  if (manualMikrotik.value) return;
-  const contract = selectedContract.value;
-  if (!contract?.mikrotik_device_id) return;
-  mikrotikDeviceId.value = contract.mikrotik_device_id;
-  secretMode.value = contract.pppoe_username ? 'existing' : 'create';
-  await onMikrotikDeviceChange();
-  if (contract.pppoe_username) selectedSecretName.value = contract.pppoe_username;
-  mikrotikProfile.value = contract.mikrotik_profile || contract.plans?.mikrotik_profile || '';
-}
-const mikrotikRoutersForZone = computed(() => {
-  if (!zoneId.value) return mikrotikStore.devices;
-  const inZone = mikrotikStore.devices.filter((d) => d.zone_id === zoneId.value);
-  return inZone.length ? inZone : mikrotikStore.devices;
-});
-
-const secretMode = ref<'create' | 'existing'>('create');
-const newSecretName = ref('');
-const newSecretPassword = ref('');
+// PPPoE is a read-only contract reference. Authorization never creates a secret.
 const mikrotikProfile = ref('');
-const mikrotikProfileNames = ref<string[]>([]);
-const loadingMikrotikProfiles = ref(false);
-const existingSecrets = ref<PppSecret[]>([]);
-const loadingSecrets = ref(false);
 const selectedSecretName = ref('');
-// Clave del secreto PPPoE YA EXISTENTE — MikroTik nunca devuelve la clave en
-// texto plano de un secreto ya creado, asi que si el tecnico la sabe la
-// escribe aca para que el PASO 6 (WAN/PPPoE por OMCI) pueda armarse solo.
-// Si se deja vacio, ese paso se salta (el equipo queda sin WAN configurada,
-// igual que antes de la Fase 75).
 const existingSecretPassword = ref('');
-
-// Excluye secretos ya vinculados a OTRO contrato del mismo router (mismo
-// criterio que ClientServiceDetailView.vue) — requiere el listado completo
-// de contratos, cargado en onMounted.
-const availableSecrets = computed(() => {
-  const linked = new Set(
-    contractsStore.contracts
-      .filter((c) => c.mikrotik_device_id === mikrotikDeviceId.value && c.id !== selectedContractId.value)
-      .map((c) => c.pppoe_username),
-  );
-  return existingSecrets.value.filter((s) => !linked.has(s.name));
-});
-
-async function onMikrotikDeviceChange() {
-  mikrotikProfileNames.value = [];
-  existingSecrets.value = [];
-  selectedSecretName.value = '';
-  mikrotikProfile.value = '';
-  if (!mikrotikDeviceId.value) return;
-  loadingMikrotikProfiles.value = true;
-  try {
-    const list = await mikrotikStore.fetchPppProfiles(mikrotikDeviceId.value);
-    mikrotikProfileNames.value = list.map((p) => p.name);
-    // Reaplica el perfil del plan contratado si este router tambien lo tiene
-    // configurado (mismo criterio que tcont/traffic: el plan manda).
-    const planProfile = selectedContract.value?.plans?.mikrotik_profile;
-    if (planProfile && mikrotikProfileNames.value.includes(planProfile)) mikrotikProfile.value = planProfile;
-  } catch (e) {
-    submitError.value = getErrorMessage(e, 'No se pudo leer los perfiles del router');
-  } finally {
-    loadingMikrotikProfiles.value = false;
-  }
-  if (secretMode.value === 'existing') await loadExistingSecrets();
-}
-
-async function loadExistingSecrets() {
-  if (!mikrotikDeviceId.value) return;
-  loadingSecrets.value = true;
-  try {
-    existingSecrets.value = await mikrotikStore.fetchPppSecrets(mikrotikDeviceId.value);
-  } catch (e) {
-    submitError.value = getErrorMessage(e, 'No se pudo leer los usuarios PPPoE del router');
-  } finally {
-    loadingSecrets.value = false;
-  }
-}
-
-watch(secretMode, (mode) => {
-  if (mode === 'existing' && mikrotikDeviceId.value) void loadExistingSecrets();
-});
+const deferWan = ref(true);
+const wanVlanProfile = ref('');
+watch([mikrotikDeviceId, selectedSecretName], () => { existingSecretPassword.value = ''; });
 
 // ---- Envio ----
 const submitting = ref(false);
 const submitError = ref<string | null>(null);
 const submitWarnings = ref<string[]>([]);
-// true apenas el paso 1 (OLT) tiene exito — a partir de ahi la ONU YA existe
-// en el equipo real, asi que el formulario nunca debe volver a enviarse (evitaria
-// crear una segunda ONU duplicada); solo queda la opcion de cerrar el modal.
+// Success requires the server to confirm the complete operation, including its ONT row.
 const ontCreated = ref(false);
+
+// ---- Aprovisionamiento confiable (Fase 2) ----
+// Se genera UNA SOLA VEZ por apertura de este modal (no dentro de
+// handleAuthorize) y nunca se regenera mientras siga abierto — asi un
+// doble-clic o un reintento manual tras un error transitorio (ej. de red)
+// SIEMPRE llega al backend con la misma clave, que la reconoce como la
+// MISMA solicitud en vez de repetir el comando de alta en la OLT (ver
+// POST /:id/onts/provision en routes/olt.ts). Cerrar y volver a abrir el
+// modal (ej. para otra ONU) si arranca una clave nueva.
+// Retain the operation's key across closing/reopening and a lost HTTP response.
+// Only non-secret identifiers are stored; passwords remain in memory.
+const recoveryStorageKey = `smartrayco:provision:${props.deviceId}:${props.prefill?.serial ?? 'manual'}`;
+function readRecovery(): { key: string; operationId?: string } | null {
+  try { const value = JSON.parse(localStorage.getItem(recoveryStorageKey) ?? 'null'); return typeof value?.key === 'string' ? value : null; } catch { return null; }
+}
+const recovery = readRecovery();
+const idempotencyKey = ref(recovery?.key || createProvisioningKey());
+function saveRecovery() {
+  try { localStorage.setItem(recoveryStorageKey, JSON.stringify({ key: idempotencyKey.value, operationId: provisionOperationId.value })); } catch { /* Storage can be disabled; the in-memory key is still retained. */ }
+}
+
+const provisionOperationId = ref<string | null>(recovery?.operationId ?? null);
+const lastOutcome = ref<ProvisionOutcome | null>(null);
+// A pending operation or a lost response must be reconciled with its original key.
+const recoveryRequired = ref(!!recovery);
+const needsReconcile = computed(() => recoveryRequired.value || ['uncertain', 'verify_uncertain'].includes(lastOutcome.value?.kind ?? ''));
+
+function describeOutcome(outcome: ProvisionOutcome): string {
+  switch (outcome.kind) {
+    case 'rejected':
+      return outcome.message ?? 'La OLT rechazo el comando de alta.';
+    case 'verify_uncertain':
+    case 'uncertain':
+      return `${outcome.message ?? 'La OLT no confirmo si el comando se aplico.'} Usa "Verificar antes de reintentar" en vez de volver a enviar el formulario.`;
+    case 'verify_mismatch': {
+      const campos = (outcome.mismatches ?? []).map((m) => m.field).join(', ');
+      return `La OLT quedo con datos distintos a los solicitados (${campos}) — revisa antes de continuar, no se marco como completado.`;
+    }
+    case 'conflict_elsewhere':
+      return `Ese serial ya esta registrado en gpon-onu_${outcome.at?.shelf}/${outcome.at?.slot}/${outcome.at?.port}:${outcome.at?.onuId} — no se toco nada. Si es una reconexion, gestionala desde "Desconfiguradas / Por Reconectar".`;
+    case 'conflict_same_position_different_config':
+      return 'Ya existe una ONU distinta en esa misma posicion de la OLT, con otra configuracion — no se sobreescribio. Revisa manualmente antes de continuar.';
+    case 'capacity_full':
+      return 'No quedan onu-id libres en ese puerto PON (capacidad agotada).';
+    case 'scan_unreliable':
+    case 'invalid':
+      return outcome.message ?? 'Datos invalidos.';
+    default:
+      return 'No se pudo confirmar el registro en la OLT.';
+  }
+}
+
+function continuationPayload() {
+  return {
+    zoneId: zoneId.value || null, napId: napId.value || null,
+    pppoeReference: { deviceId: mikrotikDeviceId.value, username: selectedSecretName.value, profile: mikrotikProfile.value },
+    wan: !deferWan.value && existingSecretPassword.value ? {
+      username: selectedSecretName.value, password: existingSecretPassword.value,
+      vlanProfile: wanVlanProfile.value.trim() || String(vlan.value),
+    } : undefined,
+  };
+}
+
+function applyProvisionResult(result: ProvisionResponse) {
+  provisionOperationId.value = result.operation.id;
+  saveRecovery();
+  lastOutcome.value = result.outcome;
+  const status = classifyProvisioningResult(result);
+  submitWarnings.value = status.warnings;
+  ontCreated.value = status.complete;
+  recoveryRequired.value = !status.complete;
+  if (!status.oltOk) submitError.value = describeOutcome(result.outcome);
+  else if (!status.complete) submitError.value = 'La OLT esta confirmada, pero la operacion sigue pendiente. Puedes verificar y reintentar las etapas faltantes.';
+  else {
+    try { localStorage.removeItem(recoveryStorageKey); } catch { /* optional */ }
+    emit('authorized');
+  }
+}
+
+async function handleReconcile() {
+  if (submitting.value) return;
+  submitting.value = true;
+  submitError.value = null;
+  try {
+    if (!provisionOperationId.value) {
+      const saved = await oltStore.fetchProvisioningOperationByKey(props.deviceId, idempotencyKey.value);
+      if (!saved) { recoveryRequired.value = false; submitError.value = 'El intento no llego al servidor; puedes enviarlo con la misma clave.'; return; }
+      provisionOperationId.value = saved.id;
+      saveRecovery();
+    }
+    applyProvisionResult(await oltStore.reconcileProvisioning(props.deviceId, provisionOperationId.value, continuationPayload()));
+  } catch (e) {
+    recoveryRequired.value = true;
+    submitError.value = getErrorMessage(e, 'Error al verificar la operacion; conserva este intento');
+  } finally { submitting.value = false; }
+}
 
 function validate(): string | null {
   if (!serial.value.trim()) return 'El serial es obligatorio';
@@ -373,17 +378,17 @@ function validate(): string | null {
   if (!selectedClientId.value) return 'Selecciona un cliente';
   if (!selectedContractId.value) return 'Selecciona el servicio/contrato del cliente';
   if (!mikrotikDeviceId.value) return 'Selecciona el router MikroTik';
-  if (secretMode.value === 'create') {
-    if (!newSecretName.value.trim() || !newSecretPassword.value.trim() || !mikrotikProfile.value) {
-      return 'Completa usuario, contraseña y perfil PPPoE';
-    }
-  } else if (!selectedSecretName.value || !mikrotikProfile.value) {
-    return 'Elige el secreto PPPoE existente y su perfil';
+  const contract = selectedContract.value;
+  if (!contract?.pppoe_username || !contract.mikrotik_profile ||
+      contract.pppoe_username !== selectedSecretName.value ||
+      contract.mikrotik_device_id !== mikrotikDeviceId.value || contract.mikrotik_profile !== mikrotikProfile.value) {
+    return 'Vincula primero router, usuario y perfil PPPoE al contrato desde la ficha del cliente. Autorizar solo usa esa referencia.';
   }
-  return null;
+  return validateProvisioningWan(deferWan.value, existingSecretPassword.value);
 }
 
 async function handleAuthorize() {
+  if (submitting.value || recoveryRequired.value) return;
   const validationError = validate();
   if (validationError) {
     submitError.value = validationError;
@@ -394,10 +399,19 @@ async function handleAuthorize() {
   submitError.value = null;
   submitWarnings.value = [];
 
-  // PASO 1 — OLT (duro: si falla, no se ejecuta nada mas).
-  let ontRow: OltOnt;
+  // PASO 1 — OLT, idempotente y verificada (Fase 2, ver
+  // oltProvisioningService.ts): el backend reescanea la OLT en vivo antes
+  // de escribir (serial-existe / id-libre), y relee despues de escribir
+  // para confirmar que quedo tal como se pidio. Un resultado que no sea
+  // "registered"/"already_registered" NUNCA se trata como exito, y nunca
+  // se sigue con los pasos 2-6 sobre una OLT que no esta confirmada.
+  let result: Awaited<ReturnType<typeof oltStore.provisionOnt>>;
+  saveRecovery();
   try {
-    ontRow = await oltStore.registerOnt(props.deviceId, {
+    result = await oltStore.provisionOnt(props.deviceId, {
+      ...continuationPayload(),
+      idempotencyKey: idempotencyKey.value,
+      shelf: shelf.value,
       slot: slot.value,
       port: port.value,
       serial: serial.value,
@@ -407,107 +421,18 @@ async function handleAuthorize() {
       tcontProfile: tcontProfile.value,
       trafficProfile: trafficProfile.value,
       clientId: selectedClientId.value,
+      contractId: selectedContractId.value,
       onuId: isLocked.value ? undefined : onuId.value === '' ? undefined : onuId.value,
     });
   } catch (e) {
-    submitError.value = getErrorMessage(e, 'Error al registrar la ONT en la OLT');
+    recoveryRequired.value = true;
+    submitError.value = getErrorMessage(e, 'Se perdio la respuesta. Consulta el estado del mismo intento antes de continuar.');
     submitting.value = false;
     return;
   }
-  ontCreated.value = true;
 
-  // A partir de aqui la ONT YA existe en la OLT — cada paso siguiente es
-  // best-effort (igual que handleContractSubmit en ClientServiceDetailView.vue):
-  // nunca revierte el paso 1, solo acumula avisos.
-
-  // PASO 2 — vincular cliente/contrato/zona.
-  try {
-    await oltStore.updateOntMeta(props.deviceId, ontRow.id, {
-      client_id: selectedClientId.value,
-      contract_id: selectedContractId.value,
-      zone_id: zoneId.value || null,
-    });
-  } catch (e) {
-    submitWarnings.value.push(getErrorMessage(e, 'La ONT se registró en la OLT, pero no se pudo vincular al cliente/contrato'));
-  }
-
-  // PASO 3 — Caja NAP (solo si se eligió una).
-  if (napId.value) {
-    try {
-      const nap = napOptions.value.find((n) => n.id === napId.value);
-      await fibra.assignContractToNap(napId.value, selectedContractId.value, selectedClientId.value, nap?.capacity ?? NAP_CLIENT_LIMIT);
-    } catch (e) {
-      submitWarnings.value.push(getErrorMessage(e, 'No se pudo asignar la caja NAP'));
-    }
-  }
-
-  // PASO 4 — MikroTik: crear o vincular secreto PPPoE.
-  let pppoeUsername: string | null = null;
-  try {
-    if (secretMode.value === 'create') {
-      const secret = await mikrotikStore.createPppSecret(mikrotikDeviceId.value, {
-        name: newSecretName.value.trim(),
-        password: newSecretPassword.value,
-        profile: mikrotikProfile.value,
-        comment: description.value || undefined,
-      });
-      pppoeUsername = secret.name;
-    } else {
-      const secret = existingSecrets.value.find((s) => s.name === selectedSecretName.value);
-      if (secret) await mikrotikStore.setPppSecretProfile(mikrotikDeviceId.value, secret['.id'], mikrotikProfile.value);
-      pppoeUsername = selectedSecretName.value;
-    }
-  } catch (e) {
-    submitWarnings.value.push(
-      getErrorMessage(e, 'La ONT y el cliente quedaron registrados, pero no se pudo crear/activar la credencial PPPoE en MikroTik'),
-    );
-  }
-
-  // PASO 5 — guardar la referencia MikroTik en el contrato (solo si el paso 4 dio un usuario).
-  if (pppoeUsername) {
-    try {
-      await contractsStore.updateContract(selectedContractId.value, {
-        mikrotik_device_id: mikrotikDeviceId.value,
-        pppoe_username: pppoeUsername,
-        mikrotik_profile: mikrotikProfile.value,
-      });
-    } catch (e) {
-      submitWarnings.value.push(getErrorMessage(e, 'La credencial PPPoE se creó, pero no se pudo guardar en el contrato'));
-    }
-  }
-
-  // PASO 6 — WAN/PPPoE por OMCI (Fase 75/76: confirmado contra el equipo
-  // real, vlan-profile = el mismo numero de VLAN como texto, ej. "120").
-  // Necesita la clave en texto plano: si se creo credencial nueva ya la
-  // tenemos (newSecretPassword); si es un secreto existente, MikroTik nunca
-  // devuelve su clave, asi que se usa la que el tecnico haya escrito a mano
-  // en existingSecretPassword (opcional — si la dejo vacia, este paso se
-  // salta y queda pendiente el boton manual en la ficha de la ONT).
-  const wanPassword = secretMode.value === 'create' ? newSecretPassword.value : existingSecretPassword.value;
-  if (pppoeUsername && wanPassword) {
-    try {
-      await oltStore.configureWanPppoe(props.deviceId, ontRow.id, {
-        username: pppoeUsername,
-        password: wanPassword,
-        vlanProfile: String(vlan.value),
-      });
-    } catch (e) {
-      submitWarnings.value.push(
-        getErrorMessage(
-          e,
-          'Todo lo demas quedo listo, pero no se pudo configurar el WAN/PPPoE del equipo por OMCI — usa el boton "Configurar WAN/PPPoE" en la ficha de la ONT, o configuralo a mano en la pagina web local.',
-        ),
-      );
-    }
-  }
-
+  applyProvisionResult(result);
   submitting.value = false;
-  emit('authorized');
-  // El modal se queda abierto mostrando el resultado (exito o avisos) — el
-  // tecnico lo lee y cierra a mano (ver template, boton "Cerrar"). Los pasos
-  // que fallaron se pueden completar despues desde las pantallas ya
-  // existentes (ficha del cliente para MikroTik/NAP, tabla de ONTs para
-  // reintentar vinculo).
 }
 
 onMounted(async () => {
@@ -528,6 +453,39 @@ onMounted(async () => {
     await onClientChange();
     if (props.prefill.contractId) selectedContractId.value = props.prefill.contractId;
   }
+  if (recovery) {
+    submitting.value = true;
+    try {
+      const saved = await oltStore.fetchProvisioningOperationByKey(props.deviceId, idempotencyKey.value);
+      if (saved) {
+        provisionOperationId.value = saved.id;
+        serial.value = saved.serial; shelf.value = saved.frame; slot.value = saved.slot; port.value = saved.port;
+        selectedClientId.value = saved.client_id ?? '';
+        await onClientChange();
+        selectedContractId.value = saved.contract_id ?? '';
+        const requested = saved.requested;
+        onuType.value = String(requested.onuType ?? ''); vlan.value = Number(requested.vlan);
+        tcontProfile.value = String(requested.tcontProfile ?? ''); trafficProfile.value = String(requested.trafficProfile ?? '');
+        description.value = String(requested.description ?? ''); zoneId.value = String(requested.zoneId ?? ''); napId.value = String(requested.napId ?? '');
+        const w = requested.wan as Record<string, unknown> | undefined;
+        deferWan.value = !w;
+        wanVlanProfile.value = String(w?.vlanProfile ?? '');
+        const p = requested.pppoeReference as Record<string, unknown> | undefined;
+        if (p) {
+          mikrotikDeviceId.value = String(p.deviceId ?? ''); selectedSecretName.value = String(p.username ?? '');
+          mikrotikProfile.value = String(p.profile ?? '');
+        }
+        saveRecovery();
+        submitError.value = 'Se recupero el intento anterior. Verifica su estado; si necesita una clave PPPoE, vuelve a ingresarla.';
+      } else {
+        // No operation exists: the previous request did not reach creation.
+        recoveryRequired.value = false;
+      }
+    } catch (e) {
+      submitError.value = getErrorMessage(e, 'No se pudo recuperar el intento anterior. Cierra y vuelve a abrir para consultar antes de continuar.');
+    } finally { submitting.value = false; }
+  }
+
 });
 </script>
 
@@ -536,7 +494,7 @@ onMounted(async () => {
     <div class="modal-overlay">
       <form class="w-full max-w-2xl modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleAuthorize">
         <h2 class="text-lg font-semibold mb-1">Autorizar ONU</h2>
-        <p class="text-xs text-slate-500 mb-4">Aprovisiona la OLT, vincula al cliente y activa MikroTik en un solo paso.</p>
+        <p class="text-xs text-slate-500 mb-4">Aprovisiona la OLT y vincula la ONU al contrato del cliente.</p>
 
         <!-- 1) Identificacion heredada del escaneo -->
         <div class="mb-2 text-sm">
@@ -544,6 +502,11 @@ onMounted(async () => {
           <div class="font-mono">{{ oltName || 'OLT' }}</div>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2 text-sm">
+          <div>
+            <div class="text-xs text-slate-500">Shelf</div>
+            <div v-if="isLocked" class="font-mono">{{ shelf }}</div>
+            <input v-else v-model.number="shelf" type="number" min="1" class="field-input" />
+          </div>
           <div>
             <div class="text-xs text-slate-500">Board</div>
             <div v-if="isLocked" class="font-mono">{{ slot }}</div>
@@ -557,7 +520,10 @@ onMounted(async () => {
           <div class="col-span-2">
             <div class="text-xs text-slate-500">Serial (SN)</div>
             <div v-if="isLocked" class="font-mono">{{ serial }} <span class="text-[10px] text-slate-400">(detectado por escaneo)</span></div>
-            <input v-else v-model="serial" placeholder="ZTEGC1234567" class="field-input font-mono" />
+            <div v-else class="flex gap-2">
+              <input v-model="serial" placeholder="ZTEGC1234567" class="field-input font-mono" />
+              <button type="button" class="btn-secondary" :disabled="recoveryRequired" @click="qrOpen = true">QR</button>
+            </div>
           </div>
         </div>
         <div class="mb-4">
@@ -642,7 +608,7 @@ onMounted(async () => {
               <option>Routing (router/HGU)</option>
             </select>
             <p class="text-[11px] text-slate-400 mt-1">
-              El WAN/PPPoE se configura a mano en la página web local del equipo — SmartRayco solo autoriza el servicio GPON.
+              SmartRayco configura WAN/PPPoE cuando ingresas la clave. Si no la tienes, completa el WAN despues desde la ficha de la ONU.
             </p>
           </div>
           <div v-if="!isLocked">
@@ -715,85 +681,63 @@ onMounted(async () => {
 
         <!-- 9) MikroTik -->
         <div class="flex items-center justify-between mb-2 pt-3 border-t border-slate-200">
-          <h3 class="text-sm font-semibold">Sincronización MikroTik</h3>
-          <button v-if="!manualMikrotik" type="button" class="text-xs text-sky-700 hover:underline" @click="toggleManualMikrotik">
-            Cambiar
-          </button>
+          <h3 class="text-sm font-semibold">PPPoE del contrato</h3>
+        </div>
+        <div class="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+          <p><span class="text-slate-500">Router:</span> {{ mikrotikStore.devices.find((d) => d.id === mikrotikDeviceId)?.name ?? 'Sin vincular' }}</p>
+          <p><span class="text-slate-500">Usuario PPPoE:</span> <span class="font-mono">{{ selectedSecretName || 'Sin vincular' }}</span></p>
+          <p><span class="text-slate-500">Perfil:</span> <span class="font-mono">{{ mikrotikProfile || 'Sin vincular' }}</span></p>
+          <p class="text-xs text-slate-500 mt-2">Referencia del contrato. Autorizar no modifica este usuario, su contraseña, perfil ni estado en MikroTik. Vincúlalo previamente desde la ficha del cliente.</p>
         </div>
 
-        <div v-if="!manualMikrotik" class="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-          <p><span class="text-slate-500">Router:</span> {{ mikrotikStore.devices.find((d) => d.id === mikrotikDeviceId)?.name ?? mikrotikDeviceId }}</p>
-          <p><span class="text-slate-500">Usuario PPPoE:</span> <span class="font-mono">{{ selectedSecretName }}</span></p>
-          <p><span class="text-slate-500">Perfil:</span> <span class="font-mono">{{ mikrotikProfile || '—' }}</span></p>
+        <div class="mb-4 rounded-lg border border-slate-200 p-3">
+          <h3 class="text-sm font-semibold mb-2">WAN/PPPoE de la ONU</h3>
+          <label class="flex items-center gap-2 text-sm mb-3">
+            <input v-model="deferWan" type="checkbox" :disabled="recoveryRequired" />
+            Configurar WAN manualmente desde la web de la ONT (modo habitual)
+          </label>
+          <p v-if="deferWan" class="text-xs text-amber-700">
+            SmartRayco no enviará la WAN a la ONT ni pedirá su contraseña PPPoE existente. Configúrala desde la web de la ONT. Desmarca esta opción si deseas enviarla desde la OLT.
+          </p>
+          <template v-else>
+            <div class="mb-3">
+              <label class="block text-xs text-slate-600 mb-1">Contraseña PPPoE actual de {{ selectedSecretName || 'este usuario' }}</label>
+              <input v-model="existingSecretPassword" type="password" autocomplete="new-password" class="field-input" />
+              <p class="text-xs text-slate-500 mt-1">Usa la misma contraseña de MikroTik. Se enviará a la ONU sin cambiar la credencial existente en el router.</p>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Perfil VLAN de la WAN (ya existente en la OLT)</label>
+              <input v-model="wanVlanProfile" class="field-input" :placeholder="String(vlan)" :disabled="recoveryRequired" />
+              <p class="text-xs text-slate-500 mt-1">Si lo dejas vacío, se usará {{ vlan }} como nombre del perfil. Si tu OLT usa otro nombre, escríbelo aquí.</p>
+            </div>
+          </template>
         </div>
 
-        <template v-else>
-          <div class="mb-3">
-            <label class="block text-xs text-slate-600 mb-1">Router MikroTik</label>
-            <select v-model="mikrotikDeviceId" required class="field-input" @change="onMikrotikDeviceChange">
-              <option value="" disabled>Selecciona un router</option>
-              <option v-for="d in mikrotikRoutersForZone" :key="d.id" :value="d.id">{{ d.name }}</option>
-            </select>
-          </div>
-          <div class="flex gap-4 mb-3 text-sm">
-            <label class="flex items-center gap-1.5">
-              <input v-model="secretMode" type="radio" value="create" /> Crear credencial nueva
-            </label>
-            <label class="flex items-center gap-1.5">
-              <input v-model="secretMode" type="radio" value="existing" /> Vincular usuario PPPoE existente
-            </label>
-          </div>
-          <div v-if="secretMode === 'create'" class="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE</label>
-              <input v-model="newSecretName" class="field-input" placeholder="usuario.pppoe" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Contraseña</label>
-              <input v-model="newSecretPassword" class="field-input" />
-            </div>
-          </div>
-          <div v-else class="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Usuario PPPoE existente</label>
-              <select v-model="selectedSecretName" class="field-input" :disabled="!mikrotikDeviceId || loadingSecrets">
-                <option value="" disabled>{{ loadingSecrets ? 'Cargando...' : 'Selecciona un secreto' }}</option>
-                <option v-for="s in availableSecrets" :key="s['.id']" :value="s.name">{{ s.name }}</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Clave de ese secreto (opcional)</label>
-              <input v-model="existingSecretPassword" class="field-input" placeholder="Para configurar el WAN del equipo" />
-              <p class="text-[11px] text-slate-400 mt-1">
-                MikroTik no la expone — si la sabés, escribila para que SmartRayco arme el WAN/PPPoE del equipo solo.
-                Si la dejás vacía, lo configurás después a mano.
-              </p>
-            </div>
-          </div>
-          <div class="mb-4">
-            <label class="block text-xs text-slate-600 mb-1">Perfil PPPoE (MikroTik)</label>
-            <select v-model="mikrotikProfile" class="field-input" :disabled="!mikrotikDeviceId || loadingMikrotikProfiles">
-              <option value="" disabled>{{ loadingMikrotikProfiles ? 'Cargando...' : 'Selecciona un perfil' }}</option>
-              <option v-for="p in mikrotikProfileNames" :key="p" :value="p">{{ p }}</option>
-            </select>
-          </div>
-        </template>
-
-        <p v-if="submitError" class="text-sm text-red-600 mb-3">{{ submitError }}</p>
+        <div v-if="submitError && needsReconcile" class="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <p class="text-sm font-semibold text-amber-800 mb-1">Operacion pendiente de verificacion</p>
+          <p class="text-xs text-amber-800">{{ submitError }}</p>
+        </div>
+        <p v-else-if="submitError" class="text-sm text-red-600 mb-3">{{ submitError }}</p>
         <div v-if="ontCreated && !submitWarnings.length" class="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3">
           <p class="text-sm font-semibold text-emerald-800">
-            ONU registrada exitosamente en OLT y sincronizada con MikroTik.
+            ONU registrada y VERIFICADA en la OLT (serial/posición/VLAN/perfiles confirmados contra el equipo), vinculada al contrato. Configuración WAN/PPPoE enviada; comprueba la conexión PPPoE y la navegación del equipo.
           </p>
         </div>
         <div v-if="submitWarnings.length" class="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
-          <p class="text-sm font-semibold text-amber-800 mb-1">La ONU quedó registrada, pero con avisos:</p>
+          <p class="text-sm font-semibold text-amber-800 mb-1">La ONU quedó registrada y verificada en la OLT, pero con avisos:</p>
           <ul class="text-xs text-amber-800 list-disc pl-4 space-y-0.5">
             <li v-for="(w, i) in submitWarnings" :key="i">{{ w }}</li>
           </ul>
         </div>
 
         <div class="flex justify-end gap-2">
-          <template v-if="!ontCreated">
+          <template v-if="!ontCreated && needsReconcile">
+            <button type="button" class="btn-ghost" @click="emit('close')">Cancelar</button>
+            <button type="button" :disabled="submitting" class="btn-primary" @click="handleReconcile">
+              {{ submitting ? 'Verificando...' : 'Verificar antes de reintentar' }}
+            </button>
+          </template>
+          <template v-else-if="!ontCreated">
             <button type="button" class="btn-ghost" @click="emit('close')">Cancelar</button>
             <button type="submit" :disabled="submitting" class="btn-primary">
               {{ submitting ? 'Autorizando...' : 'Autorizar y Activar' }}
@@ -804,4 +748,5 @@ onMounted(async () => {
       </form>
     </div>
   </Teleport>
+    <QrScannerModal :open="qrOpen" @close="qrOpen = false" @scan="serial = $event; qrOpen = false" />
 </template>

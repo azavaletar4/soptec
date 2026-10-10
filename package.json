@@ -18,7 +18,9 @@
     "compress:storage-photos": "tsx server/scripts/compress-storage-photos.ts",
     "lint": "eslint .",
     "test:telnet": "node --import tsx --test server/src/telnet/__tests__/*.test.ts",
-    "test:fetch-timeout": "node --import tsx --test src/lib/__tests__/*.test.ts"
+    "test:provisioning": "node --import tsx --test server/src/services/__tests__/*.test.ts",
+    "test:fetch-timeout": "node --import tsx --test src/lib/__tests__/*.test.ts",
+    "test:nap-sql": "node --import tsx --test server/tests/napAssignment.sql.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.1",
