@@ -708,6 +708,46 @@ antes daba la franja nativa de Flutter (ya eliminada).
   schedulers reiniciados sin error. Sin migraciones, sin tocar
   Supabase/OLT/MikroTik.
 
+## 13j. Fix: "Convertir en cliente" de Prospectos no creaba nada — RESUELTO, pendiente de desplegar
+
+Reportado por el usuario con un caso real: el prospecto "prueba2" (id
+`3f3ec843-c8bf-43c6-a59b-6e0314d461fe`) quedó `en_negociacion`,
+`converted_client_id` null, sin cliente ni orden de Alta — confirmado por
+SQL de **solo lectura** contra Supabase (sin tocar el registro). Detalle
+completo en `docs/ERRORES-CAMPO.md` (primera entrada real del archivo).
+
+- **Causa raíz**: "Convertir en cliente" (`ProspectosView.vue`) solo hace
+  `router.push` a `/clientes?prospect_id=..` para preabrir el modal "+
+  Nuevo cliente" — no escribe nada por sí solo. Ese modal exige documento
+  (`clients.document_number` es `NOT NULL`; el prospecto no lo captura,
+  solo nombre/teléfono/zona/plan de interés) sin ningún aviso de que ese
+  paso todavía falta completar. Si se cierra o no se envía, no queda
+  rastro — flujo de dos pasos sin confirmación visible del segundo.
+- **Corrección** (`src/views/clientes/ClientesView.vue`, único archivo
+  tocado): aviso ámbar visible en el modal mientras se convierte un
+  prospecto; aviso de posible duplicado por teléfono (`clients.phone`
+  nunca es `unique`, igual que `prospects.phone` — antes "sin
+  validación", ahora al menos avisa) vía `confirmDialog` antes de crear;
+  además del cliente, genera la orden de Alta reusando el mismo
+  store/flujo que "Nueva instalación" en Soporte
+  (`installationsStore.createInstallation({ client_id })`, mismos
+  defaults reales de la tabla — `status: 'pending'`, `priority: 'medium'`
+  — sin agendar fecha ni asignar técnico); toasts de éxito/error en vez
+  de `alert()`; navega a la ficha del cliente al terminar. El prospecto
+  se sigue marcando `convertido` en el mismo punto que ya hacía (recién
+  con el cliente creado de verdad) — no se cambió ese criterio, solo se
+  agregó el paso de instalación antes, con el mismo patrón de "falla sin
+  bloquear ni revertir" que ya tenía el paso de referido.
+- **Sin tabla ni estado inventado, sin migración**: `clients.status`
+  default `'prospect'` e `installations.status` default `'pending'` ya
+  eran los valores reales existentes para "pendiente de instalación".
+- **Sin prueba end-to-end contra Supabase real** — hacerlo habría creado
+  un cliente/instalación reales de prueba, que el pedido explícitamente
+  prohibía. Validado por lectura de código + `vue-tsc` limpio únicamente;
+  queda pendiente que el usuario lo pruebe con un prospecto real.
+- Commit `0c2ba8a`, pusheado a `origin/main`. **No desplegado** — no
+  autorizado en este turno.
+
 ## 13. Próximo paso recomendado
 
 1. **Frontend ya desplegado** (VM en `d59759a`, ver 13h) — falta instalar
