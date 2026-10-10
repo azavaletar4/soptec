@@ -21,11 +21,15 @@ const props = withDefaults(
     danger?: boolean;
     /** true = caja ambar con ⚠️ alrededor del mensaje — advertencia no destructiva (ej. choque de horario) que de todos modos se puede confirmar. */
     warning?: boolean;
+    /** linea secundaria, atenuada, debajo del mensaje — ej. fecha/hora de referencia. */
+    details?: string;
     confirmLabel?: string;
     cancelLabel?: string;
     loading?: boolean;
+    /** true = el foco inicial va a "Cancelar" (igual que danger) aunque el boton no sea rojo — evita que Enter dispare la accion apenas se abre el modal. */
+    focusCancel?: boolean;
   }>(),
-  { danger: false, warning: false, confirmLabel: 'Confirmar', cancelLabel: 'Cancelar', loading: false },
+  { danger: false, warning: false, confirmLabel: 'Confirmar', cancelLabel: 'Cancelar', loading: false, focusCancel: false },
 );
 
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
@@ -87,7 +91,7 @@ watch(
     if (isOpen) {
       lockOpen();
       await nextTick();
-      (props.danger ? cancelBtnRef.value : confirmBtnRef.value)?.focus();
+      (props.danger || props.focusCancel ? cancelBtnRef.value : confirmBtnRef.value)?.focus();
     } else {
       unlockClose();
     }
@@ -113,6 +117,7 @@ onBeforeUnmount(() => {
         <p v-if="warning" class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-1">
           ⚠️ {{ message }}
         </p>
+        <p v-if="details" class="text-xs text-slate-500 mb-3">{{ details }}</p>
         <div class="flex justify-end gap-2 mt-4">
           <button ref="cancelBtnRef" type="button" class="btn-ghost" :disabled="loading" @click="$emit('cancel')">
             {{ cancelLabel }}

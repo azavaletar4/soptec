@@ -11,6 +11,7 @@ import {
   horaIngresoEsperadaLabel,
 } from '@/lib/asistenciaReglas';
 import { getErrorMessage } from '@/lib/errors';
+import ConfirmModal from '@/components/ConfirmModal.vue';
 
 // Widget de marcacion de jornada (Fase 117) — un solo componente compartido
 // entre la App de Campo (tecnicos) y el modal de marcacion rapida del Panel
@@ -54,42 +55,69 @@ function getPosition(): Promise<GeolocationPosition | null> {
   });
 }
 
-async function withAction(fn: () => Promise<{ fuera_oficina_ingreso?: boolean | null; fuera_oficina_fin_almuerzo?: boolean | null } | void>) {
+// Confirmacion previa a cada marcacion (evita registros por clic accidental) —
+// el boton solo abre el modal; la marcacion real recien se dispara desde
+// confirmAction(), y solo si el usuario presiona "Si, confirmar".
+type AccionJornada = 'ingreso' | 'inicio_almuerzo' | 'fin_almuerzo' | 'salida';
+
+const CONFIRM_COPY: Record<AccionJornada, { icon: string; message: string }> = {
+  ingreso: { icon: '🟢', message: '¿Estás seguro de que deseas marcar tu ingreso laboral?' },
+  inicio_almuerzo: { icon: '🍲', message: '¿Estás seguro de que deseas marcar tu salida al almuerzo?' },
+  fin_almuerzo: { icon: '🛠️', message: '¿Estás seguro de que deseas marcar tu regreso del almuerzo?' },
+  salida: { icon: '🔴', message: '¿Estás seguro de que deseas finalizar tu jornada laboral?' },
+};
+
+const ACCION_RUNNERS: Record<AccionJornada, () => Promise<{ fuera_oficina_ingreso?: boolean | null; fuera_oficina_fin_almuerzo?: boolean | null } | void>> = {
+  ingreso: async () => {
+    const pos = await getPosition();
+    return store.markIngreso(pos?.coords.latitude ?? null, pos?.coords.longitude ?? null);
+  },
+  inicio_almuerzo: () => store.markInicioAlmuerzo(),
+  fin_almuerzo: async () => {
+    const pos = await getPosition();
+    return store.markFinAlmuerzo(pos?.coords.latitude ?? null, pos?.coords.longitude ?? null);
+  },
+  salida: async () => {
+    const pos = await getPosition();
+    return store.markSalida(pos?.coords.latitude ?? null, pos?.coords.longitude ?? null);
+  },
+};
+
+const pendingAction = ref<AccionJornada | null>(null);
+const confirmTitle = computed(() => (pendingAction.value ? `${CONFIRM_COPY[pendingAction.value].icon} Confirmar marcación` : 'Confirmar marcación'));
+const confirmMessage = computed(() => (pendingAction.value ? CONFIRM_COPY[pendingAction.value].message : ''));
+const confirmDetails = computed(() =>
+  `Fecha y hora: ${new Date(now.value).toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'medium', timeStyle: 'medium' })}`,
+);
+
+function askConfirm(accion: AccionJornada) {
+  if (loading.value || pendingAction.value) return; // ya hay una marcacion en curso o un modal abierto
+  pendingAction.value = accion;
+}
+
+function cancelConfirm() {
+  if (loading.value) return; // no cerrar a mitad de una solicitud en curso
+  pendingAction.value = null;
+}
+
+async function confirmAction() {
+  if (loading.value || !pendingAction.value) return;
+  const accion = pendingAction.value;
   loading.value = true;
   actionError.value = null;
   actionNotice.value = null;
   try {
-    const result = await fn();
-    if (result?.fuera_oficina_ingreso || result?.fuera_oficina_fin_almuerzo) {
-      actionNotice.value = '⚠️ Marcado fuera de oficina — quedó registrado igual.';
-    }
+    const result = await ACCION_RUNNERS[accion]();
+    pendingAction.value = null; // solo se cierra el modal tras la confirmacion real del servidor
+    actionNotice.value = result?.fuera_oficina_ingreso || result?.fuera_oficina_fin_almuerzo
+      ? '⚠️ Marcado fuera de oficina — quedó registrado igual.'
+      : '✅ Marcación registrada correctamente.';
   } catch (e) {
+    pendingAction.value = null;
     actionError.value = getErrorMessage(e, 'No se pudo registrar la marcación');
   } finally {
     loading.value = false;
   }
-}
-
-async function handleIngreso() {
-  await withAction(async () => {
-    const pos = await getPosition();
-    return store.markIngreso(pos?.coords.latitude ?? null, pos?.coords.longitude ?? null);
-  });
-}
-async function handleInicioAlmuerzo() {
-  await withAction(() => store.markInicioAlmuerzo());
-}
-async function handleFinAlmuerzo() {
-  await withAction(async () => {
-    const pos = await getPosition();
-    return store.markFinAlmuerzo(pos?.coords.latitude ?? null, pos?.coords.longitude ?? null);
-  });
-}
-async function handleSalida() {
-  await withAction(async () => {
-    const pos = await getPosition();
-    return store.markSalida(pos?.coords.latitude ?? null, pos?.coords.longitude ?? null);
-  });
 }
 
 // Cronometro inverso de 2:00:00 (o lo que diga company_settings.almuerzo_min)
@@ -131,7 +159,7 @@ function formatCountdown(ms: number): string {
 
       <!-- Sin marcar ingreso -->
       <div v-if="!store.hoy">
-        <button type="button" class="btn-primary w-full text-sm" :disabled="loading" @click="handleIngreso">
+        <button type="button" class="btn-primary w-full text-sm" :disabled="loading" @click="askConfirm('ingreso')">
           {{ loading ? 'Marcando...' : '🟢 Marcar Ingreso' }}
         </button>
       </div>
@@ -142,7 +170,7 @@ function formatCountdown(ms: number): string {
           Ingreso: <span class="font-medium text-slate-800">{{ formatHora(store.hoy.hora_ingreso) }}</span>
           <span v-if="store.hoy.minutos_tardanza > 0" class="text-amber-600"> · {{ store.hoy.minutos_tardanza }} min de tardanza</span>
         </p>
-        <button type="button" class="btn-primary w-full text-sm" :disabled="loading" @click="handleInicioAlmuerzo">
+        <button type="button" class="btn-primary w-full text-sm" :disabled="loading" @click="askConfirm('inicio_almuerzo')">
           {{ loading ? 'Marcando...' : '🍲 Iniciar Almuerzo (2h)' }}
         </button>
       </div>
@@ -156,7 +184,7 @@ function formatCountdown(ms: number): string {
           </p>
           <p v-if="(almuerzoRestanteMs ?? 0) < 0" class="text-[11px] text-red-600 mt-1">⚠️ Tiempo de refrigerio excedido</p>
         </div>
-        <button type="button" class="btn-primary w-full text-sm" :disabled="loading" @click="handleFinAlmuerzo">
+        <button type="button" class="btn-primary w-full text-sm" :disabled="loading" @click="askConfirm('fin_almuerzo')">
           {{ loading ? 'Marcando...' : '🛠️ Fin Almuerzo' }}
         </button>
       </div>
@@ -167,7 +195,7 @@ function formatCountdown(ms: number): string {
           Almuerzo: {{ formatMinutos(store.hoy.duracion_almuerzo_min) }}
           <span v-if="store.hoy.exceso_almuerzo_min" class="text-amber-600"> · {{ store.hoy.exceso_almuerzo_min }} min de exceso</span>
         </p>
-        <button type="button" class="btn-destructive w-full text-sm" :disabled="loading" @click="handleSalida">
+        <button type="button" class="btn-destructive w-full text-sm" :disabled="loading" @click="askConfirm('salida')">
           {{ loading ? 'Marcando...' : '🔴 Marcar Salida' }}
         </button>
       </div>
@@ -180,5 +208,18 @@ function formatCountdown(ms: number): string {
 
     <p v-if="actionNotice" class="text-xs text-amber-600 mt-2.5">{{ actionNotice }}</p>
     <p v-if="actionError" class="text-xs text-red-600 mt-2.5">{{ actionError }}</p>
+
+    <ConfirmModal
+      :open="!!pendingAction"
+      :title="confirmTitle"
+      :message="confirmMessage"
+      :details="confirmDetails"
+      confirm-label="Sí, confirmar"
+      cancel-label="Cancelar"
+      :focus-cancel="true"
+      :loading="loading"
+      @confirm="confirmAction"
+      @cancel="cancelConfirm"
+    />
   </div>
 </template>
