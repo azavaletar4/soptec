@@ -256,6 +256,11 @@ function openEdit(client: Client) {
 }
 
 async function handleSubmit() {
+  // Fase 147 — guarda explicita contra doble envio (Enter + click casi
+  // simultaneos, etc.): :disabled="saving" en el boton ya cubre el click
+  // normal, pero handleSubmit no se auto-protegia si se disparaba por otra
+  // via mientras una llamada anterior seguia en vuelo.
+  if (saving.value) return;
   if (duplicateClient.value) {
     formError.value = `Ya existe un cliente con ese documento (${duplicateClient.value.first_name} ${duplicateClient.value.last_name}). Ve a su ficha y usa "+ Nuevo contrato" para agregarle otro servicio.`;
     return;
@@ -352,20 +357,39 @@ async function handleSubmit() {
         }
       }
 
-      // Fase 140 — el cliente YA se creo correctamente (savedId real, no
-      // supuesto): recien aca se marca el prospecto 'convertido', nunca
-      // antes (punto 9 del pedido). Si falla, el cliente igual queda
-      // creado — solo se avisa, no se revierte el alta.
+      // Fase 147 — el prospecto SOLO se marca 'convertido' si las TRES
+      // escrituras (cliente, contrato, instalacion) terminaron bien --
+      // antes (Fase 145/146) se marcaba apenas el cliente existia, aunque
+      // el contrato y la instalacion hubieran fallado los dos. Si algo
+      // fallo, el cliente (y el contrato, si llego a crearse) quedan en
+      // pie -- no se borran ni revierten, eso requeriria un borrado
+      // compensatorio sobre datos reales -- pero el prospecto sigue
+      // apareciendo como "por convertir" en Prospectos. Un reintento desde
+      // ahi vuelve a pasar por el chequeo de documento (arriba, bloquea si
+      // coincide) y de telefono (arriba, avisa y pide confirmar si
+      // coincide) de este mismo formulario -- protege contra el caso
+      // comun (reintentar con los mismos datos), no es una garantia de
+      // unicidad a nivel de base de datos; completar el contrato/
+      // instalacion que falto queda a mano, desde la ficha del cliente o
+      // Soporte.
       if (convertingProspectId.value) {
-        try {
-          await prospectsStore.markConverted(convertingProspectId.value, savedId);
-          toast.success(
-            installationCreated
-              ? `Prospecto convertido: se creó el cliente${contractId ? ', su servicio' : ''} y su orden de Alta.`
-              : `Prospecto convertido: se creó el cliente (falta completar el servicio/orden de Alta a mano).`,
+        const conversionComplete = contractId !== null && installationCreated;
+        if (conversionComplete) {
+          try {
+            await prospectsStore.markConverted(convertingProspectId.value, savedId);
+            toast.success('Prospecto convertido: se creó el cliente, su servicio y su orden de Alta.');
+          } catch (e) {
+            toast.error(
+              getErrorMessage(
+                e,
+                'El cliente, el servicio y la orden de Alta se crearon, pero no se pudo marcar el prospecto como convertido. Puedes reintentar la conversión desde Prospectos: te avisaremos si detectamos que ya existe un cliente con ese documento o teléfono.',
+              ),
+            );
+          }
+        } else {
+          toast.error(
+            'El cliente se creó, pero falta completar el servicio o la orden de Alta — revísalo en su ficha. El prospecto sigue pendiente de convertir en Prospectos: si reintentas, te avisaremos si detectamos que ya existe un cliente con ese documento o teléfono.',
           );
-        } catch (e) {
-          toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo marcar el prospecto como convertido'));
         }
         convertingProspectId.value = null;
         convertingProspectName.value = null;
