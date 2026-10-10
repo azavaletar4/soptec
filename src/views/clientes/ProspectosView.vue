@@ -151,6 +151,12 @@ async function handleSubmit() {
 function convertToClient(p: Prospect) {
   const params = new URLSearchParams({ prospect_id: p.id, name: p.full_name, phone: p.phone });
   if (p.address) params.set('address', p.address);
+  // Fase 146 — ademas de nombre/telefono/direccion, se pasa la zona/PON y
+  // el plan de interes para precargar el contrato que se crea junto con
+  // el cliente al convertir (ver ClientesView.vue) — antes se perdian al
+  // llegar al modal, el contrato quedaba sin plan/tarifa/zona.
+  if (p.zone_id) params.set('zone_id', p.zone_id);
+  if (p.plan_interes_id) params.set('plan_id', p.plan_interes_id);
   router.push(`/clientes?${params.toString()}`);
 }
 

@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useReferidosStore } from '@/stores/referidos';
 import { useProspectsStore } from '@/stores/prospects';
 import { useInstallationsStore } from '@/stores/installations';
+import { useCatalogsStore } from '@/stores/catalogs';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
@@ -23,6 +24,7 @@ const auth = useAuthStore();
 const referidosStore = useReferidosStore();
 const prospectsStore = useProspectsStore();
 const installationsStore = useInstallationsStore();
+const catalogs = useCatalogsStore();
 const toast = useToast();
 const { confirmDialog } = useConfirm();
 
@@ -39,6 +41,12 @@ const { confirmDialog } = useConfirm();
 // "prueba2", 2026-10-10 — quedo en Supabase sin cliente ni orden alguna).
 const convertingProspectId = ref<string | null>(null);
 const convertingProspectName = ref<string | null>(null);
+// Fase 146 — zona/PON y plan de interes del prospecto (ver
+// ProspectosView.vue), para precargar el contrato que se crea junto con
+// el cliente al convertir. No son datos del cliente ni del formulario
+// visible, por eso van aparte y no dentro de `form`.
+const convertingZoneId = ref<string | null>(null);
+const convertingPlanId = ref<string | null>(null);
 
 // TECNICO_RED puede ver/editar clientes (GPS, fotos), pero no crearlos ni
 // eliminarlos — eso queda para SOPORTE/ADMIN/FACTURACION.
@@ -186,7 +194,13 @@ const STATUS_CLASS: Record<ClientStatus, string> = {
 };
 
 onMounted(async () => {
-  await Promise.all([clientsStore.fetchClients(), contractsStore.fetchContracts(), mikrotikStore.fetchDevices()]);
+  await Promise.all([
+    clientsStore.fetchClients(),
+    contractsStore.fetchContracts(),
+    mikrotikStore.fetchDevices(),
+    catalogs.fetchPlans(),
+    catalogs.fetchZones(),
+  ]);
   if (mikrotikStore.devices.length === 1) {
     unlinkedDeviceId.value = mikrotikStore.devices[0].id;
   }
@@ -202,6 +216,8 @@ onMounted(async () => {
     form.value.last_name = rest.join(' ');
     form.value.phone = (route.query.phone as string) ?? '';
     form.value.address = (route.query.address as string) ?? '';
+    convertingZoneId.value = (route.query.zone_id as string) || null;
+    convertingPlanId.value = (route.query.plan_id as string) || null;
     // Limpia los query params para no reabrir/reprecargar el modal si el
     // tecnico recarga la pagina o navega de vuelta.
     router.replace('/clientes');
@@ -212,6 +228,8 @@ function openCreate(fromSecret?: PppSecret) {
   editing.value = null;
   convertingProspectId.value = null;
   convertingProspectName.value = null;
+  convertingZoneId.value = null;
+  convertingPlanId.value = null;
   form.value = emptyForm();
   pendingPppoeHint.value = fromSecret ? fromSecret.name : null;
   formError.value = null;
@@ -292,19 +310,42 @@ async function handleSubmit() {
         }
       }
 
-      // Fase 145 — al convertir un prospecto, ademas del cliente se genera
-      // la orden de Alta correspondiente, usando el mismo store/flujo que
-      // "Nueva instalación" en Soporte (InstalacionesView.vue): mismo
-      // payload minimo (solo client_id), mismos defaults reales de la
-      // tabla (status 'pending', priority 'medium') — sin agendar fecha ni
-      // asignar tecnico, eso lo decide el staff despues por el
-      // procedimiento normal. Si falla, el cliente igual queda creado
-      // (mismo criterio que el referido arriba) — se avisa y se puede
-      // crear la Alta a mano desde Soporte → Instalaciones.
+      // Fase 146 — al convertir un prospecto, ademas del cliente se genera
+      // el contrato (plan/tarifa/zona) y la orden de Alta, para que ese
+      // plan y tarifa realmente lleguen a la orden -- antes la Alta se
+      // creaba sin contrato (Fase 145) y quedaba sin plan ni tarifa. Mismo
+      // criterio que "+ Nuevo servicio" de la ficha del cliente
+      // (ClientDetailView.vue): monthly_fee se toma del plan elegido,
+      // installation_address parte de la direccion del cliente (se ajusta
+      // despues en la ficha del servicio si hace falta, igual que alli).
+      // No se toca pppoe_username/mikrotik_* -- esa vinculacion sigue
+      // siendo un paso aparte, manual, via el flujo de provision existente.
+      let contractId: string | null = null;
       let installationCreated = false;
       if (convertingProspectId.value) {
         try {
-          await installationsStore.createInstallation({ client_id: savedId });
+          const plan = convertingPlanId.value ? catalogs.plans.find((p) => p.id === convertingPlanId.value) : null;
+          const contract = await contractsStore.createContract({
+            client_id: savedId,
+            plan_id: convertingPlanId.value || null,
+            monthly_fee: plan ? Number(plan.price) : 0,
+            installation_address: form.value.address || null,
+            zone_id: convertingZoneId.value || null,
+          });
+          contractId = contract.id;
+        } catch (e) {
+          toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo generar el contrato/servicio. Puedes crearlo manualmente desde la ficha del cliente.'));
+        }
+
+        // Orden de Alta — mismo store/flujo que "Nueva instalación" en
+        // Soporte (InstalacionesView.vue): mismos defaults reales de la
+        // tabla (status 'pending', priority 'medium'), sin agendar fecha
+        // ni asignar tecnico (eso lo decide el staff despues, por el
+        // procedimiento normal). Si algo de esto falla, el cliente igual
+        // queda creado (mismo criterio que el referido arriba) — se avisa
+        // y se puede completar a mano desde Soporte → Instalaciones.
+        try {
+          await installationsStore.createInstallation({ client_id: savedId, contract_id: contractId });
           installationCreated = true;
         } catch (e) {
           toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo generar la orden de Alta. Puedes crearla manualmente desde Soporte → Instalaciones.'));
@@ -320,14 +361,16 @@ async function handleSubmit() {
           await prospectsStore.markConverted(convertingProspectId.value, savedId);
           toast.success(
             installationCreated
-              ? `Prospecto convertido: se creó el cliente y su orden de Alta.`
-              : `Prospecto convertido: se creó el cliente (falta crear la orden de Alta a mano).`,
+              ? `Prospecto convertido: se creó el cliente${contractId ? ', su servicio' : ''} y su orden de Alta.`
+              : `Prospecto convertido: se creó el cliente (falta completar el servicio/orden de Alta a mano).`,
           );
         } catch (e) {
           toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo marcar el prospecto como convertido'));
         }
         convertingProspectId.value = null;
         convertingProspectName.value = null;
+        convertingZoneId.value = null;
+        convertingPlanId.value = null;
         showModal.value = false;
         router.push(`/clientes/${savedId}`);
         return;
@@ -490,11 +533,20 @@ function goToDetail(client: Client) {
           @submit.prevent="handleSubmit"
         >
           <h2 class="text-lg font-semibold mb-1">{{ editing ? 'Editar cliente' : 'Nuevo cliente' }}</h2>
-          <p v-if="convertingProspectId" class="text-xs font-medium text-amber-700 bg-amber-500/10 rounded-lg px-2.5 py-1.5 mb-3">
-            Convirtiendo el prospecto{{ convertingProspectName ? ` "${convertingProspectName}"` : '' }} en cliente —
-            completa el documento y los datos que falten, y guarda para terminar. Esto también crea su orden de Alta
-            en Soporte. Si cierras sin guardar, no queda nada registrado.
-          </p>
+          <div v-if="convertingProspectId" class="text-xs font-medium text-amber-700 bg-amber-500/10 rounded-lg px-2.5 py-1.5 mb-3">
+            <p>
+              Convirtiendo el prospecto{{ convertingProspectName ? ` "${convertingProspectName}"` : '' }} en cliente —
+              completa el documento, la dirección de instalación y el teléfono alternativo si lo tienes, y guarda
+              para terminar. Esto también crea su servicio y la orden de Alta en Soporte. Si cierras sin guardar, no
+              queda nada registrado.
+            </p>
+            <p v-if="convertingPlanId || convertingZoneId" class="font-normal mt-1 text-amber-700/80">
+              Se precargará en el servicio:
+              <span v-if="convertingPlanId">plan {{ catalogs.plans.find((p) => p.id === convertingPlanId)?.name ?? '—' }}</span>
+              <span v-if="convertingPlanId && convertingZoneId">, </span>
+              <span v-if="convertingZoneId">zona {{ catalogs.zones.find((z) => z.id === convertingZoneId)?.name ?? '—' }}</span>.
+            </p>
+          </div>
           <p v-else-if="pendingPppoeHint" class="text-xs text-sky-700/80 mb-3">
             Vinculado a partir del usuario PPPoE <span class="font-mono">{{ pendingPppoeHint }}</span> — el vinculo se completa al crear el contrato.
           </p>
@@ -559,8 +611,10 @@ function goToDetail(client: Client) {
               <input v-model="form.email" type="email" class="field-input" />
             </div>
             <div>
-              <label class="block text-xs text-slate-600 mb-1">Direccion</label>
-              <input v-model="form.address" class="field-input" />
+              <label class="block text-xs text-slate-600 mb-1">
+                Direccion{{ convertingProspectId ? ' de instalación' : '' }}
+              </label>
+              <input v-model="form.address" :required="!!convertingProspectId" class="field-input" />
             </div>
           </div>
 
