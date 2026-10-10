@@ -980,19 +980,21 @@ const napElementosAll = computed(() =>
 const napOptions = computed(() => napElementosAll.value);
 const installNapOptions = computed(() => napElementosAll.value.filter((n) => n.zoneId === closureForm.value.zoneId));
 
-// Fase 139 — consulta compacta de los servicios ya registrados en la caja NAP
-// elegida: Cliente → Servicio → Código del cintillo Drop → Caja NAP → Puerto,
-// reusando fibra.napPuertosPorElemento (ya cargado por fetchTodosNapPuertos
-// mas arriba, sin tabla ni relacion nueva).
-const selectedNapServices = computed(() => {
+// Consulta compacta de los CLIENTES asociados a la caja NAP elegida —
+// Cliente → Contrato → Código de cliente/cintillo Drop. Los puertos no son
+// parte de esta funcionalidad: misma fuente y mismo filtro que
+// ZonasView.vue (napsByZone/buildNap) para que la lista coincida exacto con
+// Operaciones → Zonas, sin exponer numero de puerto en ningun lado.
+const selectedNapClients = computed(() => {
   const napId = closureForm.value.napElementoId;
   if (!napId) return [];
   return (fibra.napPuertosPorElemento[napId] ?? [])
-    .filter((p) => p.estado === 'ocupado')
+    .filter((p) => p.estado === 'ocupado' && p.client_id)
     .map((p) => ({
-      puerto: p.puerto_numero,
+      id: p.client_id as string,
+      name: p.clients ? `${p.clients.first_name} ${p.clients.last_name}`.trim() : 'Cliente',
+      contractNumber: p.service_contracts?.contract_number ?? null,
       clientCode: p.service_contracts?.client_code ?? null,
-      label: p.clients ? `${p.clients.first_name} ${p.clients.last_name}` : (p.service_contracts?.contract_number ?? 'Servicio'),
     }));
 });
 
@@ -2036,12 +2038,11 @@ async function handleCloseSubmit() {
             </div>
             <p v-if="installZoneNapMissing" class="text-[11px] text-red-600 mb-2">Debes elegir la Zona y la Caja NAP para poder completar.</p>
 
-            <div v-if="closureForm.napElementoId && selectedNapServices.length" class="mb-3 text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
-              <p class="text-slate-500 mb-1">Servicios ya registrados en esta caja:</p>
-              <div v-for="s in selectedNapServices" :key="s.puerto" class="flex justify-between gap-2 text-slate-700">
-                <span class="font-mono">{{ s.clientCode ?? '—' }}</span>
-                <span class="truncate flex-1 text-center">{{ s.label }}</span>
-                <span class="text-slate-400">Puerto {{ s.puerto }}</span>
+            <div v-if="closureForm.napElementoId && selectedNapClients.length" class="mb-3 text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+              <p class="text-slate-500 mb-1">Clientes ya registrados en esta caja:</p>
+              <div v-for="c in selectedNapClients" :key="c.id" class="flex justify-between gap-2 text-slate-700">
+                <span class="truncate flex-1" :title="c.name">{{ c.name }}<span v-if="c.contractNumber" class="text-slate-400"> ({{ c.contractNumber }})</span></span>
+                <span class="font-mono shrink-0">{{ c.clientCode || 'Sin código' }}</span>
               </div>
             </div>
 
@@ -2074,12 +2075,11 @@ async function handleCloseSubmit() {
               </select>
             </div>
 
-            <div v-if="closureForm.napElementoId && selectedNapServices.length" class="mb-3 text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
-              <p class="text-slate-500 mb-1">Servicios ya registrados en esta caja:</p>
-              <div v-for="s in selectedNapServices" :key="s.puerto" class="flex justify-between gap-2 text-slate-700">
-                <span class="font-mono">{{ s.clientCode ?? '—' }}</span>
-                <span class="truncate flex-1 text-center">{{ s.label }}</span>
-                <span class="text-slate-400">Puerto {{ s.puerto }}</span>
+            <div v-if="closureForm.napElementoId && selectedNapClients.length" class="mb-3 text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+              <p class="text-slate-500 mb-1">Clientes ya registrados en esta caja:</p>
+              <div v-for="c in selectedNapClients" :key="c.id" class="flex justify-between gap-2 text-slate-700">
+                <span class="truncate flex-1" :title="c.name">{{ c.name }}<span v-if="c.contractNumber" class="text-slate-400"> ({{ c.contractNumber }})</span></span>
+                <span class="font-mono shrink-0">{{ c.clientCode || 'Sin código' }}</span>
               </div>
             </div>
 
