@@ -211,7 +211,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
 
   /** Carga la ocupación de puertos de TODAS las cajas NAP de una vez (resumen para el mapa de clientes). */
   async function fetchTodosNapPuertos() {
-    const { data, error } = await supabase.from('fo_nap_puertos').select('*, clients(id, first_name, last_name), service_contracts(id, contract_number)').order('puerto_numero');
+    const { data, error } = await supabase.from('fo_nap_puertos').select('*, clients(id, first_name, last_name), service_contracts(id, contract_number, client_code)').order('puerto_numero');
     if (error) throw error;
     const porElemento: Record<string, FoNapPuerto[]> = {};
     for (const row of (data ?? []) as FoNapPuerto[]) {
@@ -223,7 +223,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
   async function fetchNapPuertos(infraElementoId: string) {
     const { data, error } = await supabase
       .from('fo_nap_puertos')
-      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number)')
+      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number, client_code)')
       .eq('infra_elemento_id', infraElementoId)
       .order('puerto_numero');
     if (error) throw error;
@@ -243,7 +243,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     const { data, error } = await supabase
       .from('fo_nap_puertos')
       .upsert(payload, { onConflict: 'infra_elemento_id,puerto_numero' })
-      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number)')
+      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number, client_code)')
       .single();
     if (error) throw error;
     const list = napPuertosPorElemento.value[payload.infra_elemento_id] ?? [];
@@ -260,7 +260,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
       .from('fo_nap_puertos')
       .update({ estado: 'libre', client_id: null, contract_id: null })
       .eq('contract_id', contractId)
-      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number)');
+      .select('*, clients(id, first_name, last_name), service_contracts(id, contract_number, client_code)');
     if (error) throw error;
     for (const row of (data ?? []) as FoNapPuerto[]) {
       const list = napPuertosPorElemento.value[row.infra_elemento_id] ?? [];

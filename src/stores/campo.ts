@@ -196,6 +196,8 @@ export interface ClosureInput {
   napElementoId: string | null;
   /** Zona/Sector de la Planta Externa, obligatoria al completar una instalación — se guarda en contracts.zone_id. */
   zoneId: string | null;
+  /** Fase 139 — codigo de cliente / cintillo Drop, reusa contracts.client_code (Fase 39). Obligatorio al completar una instalacion, opcional en tickets/reconexiones. Null/vacio = no tocar (evita sobrescribir con blanco). */
+  clientCode: string | null;
 }
 
 /**
@@ -554,6 +556,16 @@ export const useCampoStore = defineStore('campo', () => {
       await contractsStore.updateContract(input.contractId, { zone_id: input.zoneId });
     }
 
+    // Codigo de cliente / cintillo Drop (Fase 139) — reusa el mismo campo que
+    // ya edita ClientServiceDetailView.vue (contracts.client_code, Fase 39),
+    // nunca uno nuevo. Solo escribe si el tecnico de verdad dejo un valor: un
+    // ticket/reconexion puede llegar con este campo vacio (opcional) y no
+    // debe borrar un codigo ya existente en el contrato.
+    const trimmedClientCode = input.clientCode?.trim();
+    if (trimmedClientCode && input.contractId) {
+      await contractsStore.updateContract(input.contractId, { client_code: trimmedClientCode });
+    }
+
     // Cambio de puerto NAP (Fase 95, solo si la averia exigio recablear) u
     // obligatoria al completar una instalacion: mismo assignContractToNap —
     // libera el puerto anterior del contrato (si tenia) y ocupa uno en la
@@ -627,6 +639,7 @@ export const useCampoStore = defineStore('campo', () => {
       potenciaDbm: item.potenciaDbm,
       napElementoId: item.napElementoId,
       zoneId: item.zoneId,
+      clientCode: item.clientCode,
     });
   }
 
@@ -653,6 +666,7 @@ export const useCampoStore = defineStore('campo', () => {
         potenciaDbm: input.potenciaDbm,
         napElementoId: input.napElementoId,
         zoneId: input.zoneId,
+        clientCode: input.clientCode,
       });
       await refreshQueuedCount();
       return { queued: true };
@@ -684,6 +698,7 @@ export const useCampoStore = defineStore('campo', () => {
           potenciaDbm: input.potenciaDbm,
           napElementoId: input.napElementoId,
           zoneId: input.zoneId,
+          clientCode: input.clientCode,
         });
         await refreshQueuedCount();
         return { queued: true };

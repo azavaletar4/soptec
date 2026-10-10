@@ -531,7 +531,7 @@ export interface FoNapPuerto {
   notes: string | null;
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name'> | null;
-  service_contracts?: Pick<ServiceContract, 'id' | 'contract_number'> | null;
+  service_contracts?: Pick<ServiceContract, 'id' | 'contract_number' | 'client_code'> | null;
 }
 
 export interface Tr069Device {

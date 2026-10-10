@@ -48,6 +48,8 @@ export interface QueuedClosure {
   napElementoId: string | null;
   /** Zona/Sector de la Planta Externa, obligatoria al completar una instalación — se guarda en el contrato. */
   zoneId: string | null;
+  /** Código de cliente / cintillo Drop (reusa service_contracts.client_code, Fase 39) — obligatorio al completar una instalación, opcional en tickets. */
+  clientCode: string | null;
   lastError?: string;
 }
 

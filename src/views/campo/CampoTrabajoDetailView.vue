@@ -293,6 +293,11 @@ onMounted(async () => {
       loadExistingPhotos(trabajo.value.contractId),
       loadEquipmentPhotos(trabajo.value.contractId),
     ]);
+    // Fase 139 — precarga el codigo de cliente / cintillo Drop ya existente
+    // en el servicio (misma fuente que ClientServiceDetailView.vue, nunca un
+    // codigo independiente). Aplica a tickets (incluidas reconexiones, donde
+    // debe conservarse) e instalaciones por igual.
+    if (!closureForm.value.clientCode) closureForm.value.clientCode = activeContract.value?.client_code ?? '';
   }
   if (jobType === 'ticket') {
     infraStore.fetchElementos().catch(() => {});
@@ -975,6 +980,22 @@ const napElementosAll = computed(() =>
 const napOptions = computed(() => napElementosAll.value);
 const installNapOptions = computed(() => napElementosAll.value.filter((n) => n.zoneId === closureForm.value.zoneId));
 
+// Fase 139 — consulta compacta de los servicios ya registrados en la caja NAP
+// elegida: Cliente → Servicio → Código del cintillo Drop → Caja NAP → Puerto,
+// reusando fibra.napPuertosPorElemento (ya cargado por fetchTodosNapPuertos
+// mas arriba, sin tabla ni relacion nueva).
+const selectedNapServices = computed(() => {
+  const napId = closureForm.value.napElementoId;
+  if (!napId) return [];
+  return (fibra.napPuertosPorElemento[napId] ?? [])
+    .filter((p) => p.estado === 'ocupado')
+    .map((p) => ({
+      puerto: p.puerto_numero,
+      clientCode: p.service_contracts?.client_code ?? null,
+      label: p.clients ? `${p.clients.first_name} ${p.clients.last_name}` : (p.service_contracts?.contract_number ?? 'Servicio'),
+    }));
+});
+
 function findContractNapId(contractId: string): string {
   for (const puertos of Object.values(fibra.napPuertosPorElemento)) {
     const found = puertos.find((p) => p.contract_id === contractId && p.estado === 'ocupado');
@@ -1024,6 +1045,9 @@ const closureForm = ref({
   napElementoId: '',
   // Zona/Sector de Planta Externa, obligatoria al completar una instalacion.
   zoneId: '',
+  // Fase 139 — codigo de cliente / cintillo Drop (reusa contracts.client_code,
+  // Fase 39). Obligatorio al completar una instalacion; opcional en tickets.
+  clientCode: '',
 });
 // Causa preliminar (Fase 103): si admin/soporte dejo una sospecha al crear
 // el ticket, se pre-carga aca apenas se conoce el ticket — el tecnico la ve
@@ -1239,6 +1263,10 @@ async function handleCloseSubmit() {
     closeError.value = 'Selecciona la Zona y la Caja NAP antes de completar la instalación.';
     return;
   }
+  if (jobType === 'installation' && !closureForm.value.clientCode.trim()) {
+    closeError.value = 'Ingresa el código de cliente / cintillo Drop antes de completar la instalación.';
+    return;
+  }
 
   // Averia: el motivo de cierre es obligatorio para poder liquidarla (alimenta
   // el ranking de puntos, Fase 49) — no aplica a instalaciones ni a rutinas.
@@ -1308,6 +1336,7 @@ async function handleCloseSubmit() {
       potenciaDbm: jobType === 'ticket' ? closureForm.value.potenciaDbm : null,
       napElementoId: jobType === 'ticket' || jobType === 'installation' ? closureForm.value.napElementoId || null : null,
       zoneId: jobType === 'installation' ? closureForm.value.zoneId || null : null,
+      clientCode: jobType === 'ticket' || jobType === 'installation' ? closureForm.value.clientCode.trim() || null : null,
     });
     closeResult.value = result.queued ? 'queued' : 'ok';
     // El borrador solo se borra cuando el cierre de verdad llego a Supabase —
@@ -2006,6 +2035,23 @@ async function handleCloseSubmit() {
               </div>
             </div>
             <p v-if="installZoneNapMissing" class="text-[11px] text-red-600 mb-2">Debes elegir la Zona y la Caja NAP para poder completar.</p>
+
+            <div v-if="closureForm.napElementoId && selectedNapServices.length" class="mb-3 text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+              <p class="text-slate-500 mb-1">Servicios ya registrados en esta caja:</p>
+              <div v-for="s in selectedNapServices" :key="s.puerto" class="flex justify-between gap-2 text-slate-700">
+                <span class="font-mono">{{ s.clientCode ?? '—' }}</span>
+                <span class="truncate flex-1 text-center">{{ s.label }}</span>
+                <span class="text-slate-400">Puerto {{ s.puerto }}</span>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="block text-xs text-slate-600 mb-1">
+                Código de cliente / Cintillo Drop<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
+              </label>
+              <input v-model="closureForm.clientCode" placeholder="Ej. 001283" class="field-input text-sm font-mono" />
+              <p class="text-[11px] text-slate-500 mt-1">Código colocado en el cintillo del cable Drop de la caja NAP.</p>
+            </div>
           </template>
 
           <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
@@ -2026,6 +2072,21 @@ async function handleCloseSubmit() {
                   {{ n.name }} — {{ n.used }}/{{ n.capacity }}
                 </option>
               </select>
+            </div>
+
+            <div v-if="closureForm.napElementoId && selectedNapServices.length" class="mb-3 text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+              <p class="text-slate-500 mb-1">Servicios ya registrados en esta caja:</p>
+              <div v-for="s in selectedNapServices" :key="s.puerto" class="flex justify-between gap-2 text-slate-700">
+                <span class="font-mono">{{ s.clientCode ?? '—' }}</span>
+                <span class="truncate flex-1 text-center">{{ s.label }}</span>
+                <span class="text-slate-400">Puerto {{ s.puerto }}</span>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="block text-xs text-slate-600 mb-1">Código de cliente / Cintillo Drop</label>
+              <input v-model="closureForm.clientCode" placeholder="Ej. 001283" class="field-input text-sm font-mono" />
+              <p class="text-[11px] text-slate-500 mt-1">Código colocado en el cintillo del cable Drop de la caja NAP.</p>
             </div>
           </template>
 
