@@ -4,9 +4,9 @@
 mas los fixes 13c-13h, todos el mismo día — **13e es la versión final y
 vigente del isotipo web, 13f la aplicó también al ícono/splash de la APK,
 13h es la cabecera móvil vigente (reemplazó la franja nativa de 13g, que
-quedó supersedida)** (12 y 13d quedaron supersedidas en cuanto al diseño
-del isotipo, ver nota en 12). **Pendiente de autorización para desplegar
-el frontend web** (13h). Este documento es la
+quedó supersedida) y ya está desplegada en producción (VM en commit
+`d59759a`)** (12 y 13d quedaron supersedidas en cuanto al diseño del
+isotipo, ver nota en 12). Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -587,7 +587,7 @@ del sidebar (`AppLayout.vue`) cuando estaba abierto en el celular.
 - **Superseded por 13h**: la franja descrita acá se reemplazó por una
   cabecera unificada en el propio Vue — ver esa sección.
 
-## 13h. Cabecera única (Vue) en vez de franja Flutter — RESUELTO, pendiente de desplegar
+## 13h. Cabecera única (Vue) en vez de franja Flutter — RESUELTO Y DESPLEGADO
 
 Pedido del usuario tras probar 13g en su Samsung: seguía viendo **dos**
 cabeceras apiladas (la franja nativa de Flutter + la cabecera blanca del
@@ -631,26 +631,62 @@ panel). Se unificaron en una sola.
 - Commit `785b8fd`, pusheado a `origin/main`. APK recompilada y copiada a
   `C:\Users\USER\Desktop\SmartRayco.apk` (pisa 13g). No instalada ni
   distribuida.
-- **Pendiente de autorización — requiere DOS pasos, no uno**: a diferencia
-  de 13g (que era 100% Flutter), este fix toca `AppLayout.vue` — hace
-  falta **desplegar el frontend web a la VM** (`bash deploy/update.sh`)
-  ADEMÁS de instalar la APK nueva, o la cabecera azul no aparecerá (el
-  WebView seguiría cargando la versión vieja del panel desde
-  `panel.rayconetworks.com`). Usuario pidió explícitamente no desplegar
-  sin autorización — **no se desplegó**.
+- **Desplegado 2026-10-10, autorizado explícitamente con condiciones**:
+  - Verificado antes de desplegar: `CampoLayout.vue` sin diff alguno desde
+    su último cambio real (`633f053`, ajeno a esto); `/soporte` (home de
+    TECNICO_RED) usa `AppLayout` (cabecera azul nueva), `/campo` y
+    `/campo/:tipo/:id` usan `CampoLayout` (sin cambios) — confirmado en
+    `src/router/index.ts` y el comentario de `App.vue` sobre que un
+    técnico pasa por ambos layouts en la misma sesión. Sin duplicación,
+    sin función perdida. Orden `_applyUserAgent()` → `loadRequest()`
+    confirmado por lectura de código (el `await` garantiza que el UA
+    quede puesto antes de la primera petición).
+  - **Respaldo antes de desplegar**: se etiquetaron las imágenes Docker
+    en uso (`smartrayco-frontend:latest` y `smartrayco-backend:latest`,
+    ambas en commit `db1188b`) como `rollback-20261010220751` — mismo
+    patrón de tags manuales que ya existía en la VM de sesiones previas
+    (`antes-fase1-telnet`, `respaldo-20261009-185510`, etc.). `docker
+    image prune` del propio `update.sh` no las toca (solo borra imágenes
+    sin tag).
+  - `bash deploy/update.sh` — git pull trajo `7f4de75`→`6386ad1`→
+    `785b8fd`→`d59759a` (los primeros dos son Dart/docs, no tocan el
+    build del frontend; el cambio real de UI es `785b8fd`). Sin
+    migraciones, sin tocar Supabase/OLT/MikroTik — `update.sh` nunca lo
+    hace.
+  - **Verificado tras desplegar**: VM en `d59759a` (`git rev-parse HEAD`).
+    `/login` y `/` responden 200. Bundle nuevo confirmado
+    (`index-BxFqjSMd.js`, hash distinto al anterior). Logs de
+    `smartrayco-backend-1` — los 6 schedulers reiniciaron limpios, sin
+    error. Logs de `smartrayco-frontend-1` — sirviendo `/login`,
+    `/dashboard` (redirige a login sin sesión, confirma que el guard de
+    auth sigue intacto) y los assets nuevos con 200. Revisado visualmente
+    en el navegador: Login carga bien, logo correcto, sin cabecera
+    duplicada (Login no usa `AppLayout`). No se inició sesión real para
+    ver la cabecera azul autenticada en vivo (se evitó deliberadamente
+    usar una contraseña real guardada solo para una prueba visual) — la
+    confirmación de la cabecera azul en sí fue vía el mockup HTML
+    aislado de 13h, no contra la VM.
+  - **Rollback disponible** (dos formas):
+    1. Rápido (sin rebuild): en la VM,
+       `docker tag smartrayco-frontend:rollback-20261010220751
+       smartrayco-frontend:latest && docker tag
+       smartrayco-backend:rollback-20261010220751
+       smartrayco-backend:latest && docker compose -f
+       docker-compose.onprem.yml up -d` (recrea los contenedores con las
+       imágenes de antes, ~segundos).
+    2. Por git (si hiciera falta volver también el código fuente):
+       `git checkout db1188b && bash deploy/update.sh` — vuelve al
+       commit que estaba desplegado antes de esta sesión.
 
 ## 13. Próximo paso recomendado
 
-1. **Autorizar el despliegue del frontend web** (`bash deploy/update.sh`)
-   para que la cabecera azul unificada de 13h tome efecto en
-   `panel.rayconetworks.com` — sin eso, instalar la APK nueva no alcanza
-   (el WebView sigue cargando el panel viejo desde la VM). Luego instalar
+1. **Frontend ya desplegado** (VM en `d59759a`, ver 13h) — falta instalar
    `C:\Users\USER\Desktop\SmartRayco.apk` (cabecera única + ícono/splash
-   definitivos, ver 13f/13h) en un equipo real y confirmar: una sola
-   cabecera azul visible con sesión iniciada, Login sin ella, menú lateral
-   abre/cierra sin superposiciones, Inicio/Recargar funcionan, App de
-   Campo conserva su propia navegación — validación de campo pendiente,
-   no hecha todavía (sin emulador Android en este entorno).
+   definitivos) en un equipo real y confirmar: una sola cabecera azul
+   visible con sesión iniciada, Login sin ella, menú lateral abre/cierra
+   sin superposiciones, Inicio/Recargar funcionan, App de Campo conserva
+   su propia navegación — validación de campo pendiente, no hecha
+   todavía (sin emulador Android en este entorno).
 2. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
    flujo de Drop prefabricado/bobina (fase anterior a la de identidad
    visual) antes de seguir iterando sobre esa pantalla.
