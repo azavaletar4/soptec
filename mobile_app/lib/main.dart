@@ -12,6 +12,13 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 const String _panelUrl = 'https://panel.rayconetworks.com/';
 const String _panelHost = 'panel.rayconetworks.com';
 
+// Token agregado al User-Agent por defecto del WebView (nunca lo
+// reemplaza) para que el panel Vue (src/lib/nativeApp.ts) pueda saber de
+// forma explicita y confiable si corre dentro de esta APK -- y mostrar ahi
+// su propia cabecera unificada (Inicio/Recargar/Menu) en vez de que
+// Flutter dibuje una franja nativa aparte (Fase 144: una sola cabecera).
+const String _userAgentSuffix = 'SmartRaycoApp/1.0';
+
 // MIUI (Xiaomi) mata el proceso de la app muy seguido en segundo plano (ej.
 // el tecnico sale a tomar una foto o a WhatsApp) — al volver, Android recrea
 // todo desde cero y el WebView pierde su historial. No hay forma de recuperar
@@ -53,15 +60,6 @@ class _PanelWebViewState extends State<PanelWebView> {
   bool _loading = true;
   String? _loadError;
 
-  // Controla la franja de Inicio/Recargar (_buildNavBar): debe ocultarse en
-  // pantallas publicas sin sesion (hoy solo /login -- /cambiar-password
-  // siempre exige sesion en el router de Vue, asi que nunca se alcanza "sin
-  // sesion"). Se infiere de la ruta real que ya decide el router del panel
-  // (el mismo requiresAuth que usa el panel web), no de un sistema de auth
-  // propio del lado de Flutter. Empieza en true para no mostrar la franja
-  // un instante antes de saber en que pantalla se entra.
-  bool _isPublicRoute = true;
-
   @override
   void initState() {
     super.initState();
@@ -69,20 +67,24 @@ class _PanelWebViewState extends State<PanelWebView> {
     _loadInitialUrl();
   }
 
-  void _updatePublicRoute(String? url) {
-    final path = Uri.tryParse(url ?? '')?.path ?? '';
-    final isPublic = path.isEmpty || path == '/' || path == '/login';
-    if (isPublic != _isPublicRoute) {
-      setState(() => _isPublicRoute = isPublic);
-    }
-  }
-
   Future<void> _loadInitialUrl() async {
+    // Antes de la primera carga, no despues: si el panel llegara a leer el
+    // User-Agent en su primer render, ya debe tener el sufijo puesto.
+    await _applyUserAgent();
+
     final prefs = await SharedPreferences.getInstance();
     final lastUrl = prefs.getString(_lastUrlPrefsKey);
     final target = lastUrl != null && Uri.tryParse(lastUrl)?.host == _panelHost ? lastUrl : _panelUrl;
-    _updatePublicRoute(target);
     await _controller.loadRequest(Uri.parse(target));
+  }
+
+  // Le agrega el sufijo al User-Agent real del dispositivo (no lo
+  // reemplaza por uno inventado) -- evita romper cualquier logica de
+  // deteccion de navegador/CSS responsive que dependa del UA real.
+  Future<void> _applyUserAgent() async {
+    final current = await _controller.getUserAgent();
+    final base = (current == null || current.isEmpty) ? '' : '$current ';
+    await _controller.setUserAgent('$base$_userAgentSuffix');
   }
 
   WebViewController _buildController() {
@@ -92,14 +94,12 @@ class _PanelWebViewState extends State<PanelWebView> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
-            _updatePublicRoute(url);
             setState(() {
               _loading = true;
               _loadError = null;
             });
           },
           onPageFinished: (url) {
-            _updatePublicRoute(url);
             setState(() => _loading = false);
             // Para que, si Android mata el proceso en segundo plano, la app
             // vuelva a abrir en la misma pagina en vez de desde cero.
@@ -107,13 +107,6 @@ class _PanelWebViewState extends State<PanelWebView> {
               SharedPreferences.getInstance().then((p) => p.setString(_lastUrlPrefsKey, url));
             }
           },
-          // El panel es una SPA (Vue Router en modo history): navegar de
-          // /login a /dashboard tras iniciar sesion NO dispara una carga de
-          // pagina nueva (onPageStarted/onPageFinished no se enteran), solo
-          // cambia la URL via pushState. onUrlChange si se entera de eso --
-          // es la unica forma de que la franja reaccione a un login/logout
-          // sin recargar la pagina.
-          onUrlChange: (change) => _updatePublicRoute(change.url),
           onWebResourceError: (error) {
             // Solo los errores de navegacion principal (no un recurso suelto,
             // como un icono o un script de terceros que falle) deben tapar la
@@ -220,18 +213,6 @@ class _PanelWebViewState extends State<PanelWebView> {
     await _controller.reload();
   }
 
-  // Botón "Inicio": vuelve siempre a la raíz del panel sin depender del
-  // historial interno del WebView (que un tecnico puede perder facil si
-  // Android mata el proceso en segundo plano). El propio panel decide a que
-  // pantalla mandar a cada rol ya autenticado (dashboard, campo, etc.).
-  Future<void> _goHome() async {
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
-    await _controller.loadRequest(Uri.parse(_panelUrl));
-  }
-
   Future<void> _handleBack(bool didPop, Object? result) async {
     if (didPop) return;
     if (await _controller.canGoBack()) {
@@ -249,59 +230,29 @@ class _PanelWebViewState extends State<PanelWebView> {
       canPop: false,
       onPopInvokedWithResult: _handleBack,
       child: Scaffold(
-        // Sin AppBar de Flutter (58dp fijos, con titulo/logo) -- el panel ya
-        // trae su propia cabecera. En vez de eso, una franja angosta propia
-        // de solo 2 iconos (sin logo/titulo, cero duplicacion) que vive en
-        // su PROPIO espacio por encima del WebView. A diferencia de los FAB
-        // flotantes anteriores (que tapaban el perfil del tecnico y los
-        // botones inferiores del sidebar cuando estaba abierto, y el
-        // recuadro de firma del cliente), esta franja nunca se superpone a
-        // nada del panel porque no flota sobre el contenido -- le resta su
-        // propia altura fija, chica, al WebView.
+        // Sin AppBar/FAB de Flutter y sin ninguna franja nativa propia: la
+        // cabecera unica del panel (logo, Inicio, Recargar, Menu) vive
+        // entera en el Vue (AppLayout.vue), que la detecta via User-Agent
+        // (_applyUserAgent / src/lib/nativeApp.ts) y la dibuja ella misma
+        // cuando corre dentro de esta APK. Fase 144: antes hubo una franja
+        // nativa aparte (y antes de eso, FAB flotantes) -- ambas duplicaban
+        // la cabecera del panel o tapaban contenido (perfil del tecnico,
+        // firma del cliente). Flutter ahora solo hospeda el WebView.
         body: SafeArea(
-          child: Column(
+          child: Stack(
             children: [
-              if (!_isPublicRoute) _buildNavBar(),
-              Expanded(
-                child: Stack(
-                  children: [
-                    WebViewWidget(controller: _controller),
-                    if (_loading)
-                      const Positioned.fill(
-                        child: ColoredBox(
-                          color: Color(0x11000000),
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                      ),
-                    if (_loadError != null) _buildErrorOverlay(),
-                  ],
+              WebViewWidget(controller: _controller),
+              if (_loading)
+                const Positioned.fill(
+                  child: ColoredBox(
+                    color: Color(0x11000000),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
                 ),
-              ),
+              if (_loadError != null) _buildErrorOverlay(),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  // Franja compacta (36dp) con Inicio/Recargar -- reemplaza a los FAB
-  // flotantes. Mismas funciones (_goHome/_reload), ningun sistema de
-  // navegacion nuevo. Solo iconos (sin logo ni texto "SmartRayco": eso ya
-  // lo muestra la cabecera del panel debajo, evita duplicarlo).
-  Widget _buildNavBar() {
-    return Container(
-      height: 36,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          _NavBarButton(icon: Icons.home_outlined, tooltip: 'Inicio', onPressed: _goHome),
-          _NavBarButton(icon: Icons.refresh, tooltip: 'Recargar', onPressed: _reload),
-          const SizedBox(width: 4),
-        ],
       ),
     );
   }
@@ -331,31 +282,6 @@ class _PanelWebViewState extends State<PanelWebView> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// Boton chico de icono solo (sin el padding/tamaño de un IconButton
-// default de Material, pensado para caber en una franja de 36dp).
-class _NavBarButton extends StatelessWidget {
-  const _NavBarButton({required this.icon, required this.tooltip, required this.onPressed});
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(icon, size: 20, color: const Color(0xFF0EA5E9)),
         ),
       ),
     );

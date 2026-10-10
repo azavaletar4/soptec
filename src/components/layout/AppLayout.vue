@@ -10,13 +10,31 @@ import Breadcrumbs from '@/components/layout/Breadcrumbs.vue';
 import AsistenciaPanel from '@/components/asistencia/AsistenciaPanel.vue';
 import logoIcon from '@/assets/logo-icon.png';
 import { homePath } from '@/lib/navigation';
+import { isNativeApp } from '@/lib/nativeApp';
+import { useConfirm } from '@/composables/useConfirm';
 
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
+const { confirmDialog } = useConfirm();
 
 // Logo clickeable al Dashboard/home del rol (Fase 114).
 const homeTo = computed(() => homePath(auth.role));
+
+// Cabecera unificada de la APK (Fase 144): dentro del WebView nativo ya no
+// hay una franja Flutter aparte con Inicio/Recargar -- esos controles se
+// agregan ACA, en la misma cabecera del panel, solo cuando isNativeApp es
+// true. En un navegador normal (celular o escritorio) la cabecera sigue
+// exactamente igual que antes.
+async function handleRefresh() {
+  const ok = await confirmDialog({
+    title: 'Actualizar vista',
+    message: 'Se recargará la página actual. Los cambios sin guardar en un formulario se perderán.',
+    warning: true,
+    confirmLabel: 'Actualizar',
+  });
+  if (ok) window.location.reload();
+}
 
 const SUPERADMIN_ROLES = ['SUPERADMIN'];
 const ADMIN_ROLES = ['SUPERADMIN', 'ADMIN'];
@@ -230,20 +248,68 @@ async function handleLogout() {
 
 <template>
   <div class="min-h-screen md:flex">
-    <div class="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur px-4 py-3 md:hidden">
+    <div
+      class="sticky top-0 z-30 flex items-center justify-between px-4 py-3 md:hidden"
+      :class="isNativeApp ? 'bg-sky-600' : 'border-b border-slate-200 bg-white/95 backdrop-blur'"
+    >
       <router-link
         :to="homeTo"
         class="flex items-center gap-2.5 transition-opacity duration-150 hover:opacity-75"
         title="Ir al inicio"
       >
         <img :src="logoIcon" alt="" class="w-7 h-7 shrink-0 transition-[filter] duration-150 hover:drop-shadow-[0_0_8px_rgba(14,165,233,0.55)]" />
-        <div class="text-base font-semibold">SmartRayco</div>
+        <div class="text-base font-semibold" :class="isNativeApp ? 'text-white' : ''">SmartRayco</div>
       </router-link>
+
+      <!-- Dentro de la APK (isNativeApp): Inicio + Recargar + Menu, los 3
+           iconos blancos — reemplaza la franja nativa de Flutter que vivia
+           aparte (quitada en mobile_app/lib/main.dart, Fase 144). "Inicio"
+           reusa el mismo :to="homeTo" del logo (rutas/permisos intactos),
+           "Recargar" confirma antes de refrescar (useConfirm, evita perder
+           formularios), "Menu" es el mismo sidebarOpen de siempre -- ningun
+           sistema de apertura/cierre nuevo. -->
+      <div v-if="isNativeApp" class="flex items-center gap-1">
+        <router-link
+          :to="homeTo"
+          class="p-2 rounded-lg text-white hover:bg-white/15 active:scale-95 transition-transform"
+          aria-label="Inicio"
+          title="Inicio"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </router-link>
+        <button
+          class="p-2 rounded-lg text-white hover:bg-white/15 active:scale-95 transition-transform"
+          aria-label="Recargar"
+          title="Recargar"
+          @click="handleRefresh"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M4 4v5h5M20 20v-5h-5M4.6 9a8 8 0 0 1 14.03-3.36M19.4 15a8 8 0 0 1-14.03 3.36"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          class="p-2 rounded-lg text-white hover:bg-white/15 active:scale-95 transition-transform"
+          aria-label="Abrir menu"
+          @click="sidebarOpen = true"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+
       <!-- Campana + menu agrupados a la derecha con separacion fija (Fase
            134): antes la campana flotaba fixed encima del boton ☰ y lo
            bloqueaba — ahora es un icono mas de esta barra, con gap-3 (12px)
-           de por medio para evitar toques accidentales entre los dos. -->
-      <div class="flex items-center gap-3">
+           de por medio para evitar toques accidentales entre los dos.
+           Igual que siempre para navegador (fuera de la APK). -->
+      <div v-else class="flex items-center gap-3">
         <ScheduleAlertBell variant="inline" />
         <button
           class="p-2 rounded-lg text-slate-800 hover:bg-slate-100 active:scale-95 transition-transform"
