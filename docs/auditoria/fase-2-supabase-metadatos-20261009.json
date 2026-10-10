@@ -1,0 +1,596 @@
+﻿{
+  "checkedAt": "2026-10-09T21:06:54.083Z",
+  "access": "configured_backend_supabase_api",
+  "sqlAccess": false,
+  "httpStatus": 200,
+  "openApiAvailable": true,
+  "functionPaths": {
+    "current_user_role": true,
+    "append_provisioning_step": true,
+    "assign_provisioning_nap": true,
+    "assign_contract_nap": false
+  },
+  "tables": {
+    "profiles": {
+      "exposed": true,
+      "required": [
+        "id",
+        "email",
+        "role",
+        "active",
+        "created_at",
+        "updated_at",
+        "username",
+        "must_change_password"
+      ],
+      "columns": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "email": {
+          "type": "string",
+          "format": "text"
+        },
+        "full_name": {
+          "type": "string",
+          "format": "text"
+        },
+        "role": {
+          "type": "string",
+          "format": "public.user_role"
+        },
+        "active": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "username": {
+          "type": "string",
+          "format": "text"
+        },
+        "phone": {
+          "type": "string",
+          "format": "text"
+        },
+        "must_change_password": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "battery_level": {
+          "type": "integer",
+          "format": "smallint"
+        },
+        "latitude": {
+          "type": "number",
+          "format": "numeric"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "numeric"
+        },
+        "last_ping_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        }
+      }
+    },
+    "service_contracts": {
+      "exposed": true,
+      "required": [
+        "id",
+        "client_id",
+        "monthly_fee",
+        "status",
+        "start_date",
+        "created_at",
+        "updated_at",
+        "debt_hold_status",
+        "priority",
+        "service_type",
+        "is_courtesy"
+      ],
+      "columns": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "contract_number": {
+          "type": "string",
+          "format": "text"
+        },
+        "client_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "plan_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "monthly_fee": {
+          "type": "number",
+          "format": "numeric"
+        },
+        "status": {
+          "type": "string",
+          "format": "public.contract_status"
+        },
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "end_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "billing_day": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "payment_method": {
+          "type": "string",
+          "format": "text"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "mikrotik_device_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "pppoe_username": {
+          "type": "string",
+          "format": "text"
+        },
+        "mikrotik_profile": {
+          "type": "string",
+          "format": "text"
+        },
+        "xui_line_id": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "xui_username": {
+          "type": "string",
+          "format": "text"
+        },
+        "debt_hold_status": {
+          "type": "string",
+          "format": "public.debt_hold_status"
+        },
+        "debt_hold_flagged_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "debt_hold_applied_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "debt_hold_invoice_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "mikrotik_profile_before_hold": {
+          "type": "string",
+          "format": "text"
+        },
+        "installation_address": {
+          "type": "string",
+          "format": "text"
+        },
+        "installation_reference": {
+          "type": "string",
+          "format": "text"
+        },
+        "latitude": {
+          "type": "number",
+          "format": "double precision"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "double precision"
+        },
+        "zone_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "client_code": {
+          "type": "string",
+          "format": "text"
+        },
+        "priority": {
+          "type": "string",
+          "format": "text"
+        },
+        "service_type": {
+          "type": "string",
+          "format": "public.contract_service_type"
+        },
+        "is_courtesy": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "courtesy_reason": {
+          "type": "string",
+          "format": "text"
+        }
+      }
+    },
+    "infra_elementos": {
+      "exposed": true,
+      "required": [
+        "id",
+        "name",
+        "tipo",
+        "is_active",
+        "created_at",
+        "updated_at"
+      ],
+      "columns": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "format": "text"
+        },
+        "tipo": {
+          "type": "string",
+          "format": "text"
+        },
+        "potencia": {
+          "type": "string",
+          "format": "text"
+        },
+        "spliteo": {
+          "type": "string",
+          "format": "text"
+        },
+        "is_active": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "photo_path": {
+          "type": "string",
+          "format": "text"
+        },
+        "latitude": {
+          "type": "number",
+          "format": "double precision"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "double precision"
+        },
+        "notes": {
+          "type": "string",
+          "format": "text"
+        },
+        "created_by": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "puertos_total": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "zone_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kml_ref": {
+          "type": "string",
+          "format": "text"
+        },
+        "import_batch_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "fo_nap_puertos": {
+      "exposed": true,
+      "required": [
+        "id",
+        "infra_elemento_id",
+        "puerto_numero",
+        "estado",
+        "updated_at"
+      ],
+      "columns": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "infra_elemento_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "puerto_numero": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "estado": {
+          "type": "string",
+          "format": "text"
+        },
+        "client_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fusion_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "notes": {
+          "type": "string",
+          "format": "text"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "contract_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "olt_provisioning_operations": {
+      "exposed": true,
+      "required": [
+        "id",
+        "idempotency_key",
+        "olt_device_id",
+        "serial",
+        "frame",
+        "slot",
+        "port",
+        "requested",
+        "status",
+        "steps",
+        "created_at",
+        "updated_at"
+      ],
+      "columns": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "format": "text"
+        },
+        "olt_device_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "serial": {
+          "type": "string",
+          "format": "text"
+        },
+        "frame": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "slot": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "port": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "onu_id": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "client_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "contract_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "requested": {
+          "format": "jsonb"
+        },
+        "status": {
+          "type": "string",
+          "format": "text"
+        },
+        "steps": {
+          "format": "jsonb"
+        },
+        "ont_db_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "error": {
+          "type": "string",
+          "format": "text"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        }
+      }
+    },
+    "olt_onts": {
+      "exposed": true,
+      "required": [
+        "id",
+        "olt_device_id",
+        "frame",
+        "slot",
+        "port",
+        "ont_id",
+        "serial",
+        "status",
+        "created_at",
+        "updated_at",
+        "tr069_enabled",
+        "admin_state"
+      ],
+      "columns": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "olt_device_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "client_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "frame": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "slot": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "port": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "ont_id": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "serial": {
+          "type": "string",
+          "format": "text"
+        },
+        "description": {
+          "type": "string",
+          "format": "text"
+        },
+        "onu_type": {
+          "type": "string",
+          "format": "text"
+        },
+        "vlan": {
+          "type": "integer",
+          "format": "integer"
+        },
+        "status": {
+          "type": "string",
+          "format": "public.ont_status"
+        },
+        "rx_power": {
+          "type": "number",
+          "format": "numeric"
+        },
+        "tx_power": {
+          "type": "number",
+          "format": "numeric"
+        },
+        "last_synced_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "timestamp with time zone"
+        },
+        "wan_mac": {
+          "type": "string",
+          "format": "text"
+        },
+        "tcont_profile": {
+          "type": "string",
+          "format": "text"
+        },
+        "traffic_profile": {
+          "type": "string",
+          "format": "text"
+        },
+        "tr069_enabled": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "tr069_acs_url": {
+          "type": "string",
+          "format": "text"
+        },
+        "zone_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "splitter": {
+          "type": "string",
+          "format": "text"
+        },
+        "splitter_port": {
+          "type": "string",
+          "format": "text"
+        },
+        "address_comment": {
+          "type": "string",
+          "format": "text"
+        },
+        "contact": {
+          "type": "string",
+          "format": "text"
+        },
+        "latitude": {
+          "type": "number",
+          "format": "numeric"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "numeric"
+        },
+        "plan_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "contract_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "admin_state": {
+          "type": "string",
+          "format": "text"
+        }
+      }
+    }
+  },
+  "limits": [
+    "API metadata does not certify migration ledger, SQL definitions, account-active check, constraints, grants or RLS. No RPC was executed."
+  ]
+}

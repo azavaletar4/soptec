@@ -1,0 +1,70 @@
+{
+  "checkedAt": "2026-10-09T21:06:54.083Z",
+  "httpStatus": 200,
+  "readOnlyMethod": "GET /rest/v1/ OpenAPI",
+  "sqlAccess": false,
+  "functions": {
+    "current_user_role": true,
+    "append_provisioning_step": true,
+    "assign_provisioning_nap": true,
+    "assign_contract_nap": false
+  },
+  "tables": {
+    "profiles": {
+      "missingColumns": [],
+      "observedTypes": {
+        "id": "uuid",
+        "role": "public.user_role",
+        "active": "boolean"
+      }
+    },
+    "service_contracts": {
+      "missingColumns": [],
+      "observedTypes": {
+        "id": "uuid",
+        "client_id": "uuid",
+        "mikrotik_device_id": "uuid",
+        "pppoe_username": "text",
+        "mikrotik_profile": "text"
+      }
+    },
+    "infra_elementos": {
+      "missingColumns": [],
+      "observedTypes": {
+        "id": "uuid",
+        "tipo": "text",
+        "puertos_total": "integer"
+      }
+    },
+    "fo_nap_puertos": {
+      "missingColumns": [],
+      "observedTypes": {
+        "id": "uuid",
+        "infra_elemento_id": "uuid",
+        "puerto_numero": "integer",
+        "estado": "text",
+        "client_id": "uuid",
+        "contract_id": "uuid"
+      }
+    },
+    "olt_provisioning_operations": {
+      "missingColumns": [],
+      "observedTypes": {
+        "id": "uuid",
+        "idempotency_key": "text",
+        "requested": "jsonb",
+        "steps": "jsonb",
+        "status": "text",
+        "client_id": "uuid",
+        "contract_id": "uuid"
+      }
+    },
+    "olt_onts": {
+      "missingColumns": [],
+      "observedTypes": {
+        "id": "uuid",
+        "contract_id": "uuid"
+      }
+    }
+  }
+}

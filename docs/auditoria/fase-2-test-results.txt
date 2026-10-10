@@ -1,0 +1,114 @@
+=== npm run test:telnet ===
+
+> smartrayco@0.1.0 test:telnet
+> node --import tsx --test server/src/telnet/__tests__/*.test.ts
+
+✔ ejecucion completa exitosa: resuelve con el output de cada comando, en orden (21.6237ms)
+✔ cierre antes de terminar los comandos: rechaza, nunca resuelve exito parcial (4.593ms)
+✔ error CLI detectado: detiene la secuencia y NO manda el comando siguiente (2.9107ms)
+[telnet] TIMEOUT — fase=comandos comando=#0/1 duracionMs=307 bytesPendientes=0
+✔ timeout: rechaza si la OLT nunca responde (309.9479ms)
+✔ negociacion IAC fragmentada entre paquetes TCP: login y comandos funcionan igual (123.4356ms)
+✔ fakeOltServer: respuestas de negociacion tardias o mezcladas con el login/comandos se separan del texto real (2.6331ms)
+✔ respuesta de un comando dividida en varios paquetes TCP se reensambla completa (45.5448ms)
+✔ paginacion --More-- con paginas entregadas en paquetes separados: se acumula sin perder filas (45.2446ms)
+✔ timeout: el log y el error nunca incluyen el comando ni el buffer crudo (solo metadatos seguros) (310.6619ms)
+✔ timeout durante el login: una credencial "recibida" en el buffer (Password:\nSECRETO) nunca aparece en logs ni en el error (311.6799ms)
+✔ "terminal length 0" rechazado: no aborta la conexion, deja constancia y sigue con paginacion generica (45.8293ms)
+✔ una linea de estadisticas que empieza con "Error" (ej. contador de paquetes) no aborta la secuencia (9.0454ms)
+✔ detecta errores CLI confirmados contra el equipo real (ver zteCommands.ts) (1.1783ms)
+✔ detecta las variantes estilo Cisco como fallback (0.1335ms)
+✔ no hay error cuando la secuencia termino sin problemas (0.6675ms)
+✔ no genera falso positivo con texto libre que contiene la palabra "error" en medio de la linea (0.1237ms)
+✔ no confunde el estado normal de una ONU (columna admin-state "disable") con un error (0.1285ms)
+✔ no clasifica como error una linea de estadisticas que empieza con "Error" pero no es un codigo de rechazo (0.1504ms)
+✔ no clasifica como error una linea de configuracion/contadores que menciona "error" sin ser un codigo de rechazo (0.111ms)
+✔ una salida larga con lineas de estadisticas "Error ..." y el prompt real sigue sin disparar nada (0.1222ms)
+✔ redactSensitive oculta password y username sin tocar el resto del comando (0.3705ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1386.2252
+
+=== npm run test:provisioning ===
+
+> smartrayco@0.1.0 test:provisioning
+> node --import tsx --test server/src/services/__tests__/*.test.ts
+
+✔ validateProvisionInput: rechaza cada campo invalido con un mensaje especifico (1.5253ms)
+✔ findExistingBySerial: encuentra la posicion real o devuelve null (1.4465ms)
+✔ resolveFreeOnuId: devuelve el primero libre, y null si esta todo ocupado (0.1489ms)
+✔ verifyProvisionedOnt: sin diferencias cuando todo coincide, y reporta cada campo distinto (0.3224ms)
+✔ classifyWriteError: distingue un rechazo CLI real de cualquier otro fallo (0.223ms)
+✔ escenario 1 — aprovisionamiento exitoso: registra, verifica, y reporta cada etapa (28.4481ms)
+✔ escenario 2 — comando rechazado a mitad de secuencia: reporta "rejected" y detiene el resto (configuracion parcial, nunca "exito") (6.6237ms)
+✔ escenario 3a — la conexion se cierra justo despues de aceptar el alta: resultado "uncertain", nunca "fallo" ni "exito" (4.6399ms)
+[telnet] TIMEOUT — fase=comandos comando=#3/12 duracionMs=607 bytesPendientes=0
+✔ escenario 3b — timeout real de escritura (nunca responde): resultado "uncertain" (611.9302ms)
+✔ escenario 3c — reconciliar un "uncertain": reescanear revela si la escritura SI llego a aplicarse (7.5909ms)
+✔ escenario 4 — la OLT queda bien pero la BD falla: la OLT NO se revierte, el fallo queda aislado a esa etapa (9.0387ms)
+✔ escenario 5 — la OLT y la BD quedan bien pero MikroTik falla: solo esa etapa queda pendiente (5.87ms)
+✔ isOltStageOk: solo "registered"/"already_registered" habilitan seguir con BD/MikroTik (0.1684ms)
+✔ escenario 6a — doble solicitud CONCURRENTE (doble clic): un solo comando de alta real llega a la OLT (7.966ms)
+✔ escenario 6b — reintento SECUENCIAL (ej. el cliente reintenta tras creer que fallo): no duplica el alta (7.5362ms)
+✔ escenario 7a — el serial ya esta registrado en OTRA posicion: conflicto, no se toca nada (3.7458ms)
+✔ escenario 7b — el onu-id forzado ya esta ocupado por OTRO serial en esa posicion: conflicto, no se sobreescribe (3.0281ms)
+✔ escenario 7c — capacidad llena (todos los onu-id del puerto ocupados): se reporta, no se intenta escribir (4.3399ms)
+✔ escenario 8 — la OLT escribe algo distinto de lo pedido: la verificacion posterior lo detecta, NUNCA se reporta exito (5.4123ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 862.7421
+
+=== npm run test:fetch-timeout ===
+
+> smartrayco@0.1.0 test:fetch-timeout
+> node --import tsx --test src/lib/__tests__/*.test.ts
+
+✔ sin timeoutMs: se comporta igual que fetch normal (no aborta nunca) (68.2258ms)
+✔ respuesta rapida (cabeceras y body) dentro del timeout: resuelve normal (37.2549ms)
+✔ timeout mientras se esperan las cabeceras: rechaza con el mensaje preciso, sin esperar al servidor (160.3872ms)
+✔ timeout con cabeceras rapidas pero BODY lento: tambien rechaza, no se queda esperando el body (165.7245ms)
+✔ body lento pero DENTRO del timeout: resuelve normal con el contenido completo (109.0111ms)
+✔ el mensaje de timeout es preciso: no le atribuye la causa a la OLT ni a la cola Telnet (63.438ms)
+✔ cancelacion EXTERNA (signal del caller) mientras se esperan cabeceras: se distingue del timeout (61.5179ms)
+✔ cancelacion EXTERNA mientras se lee el BODY: tambien se distingue del timeout (63.3774ms)
+✔ signal externo YA cancelado antes de empezar: rechaza de inmediato, sin llegar a conectar (0.6ms)
+✔ un error de red real (no por timeout ni cancelacion) se propaga tal cual (0.6382ms)
+✔ un error propio de onResponse (no un abort) se propaga sin reinterpretarse como timeout (30.9118ms)
+✔ consulta exitosa: aplica rxPower/txPower a la ONU mostrada y resuelve ok (1.5511ms)
+✔ timeout o error en getSignal: libera con ok=false y el mensaje real, sin tocar la ONU ni refrescar el listado (0.3785ms)
+✔ un refresco secundario del listado LENTO nunca mantiene bloqueada la consulta (612.598ms)
+✔ un refresco secundario del listado que FALLA tampoco se reporta como error de la consulta (15.9425ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2829.0703
+
+=== npx tsc -p tsconfig.server.json --noEmit ===
+(sin salida = sin errores)
+
+=== npx vue-tsc -p tsconfig.app.json --noEmit ===
+(sin salida = sin errores)
+
+=== npm run build ===
+[2mdist/[22m[36massets/apexcharts.ssr.esm-fe46cd2d-9CakV-nF.js  [39m[1m[33m518.27 kB[39m[22m[2m │ gzip: 140.34 kB[22m
+[2mdist/[22m[36massets/vue3-apexcharts-BwuL6oVj.js              [39m[1m[33m980.89 kB[39m[22m[2m │ gzip: 286.95 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 7.88s[39m

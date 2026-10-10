@@ -1,0 +1,30 @@
+{
+  "scope": "LOCAL SIMULADO, no Supabase real",
+  "passed": true,
+  "checks": [
+    "Consulta ejecutada sin registro de migraciones",
+    "Consulta ejecutada con registro de migraciones",
+    "Funciones y columnas ausentes se informan sin error",
+    "Transaccion de auditoria de solo lectura"
+  ],
+  "absent_ledger": {
+    "ledger_exists": false,
+    "expected_versions": [
+      "20261009100000",
+      "20261009110000",
+      "20261009120000"
+    ],
+    "matching_versions_xml": null,
+    "new_version_not_to_apply": "20261009130000"
+  },
+  "present_ledger": {
+    "ledger_exists": true,
+    "expected_versions": [
+      "20261009100000",
+      "20261009110000",
+      "20261009120000"
+    ],
+    "matching_versions_xml": "<table xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n\n<row>\n  <version>20261009100000</version>\n</row>\n\n<row>\n  <version>20261009110000</version>\n</row>\n\n<row>\n  <version>20261009120000</version>\n</row>\n\n</table>\n",
+    "new_version_not_to_apply": "20261009130000"
+  }
+}

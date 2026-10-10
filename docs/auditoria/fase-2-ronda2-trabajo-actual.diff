@@ -1,0 +1,2906 @@
+diff --git a/package.json b/package.json
+index 4cb1c4a..3df5a16 100644
+--- a/package.json
++++ b/package.json
+@@ -18,6 +18,7 @@
+     "compress:storage-photos": "tsx server/scripts/compress-storage-photos.ts",
+     "lint": "eslint .",
+     "test:telnet": "node --import tsx --test server/src/telnet/__tests__/*.test.ts",
++    "test:provisioning": "node --import tsx --test server/src/services/__tests__/*.test.ts",
+     "test:fetch-timeout": "node --import tsx --test src/lib/__tests__/*.test.ts"
+   },
+   "dependencies": {
+diff --git a/server/src/routes/olt.ts b/server/src/routes/olt.ts
+index 0567270..971a3ff 100644
+--- a/server/src/routes/olt.ts
++++ b/server/src/routes/olt.ts
+@@ -40,6 +40,14 @@ import {
+   parseUnconfiguredOnts,
+   parseProfileNames,
+ } from '../ssh/zteParsers';
++import { createSupabaseProvisioningStore } from '../services/oltProvisioningStore';
++import {
++  handleProvisionRequest,
++  handleReconcileRequest,
++  type ProvisionHandlerDeps,
++  type ProvisionRequestBody,
++} from '../services/oltProvisioningHandler';
++import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
+ 
+ export const oltRoutes = new Hono();
+ 
+@@ -783,6 +791,16 @@ oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) =
+   }
+ });
+ 
++/**
++ * OJO — endpoint anterior a la Fase 2 (ver docs/auditoria/fase-2-
++ * aprovisionamiento.html). Se mantiene tal cual por compatibilidad, pero
++ * NO es idempotente (un doble-clic o un reintento de red puede mandar el
++ * comando de alta dos veces) y nunca verifica lo que realmente quedo en la
++ * OLT despues de escribir — solo confia en que volvio el prompt. El
++ * frontend ahora usa POST /:id/onts/provision (mas abajo), que si hace
++ * ambas cosas. Este endpoint queda para no romper ningun otro caller
++ * existente, sin ampliarlo mas.
++ */
+ oltRoutes.post('/:id/onts', requireRole(...ONT_PROVISION), async (c) => {
+   const device = await getDeviceOrNull(c.req.param('id'));
+   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+@@ -889,6 +907,239 @@ oltRoutes.post('/:id/onts', requireRole(...ONT_PROVISION), async (c) => {
+   return c.json(data, 201);
+ });
+ 
++// ---- Aprovisionamiento confiable (Fase 2) — ver oltProvisioningService.ts,
++// oltProvisioningStore.ts, oltProvisioningHandler.ts y
++// docs/auditoria/fase-2-aprovisionamiento.html ----
++
++const provisioningStore = createSupabaseProvisioningStore(supabaseAdmin);
++
++interface MikrotikDeviceRowForProvision {
++  id: string;
++  host: string;
++  port: number;
++  use_tls: boolean;
++  username: string;
++  password: string;
++}
++
++async function getMikrotikDeviceOrNull(id: string): Promise<MikrotikDeviceRowForProvision | null> {
++  const { data, error } = await supabaseAdmin.from('mikrotik_devices').select('*').eq('id', id).single();
++  if (error || !data) return null;
++  return data as MikrotikDeviceRowForProvision;
++}
++
++/**
++ * Construye el paso de MikroTik (crear o vincular un secreto PPPoE) a
++ * partir de `body.mikrotik`, si se pidio — nunca toca la OLT ni la base de
++ * datos de aprovisionamiento, solo RouterOS. Devuelve `undefined` cuando no
++ * se pidio (etapa "no aplica", no "pendiente" — ver isPipelineComplete en
++ * oltProvisioningService.ts).
++ */
++async function buildMikrotikSync(body: Record<string, unknown>): Promise<(() => Promise<void>) | undefined> {
++  const mikrotik = body.mikrotik as Record<string, unknown> | undefined;
++  if (!mikrotik?.deviceId) return undefined;
++
++  const device = await getMikrotikDeviceOrNull(String(mikrotik.deviceId));
++  if (!device) {
++    return async () => {
++      throw new Error('Router MikroTik no encontrado');
++    };
++  }
++  const target: MikrotikTarget = { host: device.host, port: device.port, useTls: device.use_tls, username: device.username, password: device.password };
++
++  return async () => {
++    if (mikrotik.secretMode === 'create') {
++      await mikrotikRequest(target, '/ppp/secret', {
++        method: 'POST',
++        body: {
++          name: String(mikrotik.newSecretName ?? ''),
++          password: String(mikrotik.newSecretPassword ?? ''),
++          profile: String(mikrotik.profile ?? ''),
++          service: 'pppoe',
++          comment: mikrotik.comment ? String(mikrotik.comment) : undefined,
++        },
++      });
++    } else {
++      await mikrotikRequest(target, `/ppp/secret/${String(mikrotik.existingSecretId ?? '')}`, {
++        method: 'PATCH',
++        body: { profile: String(mikrotik.profile ?? '') },
++      });
++    }
++  };
++}
++
++/**
++ * Fabrica del paso de WAN/PPPoE por OMCI — a diferencia de MikroTik, SI
++ * necesita el onu-id (se conoce solo despues de que la OLT responde), por
++ * eso es una funcion que recibe `onuId` en vez de una funcion ya armada
++ * (ver buildSyncWan en oltProvisioningHandler.ts, que la llama justo a
++ * tiempo). La clave en texto plano SOLO vive en este closure, nunca se
++ * persiste en ningun lado (ni en `requested` ni en `steps`).
++ */
++function buildWanSyncFactory(
++  device: OltDeviceRow,
++  ref: ZteInterfaceRef,
++  vlan: number,
++  body: Record<string, unknown>,
++): ((onuId: number) => () => Promise<void>) | undefined {
++  const wan = body.wan as Record<string, unknown> | undefined;
++  if (!wan?.username || !wan?.password || !wan?.vlanProfile) return undefined;
++
++  return (onuId: number) => async () => {
++    await withOltLock(device.id, () =>
++      runTelnetCommands(
++        telnetTargetFor(device),
++        configureWanPppoeCommands({
++          ref,
++          onuId,
++          vlan,
++          username: String(wan.username),
++          password: String(wan.password),
++          vlanProfile: String(wan.vlanProfile),
++        }),
++        { timeoutMs: 20000 },
++      ),
++    );
++  };
++}
++
++function toProvisionRequestBody(body: Record<string, unknown>): ProvisionRequestBody {
++  return {
++    idempotencyKey: String(body.idempotencyKey ?? ''),
++    shelf: typeof body.shelf === 'number' ? body.shelf : 1,
++    slot: Number(body.slot),
++    port: Number(body.port),
++    serial: String(body.serial ?? ''),
++    onuType: String(body.onuType ?? ''),
++    description: typeof body.description === 'string' ? body.description : '',
++    vlan: Number(body.vlan),
++    tcontProfile: String(body.tcontProfile ?? ''),
++    trafficProfile: String(body.trafficProfile ?? ''),
++    onuId: typeof body.onuId === 'number' ? body.onuId : undefined,
++    clientId: typeof body.clientId === 'string' ? body.clientId : null,
++    contractId: typeof body.contractId === 'string' ? body.contractId : null,
++  };
++}
++
++/**
++ * Aprovisiona una ONT de forma IDEMPOTENTE y VERIFICADA, encadenando OLT ->
++ * BD -> MikroTik -> WAN (ver runProvisioningPipeline en
++ * oltProvisioningService.ts): solo se marca "completed" cuando TODAS las
++ * etapas que de verdad se pidieron terminaron bien — MikroTik/WAN pendiente
++ * deja la operacion en un estado intermedio, reconciliable por separado
++ * (ver POST .../reconcile mas abajo), nunca se finge "completo".
++ */
++oltRoutes.post('/:id/onts/provision', requireRole(...ONT_PROVISION), async (c) => {
++  const device = await getDeviceOrNull(c.req.param('id'));
++  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
++
++  const rawBody = (await c.req.json()) as Record<string, unknown>;
++  const body = toProvisionRequestBody(rawBody);
++  const ref: ZteInterfaceRef = { shelf: body.shelf ?? 1, slot: body.slot, port: body.port };
++
++  const deps: ProvisionHandlerDeps = {
++    store: provisioningStore,
++    deviceId: device.id,
++    withOltLock: (fn) => withOltLock(device.id, fn),
++    runTelnet: (commands, opts) => runTelnetCommands(telnetTargetFor(device), commands, opts),
++    syncMikrotik: await buildMikrotikSync(rawBody),
++    buildSyncWan: buildWanSyncFactory(device, ref, body.vlan, rawBody),
++    onOntChanged: (ont) => oltEvents.emitOntChanged({ oltDeviceId: device.id, ont }),
++  };
++
++  const result = await handleProvisionRequest(deps, body);
++  return c.json(
++    result.error
++      ? { error: result.error }
++      : {
++          operation: result.operation,
++          outcome: result.outcome,
++          ont: result.ont,
++          mikrotikOk: result.mikrotikOk,
++          mikrotikError: result.mikrotikError,
++          wanOk: result.wanOk,
++          wanError: result.wanError,
++          persistenceWarning: result.persistenceWarning,
++        },
++    result.httpStatus as any,
++  );
++});
++
++/**
++ * Progreso/resultado de una operacion de aprovisionamiento — para que el
++ * frontend pueda recuperarla al cerrar y volver a abrir el panel (requisito
++ * 1 de la revision externa): el frontend guarda el `operationId` devuelto
++ * por el POST de arriba y, si lo tiene, consulta aqui antes de asumir nada.
++ */
++oltRoutes.get('/:id/onts/operations/:opId', requireRole(...STAFF_READ), async (c) => {
++  const opId = c.req.param('opId');
++  const deviceIdParam = c.req.param('id');
++  if (!opId || !deviceIdParam) return c.json({ error: 'Falta el id de la OLT o de la operacion' }, 400);
++  const result = await provisioningStore.findOperationById(opId, deviceIdParam);
++  if (result.error) return c.json({ error: result.error }, 500);
++  if (!result.data) return c.json({ error: 'Operacion no encontrada' }, 404);
++  return c.json(result.data);
++});
++
++/**
++ * Reintenta SOLO lo que quedo pendiente de una operacion ya existente — para
++ * un resultado "incierto"/"verify_uncertain" (timeout/cierre en la
++ * escritura o en la relectura) o un fallo de MikroTik/WAN, vuelve a
++ * escanear la OLT antes de decidir si hace falta escribir algo de nuevo
++ * (ver provisionOnt(): siempre revisa en vivo, nunca repite un comando de
++ * alta a ciegas) y reintenta SOLO las etapas de BD/MikroTik/WAN que
++ * todavia no estaban "ok". Si la operacion ya esta "completed", la
++ * devuelve tal cual (no hay nada pendiente que reconciliar).
++ */
++oltRoutes.post('/:id/onts/operations/:opId/reconcile', requireRole(...ONT_PROVISION), async (c) => {
++  const device = await getDeviceOrNull(c.req.param('id'));
++  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
++  const opId = c.req.param('opId');
++  if (!opId) return c.json({ error: 'Falta el id de la operacion' }, 400);
++
++  const existing = await provisioningStore.findOperationById(opId, device.id);
++  if (existing.error) return c.json({ error: existing.error }, 500);
++  if (!existing.data) return c.json({ error: 'Operacion no encontrada' }, 404);
++
++  const rawBody = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
++  const requested = existing.data.requested ?? {};
++  const ref: ZteInterfaceRef = { shelf: existing.data.frame, slot: existing.data.slot, port: existing.data.port };
++  const vlan = Number(requested.vlan ?? 0);
++
++  const deps: ProvisionHandlerDeps = {
++    store: provisioningStore,
++    deviceId: device.id,
++    withOltLock: (fn) => withOltLock(device.id, fn),
++    runTelnet: (commands, opts) => runTelnetCommands(telnetTargetFor(device), commands, opts),
++    // MikroTik/WAN en el reconcile son OPCIONALES en el body (ej. si solo
++    // hacia falta reintentar la verificacion de la OLT, no hace falta
++    // volver a mandar nada de esto) — si no vienen, esas etapas simplemente
++    // no se reintentan en esta llamada (quedan como estaban).
++    syncMikrotik: await buildMikrotikSync(rawBody),
++    buildSyncWan: buildWanSyncFactory(device, ref, vlan, rawBody),
++    onOntChanged: (ont) => oltEvents.emitOntChanged({ oltDeviceId: device.id, ont }),
++  };
++
++  const result = await handleReconcileRequest(deps, opId);
++  return c.json(
++    result.error
++      ? { error: result.error }
++      : {
++          operation: result.operation,
++          outcome: result.outcome,
++          ont: result.ont,
++          mikrotikOk: result.mikrotikOk,
++          mikrotikError: result.mikrotikError,
++          wanOk: result.wanOk,
++          wanError: result.wanError,
++          persistenceWarning: result.persistenceWarning,
++        },
++    result.httpStatus as any,
++  );
++});
++
++
++
+ async function getOntOrNull(id: string | undefined) {
+   if (!id) return null;
+   const { data } = await supabaseAdmin.from('olt_onts').select('*').eq('id', id).single();
+diff --git a/server/src/services/__tests__/fakeOltCli.ts b/server/src/services/__tests__/fakeOltCli.ts
+new file mode 100644
+index 0000000..132d5f2
+--- /dev/null
++++ b/server/src/services/__tests__/fakeOltCli.ts
+@@ -0,0 +1,266 @@
++import type { Socket } from 'node:net';
++import { startFakeOlt, TEST_PROMPT } from '../../telnet/__tests__/fakeOltServer';
++
++/**
++ * Mini simulador de la CLI de la ZXA10 C300 (encima del login/negociacion
++ * IAC ya probado en la Fase 1, ver telnet/__tests__/fakeOltServer.ts) — solo
++ * entiende la secuencia de comandos real que manda registerOntCommands() y
++ * los "show" de solo lectura YA CONFIRMADOS contra el equipo real (ver
++ * zteCommands.ts). Mantiene un registro en memoria de las ONUs "dadas de
++ * alta" para que un escaneo posterior (en una conexion NUEVA, como hace el
++ * motor real: cada runTelnetCommands() abre su propia conexion) refleje lo
++ * que se escribio antes.
++ *
++ * A proposito NO modela "show running-config interface gpon-olt_S/L/P"
++ * (portRunningConfigCommand en zteCommands.ts) — esa sintaxis nunca se
++ * confirmo contra el equipo real (ver advertencia ahi mismo), asi que este
++ * simulador la trata como cualquier otro comando NO reconocido: la rechaza
++ * (ver el `default` mas abajo), igual que haria una CLI real con algo que
++ * no entiende. Si algun dia se confirma el formato real, se agrega aqui a
++ * proposito, con evidencia.
++ */
++export interface FakeOltCliEntry {
++  onuType: string;
++  serial: string;
++  description: string;
++  tcontProfile?: string;
++  trafficProfile?: string;
++  vlan?: number;
++}
++
++export type InterceptResult =
++  | { action: 'reject'; message: string }
++  | { action: 'hang' }
++  | { action: 'close' }
++  | { action: 'closeAfterApply' }
++  | { action: 'customResponse'; text: string }
++  | null
++  | undefined;
++
++export interface FakeOltCliOptions {
++  initialEntries?: Record<string, FakeOltCliEntry>;
++  /**
++   * Se llama con CADA linea de comando antes de mandar su respuesta —
++   * {action:'reject'} simula un rechazo CLI real a mitad de secuencia (el
++   * efecto de esa linea NO se aplica); {action:'hang'} nunca responde
++   * (timeout real); {action:'close'} cierra la conexion SIN aplicar el
++   * efecto de esa linea (igual que antes de que el comando llegara a
++   * procesarse); {action:'closeAfterApply'} SI aplica el efecto normal de
++   * la linea (ej. de verdad registra la ONU) pero la conexion se cierra
++   * ANTES de que la confirmacion vuelva — simula que el comando SI llego a
++   * la OLT real y se aplico, solo que la respuesta nunca volvio. Devolver
++   * null/undefined deja el comportamiento normal del simulador.
++   */
++  intercept?: (line: string) => InterceptResult;
++  /** Cada linea de comando recibida, en orden — para que el test cuente cuantas veces se escribio de verdad. */
++  onCommand?: (line: string) => void;
++  /**
++   * Al RENDERIZAR running-config (nunca al guardar internamente), fuerza
++   * estos campos a un valor distinto del realmente aplicado — simula que la
++   * OLT real termino con una configuracion diferente de la pedida (ej. un
++   * firmware que redondea/trunca un valor), para probar que la verificacion
++   * posterior lo detecta en vez de asumir exito.
++   */
++  renderOverride?: Partial<{ onuType: string; vlan: number; tcontProfile: string; trafficProfile: string }>;
++  /**
++   * Claves ("shelf/slot/port:onuId") que existen en `entries` pero se
++   * OMITEN de "show gpon onu state" (nunca de "show running-config") — para
++   * simular una ONU que esta configurada pero que el escaneo de ESTADO no
++   * reporta (ej. offline en ese momento). Prueba que resolveFreeOnuId()
++   * combine ambas fuentes en vez de confiar solo en el escaneo de estado.
++   */
++  omitFromStateScan?: string[];
++}
++
++type Mode = 'top' | 'config' | 'if-olt' | 'if-onu';
++
++export function startFakeOltCli(opts: FakeOltCliOptions = {}) {
++  const entries = new Map<string, FakeOltCliEntry>(Object.entries(opts.initialEntries ?? {}));
++  let mode: Mode = 'top';
++  let currentOltRef: { shelf: number; slot: number; port: number } | null = null;
++  let currentOnuKey: string | null = null;
++  let hung = false;
++
++  function promptFor(m: Mode): string {
++    if (m === 'top') return TEST_PROMPT;
++    if (m === 'config') return 'ZXAN(config)#';
++    return 'ZXAN(config-if)#';
++  }
++
++  function buildGlobalState(): string {
++    const omit = new Set(opts.omitFromStateScan ?? []);
++    const lines: string[] = [];
++    for (const key of entries.keys()) {
++      if (omit.has(key)) continue;
++      lines.push(`${key}    enable       enable      working      1(GPON)`);
++    }
++    return lines.join('\r\n');
++  }
++
++  function buildRunningConfig(): string {
++    const byOlt = new Map<string, string[]>();
++    for (const [key, entry] of entries) {
++      const pos = key.split(':')[0];
++      if (!byOlt.has(pos)) byOlt.set(pos, []);
++      const onuType = opts.renderOverride?.onuType ?? entry.onuType;
++      byOlt.get(pos)!.push(`onu ${key.split(':')[1]} type ${onuType} sn ${entry.serial}`);
++    }
++    const blocks: string[] = [];
++    for (const [pos, lines] of byOlt) {
++      blocks.push(`interface gpon-olt_${pos}`, ...lines.map((l) => ` ${l}`), '!');
++    }
++    for (const [key, entry] of entries) {
++      const tcontProfile = opts.renderOverride?.tcontProfile ?? entry.tcontProfile;
++      const trafficProfile = opts.renderOverride?.trafficProfile ?? entry.trafficProfile;
++      const vlan = opts.renderOverride?.vlan ?? entry.vlan;
++      blocks.push(`interface gpon-onu_${key}`);
++      blocks.push(` description ${entry.description || ''}`);
++      if (tcontProfile) blocks.push(` tcont 1 profile ${tcontProfile}`);
++      blocks.push(' gemport 1 tcont 1');
++      if (trafficProfile) blocks.push(` gemport 1 traffic-limit downstream ${trafficProfile}`);
++      if (vlan != null) blocks.push(` service-port 1 vport 1 user-vlan ${vlan} vlan ${vlan}`);
++      blocks.push('!');
++    }
++    return blocks.join('\r\n');
++  }
++
++  return startFakeOlt({
++    handleCommand(line: string, socket: Socket) {
++      opts.onCommand?.(line);
++      if (hung) return; // conexion ya "colgada" a proposito, no responder mas
++
++      const intercepted = opts.intercept?.(line);
++      if (intercepted?.action === 'hang') {
++        hung = true;
++        return;
++      }
++      if (intercepted?.action === 'close') {
++        socket.end();
++        return;
++      }
++      if (intercepted?.action === 'reject') {
++        socket.write(`\r\n${intercepted.message}\r\n${promptFor(mode === 'top' ? 'config' : mode)}`);
++        return;
++      }
++      if (intercepted?.action === 'customResponse') {
++        // Para simular una respuesta con un formato totalmente inesperado
++        // (ej. para probar looksLikeParseFailure/scan_unreliable de extremo
++        // a extremo) sin modelar ese formato como un comportamiento "real".
++        socket.write(`\r\n${intercepted.text}\r\n${promptFor(mode)}`);
++        return;
++      }
++
++      // closeAfterApply: deja que el resto de esta funcion aplique el
++      // efecto normal de la linea (entries.set, cambios de modo, etc.) pero
++      // cualquier `send(...)` de aqui en adelante cierra la conexion en vez
++      // de mandar la respuesta — el comando SI se proceso, solo que la
++      // confirmacion nunca vuelve (igual que un timeout/corte real).
++      const closeAfterApply = intercepted?.action === 'closeAfterApply';
++      const send = (text: string) => {
++        if (closeAfterApply) socket.end();
++        else socket.write(text);
++      };
++
++      // 'enable' es siempre el primer comando real de cualquier secuencia
++      // (ver zteCommands.ts) — se usa como señal de "arranca una conexion
++      // logica nueva" para resetear la navegacion de modos (nunca el
++      // registro de ONUs, que debe sobrevivir entre conexiones).
++      if (line === 'enable') {
++        mode = 'top';
++        currentOltRef = null;
++        currentOnuKey = null;
++        send(`\r\n${TEST_PROMPT}`);
++        return;
++      }
++
++      if (line === 'configure terminal') {
++        mode = 'config';
++        send(`\r\nZXAN(config)#`);
++        return;
++      }
++
++      if (line === 'exit') {
++        mode = mode === 'top' ? 'top' : 'config';
++        currentOltRef = null;
++        currentOnuKey = null;
++        send(`\r\n${promptFor(mode)}`);
++        return;
++      }
++
++      let m = line.match(/^interface gpon-olt_(\d+)\/(\d+)\/(\d+)$/);
++      if (m) {
++        currentOltRef = { shelf: Number(m[1]), slot: Number(m[2]), port: Number(m[3]) };
++        mode = 'if-olt';
++        send(`\r\nZXAN(config-if)#`);
++        return;
++      }
++
++      m = line.match(/^onu (\d+) type (\S+) sn (\S+)$/);
++      if (m && mode === 'if-olt' && currentOltRef) {
++        const onuId = Number(m[1]);
++        const key = `${currentOltRef.shelf}/${currentOltRef.slot}/${currentOltRef.port}:${onuId}`;
++        entries.set(key, { onuType: m[2], serial: m[3], description: '' });
++        send(`\r\nZXAN(config-if)#`);
++        return;
++      }
++
++      m = line.match(/^interface gpon-onu_(\d+)\/(\d+)\/(\d+):(\d+)$/);
++      if (m) {
++        currentOnuKey = `${m[1]}/${m[2]}/${m[3]}:${m[4]}`;
++        if (!entries.has(currentOnuKey)) entries.set(currentOnuKey, { onuType: '', serial: '', description: '' });
++        mode = 'if-onu';
++        send(`\r\nZXAN(config-if)#`);
++        return;
++      }
++
++      if (mode === 'if-onu' && currentOnuKey) {
++        const entry = entries.get(currentOnuKey)!;
++        let mm = line.match(/^description\s+"?(.*?)"?$/);
++        if (mm) {
++          entry.description = mm[1];
++          send(`\r\nZXAN(config-if)#`);
++          return;
++        }
++        mm = line.match(/^tcont 1 profile (\S+)$/);
++        if (mm) {
++          entry.tcontProfile = mm[1];
++          send(`\r\nZXAN(config-if)#`);
++          return;
++        }
++        if (line === 'gemport 1 tcont 1') {
++          send(`\r\nZXAN(config-if)#`);
++          return;
++        }
++        mm = line.match(/^gemport 1 traffic-limit downstream (\S+)$/);
++        if (mm) {
++          entry.trafficProfile = mm[1];
++          send(`\r\nZXAN(config-if)#`);
++          return;
++        }
++        mm = line.match(/^service-port 1 vport 1 user-vlan (\d+) vlan \d+$/);
++        if (mm) {
++          entry.vlan = Number(mm[1]);
++          send(`\r\nZXAN(config-if)#`);
++          return;
++        }
++      }
++
++      if (line === 'show gpon onu state') {
++        send(`\r\n${buildGlobalState()}\r\n${TEST_PROMPT}`);
++        return;
++      }
++      if (line === 'show running-config') {
++        send(`\r\n${buildRunningConfig()}\r\n${TEST_PROMPT}`);
++        return;
++      }
++
++      // Cualquier otro comando (incluido "show running-config interface
++      // gpon-olt_S/L/P", NUNCA confirmado contra el equipo real — ver
++      // advertencia en zteCommands.ts) se RECHAZA como lo haria una CLI
++      // real con algo que no reconoce — nunca se simula un exito silencioso
++      // para un comando que este simulador no tiene evidencia de como se
++      // comporta de verdad.
++      send(`\r\n% Unrecognized command\r\n${promptFor(mode)}`);
++    },
++  });
++}
+diff --git a/server/src/services/__tests__/fakeProvisioningStore.ts b/server/src/services/__tests__/fakeProvisioningStore.ts
+new file mode 100644
+index 0000000..92f98e9
+--- /dev/null
++++ b/server/src/services/__tests__/fakeProvisioningStore.ts
+@@ -0,0 +1,137 @@
++import type {
++  ProvisioningStore,
++  ProvisioningOperationRow,
++  NewOperationInput,
++  InsertOperationResult,
++  StoreResult,
++  OntRow,
++  NewOntInput,
++} from '../oltProvisioningStore';
++
++/**
++ * Store en memoria para probar oltProvisioningHandler.ts (las rutas reales,
++ * sin Supabase) — ver server/src/services/__tests__/oltProvisioningHandler.test.ts.
++ * Reproduce a proposito el mismo comportamiento de "insert falla por clave
++ * duplicada" que el Postgres real (constraint UNIQUE olt_device_id+idempotency_key)
++ * para poder probar la resolucion de carreras (requisito 2 de la revision externa).
++ */
++export function createFakeProvisioningStore() {
++  const operations = new Map<string, ProvisioningOperationRow>();
++  const onts = new Map<string, OntRow>();
++  let nextOpId = 1;
++  let nextOntId = 1;
++
++  /** Permite forzar que la PROXIMA llamada a appendStep/updateOperation falle, para probar el manejo de errores de persistencia (requisito 5). */
++  const failures = {
++    appendStepOnce: false,
++    updateOperationOnce: false,
++    insertOperationOnce: false,
++  };
++
++  function keyFor(deviceId: string, idempotencyKey: string): string {
++    return `${deviceId}::${idempotencyKey}`;
++  }
++
++  const store: ProvisioningStore = {
++    async findOperationByKey(deviceId, idempotencyKey) {
++      const op = [...operations.values()].find((o) => o.olt_device_id === deviceId && o.idempotency_key === idempotencyKey);
++      return { data: op ?? null, error: null };
++    },
++
++    async findOperationById(id, deviceId) {
++      const op = operations.get(id);
++      if (!op || op.olt_device_id !== deviceId) return { data: null, error: null };
++      return { data: op, error: null };
++    },
++
++    async insertOperation(input: NewOperationInput): Promise<InsertOperationResult> {
++      if (failures.insertOperationOnce) {
++        failures.insertOperationOnce = false;
++        return { data: null, error: 'fallo simulado de insercion', duplicateKey: false };
++      }
++      const existingKey = keyFor(input.olt_device_id, input.idempotency_key);
++      const alreadyThere = [...operations.values()].some(
++        (o) => o.olt_device_id === input.olt_device_id && o.idempotency_key === input.idempotency_key,
++      );
++      if (alreadyThere) {
++        return { data: null, error: 'duplicate key value violates unique constraint', duplicateKey: true };
++      }
++      const now = new Date().toISOString();
++      const row: ProvisioningOperationRow = {
++        id: `op-${nextOpId++}`,
++        idempotency_key: input.idempotency_key,
++        olt_device_id: input.olt_device_id,
++        serial: input.serial,
++        frame: input.frame,
++        slot: input.slot,
++        port: input.port,
++        onu_id: null,
++        client_id: input.client_id,
++        contract_id: input.contract_id,
++        requested: input.requested,
++        status: 'pending',
++        steps: [],
++        ont_db_id: null,
++        error: null,
++        created_at: now,
++        updated_at: now,
++      };
++      operations.set(row.id, row);
++      void existingKey;
++      return { data: row, error: null, duplicateKey: false };
++    },
++
++    async appendStep(operationId, stage, status, detail): Promise<StoreResult<ProvisioningOperationRow>> {
++      if (failures.appendStepOnce) {
++        failures.appendStepOnce = false;
++        return { data: null, error: 'fallo simulado al guardar la etapa' };
++      }
++      const op = operations.get(operationId);
++      if (!op) return { data: null, error: `operacion ${operationId} no existe` };
++      // Simula el comportamiento ATOMICO real (un solo UPDATE en Postgres,
++      // ver migracion fase136b): lee el valor MAS RECIENTE de `op.steps`
++      // (no una copia vieja) y le agrega encima — como este store es
++      // single-threaded en Node, esto ya es inherentemente seguro frente a
++      // la carrera que afectaba al viejo SELECT+UPDATE desde el backend.
++      op.steps = [...op.steps, { stage, status, at: new Date().toISOString(), detail }];
++      op.updated_at = new Date().toISOString();
++      return { data: op, error: null };
++    },
++
++    async updateOperation(id, patch): Promise<StoreResult<ProvisioningOperationRow>> {
++      if (failures.updateOperationOnce) {
++        failures.updateOperationOnce = false;
++        return { data: null, error: 'fallo simulado al actualizar la operacion' };
++      }
++      const op = operations.get(id);
++      if (!op) return { data: null, error: `operacion ${id} no existe` };
++      Object.assign(op, patch, { updated_at: new Date().toISOString() });
++      return { data: op, error: null };
++    },
++
++    async upsertOnt(input: NewOntInput): Promise<StoreResult<OntRow>> {
++      const existing = [...onts.values()].find(
++        (o) => o.olt_device_id === input.olt_device_id && o.frame === input.frame && o.slot === input.slot && o.port === input.port && o.ont_id === input.ont_id,
++      );
++      if (existing) {
++        Object.assign(existing, input);
++        return { data: existing, error: null };
++      }
++      const row: OntRow = { id: `ont-${nextOntId++}`, ...input };
++      onts.set(row.id, row);
++      return { data: row, error: null };
++    },
++
++    async getOntById(id) {
++      return { data: onts.get(id) ?? null, error: null };
++    },
++  };
++
++  return {
++    store,
++    failures,
++    /** Para que los tests inspeccionen el estado interno sin pasar por la interfaz publica. */
++    _operations: operations,
++    _onts: onts,
++  };
++}
+diff --git a/server/src/services/__tests__/oltProvisioningService.test.ts b/server/src/services/__tests__/oltProvisioningService.test.ts
+new file mode 100644
+index 0000000..a9349dd
+--- /dev/null
++++ b/server/src/services/__tests__/oltProvisioningService.test.ts
+@@ -0,0 +1,595 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { runTelnetCommands, type TelnetTarget } from '../../telnet/client';
++import { withOltLock } from '../oltTelnetLock';
++import {
++  provisionOnt,
++  runProvisioningPipeline,
++  validateProvisionInput,
++  findExistingBySerial,
++  resolveFreeOnuId,
++  collectUsedOnuIds,
++  looksLikeParseFailure,
++  verifyProvisionedOnt,
++  classifyWriteError,
++  isOltStageOk,
++  isPipelineComplete,
++  outcomeNeedsReconciliation,
++  type ProvisionDeps,
++  type ProvisionParams,
++} from '../oltProvisioningService';
++import { startFakeOltCli, type FakeOltCliOptions } from './fakeOltCli';
++import { TEST_USERNAME, TEST_PASSWORD } from '../../telnet/__tests__/fakeOltServer';
++import { parseFullRunningConfig } from '../../ssh/zteParsers';
++
++let deviceCounter = 0;
++/** deviceId unico por test -- withOltLock mantiene colas por deviceId; nunca debe compartirse entre tests. */
++function nextDeviceId(): string {
++  deviceCounter += 1;
++  return `test-device-${deviceCounter}`;
++}
++
++function makeDeps(port: number, deviceId: string, stageLog: { stage: string; status: string; detail?: string }[] = []): ProvisionDeps {
++  const target: TelnetTarget = { host: '127.0.0.1', port, username: TEST_USERNAME, password: TEST_PASSWORD };
++  return {
++    withOltLock: <T>(fn: () => Promise<T>) => withOltLock(deviceId, fn),
++    // timeout corto a proposito: todas las respuestas del simulador son casi
++    // instantaneas salvo donde el propio test decide colgarlas/cerrarlas.
++    runTelnet: (commands, _opts) => runTelnetCommands(target, commands, { timeoutMs: 600 }),
++    onStage: (stage, status, detail) => {
++      stageLog.push({ stage, status, detail });
++    },
++  };
++}
++
++function baseParams(overrides: Partial<ProvisionParams> = {}): ProvisionParams {
++  return {
++    ref: { shelf: 1, slot: 2, port: 2 },
++    serial: 'HWTCABD21CB4',
++    onuType: 'GPT-2741GNAC',
++    vlan: 120,
++    description: 'Cliente de prueba',
++    tcontProfile: 'SMARTOLT-100M-UP',
++    trafficProfile: 'SMARTOLT-100M-DOWN',
++    ...overrides,
++  };
++}
++
++async function withServer<T>(opts: FakeOltCliOptions, fn: (port: number) => Promise<T>): Promise<T> {
++  const { port, close } = await startFakeOltCli(opts);
++  try {
++    return await fn(port);
++  } finally {
++    await close();
++  }
++}
++
++// ---------------------------------------------------------------------------
++// Pruebas puras (sin sockets)
++// ---------------------------------------------------------------------------
++
++test('validateProvisionInput: rechaza cada campo invalido con un mensaje especifico', () => {
++  assert.match(validateProvisionInput(baseParams({ serial: 'ab' }))!, /serial/i);
++  assert.match(validateProvisionInput(baseParams({ onuType: '' }))!, /tipo de onu/i);
++  assert.match(validateProvisionInput(baseParams({ vlan: 0 }))!, /vlan/i);
++  assert.match(validateProvisionInput(baseParams({ vlan: 5000 }))!, /vlan/i);
++  assert.match(validateProvisionInput(baseParams({ tcontProfile: '' }))!, /perfiles/i);
++  assert.match(validateProvisionInput(baseParams({ ref: { shelf: 1, slot: 99, port: 2 } }))!, /slot/i);
++  assert.match(validateProvisionInput(baseParams({ forcedOnuId: 0 }))!, /id de onu/i);
++  assert.match(validateProvisionInput(baseParams({ forcedOnuId: 999 }))!, /id de onu/i);
++  assert.equal(validateProvisionInput(baseParams()), null, 'una solicitud valida no debe reportar error');
++});
++
++test('findExistingBySerial: encuentra la posicion real o devuelve null', () => {
++  const raw = [
++    'interface gpon-olt_1/2/2',
++    ' onu 5 type GPT-2741GNAC sn HWTCABD21CB4',
++    '!',
++    'interface gpon-onu_1/2/2:5',
++    ' description cliente',
++    ' tcont 1 profile X',
++    ' gemport 1 tcont 1',
++    ' gemport 1 traffic-limit downstream Y',
++    ' service-port 1 vport 1 user-vlan 120 vlan 120',
++    '!',
++  ].join('\n');
++  const config = parseFullRunningConfig(raw);
++  const found = findExistingBySerial(config, 'HWTCABD21CB4');
++  assert.deepEqual(found && { shelf: found.shelf, slot: found.slot, port: found.port, onuId: found.onuId }, {
++    shelf: 1,
++    slot: 2,
++    port: 2,
++    onuId: 5,
++  });
++  assert.equal(findExistingBySerial(config, 'NOEXISTE000'), null);
++});
++
++test('resolveFreeOnuId: devuelve el primero libre, y null si esta todo ocupado', () => {
++  assert.equal(resolveFreeOnuId(new Set([1, 2, 4]), 1, 5), 3);
++  assert.equal(resolveFreeOnuId(new Set([1, 2, 3, 4, 5]), 1, 5), null);
++});
++
++test('verifyProvisionedOnt: sin diferencias cuando todo coincide, y reporta cada campo distinto', () => {
++  const entry = { onuType: 'GPT-2741GNAC', serial: 'HWTCABD21CB4', name: null, description: null, tcontProfile: 'UP', trafficProfile: 'DOWN', vlan: 120 };
++  const expected = { serial: 'HWTCABD21CB4', onuType: 'GPT-2741GNAC', vlan: 120, tcontProfile: 'UP', trafficProfile: 'DOWN' };
++  assert.deepEqual(verifyProvisionedOnt(entry, expected), []);
++
++  const mismatches = verifyProvisionedOnt({ ...entry, vlan: 999, tcontProfile: 'OTRO' }, expected);
++  assert.equal(mismatches.length, 2);
++  assert.ok(mismatches.some((m) => m.field === 'vlan' && m.actual === '999'));
++  assert.ok(mismatches.some((m) => m.field === 'tcontProfile' && m.actual === 'OTRO'));
++
++  assert.deepEqual(verifyProvisionedOnt(undefined, expected), [{ field: 'existencia', expected: 'registrada en la OLT', actual: null }]);
++});
++
++test('classifyWriteError: distingue un rechazo CLI real de cualquier otro fallo', () => {
++  assert.equal(classifyWriteError(new Error('La OLT rechazo el comando #3/4 (verbo "tcont"): %Error 20204')), 'rejected');
++  assert.equal(classifyWriteError(new Error('La conexion Telnet se cerro antes de completar los comandos')), 'uncertain');
++  assert.equal(classifyWriteError(new Error('Timeout de 30000ms esperando respuesta del equipo')), 'uncertain');
++  assert.equal(classifyWriteError(new Error('ECONNREFUSED')), 'uncertain');
++});
++
++// ---------------------------------------------------------------------------
++// 1) Aprovisionamiento exitoso con verificacion posterior
++// ---------------------------------------------------------------------------
++
++test('escenario 1 — aprovisionamiento exitoso: registra, verifica, y reporta cada etapa', async () => {
++  await withServer({}, async (port) => {
++    const stages: { stage: string; status: string }[] = [];
++    const outcome = await provisionOnt(makeDeps(port, nextDeviceId(), stages), baseParams());
++
++    assert.deepEqual(outcome, { kind: 'registered', onuId: 1 });
++    assert.deepEqual(
++      stages.map((s) => `${s.stage}:${s.status}`),
++      ['validate:ok', 'scan:started', 'scan:ok', 'resolve_id:ok', 'write:started', 'write:ok', 'verify:started', 'verify:ok'],
++    );
++  });
++});
++
++// ---------------------------------------------------------------------------
++// 2) Comando rechazado y configuracion parcial
++// ---------------------------------------------------------------------------
++
++test('escenario 2 — comando rechazado a mitad de secuencia: reporta "rejected" y detiene el resto (configuracion parcial, nunca "exito")', async () => {
++  const commandsReceived: string[] = [];
++  await withServer(
++    {
++      onCommand: (line) => commandsReceived.push(line),
++      intercept: (line) => (line.startsWith('tcont 1 profile') ? { action: 'reject', message: '%Error 20204: Ambiguous command found' } : null),
++    },
++    async (port) => {
++      const stages: { stage: string; status: string; detail?: string }[] = [];
++      const outcome = await provisionOnt(makeDeps(port, nextDeviceId(), stages), baseParams());
++
++      assert.equal(outcome.kind, 'rejected');
++      assert.match((outcome as { message: string }).message, /rechazo el comando/);
++      assert.equal((outcome as { onuId: number }).onuId, 1, 'el id intentado debe quedar en el outcome, aunque el comando se haya rechazado');
++      assert.ok(outcomeNeedsReconciliation(outcome), 'un rechazo CLI no prueba que los comandos ANTERIORES no se aplicaran — sigue siendo reconciliable');
++      assert.ok(stages.some((s) => s.stage === 'resolve_id' && s.detail === '1'));
++      assert.ok(stages.some((s) => s.stage === 'write' && s.status === 'failed'));
++
++      // La secuencia se detuvo justo despues del rechazo: los comandos
++      // POSTERIORES (gemport/service-port/exit final) nunca se mandaron.
++      assert.ok(!commandsReceived.includes('gemport 1 tcont 1'));
++      assert.ok(!commandsReceived.some((c) => c.startsWith('service-port')));
++    },
++  );
++});
++
++// ---------------------------------------------------------------------------
++// 3) Timeout o conexion perdida despues de una escritura
++// ---------------------------------------------------------------------------
++
++test('escenario 3a — la conexion se cierra ANTES de aplicar el alta: resultado "uncertain", nunca "fallo" ni "exito", con el id intentado', async () => {
++  await withServer(
++    { intercept: (line) => (line.startsWith('onu ') && line.includes(' sn ') ? { action: 'close' } : null) },
++    async (port) => {
++      const stages: { stage: string; status: string }[] = [];
++      const outcome = await provisionOnt(makeDeps(port, nextDeviceId(), stages), baseParams());
++
++      assert.equal(outcome.kind, 'uncertain');
++      assert.match((outcome as { message: string }).message, /se cerro antes de completar/);
++      assert.equal((outcome as { onuId: number }).onuId, 1);
++      assert.ok(stages.some((s) => s.stage === 'write' && s.status === 'uncertain'));
++    },
++  );
++});
++
++test('escenario 3b — timeout real de escritura (nunca responde): resultado "uncertain", con el id intentado', async () => {
++  await withServer(
++    { intercept: (line) => (line.startsWith('onu ') && line.includes(' sn ') ? { action: 'hang' } : null) },
++    async (port) => {
++      const outcome = await provisionOnt(makeDeps(port, nextDeviceId()), baseParams());
++      assert.equal(outcome.kind, 'uncertain');
++      assert.match((outcome as { message: string }).message, /Timeout de/);
++      assert.equal((outcome as { onuId: number }).onuId, 1);
++    },
++  );
++});
++
++test('escenario 3c — reconciliar un "uncertain" cuando la escritura SI llego a aplicarse: el reescaneo lo descubre', async () => {
++  // closeAfterApply: el simulador SI registra la ONU (como pasaria si el
++  // comando real llego a la OLT) pero la conexion muere antes de que la
++  // confirmacion vuelva — el primer intento debe ser "uncertain".
++  await withServer(
++    { intercept: (line) => (line.startsWith('onu ') && line.includes(' sn ') ? { action: 'closeAfterApply' } : null) },
++    async (port) => {
++      const deviceId = nextDeviceId();
++      const first = await provisionOnt(makeDeps(port, deviceId), baseParams());
++      assert.equal(first.kind, 'uncertain');
++      assert.equal((first as { onuId: number }).onuId, 1);
++
++      // Reconciliar (= volver a llamar con los mismos datos) reescanea
++      // ANTES de decidir nada — como el alta SI se aplico, esta vez la
++      // encuentra en la misma posicion. Pero la escritura se corto a medio
++      // camino (nunca llego a "tcont profile"/"vlan"), asi que la config
++      // esta INCOMPLETA: se reporta como conflicto (misma posicion, otra
++      // config), NUNCA como "already_registered" sin verificar los campos.
++      const reconciled = await provisionOnt(makeDeps(port, deviceId), baseParams());
++      assert.equal(reconciled.kind, 'conflict_same_position_different_config');
++      assert.equal((reconciled as { onuId: number }).onuId, 1);
++      const mismatches = (reconciled as { mismatches: { field: string }[] }).mismatches;
++      assert.ok(mismatches.some((m) => m.field === 'tcontProfile'), 'debe detectar que el perfil tcont nunca se aplico (secuencia cortada)');
++    },
++  );
++});
++
++test('escenario 3d — reconciliar un "uncertain" cuando la escritura NUNCA se aplico: el reescaneo confirma que sigue libre y la completa', async () => {
++  // El cierre SOLO pasa la primera vez que se manda el alta — el reintento
++  // (reconcile) debe comportarse normal, como si el problema de red que
++  // causo el "uncertain" ya no estuviera.
++  let onuAddAttempts = 0;
++  await withServer(
++    {
++      intercept: (line) => {
++        if (!(line.startsWith('onu ') && line.includes(' sn '))) return null;
++        onuAddAttempts += 1;
++        return onuAddAttempts === 1 ? { action: 'close' } : null;
++      },
++    },
++    async (port) => {
++      const deviceId = nextDeviceId();
++      const first = await provisionOnt(makeDeps(port, deviceId), baseParams());
++      assert.equal(first.kind, 'uncertain');
++
++      // Sin "closeAfterApply" la entrada NUNCA se creo — reconciliar debe
++      // completar el alta de verdad (no quedarse atascado en "incierto").
++      const reconciled = await provisionOnt(makeDeps(port, deviceId), baseParams());
++      assert.equal(reconciled.kind, 'registered');
++      assert.equal((reconciled as { onuId: number }).onuId, 1);
++    },
++  );
++});
++
++// ---------------------------------------------------------------------------
++// 4) Fallo de base de datos despues de configurar la OLT
++// ---------------------------------------------------------------------------
++
++test('escenario 4 — la OLT queda bien pero la BD falla: la OLT NO se revierte, el fallo queda aislado a esa etapa', async () => {
++  await withServer({}, async (port) => {
++    const deviceId = nextDeviceId();
++    const stageLog: { stage: string; status: string; detail?: string }[] = [];
++
++    const result = await runProvisioningPipeline({
++      provision: () => provisionOnt(makeDeps(port, deviceId), baseParams()),
++      persistDb: async () => {
++        throw new Error('Supabase: conexion rechazada');
++      },
++      onStage: (stage, status, detail) => {
++        stageLog.push({ stage, status, detail });
++      },
++    });
++
++    assert.equal(result.olt.kind, 'registered');
++    assert.equal(result.dbOk, false);
++    assert.match(result.dbError ?? '', /Supabase/);
++    assert.ok(stageLog.some((s) => s.stage === 'db' && s.status === 'failed'));
++
++    // La OLT sigue registrada pese al fallo de BD — nunca se intento un
++    // "no onu" (borrado) para revertir: confirmado reconsultando la OLT.
++    const recheck = await provisionOnt(makeDeps(port, deviceId), baseParams());
++    assert.equal(recheck.kind, 'already_registered');
++  });
++});
++
++// ---------------------------------------------------------------------------
++// 5) Fallo de MikroTik despues de completar la OLT
++// ---------------------------------------------------------------------------
++
++test('escenario 5 — la OLT y la BD quedan bien pero MikroTik falla: solo esa etapa queda pendiente', async () => {
++  await withServer({}, async (port) => {
++    const deviceId = nextDeviceId();
++    const stageLog: { stage: string; status: string; detail?: string }[] = [];
++
++    const result = await runProvisioningPipeline({
++      provision: () => provisionOnt(makeDeps(port, deviceId), baseParams()),
++      persistDb: async () => {},
++      syncMikrotik: async () => {
++        throw new Error('RouterOS: no se pudo conectar');
++      },
++      onStage: (stage, status, detail) => {
++        stageLog.push({ stage, status, detail });
++      },
++    });
++
++    assert.equal(result.olt.kind, 'registered');
++    assert.equal(result.dbOk, true);
++    assert.equal(result.mikrotikOk, false);
++    assert.match(result.mikrotikError ?? '', /RouterOS/);
++    assert.ok(stageLog.some((s) => s.stage === 'db' && s.status === 'ok'));
++    assert.ok(stageLog.some((s) => s.stage === 'mikrotik' && s.status === 'failed'));
++  });
++});
++
++test('escenario 5b — OLT, BD y MikroTik quedan bien pero WAN/PPPoE falla: solo esa etapa queda pendiente, el resto no se reporta como fallido', async () => {
++  await withServer({}, async (port) => {
++    const deviceId = nextDeviceId();
++    const stageLog: { stage: string; status: string; detail?: string }[] = [];
++
++    const result = await runProvisioningPipeline({
++      provision: () => provisionOnt(makeDeps(port, deviceId), baseParams()),
++      persistDb: async () => {},
++      syncMikrotik: async () => {},
++      syncWan: async () => {
++        throw new Error('La OLT rechazo el comando de WAN/PPPoE');
++      },
++      onStage: (stage, status, detail) => {
++        stageLog.push({ stage, status, detail });
++      },
++    });
++
++    assert.equal(result.olt.kind, 'registered');
++    assert.equal(result.dbOk, true);
++    assert.equal(result.mikrotikOk, true);
++    assert.equal(result.wanOk, false);
++    assert.match(result.wanError ?? '', /WAN\/PPPoE/);
++    assert.equal(isPipelineComplete(result), false, 'no debe marcarse completo con WAN pendiente');
++    assert.ok(stageLog.some((s) => s.stage === 'wan' && s.status === 'failed'));
++  });
++});
++
++test('isOltStageOk: solo "registered"/"already_registered" habilitan seguir con BD/MikroTik/WAN', () => {
++  assert.equal(isOltStageOk({ kind: 'registered', onuId: 1 }), true);
++  assert.equal(isOltStageOk({ kind: 'already_registered', onuId: 1 }), true);
++  assert.equal(isOltStageOk({ kind: 'uncertain', onuId: 1, message: 'x' }), false);
++  assert.equal(isOltStageOk({ kind: 'rejected', onuId: 1, message: 'x' }), false);
++  assert.equal(isOltStageOk({ kind: 'verify_uncertain', onuId: 1, message: 'x' }), false);
++  assert.equal(isOltStageOk({ kind: 'capacity_full' }), false);
++});
++
++test('outcomeNeedsReconciliation: incierto/rechazado/verify_uncertain/verify_mismatch si, el resto no', () => {
++  assert.equal(outcomeNeedsReconciliation({ kind: 'uncertain', onuId: 1, message: 'x' }), true);
++  assert.equal(outcomeNeedsReconciliation({ kind: 'rejected', onuId: 1, message: 'x' }), true);
++  assert.equal(outcomeNeedsReconciliation({ kind: 'verify_uncertain', onuId: 1, message: 'x' }), true);
++  assert.equal(outcomeNeedsReconciliation({ kind: 'verify_mismatch', onuId: 1, mismatches: [] }), true);
++  assert.equal(outcomeNeedsReconciliation({ kind: 'registered', onuId: 1 }), false);
++  assert.equal(outcomeNeedsReconciliation({ kind: 'capacity_full' }), false);
++  assert.equal(outcomeNeedsReconciliation({ kind: 'conflict_elsewhere', at: { shelf: 1, slot: 1, port: 1, onuId: 1 } }), false);
++});
++
++test('isPipelineComplete: exige OLT ok + las 3 etapas (db/mikrotik/wan, cuando se pidieron)', () => {
++  assert.equal(isPipelineComplete({ olt: { kind: 'registered', onuId: 1 }, dbOk: true, mikrotikOk: true, wanOk: true }), true);
++  assert.equal(isPipelineComplete({ olt: { kind: 'registered', onuId: 1 }, dbOk: false, mikrotikOk: true, wanOk: true }), false);
++  assert.equal(isPipelineComplete({ olt: { kind: 'registered', onuId: 1 }, dbOk: true, mikrotikOk: true, wanOk: false }), false);
++  assert.equal(isPipelineComplete({ olt: { kind: 'uncertain', onuId: 1, message: 'x' }, dbOk: true, mikrotikOk: true, wanOk: true }), false);
++});
++
++// ---------------------------------------------------------------------------
++// 6) Reintento y doble solicitud sin duplicados
++// ---------------------------------------------------------------------------
++
++test('escenario 6a — doble solicitud CONCURRENTE (doble clic): un solo comando de alta real llega a la OLT', async () => {
++  const commandsReceived: string[] = [];
++  await withServer({ onCommand: (l) => commandsReceived.push(l) }, async (port) => {
++    const deviceId = nextDeviceId();
++    const deps1 = makeDeps(port, deviceId);
++    const deps2 = makeDeps(port, deviceId);
++
++    const [r1, r2] = await Promise.all([provisionOnt(deps1, baseParams()), provisionOnt(deps2, baseParams())]);
++
++    const kinds = [r1.kind, r2.kind].sort();
++    assert.deepEqual(kinds, ['already_registered', 'registered']);
++    const onuIds = new Set([(r1 as { onuId: number }).onuId, (r2 as { onuId: number }).onuId]);
++    assert.equal(onuIds.size, 1, 'ambas respuestas deben referirse a LA MISMA onu-id, nunca a dos distintas');
++
++    const altas = commandsReceived.filter((l) => l.startsWith('onu ') && l.includes(' sn '));
++    assert.equal(altas.length, 1, 'el comando real de alta solo debio mandarse una vez, pese a las dos solicitudes concurrentes');
++  });
++});
++
++test('escenario 6b — reintento SECUENCIAL (ej. el cliente reintenta tras creer que fallo): no duplica el alta', async () => {
++  const commandsReceived: string[] = [];
++  await withServer({ onCommand: (l) => commandsReceived.push(l) }, async (port) => {
++    const deviceId = nextDeviceId();
++    const first = await provisionOnt(makeDeps(port, deviceId), baseParams());
++    const second = await provisionOnt(makeDeps(port, deviceId), baseParams());
++
++    assert.equal(first.kind, 'registered');
++    assert.equal(second.kind, 'already_registered');
++    assert.equal((first as { onuId: number }).onuId, (second as { onuId: number }).onuId);
++
++    const altas = commandsReceived.filter((l) => l.startsWith('onu ') && l.includes(' sn '));
++    assert.equal(altas.length, 1, 'el comando real de alta solo debio mandarse una vez');
++  });
++});
++
++// ---------------------------------------------------------------------------
++// 7) Serial ya registrado e ID ocupado
++// ---------------------------------------------------------------------------
++
++test('escenario 7a — el serial ya esta registrado en OTRA posicion: conflicto, no se toca nada', async () => {
++  const commandsReceived: string[] = [];
++  await withServer(
++    {
++      initialEntries: {
++        '1/2/5:3': { onuType: 'GPT-2741GNAC', serial: 'HWTCABD21CB4', description: 'ya existente en otro puerto' },
++      },
++      onCommand: (l) => commandsReceived.push(l),
++    },
++    async (port) => {
++      const outcome = await provisionOnt(makeDeps(port, nextDeviceId()), baseParams()); // pide registrar en 1/2/2
++      assert.deepEqual(outcome, { kind: 'conflict_elsewhere', at: { shelf: 1, slot: 2, port: 5, onuId: 3 } });
++      assert.ok(!commandsReceived.some((c) => c.startsWith('onu ') && c.includes(' sn ')), 'no debio escribirse nada');
++    },
++  );
++});
++
++test('escenario 7b — el onu-id forzado ya esta ocupado por OTRO serial en esa posicion: conflicto, no se sobreescribe', async () => {
++  await withServer(
++    { initialEntries: { '1/2/2:1': { onuType: 'GPT-2741GNAC', serial: 'OTROSERIAL99', description: '' } } },
++    async (port) => {
++      const outcome = await provisionOnt(makeDeps(port, nextDeviceId()), baseParams({ forcedOnuId: 1 }));
++      assert.deepEqual(outcome, { kind: 'conflict_elsewhere', at: { shelf: 1, slot: 2, port: 2, onuId: 1 } });
++    },
++  );
++});
++
++test('escenario 7c — capacidad llena (todos los onu-id del puerto ocupados): se reporta, no se intenta escribir', async () => {
++  const initialEntries: Record<string, { onuType: string; serial: string; description: string }> = {};
++  for (let id = 1; id <= 127; id += 1) {
++    initialEntries[`1/2/2:${id}`] = { onuType: 'GPT-2741GNAC', serial: `SERIAL${String(id).padStart(6, '0')}`, description: '' };
++  }
++  const commandsReceived: string[] = [];
++  await withServer({ initialEntries, onCommand: (l) => commandsReceived.push(l) }, async (port) => {
++    const outcome = await provisionOnt(makeDeps(port, nextDeviceId()), baseParams({ serial: 'NUEVOSERIAL1' }));
++    assert.deepEqual(outcome, { kind: 'capacity_full' });
++    assert.ok(!commandsReceived.some((c) => c.startsWith('onu ') && c.includes('NUEVOSERIAL1')));
++  });
++});
++
++// ---------------------------------------------------------------------------
++// 8) Lectura posterior que no coincide con lo solicitado
++// ---------------------------------------------------------------------------
++
++test('escenario 8 — la OLT escribe algo distinto de lo pedido: la verificacion posterior lo detecta, NUNCA se reporta exito', async () => {
++  await withServer({ renderOverride: { vlan: 999, trafficProfile: 'OTRO-PERFIL' } }, async (port) => {
++    const stages: { stage: string; status: string; detail?: string }[] = [];
++    const outcome = await provisionOnt(makeDeps(port, nextDeviceId(), stages), baseParams());
++
++    assert.equal(outcome.kind, 'verify_mismatch');
++    const mismatches = (outcome as { mismatches: { field: string }[] }).mismatches;
++    assert.ok(mismatches.some((m) => m.field === 'vlan'));
++    assert.ok(mismatches.some((m) => m.field === 'trafficProfile'));
++    const verifyFailedStage = stages.find((s) => s.stage === 'verify' && s.status === 'failed');
++    assert.ok(verifyFailedStage, 'debe quedar registrada la etapa de verificacion fallida');
++    assert.match(verifyFailedStage!.detail ?? '', /vlan/);
++  });
++});
++
++test('escenario 8b — la RELECTURA de verificacion se cae (timeout/cierre): "verify_uncertain", no "fallo" ni "exito"', async () => {
++  // "show running-config" se manda DOS veces en una operacion normal (el
++  // escaneo previo, y la relectura de verificacion) — el problema debe
++  // afectar SOLO la segunda (la de verificacion), no la primera (si afectara
++  // a ambas, el escaneo previo mismo fallaria sin llegar siquiera a escribir).
++  let fullConfigReads = 0;
++  await withServer(
++    {
++      intercept: (line) => {
++        if (line !== 'show running-config') return null;
++        fullConfigReads += 1;
++        return fullConfigReads === 2 ? { action: 'hang' } : null;
++      },
++    },
++    async (port) => {
++      const stages: { stage: string; status: string }[] = [];
++      const outcome = await provisionOnt(makeDeps(port, nextDeviceId(), stages), baseParams());
++      assert.equal(outcome.kind, 'verify_uncertain');
++      assert.equal((outcome as { onuId: number }).onuId, 1);
++      assert.match((outcome as { message: string }).message, /Timeout de/);
++      assert.ok(stages.some((s) => s.stage === 'verify' && s.status === 'uncertain'));
++    },
++  );
++});
++
++// ---------------------------------------------------------------------------
++// Punto 6 (revision externa) — el simulador debe reflejar salidas
++// VERIFICADAS y rechazar cualquier comando que no haya confirmado contra el
++// equipo real, en vez de simular un exito silencioso.
++// ---------------------------------------------------------------------------
++
++test('el simulador RECHAZA un comando no confirmado (ej. "show running-config interface gpon-olt_...") en vez de simular un exito', async () => {
++  await withServer({}, async (port) => {
++    const target: TelnetTarget = { host: '127.0.0.1', port, username: TEST_USERNAME, password: TEST_PASSWORD };
++    await assert.rejects(
++      runTelnetCommands(target, ['enable', 'show running-config interface gpon-olt_1/2/2'], { timeoutMs: 2000 }),
++      /rechazo el comando/,
++      'el simulador debe rechazarlo como lo haria una CLI real con un comando no reconocido, no responder como si hubiera funcionado',
++    );
++  });
++});
++
++test('provisionOnt NUNCA usa portRunningConfigCommand (no confirmado) para verificar — usa el dump completo ya confirmado', async () => {
++  // Si provisionOnt llegara a usar el comando acotado por puerto, este test
++  // fallaria (el simulador lo rechaza, ver prueba de arriba) y el
++  // aprovisionamiento normal (escenario 1) jamas podria dar "registered".
++  // Esta prueba deja la intencion explicita, no solo implicita.
++  await withServer({}, async (port) => {
++    const outcome = await provisionOnt(makeDeps(port, nextDeviceId()), baseParams());
++    assert.equal(outcome.kind, 'registered', 'si esto falla, probablemente provisionOnt volvio a depender del comando no confirmado');
++  });
++});
++
++// ---------------------------------------------------------------------------
++// Punto 7 (revision externa) — proteger la eleccion de ID frente a escaneos
++// vacios/incompletos/no reconocidos; combinar config+estado.
++// ---------------------------------------------------------------------------
++
++test('looksLikeParseFailure: distingue "no hay nada" de "no se pudo interpretar"', () => {
++  assert.equal(looksLikeParseFailure('', 0), false, 'una respuesta realmente vacia no es un fallo de parsing, es un equipo sin nada');
++  assert.equal(looksLikeParseFailure('ZXAN#', 0), false, 'solo el prompt tambien es un "no hay nada" normal');
++  assert.equal(
++    looksLikeParseFailure('Algo con contenido real que no matcheo ningun patron conocido del parser'.padEnd(50, '.'), 0),
++    true,
++    'contenido sustancial sin NINGUNA fila interpretada es sospechoso',
++  );
++  assert.equal(looksLikeParseFailure('cualquier cosa larga', 3), false, 'si se parseo algo, no es un fallo de parsing');
++});
++
++test('collectUsedOnuIds: combina el escaneo de ESTADO y el de CONFIGURACION para el shelf/slot/port correcto', () => {
++  const globalOnts = [
++    { slot: 2, port: 2, onuId: 1 },
++    { slot: 2, port: 9, onuId: 1 }, // otro puerto — no debe contar
++  ];
++  const configRaw = ['interface gpon-olt_1/2/2', ' onu 5 type X sn Y', '!'].join('\n');
++  const fullConfig = parseFullRunningConfig(configRaw);
++  const used = collectUsedOnuIds(globalOnts, fullConfig, { shelf: 1, slot: 2, port: 2 });
++  assert.deepEqual([...used].sort(), [1, 5], 'debe incluir el id 1 (visto por estado) Y el 5 (visto solo por configuracion)');
++});
++
++test('escenario 7d — una ONU que el escaneo de ESTADO no reporta (pero SI la configuracion) nunca se pisa al elegir id libre', async () => {
++  await withServer(
++    {
++      initialEntries: { '1/2/2:1': { onuType: 'GPT-2741GNAC', serial: 'EXISTENTE0001', description: '' } },
++      // El escaneo de estado "no ve" la onu-id 1 en este puerto (simula que
++      // esta offline en este momento) — solo el running-config la reporta.
++      omitFromStateScan: ['1/2/2:1'],
++    },
++    async (port) => {
++      const outcome = await provisionOnt(makeDeps(port, nextDeviceId()), baseParams({ serial: 'NUEVOSERIAL2' }));
++      assert.equal(outcome.kind, 'registered');
++      assert.equal(
++        (outcome as { onuId: number }).onuId,
++        2,
++        'debe elegir el id 2 (no repetir el 1, que el escaneo de ESTADO no mostraba pero el de CONFIGURACION si)',
++      );
++    },
++  );
++});
++
++test('escenario 7e — el escaneo de estado vuelve con un formato totalmente inesperado: "scan_unreliable", nunca se elige un id ni se escribe nada', async () => {
++  const commandsReceived: string[] = [];
++  await withServer(
++    {
++      onCommand: (l) => commandsReceived.push(l),
++      intercept: (line) =>
++        line === 'show gpon onu state'
++          ? { action: 'customResponse', text: 'TOTALMENTE OTRO FORMATO DE RESPUESTA QUE EL PARSER NO RECONOCE EN ABSOLUTO, no una tabla vacia real' }
++          : null,
++    },
++    async (port) => {
++      const outcome = await provisionOnt(makeDeps(port, nextDeviceId()), baseParams());
++      assert.equal(outcome.kind, 'scan_unreliable');
++      assert.ok(!commandsReceived.some((c) => c.startsWith('onu ') && c.includes(' sn ')), 'no debio intentar escribir nada sin confiar en el escaneo');
++    },
++  );
++});
+diff --git a/server/src/services/oltProvisioningHandler.ts b/server/src/services/oltProvisioningHandler.ts
+new file mode 100644
+index 0000000..17d2724
+--- /dev/null
++++ b/server/src/services/oltProvisioningHandler.ts
+@@ -0,0 +1,439 @@
++import {
++  provisionOnt,
++  runProvisioningPipeline,
++  isOltStageOk,
++  isPipelineComplete,
++  type ProvisionDeps,
++  type ProvisionParams,
++  type ProvisionOutcome,
++} from './oltProvisioningService';
++import type { ProvisioningStore, ProvisioningOperationRow, OntRow, NewOperationInput } from './oltProvisioningStore';
++
++/**
++ * Orquestacion de "Autorizar y Activar" (Fase 2, correccion de revision
++ * externa) — unifica lo que antes eran dos bloques casi idénticos en
++ * routes/olt.ts (POST /provision y POST /reconcile): ambos ahora llaman a
++ * `runProvisionAndPipeline` sobre una `ProvisioningOperationRow` ya resuelta,
++ * la diferencia es solo COMO se llega a esa fila (crear/reusar vs releer una
++ * existente).
++ *
++ * Separado de las rutas Hono para poder probarlo con un store/mikrotik/wan
++ * FALSOS (ver __tests__/oltProvisioningHandler.test.ts) sin necesitar
++ * Supabase real ni un servidor Hono real — solo el motor de OLT sigue
++ * usando el simulador de Telnet (fakeOltCli.ts) ya construido en la Fase 2.
++ */
++
++export interface ProvisionRequestBody {
++  idempotencyKey: string;
++  shelf?: number;
++  slot: number;
++  port: number;
++  serial: string;
++  onuType: string;
++  description?: string;
++  vlan: number;
++  tcontProfile: string;
++  trafficProfile: string;
++  onuId?: number;
++  clientId?: string | null;
++  contractId?: string | null;
++}
++
++export interface ProvisionHandlerDeps {
++  store: ProvisioningStore;
++  deviceId: string;
++  withOltLock: <T>(fn: () => Promise<T>) => Promise<T>;
++  runTelnet: (commands: string[], opts?: { timeoutMs?: number }) => Promise<string[]>;
++  /**
++   * Si el caller pidio MikroTik (secreto PPPoE), ya construida — nunca debe
++   * cerrar sobre una contraseña que luego se filtre a un mensaje de error
++   * persistido (ver sanitizeStageDetail abajo, que igual la redacta por si
++   * acaso). Si no se pidio, undefined (etapa no aplica, no "pendiente").
++   */
++  syncMikrotik?: () => Promise<void>;
++  /**
++   * Si el caller pidio WAN/PPPoE por OMCI, fabrica la funcion real una vez
++   * que se conoce el onu-id resuelto (nunca antes de que la OLT lo confirme).
++   */
++  buildSyncWan?: (onuId: number) => () => Promise<void>;
++  /** Notifica a quien este escuchando (SSE) que una ONT cambio — opcional, no-op en pruebas. */
++  onOntChanged?: (ont: OntRow) => void;
++}
++
++export interface ProvisionHandlerResult {
++  httpStatus: number;
++  error?: string;
++  operation?: ProvisioningOperationRow;
++  outcome?: ProvisionOutcome;
++  ont?: OntRow | null;
++  mikrotikOk?: boolean;
++  mikrotikError?: string;
++  wanOk?: boolean;
++  wanError?: string;
++  /** Presente SOLO si algun UPDATE/INSERT de este request fallo — la respuesta nunca afirma "guardado" cuando esto esta presente. */
++  persistenceWarning?: string;
++}
++
++/** Nunca persistir una contraseña en un mensaje de error/detalle — defensa adicional por si un error de MikroTik/WAN la repite tal cual. */
++function redactPotentialSecrets(message: string): string {
++  return message.replace(/(password["\s:=]+)\S+/gi, '$1[REDACTED]').replace(/(contrase[ñn]a["\s:=]+)\S+/gi, '$1[REDACTED]');
++}
++
++export function outcomeToOperationStatus(outcome: ProvisionOutcome): string {
++  switch (outcome.kind) {
++    case 'registered':
++    case 'already_registered':
++      return 'olt_registered';
++    case 'verify_mismatch':
++      return 'olt_verify_failed';
++    case 'verify_uncertain':
++    case 'uncertain':
++      return 'olt_uncertain';
++    default:
++      return 'failed';
++  }
++}
++
++export function outcomeErrorMessage(outcome: ProvisionOutcome): string | null {
++  switch (outcome.kind) {
++    case 'rejected':
++    case 'uncertain':
++    case 'verify_uncertain':
++    case 'invalid':
++    case 'scan_unreliable':
++      return outcome.message;
++    case 'capacity_full':
++      return 'No quedan onu-id libres en ese puerto (capacidad del puerto agotada)';
++    case 'conflict_elsewhere':
++      return `El serial ya esta registrado en gpon-onu_${outcome.at.shelf}/${outcome.at.slot}/${outcome.at.port}:${outcome.at.onuId} — no se toco nada`;
++    case 'conflict_same_position_different_config':
++      return `Ya existe una ONU distinta (o una config parcial) en esa misma posicion (onu-id ${outcome.onuId}) — no se sobreescribio`;
++    case 'verify_mismatch':
++      return `La OLT quedo con datos distintos a los solicitados: ${outcome.mismatches.map((m) => m.field).join(', ')}`;
++    default:
++      return null;
++  }
++}
++
++/** Identidad INMUTABLE de una solicitud — dos peticiones con la misma idempotencyKey deben coincidir en todo esto, o se reportan como conflicto antes de tocar la OLT (requisito 2 de la revision externa). */
++interface RequestIdentity {
++  serial: string;
++  frame: number;
++  slot: number;
++  port: number;
++  onuType: string;
++  vlan: number;
++  tcontProfile: string;
++  trafficProfile: string;
++  forcedOnuId: number | null;
++}
++
++function identityFromBody(body: ProvisionRequestBody): RequestIdentity {
++  return {
++    serial: (body.serial ?? '').trim().toUpperCase(),
++    frame: body.shelf ?? 1,
++    slot: body.slot,
++    port: body.port,
++    onuType: body.onuType ?? '',
++    vlan: body.vlan,
++    tcontProfile: body.tcontProfile ?? '',
++    trafficProfile: body.trafficProfile ?? '',
++    forcedOnuId: body.onuId ?? null,
++  };
++}
++
++function identityFromOperation(op: ProvisioningOperationRow): RequestIdentity {
++  const requested = op.requested ?? {};
++  return {
++    serial: (op.serial ?? '').trim().toUpperCase(),
++    frame: op.frame,
++    slot: op.slot,
++    port: op.port,
++    onuType: String(requested.onuType ?? ''),
++    vlan: Number(requested.vlan ?? 0),
++    tcontProfile: String(requested.tcontProfile ?? ''),
++    trafficProfile: String(requested.trafficProfile ?? ''),
++    forcedOnuId: typeof requested.forcedOnuId === 'number' ? requested.forcedOnuId : null,
++  };
++}
++
++function identityMatches(a: RequestIdentity, b: RequestIdentity): boolean {
++  return (
++    a.serial === b.serial &&
++    a.frame === b.frame &&
++    a.slot === b.slot &&
++    a.port === b.port &&
++    a.onuType === b.onuType &&
++    a.vlan === b.vlan &&
++    a.tcontProfile === b.tcontProfile &&
++    a.trafficProfile === b.trafficProfile &&
++    a.forcedOnuId === b.forcedOnuId
++  );
++}
++
++function validateBody(body: ProvisionRequestBody): string | null {
++  if (!body.idempotencyKey || !body.idempotencyKey.trim()) return 'idempotencyKey es requerido';
++  if (body.slot == null || body.port == null) return 'slot y port son requeridos';
++  if (!body.serial || !body.serial.trim()) return 'serial es requerido';
++  if (!body.tcontProfile || !body.trafficProfile) {
++    return 'tcontProfile y trafficProfile son requeridos (ver "show gpon profile tcont/traffic" en la OLT)';
++  }
++  return null;
++}
++
++/**
++ * Punto de entrada para POST /:id/onts/provision — resuelve (o crea, a
++ * prueba de carreras) la fila de operacion para esta idempotencyKey, y
++ * delega a runProvisionAndPipeline.
++ */
++export async function handleProvisionRequest(deps: ProvisionHandlerDeps, body: ProvisionRequestBody): Promise<ProvisionHandlerResult> {
++  const validationError = validateBody(body);
++  if (validationError) return { httpStatus: 400, error: validationError };
++
++  const idempotencyKey = body.idempotencyKey.trim();
++  const incomingIdentity = identityFromBody(body);
++
++  const existing = await deps.store.findOperationByKey(deps.deviceId, idempotencyKey);
++  if (existing.error) return { httpStatus: 500, error: `No se pudo consultar la operacion existente: ${existing.error}` };
++
++  let operation: ProvisioningOperationRow;
++
++  if (existing.data) {
++    if (!identityMatches(identityFromOperation(existing.data), incomingIdentity)) {
++      return {
++        httpStatus: 409,
++        error:
++          'Esta clave de idempotencia ya se uso para una solicitud con datos distintos (serial/posicion/VLAN/perfiles) — no se toco la OLT. Si es una solicitud realmente nueva, usa una clave de idempotencia distinta.',
++      };
++    }
++    operation = existing.data;
++  } else {
++    const insertInput: NewOperationInput = {
++      idempotency_key: idempotencyKey,
++      olt_device_id: deps.deviceId,
++      serial: body.serial,
++      frame: body.shelf ?? 1,
++      slot: body.slot,
++      port: body.port,
++      client_id: body.clientId ?? null,
++      contract_id: body.contractId ?? null,
++      requested: {
++        onuType: body.onuType,
++        vlan: body.vlan,
++        tcontProfile: body.tcontProfile,
++        trafficProfile: body.trafficProfile,
++        description: body.description ?? '',
++        forcedOnuId: body.onuId ?? null,
++      },
++    };
++    const inserted = await deps.store.insertOperation(insertInput);
++
++    if (inserted.duplicateKey) {
++      // Carrera real: dos solicitudes concurrentes con la MISMA clave —
++      // otra ya inserto la fila entre nuestro findOperationByKey (que no la
++      // vio) y este insert. Se relee en vez de tratarlo como un error: el
++      // historial de la fila ganadora sigue intacto (nunca se pierde una
++      // etapa por esto, ver appendStep atomico en oltProvisioningStore.ts).
++      const refetched = await deps.store.findOperationByKey(deps.deviceId, idempotencyKey);
++      if (refetched.error || !refetched.data) {
++        return { httpStatus: 500, error: `Conflicto de solicitudes concurrentes y no se pudo releer la operacion: ${refetched.error ?? 'no encontrada'}` };
++      }
++      if (!identityMatches(identityFromOperation(refetched.data), incomingIdentity)) {
++        return {
++          httpStatus: 409,
++          error: 'Esta clave de idempotencia ya se uso (por una solicitud concurrente) para datos distintos — no se toco la OLT.',
++        };
++      }
++      operation = refetched.data;
++    } else if (inserted.error || !inserted.data) {
++      return { httpStatus: 500, error: `No se pudo registrar la operacion: ${inserted.error}` };
++    } else {
++      operation = inserted.data;
++    }
++  }
++
++  if (operation.status === 'completed') {
++    return completedOperationResult(deps, operation);
++  }
++
++  return runProvisionAndPipeline(deps, operation);
++}
++
++/** Punto de entrada para POST /:id/onts/operations/:opId/reconcile. */
++export async function handleReconcileRequest(deps: ProvisionHandlerDeps, operationId: string): Promise<ProvisionHandlerResult> {
++  const existing = await deps.store.findOperationById(operationId, deps.deviceId);
++  if (existing.error) return { httpStatus: 500, error: `No se pudo consultar la operacion: ${existing.error}` };
++  if (!existing.data) return { httpStatus: 404, error: 'Operacion no encontrada' };
++
++  if (existing.data.status === 'completed') {
++    return completedOperationResult(deps, existing.data);
++  }
++
++  return runProvisionAndPipeline(deps, existing.data);
++}
++
++async function completedOperationResult(deps: ProvisionHandlerDeps, operation: ProvisioningOperationRow): Promise<ProvisionHandlerResult> {
++  const outcome: ProvisionOutcome = { kind: 'already_registered', onuId: operation.onu_id ?? 0 };
++  if (!operation.ont_db_id) {
++    return {
++      httpStatus: 500,
++      operation,
++      outcome,
++      ont: null,
++      persistenceWarning: 'La operacion esta marcada "completed" pero no tiene ninguna ONT asociada — revisar manualmente, no asumir que esta bien.',
++    };
++  }
++  const ontResult = await deps.store.getOntById(operation.ont_db_id);
++  if (ontResult.error) {
++    return { httpStatus: 500, operation, outcome, ont: null, persistenceWarning: `No se pudo leer la ONT asociada: ${ontResult.error}` };
++  }
++  return { httpStatus: 200, operation, outcome, ont: ontResult.data };
++}
++
++/**
++ * El nucleo real: corre el motor de OLT + el pipeline (BD/MikroTik/WAN) y
++ * persiste el resultado. Usado tanto por el alta nueva como por el
++ * reconcile — ambos caminos llegan aqui con una ProvisioningOperationRow ya
++ * resuelta (creada, reusada, o releida).
++ */
++async function runProvisionAndPipeline(deps: ProvisionHandlerDeps, operation: ProvisioningOperationRow): Promise<ProvisionHandlerResult> {
++  const stepPersistenceErrors: string[] = [];
++  let resolvedOnuId: number | undefined = operation.onu_id ?? undefined;
++  // Objeto contenedor en vez de un `let` suelto a proposito: TypeScript no
++  // seguro invalida el narrowing de un `let` cuyo UNICO punto de asignacion
++  // visible esta dentro de un closure anidado (persistDb, mas abajo) — lo
++  // sigue tratando como su valor inicial ("null") en el resto de esta
++  // funcion, aunque en tiempo de ejecucion si cambie. Mutar una propiedad
++  // de un objeto no tiene ese problema.
++  const ontRowHolder: { current: OntRow | null } = { current: null };
++
++  const provisionDeps: ProvisionDeps = {
++    withOltLock: deps.withOltLock,
++    runTelnet: deps.runTelnet,
++    onStage: async (stage, status, detail) => {
++      const safeDetail = detail != null ? redactPotentialSecrets(detail) : null;
++      const stepResult = await deps.store.appendStep(operation.id, stage, status, safeDetail);
++      if (stepResult.error) stepPersistenceErrors.push(`etapa "${stage}": ${stepResult.error}`);
++
++      if (stage === 'resolve_id' && status === 'ok' && detail != null) {
++        const id = Number(detail);
++        if (Number.isInteger(id)) {
++          resolvedOnuId = id;
++          // Se persiste de inmediato (antes de escribir) — si todo lo demas
++          // se cae despues, de todas formas queda registrado cual id se
++          // intento (requisito 4 de la revision externa).
++          const idPatch = await deps.store.updateOperation(operation.id, { onu_id: id });
++          if (idPatch.error) stepPersistenceErrors.push(`persistir onu_id elegido: ${idPatch.error}`);
++        }
++      }
++    },
++  };
++
++  const requested = operation.requested ?? {};
++  const params: ProvisionParams = {
++    ref: { shelf: operation.frame, slot: operation.slot, port: operation.port },
++    serial: operation.serial,
++    onuType: String(requested.onuType ?? ''),
++    vlan: Number(requested.vlan ?? 0),
++    description: String(requested.description ?? ''),
++    tcontProfile: String(requested.tcontProfile ?? ''),
++    trafficProfile: String(requested.trafficProfile ?? ''),
++    forcedOnuId: typeof requested.forcedOnuId === 'number' ? requested.forcedOnuId : (operation.onu_id ?? undefined),
++  };
++
++  const persistDb = async () => {
++    if (resolvedOnuId == null) throw new Error('No se resolvio ningun onu-id — no se puede guardar la ONT en la base');
++    const ontResult = await deps.store.upsertOnt({
++      olt_device_id: deps.deviceId,
++      client_id: operation.client_id,
++      contract_id: operation.contract_id,
++      frame: operation.frame,
++      slot: operation.slot,
++      port: operation.port,
++      ont_id: resolvedOnuId,
++      serial: operation.serial,
++      description: typeof requested.description === 'string' ? requested.description : null,
++      onu_type: String(requested.onuType ?? ''),
++      vlan: Number(requested.vlan ?? 0),
++      tcont_profile: String(requested.tcontProfile ?? ''),
++      traffic_profile: String(requested.trafficProfile ?? ''),
++    });
++    if (ontResult.error || !ontResult.data) throw new Error(ontResult.error ?? 'no se pudo guardar la ONT en la base de datos');
++    ontRowHolder.current = ontResult.data;
++    deps.onOntChanged?.(ontResult.data);
++  };
++
++  const syncWan = deps.buildSyncWan
++    ? async () => {
++        if (resolvedOnuId == null) throw new Error('No se resolvio ningun onu-id antes de intentar el WAN/PPPoE');
++        await deps.buildSyncWan!(resolvedOnuId)();
++      }
++    : undefined;
++
++  const pipelineResult = await runProvisioningPipeline({
++    provision: () => provisionOnt(provisionDeps, params),
++    persistDb,
++    syncMikrotik: deps.syncMikrotik,
++    syncWan,
++    onStage: async (stage, status, detail) => {
++      const safeDetail = detail != null ? redactPotentialSecrets(detail) : null;
++      const r = await deps.store.appendStep(operation.id, stage, status, safeDetail);
++      if (r.error) stepPersistenceErrors.push(`etapa "${stage}": ${r.error}`);
++    },
++  });
++
++  const outcome = pipelineResult.olt;
++  const complete = isPipelineComplete(pipelineResult);
++
++  let finalStatus: string;
++  if (!isOltStageOk(outcome)) {
++    finalStatus = outcomeToOperationStatus(outcome);
++  } else if (complete) {
++    finalStatus = 'completed';
++  } else if (!pipelineResult.dbOk) {
++    finalStatus = 'linking';
++  } else {
++    // BD ok pero MikroTik y/o WAN quedaron pendientes.
++    finalStatus = 'mikrotik_pending';
++  }
++
++  const patch: Partial<ProvisioningOperationRow> = {
++    status: finalStatus,
++    error: outcomeErrorMessage(outcome) ?? pipelineResult.dbError ?? pipelineResult.mikrotikError ?? pipelineResult.wanError ?? null,
++  };
++  if (resolvedOnuId != null) patch.onu_id = resolvedOnuId;
++  if (ontRowHolder.current) patch.ont_db_id = ontRowHolder.current.id;
++
++  const updateResult = await deps.store.updateOperation(operation.id, patch);
++
++  const common = {
++    outcome,
++    ont: ontRowHolder.current,
++    mikrotikOk: pipelineResult.mikrotikOk,
++    mikrotikError: pipelineResult.mikrotikError,
++    wanOk: pipelineResult.wanOk,
++    wanError: pipelineResult.wanError,
++  };
++
++  if (updateResult.error) {
++    // La base NO confirmo el update — la respuesta nunca afirma el estado
++    // nuevo (ni "completed" ni ningun otro): se devuelve el estado VIEJO
++    // conocido mas una advertencia explicita (requisito 5 de la revision
++    // externa).
++    return {
++      httpStatus: 207,
++      operation,
++      ...common,
++      persistenceWarning: `El resultado se calculo (${finalStatus}) pero no se pudo guardar en la base de datos: ${updateResult.error}. Vuelve a consultar esta operacion antes de confiar en su estado.`,
++    };
++  }
++
++  return {
++    httpStatus: 200,
++    operation: updateResult.data ?? { ...operation, ...patch },
++    ...common,
++    persistenceWarning: stepPersistenceErrors.length
++      ? `El resultado principal se guardo, pero algunas etapas del historial no: ${stepPersistenceErrors.join('; ')}`
++      : undefined,
++  };
++}
+diff --git a/server/src/services/oltProvisioningService.ts b/server/src/services/oltProvisioningService.ts
+new file mode 100644
+index 0000000..933fae8
+--- /dev/null
++++ b/server/src/services/oltProvisioningService.ts
+@@ -0,0 +1,476 @@
++import { registerOntCommands, listAllOntsCommands, fullRunningConfigCommand, type ZteInterfaceRef } from '../ssh/zteCommands';
++import { parseGlobalOntState, parseFullRunningConfig, type FullConfigOnt } from '../ssh/zteParsers';
++
++/**
++ * Motor de aprovisionamiento confiable de ONTs (Fase 2, ver
++ * docs/auditoria/fase-2-aprovisionamiento.html). Reemplaza la logica "todo o
++ * nada" que tenia POST /:id/onts en routes/olt.ts por una secuencia que:
++ *
++ *   1. Valida la solicitud ANTES de tocar la OLT (sin red).
++ *   2. Escanea la OLT en vivo para saber si el serial YA existe en algun
++ *      lado (no solo en este puerto) y elegir un onu-id REALMENTE libre
++ *      dentro de la capacidad admitida — combinando el escaneo de estado
++ *      ("show gpon onu state") Y el de configuracion ("show running-config"),
++ *      nunca confiando solo en uno de los dos ni en la base local.
++ *   3. Si el escaneo no se pudo interpretar de forma confiable (formato
++ *      inesperado, no un puerto genuinamente vacio), se detiene ahi mismo
++ *      SIN elegir ningun id ni escribir nada — un fallo de parsing nunca se
++ *      trata como "no hay nada ahi".
++ *   4. Si el serial ya esta registrado en la MISMA posicion con la MISMA
++ *      configuracion, no vuelve a escribir nada (operacion idempotente).
++ *   5. El onu-id elegido se deja constancia (etapa "resolve_id") ANTES de
++ *      intentar escribir — si algo falla despues, se sabe de todas formas
++ *      cual id se intento.
++ *   6. Si hay que escribir, lo hace y DESPUES relee la OLT (con el MISMO
++ *      comando de "show running-config" completo, el unico confirmado
++ *      contra el equipo real — ver advertencia en zteCommands.ts sobre
++ *      portRunningConfigCommand) para verificar serial/posicion/VLAN/
++ *      perfiles. Un prompt de vuelta nunca se toma como "exito" sin esa
++ *      relectura, y si la relectura misma falla (timeout/conexion
++ *      perdida), el resultado es "verify_uncertain" — NO se asume ni exito
++ *      ni fallo.
++ *   7. Un timeout o cierre de conexion durante la ESCRITURA se reporta como
++ *      INCIERTO. Un RECHAZO CLI real tampoco prueba que los comandos
++ *      anteriores de la secuencia no se hayan aplicado — por eso ambos
++ *      casos ("rejected" y "uncertain") llevan el onu-id intentado, y un
++ *      reconcile posterior vuelve a escanear antes de decidir nada (si
++ *      encuentra una config parcial en esa posicion, lo reporta como
++ *      conflicto para que un humano decida, nunca lo sobreescribe solo).
++ *   8. Nunca borra ni modifica una ONU existente que no coincida exactamente
++ *      con la posicion/config solicitada.
++ *
++ * Todo el flujo corre dentro de UN SOLO turno de la cola por OLT (el
++ * `withOltLock` que el caller ya debe envolver, ver oltTelnetLock.ts).
++ */
++
++// onu-id 1..127: mismo rango ya validado en zteCommands.ts (sanitizeInt
++// admite 0-127, pero el auto-resuelto de rutas/olt.ts arranca en 1 — se
++// mantiene ese mismo criterio aqui para no cambiar el comportamiento ya
++// confirmado contra el equipo real).
++export const ONU_ID_MIN = 1;
++export const ONU_ID_MAX = 127;
++
++export interface ProvisionParams {
++  ref: ZteInterfaceRef;
++  serial: string;
++  onuType: string;
++  vlan: number;
++  description: string;
++  tcontProfile: string;
++  trafficProfile: string;
++  /** Si se especifica, se usa este onu-id en vez de resolver uno libre — igual se valida que este realmente libre. */
++  forcedOnuId?: number;
++  /** onu-ids que la base local YA conoce para este puerto (defensa extra, nunca sustituye al escaneo en vivo). */
++  knownUsedIdsInDb?: Iterable<number>;
++}
++
++export interface VerifyMismatch {
++  field: 'serial' | 'onuType' | 'vlan' | 'tcontProfile' | 'trafficProfile' | 'existencia';
++  expected: string;
++  actual: string | null;
++}
++
++export type ProvisionStage = 'validate' | 'scan' | 'resolve_id' | 'write' | 'verify';
++export type ProvisionStageStatus = 'started' | 'ok' | 'uncertain' | 'failed';
++
++export interface ProvisionDeps {
++  /** Ya bindeado al deviceId del caller (ver withOltLock en oltTelnetLock.ts). */
++  withOltLock: <T>(fn: () => Promise<T>) => Promise<T>;
++  /** Ya bindeado al target (host/credenciales) del caller. */
++  runTelnet: (commands: string[], opts?: { timeoutMs?: number }) => Promise<string[]>;
++  onStage?: (stage: ProvisionStage, status: ProvisionStageStatus, detail?: string) => void | Promise<void>;
++}
++
++export type ProvisionOutcome =
++  | { kind: 'invalid'; message: string }
++  | { kind: 'scan_unreliable'; message: string }
++  | { kind: 'already_registered'; onuId: number }
++  | { kind: 'registered'; onuId: number }
++  | { kind: 'verify_mismatch'; onuId: number; mismatches: VerifyMismatch[] }
++  | { kind: 'verify_uncertain'; onuId: number; message: string }
++  | { kind: 'conflict_same_position_different_config'; onuId: number; mismatches: VerifyMismatch[] }
++  | { kind: 'conflict_elsewhere'; at: { shelf: number; slot: number; port: number; onuId: number } }
++  | { kind: 'capacity_full' }
++  | { kind: 'rejected'; onuId: number; message: string }
++  | { kind: 'uncertain'; onuId: number; message: string };
++
++/** Outcomes donde SI se llego a intentar (o posiblemente aplicar) una escritura — un reconcile tiene sentido en todos estos. */
++export function outcomeNeedsReconciliation(outcome: ProvisionOutcome): boolean {
++  return (
++    outcome.kind === 'uncertain' ||
++    outcome.kind === 'rejected' ||
++    outcome.kind === 'verify_uncertain' ||
++    outcome.kind === 'verify_mismatch'
++  );
++}
++
++const SERIAL_RE = /^[A-Za-z0-9]{6,20}$/;
++
++/** Validacion de la solicitud ANTES de tocar la OLT — ninguna de estas reglas necesita red. */
++export function validateProvisionInput(params: ProvisionParams): string | null {
++  const serial = params.serial?.trim() ?? '';
++  if (!SERIAL_RE.test(serial)) return 'Serial invalido (debe ser alfanumerico, 6 a 20 caracteres)';
++  if (!params.onuType?.trim()) return 'El tipo de ONU (perfil OMCI) es requerido';
++  if (!Number.isInteger(params.vlan) || params.vlan < 1 || params.vlan > 4094) return 'VLAN fuera de rango (1-4094)';
++  if (!params.tcontProfile?.trim() || !params.trafficProfile?.trim()) return 'Los perfiles de subida y bajada son requeridos';
++  if (!Number.isInteger(params.ref.shelf) || params.ref.shelf < 0 || params.ref.shelf > 31) return 'Shelf invalido';
++  if (!Number.isInteger(params.ref.slot) || params.ref.slot < 0 || params.ref.slot > 31) return 'Slot invalido';
++  if (!Number.isInteger(params.ref.port) || params.ref.port < 0 || params.ref.port > 127) return 'Puerto invalido';
++  if (params.forcedOnuId != null) {
++    if (!Number.isInteger(params.forcedOnuId) || params.forcedOnuId < ONU_ID_MIN || params.forcedOnuId > ONU_ID_MAX) {
++      return `El ID de ONU debe estar entre ${ONU_ID_MIN} y ${ONU_ID_MAX}`;
++    }
++  }
++  return null;
++}
++
++export interface ExistingRegistration {
++  shelf: number;
++  slot: number;
++  port: number;
++  onuId: number;
++  entry: FullConfigOnt;
++}
++
++/** Busca un serial en CUALQUIER posicion del equipo (no solo el puerto solicitado) a partir de un dump ya parseado. */
++export function findExistingBySerial(fullConfig: Map<string, FullConfigOnt>, serial: string): ExistingRegistration | null {
++  const target = serial.trim().toUpperCase();
++  for (const [key, entry] of fullConfig) {
++    if ((entry.serial || '').trim().toUpperCase() !== target) continue;
++    const match = key.match(/^(\d+)\/(\d+)\/(\d+):(\d+)$/);
++    if (!match) continue;
++    return { shelf: Number(match[1]), slot: Number(match[2]), port: Number(match[3]), onuId: Number(match[4]), entry };
++  }
++  return null;
++}
++
++/** Primer onu-id libre dentro del rango admitido — nunca asume que la base local esta completa, solo complementa el escaneo en vivo. */
++export function resolveFreeOnuId(usedIds: ReadonlySet<number>, min = ONU_ID_MIN, max = ONU_ID_MAX): number | null {
++  for (let id = min; id <= max; id += 1) {
++    if (!usedIds.has(id)) return id;
++  }
++  return null;
++}
++
++/**
++ * onu-ids YA usados en un shelf/slot/port, combinando AMBAS fuentes de
++ * escaneo (estado Y configuracion) — una ONU podria aparecer en una pero no
++ * en la otra (ej. configurada pero sin señal en este momento), y confiar en
++ * una sola arriesgaria reusar un id que en realidad ya pertenece a otra ONU
++ * real (mismo tipo de incidente que ya paso una vez con el sufijo de
++ * "uncfg", ver memoria del proyecto).
++ */
++export function collectUsedOnuIds(
++  globalOnts: { slot: number; port: number; onuId: number }[],
++  fullConfig: Map<string, FullConfigOnt>,
++  ref: ZteInterfaceRef,
++): Set<number> {
++  const used = new Set<number>();
++  for (const o of globalOnts) {
++    if (o.slot === ref.slot && o.port === ref.port) used.add(o.onuId);
++  }
++  const prefix = `${ref.shelf}/${ref.slot}/${ref.port}:`;
++  for (const key of fullConfig.keys()) {
++    if (key.startsWith(prefix)) {
++      const id = Number(key.slice(prefix.length));
++      if (Number.isInteger(id)) used.add(id);
++    }
++  }
++  return used;
++}
++
++/**
++ * Distingue "el puerto genuinamente no tiene nada" de "el formato de
++ * respuesta no era el esperado y el parser no reconocio nada" — un texto
++ * crudo con contenido real (mas de unos pocos caracteres, mas alla del
++ * prompt) que termino en CERO filas interpretadas es sospechoso: algo en el
++ * formato cambio o la respuesta vino incompleta/corrupta, no que no haya
++ * absolutamente nada registrado en todo el equipo.
++ */
++export function looksLikeParseFailure(raw: string, parsedCount: number): boolean {
++  if (parsedCount > 0) return false;
++  return raw.trim().length > 40;
++}
++
++export interface ExpectedOntConfig {
++  serial: string;
++  onuType: string;
++  vlan: number;
++  tcontProfile: string;
++  trafficProfile: string;
++}
++
++/** Compara lo que de verdad quedo en la OLT (o `undefined` si ni aparece) contra lo solicitado. Vacio = todo coincide. */
++export function verifyProvisionedOnt(entry: FullConfigOnt | undefined, expected: ExpectedOntConfig): VerifyMismatch[] {
++  if (!entry) return [{ field: 'existencia', expected: 'registrada en la OLT', actual: null }];
++  const mismatches: VerifyMismatch[] = [];
++  if ((entry.serial || '').toUpperCase() !== expected.serial.toUpperCase()) {
++    mismatches.push({ field: 'serial', expected: expected.serial, actual: entry.serial || null });
++  }
++  if ((entry.onuType || '') !== expected.onuType) {
++    mismatches.push({ field: 'onuType', expected: expected.onuType, actual: entry.onuType || null });
++  }
++  if (entry.vlan !== expected.vlan) {
++    mismatches.push({ field: 'vlan', expected: String(expected.vlan), actual: entry.vlan == null ? null : String(entry.vlan) });
++  }
++  if ((entry.tcontProfile || '') !== expected.tcontProfile) {
++    mismatches.push({ field: 'tcontProfile', expected: expected.tcontProfile, actual: entry.tcontProfile || null });
++  }
++  if ((entry.trafficProfile || '') !== expected.trafficProfile) {
++    mismatches.push({ field: 'trafficProfile', expected: expected.trafficProfile, actual: entry.trafficProfile || null });
++  }
++  return mismatches;
++}
++
++/**
++ * Clasifica un error de ESCRITURA (nunca de lectura) segun los mensajes ya
++ * estandarizados de runTelnetCommands (ver server/src/telnet/client.ts,
++ * Fase 1): "rechazo el comando" es un rechazo CLI real y verificado. OJO —
++ * eso confirma que ESE comando puntual se rechazo, pero NO prueba que los
++ * comandos ANTERIORES de la misma secuencia (ej. la creacion de la interfaz,
++ * el binding tipo/serial) no se hayan aplicado ya — por eso un "rejected"
++ * sigue siendo reconciliable (ver outcomeNeedsReconciliation), nunca se
++ * trata como "no paso nada". Cualquier otro error (timeout, cierre de
++ * conexion) es INCIERTO en un sentido mas amplio: ni siquiera se sabe si
++ * ESE comando se aplico.
++ */
++export function classifyWriteError(e: unknown): 'rejected' | 'uncertain' {
++  const message = e instanceof Error ? e.message : String(e);
++  return /rechazo el comando/i.test(message) ? 'rejected' : 'uncertain';
++}
++
++function mismatchSummary(mismatches: VerifyMismatch[]): string {
++  return mismatches.map((m) => `${m.field}: esperado "${m.expected}", real "${m.actual ?? '(ausente)'}"`).join('; ');
++}
++
++export async function provisionOnt(deps: ProvisionDeps, params: ProvisionParams): Promise<ProvisionOutcome> {
++  const invalid = validateProvisionInput(params);
++  if (invalid) {
++    await deps.onStage?.('validate', 'failed', invalid);
++    return { kind: 'invalid', message: invalid };
++  }
++  await deps.onStage?.('validate', 'ok');
++
++  return deps.withOltLock(async () => {
++    await deps.onStage?.('scan', 'started');
++    const stateOut = await deps.runTelnet(listAllOntsCommands(), { timeoutMs: 45000 });
++    const stateRaw = stateOut.join('\n');
++    const globalOnts = parseGlobalOntState(stateRaw);
++    const configOut = await deps.runTelnet(fullRunningConfigCommand(), { timeoutMs: 120000 });
++    const configRaw = configOut[1] ?? '';
++    const fullConfig = parseFullRunningConfig(configRaw);
++
++    if (looksLikeParseFailure(stateRaw, globalOnts.length) || looksLikeParseFailure(configRaw, fullConfig.size)) {
++      await deps.onStage?.('scan', 'failed', 'el formato de la respuesta no se pudo interpretar con confianza');
++      return {
++        kind: 'scan_unreliable',
++        message: 'No se pudo interpretar con confianza el escaneo de la OLT (la respuesta no tenia el formato esperado) — no se elige ningun id ni se escribe nada hasta confirmar el formato real.',
++      };
++    }
++    await deps.onStage?.('scan', 'ok');
++
++    const expected: ExpectedOntConfig = {
++      serial: params.serial,
++      onuType: params.onuType,
++      vlan: params.vlan,
++      tcontProfile: params.tcontProfile,
++      trafficProfile: params.trafficProfile,
++    };
++
++    const existing = findExistingBySerial(fullConfig, params.serial);
++    if (existing) {
++      const samePosition =
++        existing.shelf === params.ref.shelf &&
++        existing.slot === params.ref.slot &&
++        existing.port === params.ref.port &&
++        (params.forcedOnuId == null || existing.onuId === params.forcedOnuId);
++
++      if (!samePosition) {
++        // Nunca se toca: ni se borra ni se mueve. Queda para que un humano
++        // decida (pudo ser una ONU desconfigurada y reconectada en otro
++        // puerto, o un error de digitacion del tecnico).
++        return { kind: 'conflict_elsewhere', at: { shelf: existing.shelf, slot: existing.slot, port: existing.port, onuId: existing.onuId } };
++      }
++
++      await deps.onStage?.('resolve_id', 'ok', String(existing.onuId));
++      const mismatches = verifyProvisionedOnt(existing.entry, expected);
++      if (mismatches.length === 0) {
++        // Idempotente: esta MISMA solicitud (o una igual) ya se aplico —
++        // nunca se repite el comando de alta. Cubre el reintento de red y
++        // el doble-clic por igual.
++        await deps.onStage?.('write', 'ok', 'ya estaba registrada igual en la OLT (operacion idempotente, sin re-escribir)');
++        await deps.onStage?.('verify', 'ok', 'confirmado contra el escaneo ya en curso');
++        return { kind: 'already_registered', onuId: existing.onuId };
++      }
++
++      // Misma posicion, pero con otra config: no se sobreescribe solo. Esto
++      // incluye el caso de una escritura PARCIAL anterior (ej. un rechazo a
++      // mitad de secuencia) — no se asume que "falta algo" = "se puede
++      // completar solo", queda para revision humana.
++      return { kind: 'conflict_same_position_different_config', onuId: existing.onuId, mismatches };
++    }
++
++    const usedLive = collectUsedOnuIds(globalOnts, fullConfig, params.ref);
++    for (const id of params.knownUsedIdsInDb ?? []) usedLive.add(id);
++
++    let onuId: number;
++    if (params.forcedOnuId != null) {
++      if (usedLive.has(params.forcedOnuId)) {
++        return { kind: 'conflict_elsewhere', at: { ...params.ref, onuId: params.forcedOnuId } };
++      }
++      onuId = params.forcedOnuId;
++    } else {
++      const free = resolveFreeOnuId(usedLive);
++      if (free == null) return { kind: 'capacity_full' };
++      onuId = free;
++    }
++
++    // Constancia del id elegido ANTES de escribir — si lo que sigue se cae
++    // (timeout, proceso caido), de todas formas queda registrado cual id se
++    // intento (ver appendProvisioningStep en routes/olt.ts: la etapa
++    // "resolve_id" tambien persiste onu_id en la operacion).
++    await deps.onStage?.('resolve_id', 'ok', String(onuId));
++
++    await deps.onStage?.('write', 'started');
++    try {
++      await deps.runTelnet(
++        registerOntCommands({
++          ref: params.ref,
++          onuId,
++          serial: params.serial,
++          onuType: params.onuType,
++          vlan: params.vlan,
++          description: params.description,
++          tcontProfile: params.tcontProfile,
++          trafficProfile: params.trafficProfile,
++        }),
++      );
++    } catch (e) {
++      const kind = classifyWriteError(e);
++      const message = e instanceof Error ? e.message : 'Error al escribir en la OLT';
++      await deps.onStage?.('write', kind === 'rejected' ? 'failed' : 'uncertain', message);
++      return kind === 'rejected' ? { kind: 'rejected', onuId, message } : { kind: 'uncertain', onuId, message };
++    }
++    await deps.onStage?.('write', 'ok');
++
++    await deps.onStage?.('verify', 'started');
++    // Se reusa el MISMO comando ya confirmado contra el equipo real
++    // ("show running-config" completo) en vez de portRunningConfigCommand()
++    // (ver advertencia en zteCommands.ts: nunca se probo que ese comando
++    // acotado por puerto realmente incluya los bloques gpon-onu con
++    // VLAN/perfiles — asumirlo sin confirmar hubiera arriesgado reportar
++    // "verify_mismatch" en un registro que en realidad salio bien).
++    let verifyConfig: Map<string, FullConfigOnt>;
++    try {
++      const verifyOut = await deps.runTelnet(fullRunningConfigCommand(), { timeoutMs: 120000 });
++      verifyConfig = parseFullRunningConfig(verifyOut[1] ?? '');
++    } catch (e) {
++      const message = e instanceof Error ? e.message : 'Error al releer la OLT para verificar';
++      await deps.onStage?.('verify', 'uncertain', message);
++      return { kind: 'verify_uncertain', onuId, message };
++    }
++    const verifyKey = `${params.ref.shelf}/${params.ref.slot}/${params.ref.port}:${onuId}`;
++    const mismatches = verifyProvisionedOnt(verifyConfig.get(verifyKey), expected);
++    if (mismatches.length) {
++      await deps.onStage?.('verify', 'failed', mismatchSummary(mismatches));
++      return { kind: 'verify_mismatch', onuId, mismatches };
++    }
++    await deps.onStage?.('verify', 'ok');
++    return { kind: 'registered', onuId };
++  });
++}
++
++/**
++ * Outcomes de provisionOnt() que significan "la OLT quedo bien, se puede
++ * seguir con las etapas siguientes" — todo lo demas detiene la cadena ahi:
++ * nunca se avanza a BD/MikroTik/WAN sobre una OLT que no esta confirmada.
++ */
++export function isOltStageOk(outcome: ProvisionOutcome): boolean {
++  return outcome.kind === 'registered' || outcome.kind === 'already_registered';
++}
++
++export interface PipelineDeps {
++  /** Ya resuelto a los parametros reales — ver provisionOnt(). */
++  provision: () => Promise<ProvisionOutcome>;
++  /** Vincular cliente/contrato/zona en Supabase (fila de olt_onts) — opcional. */
++  persistDb?: () => Promise<void>;
++  /** Crear/vincular el secreto PPPoE en MikroTik — opcional, independiente de persistDb. */
++  syncMikrotik?: () => Promise<void>;
++  /** WAN/PPPoE por OMCI contra la propia OLT — opcional, independiente de las otras dos. */
++  syncWan?: () => Promise<void>;
++  onStage?: (stage: 'db' | 'mikrotik' | 'wan', status: 'ok' | 'failed', detail?: string) => void | Promise<void>;
++}
++
++export interface PipelineResult {
++  olt: ProvisionOutcome;
++  dbOk: boolean;
++  dbError?: string;
++  mikrotikOk: boolean;
++  mikrotikError?: string;
++  wanOk: boolean;
++  wanError?: string;
++}
++
++/** true solo cuando TODAS las etapas que de verdad se pidieron (las que tenian una funcion en PipelineDeps) terminaron bien. */
++export function isPipelineComplete(result: PipelineResult): boolean {
++  return isOltStageOk(result.olt) && result.dbOk && result.mikrotikOk && result.wanOk;
++}
++
++/**
++ * Encadena OLT -> BD -> MikroTik -> WAN SIN que una etapa posterior pueda
++ * revertir la OLT (requisito 7: nunca se borra/revierte una ONU existente
++ * solo porque un paso de DESPUES fallo) y sin que el fallo de una bloquee a
++ * las demas (requisito 6: cada etapa pendiente se reintenta por separado).
++ * Si la OLT no quedo en un estado "ok" (ver isOltStageOk), ninguna etapa
++ * siguiente se intenta — ese es el UNICO paso duro de toda la cadena. Una
++ * etapa sin funcion en `deps` (ej. no se pidio WAN porque no habia clave a
++ * mano) se reporta como "ok" por default — "no pedida" no es lo mismo que
++ * "pendiente".
++ */
++export async function runProvisioningPipeline(deps: PipelineDeps): Promise<PipelineResult> {
++  const olt = await deps.provision();
++  if (!isOltStageOk(olt)) {
++    return { olt, dbOk: false, mikrotikOk: false, wanOk: false };
++  }
++
++  let dbOk = true;
++  let dbError: string | undefined;
++  if (deps.persistDb) {
++    try {
++      await deps.persistDb();
++      await deps.onStage?.('db', 'ok');
++    } catch (e) {
++      dbOk = false;
++      dbError = e instanceof Error ? e.message : 'Error al guardar en la base de datos';
++      await deps.onStage?.('db', 'failed', dbError);
++    }
++  }
++
++  let mikrotikOk = true;
++  let mikrotikError: string | undefined;
++  if (deps.syncMikrotik) {
++    try {
++      await deps.syncMikrotik();
++      await deps.onStage?.('mikrotik', 'ok');
++    } catch (e) {
++      mikrotikOk = false;
++      mikrotikError = e instanceof Error ? e.message : 'Error al sincronizar MikroTik';
++      await deps.onStage?.('mikrotik', 'failed', mikrotikError);
++    }
++  }
++
++  let wanOk = true;
++  let wanError: string | undefined;
++  if (deps.syncWan) {
++    try {
++      await deps.syncWan();
++      await deps.onStage?.('wan', 'ok');
++    } catch (e) {
++      wanOk = false;
++      wanError = e instanceof Error ? e.message : 'Error al configurar el WAN/PPPoE';
++      await deps.onStage?.('wan', 'failed', wanError);
++    }
++  }
++
++  return { olt, dbOk, dbError, mikrotikOk, mikrotikError, wanOk, wanError };
++}
+diff --git a/server/src/services/oltProvisioningStore.ts b/server/src/services/oltProvisioningStore.ts
+new file mode 100644
+index 0000000..1e00352
+--- /dev/null
++++ b/server/src/services/oltProvisioningStore.ts
+@@ -0,0 +1,159 @@
++import type { SupabaseClient } from '@supabase/supabase-js';
++
++/**
++ * Acceso a `olt_provisioning_operations` + `olt_onts` para el flujo de
++ * aprovisionamiento (Fase 2, ver oltProvisioningHandler.ts). Interfaz
++ * angosta (no un cliente Supabase generico) a proposito — asi se puede
++ * implementar con un fake en memoria para pruebas de las rutas reales sin
++ * depender de la base de datos real (ver
++ * server/src/services/__tests__/oltProvisioningHandler.test.ts), y la
++ * version real (abajo) puede CHEQUEAR TODOS los errores de cada llamada
++ * (requisito 5 de la revision externa) sin que ese detalle se filtre a la
++ * logica de negocio.
++ */
++export interface ProvisioningOperationRow {
++  id: string;
++  idempotency_key: string;
++  olt_device_id: string;
++  serial: string;
++  frame: number;
++  slot: number;
++  port: number;
++  onu_id: number | null;
++  client_id: string | null;
++  contract_id: string | null;
++  requested: Record<string, unknown>;
++  status: string;
++  steps: { stage: string; status: string; at: string; detail: string | null }[];
++  ont_db_id: string | null;
++  error: string | null;
++  created_at: string;
++  updated_at: string;
++}
++
++export interface NewOperationInput {
++  idempotency_key: string;
++  olt_device_id: string;
++  serial: string;
++  frame: number;
++  slot: number;
++  port: number;
++  client_id: string | null;
++  contract_id: string | null;
++  requested: Record<string, unknown>;
++}
++
++export interface OntRow {
++  id: string;
++  [key: string]: unknown;
++}
++
++export interface NewOntInput {
++  olt_device_id: string;
++  client_id: string | null;
++  contract_id: string | null;
++  frame: number;
++  slot: number;
++  port: number;
++  ont_id: number;
++  serial: string;
++  description: string | null;
++  onu_type: string;
++  vlan: number;
++  tcont_profile: string;
++  traffic_profile: string;
++}
++
++export interface StoreResult<T> {
++  data: T | null;
++  /** Mensaje legible si algo fallo — SIEMPRE revisar esto antes de asumir que `data` es valido (requisito 5). */
++  error: string | null;
++}
++
++export interface InsertOperationResult extends StoreResult<ProvisioningOperationRow> {
++  /** true si el insert fallo especificamente por la clave unica (olt_device_id, idempotency_key) — ya existe una fila, hay que releerla en vez de tratarlo como un error real. */
++  duplicateKey: boolean;
++}
++
++export interface ProvisioningStore {
++  findOperationByKey(deviceId: string, idempotencyKey: string): Promise<StoreResult<ProvisioningOperationRow>>;
++  findOperationById(id: string, deviceId: string): Promise<StoreResult<ProvisioningOperationRow>>;
++  insertOperation(input: NewOperationInput): Promise<InsertOperationResult>;
++  /** Append ATOMICO (un solo UPDATE en la base, ver migracion fase136b) — nunca pierde una etapa por una carrera de lectura-escritura. */
++  appendStep(operationId: string, stage: string, status: string, detail: string | null): Promise<StoreResult<ProvisioningOperationRow>>;
++  updateOperation(id: string, patch: Partial<ProvisioningOperationRow>): Promise<StoreResult<ProvisioningOperationRow>>;
++  upsertOnt(input: NewOntInput): Promise<StoreResult<OntRow>>;
++  getOntById(id: string): Promise<StoreResult<OntRow>>;
++}
++
++const UNIQUE_VIOLATION = '23505';
++
++/** Implementacion real contra Supabase — revisa el `error` de CADA llamada, nunca asume que una escritura se guardo porque la promesa no lanzo. */
++export function createSupabaseProvisioningStore(supabaseAdmin: SupabaseClient): ProvisioningStore {
++  return {
++    async findOperationByKey(deviceId, idempotencyKey) {
++      const { data, error } = await supabaseAdmin
++        .from('olt_provisioning_operations')
++        .select('*')
++        .eq('olt_device_id', deviceId)
++        .eq('idempotency_key', idempotencyKey)
++        .maybeSingle();
++      return { data: (data as ProvisioningOperationRow | null) ?? null, error: error?.message ?? null };
++    },
++
++    async findOperationById(id, deviceId) {
++      const { data, error } = await supabaseAdmin
++        .from('olt_provisioning_operations')
++        .select('*')
++        .eq('id', id)
++        .eq('olt_device_id', deviceId)
++        .maybeSingle();
++      return { data: (data as ProvisioningOperationRow | null) ?? null, error: error?.message ?? null };
++    },
++
++    async insertOperation(input) {
++      const { data, error } = await supabaseAdmin.from('olt_provisioning_operations').insert(input).select().single();
++      if (error) {
++        // code 23505 = unique_violation — otra peticion concurrente con la
++        // MISMA clave ya inserto la fila entre nuestro "findOperationByKey"
++        // (que no la vio) y este insert. No es un error real: hay que
++        // releerla, nunca reportarla como fallo al caller.
++        const duplicateKey = (error as { code?: string }).code === UNIQUE_VIOLATION;
++        return { data: null, error: error.message, duplicateKey };
++      }
++      return { data: data as ProvisioningOperationRow, error: null, duplicateKey: false };
++    },
++
++    async appendStep(operationId, stage, status, detail) {
++      const { data, error } = await supabaseAdmin.rpc('append_provisioning_step', {
++        p_operation_id: operationId,
++        p_stage: stage,
++        p_status: status,
++        p_detail: detail,
++      });
++      return { data: (data as ProvisioningOperationRow | null) ?? null, error: error?.message ?? null };
++    },
++
++    async updateOperation(id, patch) {
++      const { data, error } = await supabaseAdmin.from('olt_provisioning_operations').update(patch).eq('id', id).select().single();
++      return { data: (data as ProvisioningOperationRow | null) ?? null, error: error?.message ?? null };
++    },
++
++    async upsertOnt(input) {
++      const { data, error } = await supabaseAdmin
++        .from('olt_onts')
++        .upsert(
++          { ...input, status: 'unknown', last_synced_at: new Date().toISOString() },
++          { onConflict: 'olt_device_id,frame,slot,port,ont_id' },
++        )
++        .select()
++        .single();
++      return { data: (data as OntRow | null) ?? null, error: error?.message ?? null };
++    },
++
++    async getOntById(id) {
++      const { data, error } = await supabaseAdmin.from('olt_onts').select('*').eq('id', id).maybeSingle();
++      return { data: (data as OntRow | null) ?? null, error: error?.message ?? null };
++    },
++  };
++}
+diff --git a/server/src/ssh/zteCommands.ts b/server/src/ssh/zteCommands.ts
+index 56a91dc..f8bdb47 100644
+--- a/server/src/ssh/zteCommands.ts
++++ b/server/src/ssh/zteCommands.ts
+@@ -349,6 +349,31 @@ export function fullRunningConfigCommand(): string[] {
+   return ['enable', 'show running-config'];
+ }
+ 
++/**
++ * NO CONFIRMADO contra el equipo real — NO USAR para decidir nada todavia.
++ *
++ * La intencion original era un running-config acotado a un solo puerto PON
++ * (mas barato que fullRunningConfigCommand()), asumiendo que
++ * "show running-config interface gpon-olt_S/L/P" devuelve, igual que el
++ * dump completo, tanto el bloque gpon-olt_* (binding tipo/serial) COMO los
++ * bloques gpon-onu_*:N de servicio (VLAN/tcont/traffic) de ese puerto. Esa
++ * suposicion NUNCA se verifico contra la ZXA10 C300 real — es perfectamente
++ * posible que el equipo real, al acotar por interfaz, devuelva SOLO el
++ * bloque de esa interfaz puntual (sin los bloques gpon-onu_* asociados, que
++ * son objetos de interfaz distintos), o que la sintaxis ni siquiera sea
++ * valida. Por eso oltProvisioningService.ts (Fase 2, revision posterior)
++ * NO usa esta funcion para verificar una escritura — usa
++ * fullRunningConfigCommand() (el dump completo), que SI esta confirmado.
++ *
++ * Antes de usar esto para algo real: comparar a mano, por Telnet directo,
++ * la salida de este comando contra "show running-config" completo para el
++ * MISMO puerto (ver procedimiento de validacion manual en
++ * docs/auditoria/fase-2-aprovisionamiento.html) — solo lectura, sin riesgo.
++ */
++export function portRunningConfigCommand(ref: ZteInterfaceRef): string[] {
++  return ['enable', `show running-config interface ${oltInterface(ref)}`];
++}
++
+ /**
+  * Potencia optica de TODAS las ONUs de un puerto PON en un solo comando —
+  * VALIDADO contra el equipo real. "onu-rx" = lo que la ONU recibe (downstream,
+diff --git a/src/stores/olt.ts b/src/stores/olt.ts
+index 9ed8d65..6d5966b 100644
+--- a/src/stores/olt.ts
++++ b/src/stores/olt.ts
+@@ -80,6 +80,55 @@ export interface OntMetaUpdate {
+   contract_id?: string | null;
+ }
+ 
++// ---- Aprovisionamiento confiable (Fase 2) — ver server/src/services/
++// oltProvisioningService.ts y docs/auditoria/fase-2-aprovisionamiento.html.
++// Mismas formas que devuelve POST /:id/onts/provision.
++
++export interface ProvisionMismatch {
++  field: string;
++  expected: string;
++  actual: string | null;
++}
++
++export interface ProvisionOutcome {
++  kind:
++    | 'invalid'
++    | 'already_registered'
++    | 'registered'
++    | 'verify_mismatch'
++    | 'conflict_same_position_different_config'
++    | 'conflict_elsewhere'
++    | 'capacity_full'
++    | 'rejected'
++    | 'uncertain';
++  onuId?: number;
++  message?: string;
++  mismatches?: ProvisionMismatch[];
++  at?: { shelf: number; slot: number; port: number; onuId: number };
++}
++
++export interface ProvisioningStep {
++  stage: string;
++  status: string;
++  at: string;
++  detail: string | null;
++}
++
++export interface ProvisioningOperation {
++  id: string;
++  status: string;
++  steps: ProvisioningStep[];
++  onu_id: number | null;
++  error: string | null;
++  ont_db_id: string | null;
++}
++
++export interface ProvisionResponse {
++  operation: ProvisioningOperation;
++  outcome: ProvisionOutcome;
++  ont: OltOnt | null;
++}
++
+ export interface UnlinkedOnt {
+   id: string;
+   olt_device_id: string;
+@@ -258,6 +307,44 @@ export const useOltStore = defineStore('olt', () => {
+     });
+   }
+ 
++  // El escaneo previo (serial-existe/ID-libre) puede incluir un "show
++  // running-config" de TODO el equipo (hasta 120s de margen en el backend,
++  // ver oltProvisioningService.ts) mas la escritura y la relectura de
++  // verificacion — varias sesiones Telnet seguidas, no solo una. 170s deja
++  // margen bajo el limite real de nginx (proxy_read_timeout 180s, ver
++  // deploy/nginx.conf) para que, si algo se atasca de verdad, el aviso
++  // venga de aqui con un mensaje claro en vez de un 504 generico silencioso.
++  const PROVISION_TIMEOUT_MS = 170_000;
++
++  /**
++   * Aprovisiona una ONT de forma idempotente y verificada (Fase 2). Igual
++   * que registerOnt(), pero el backend reescanea la OLT en vivo antes de
++   * escribir, reconoce si esta MISMA solicitud (idempotencyKey) ya se
++   * aplico antes, y lee de vuelta lo que quedo en la OLT para confirmar que
++   * coincide con lo pedido — ver outcome.kind para el resultado real
++   * (nunca asumir "exito" solo porque la llamada no lanzo error).
++   */
++  async function provisionOnt(deviceId: string, payload: Record<string, unknown> & { idempotencyKey: string }) {
++    return apiFetch<ProvisionResponse>(
++      `/api/olt-devices/${deviceId}/onts/provision`,
++      { method: 'POST', body: JSON.stringify(payload) },
++      PROVISION_TIMEOUT_MS,
++    );
++  }
++
++  /** Reintenta SOLO lo que quedo pendiente de una operacion ya existente (ver reconcile en routes/olt.ts) — nunca repite un alta ya confirmada. */
++  async function reconcileProvisioning(deviceId: string, operationId: string) {
++    return apiFetch<ProvisionResponse>(
++      `/api/olt-devices/${deviceId}/onts/operations/${operationId}/reconcile`,
++      { method: 'POST' },
++      PROVISION_TIMEOUT_MS,
++    );
++  }
++
++  function fetchProvisioningOperation(deviceId: string, operationId: string) {
++    return apiFetch<ProvisioningOperation>(`/api/olt-devices/${deviceId}/onts/operations/${operationId}`);
++  }
++
+   async function toggleOnt(deviceId: string, ontDbId: string, activate: boolean) {
+     return apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/${activate ? 'activate' : 'deactivate'}`, {
+       method: 'POST',
+@@ -540,6 +627,9 @@ export const useOltStore = defineStore('olt', () => {
+     importExistingOnts,
+     syncOnts,
+     registerOnt,
++    provisionOnt,
++    reconcileProvisioning,
++    fetchProvisioningOperation,
+     toggleOnt,
+     configureWanPppoe,
+     deleteOnt,
+diff --git a/src/views/olt/AuthorizeOnuModal.vue b/src/views/olt/AuthorizeOnuModal.vue
+index 7d54469..2631049 100644
+--- a/src/views/olt/AuthorizeOnuModal.vue
++++ b/src/views/olt/AuthorizeOnuModal.vue
+@@ -1,6 +1,6 @@
+ <script setup lang="ts">
+ import { computed, onMounted, ref, watch } from 'vue';
+-import { useOltStore, type OltOnt } from '@/stores/olt';
++import { useOltStore, type OltOnt, type ProvisionOutcome } from '@/stores/olt';
+ import { useClientsStore } from '@/stores/clients';
+ import { useContractsStore } from '@/stores/contracts';
+ import { useCatalogsStore } from '@/stores/catalogs';
+@@ -366,6 +366,65 @@ const submitWarnings = ref<string[]>([]);
+ // crear una segunda ONU duplicada); solo queda la opcion de cerrar el modal.
+ const ontCreated = ref(false);
+ 
++// ---- Aprovisionamiento confiable (Fase 2) ----
++// Se genera UNA SOLA VEZ por apertura de este modal (no dentro de
++// handleAuthorize) y nunca se regenera mientras siga abierto — asi un
++// doble-clic o un reintento manual tras un error transitorio (ej. de red)
++// SIEMPRE llega al backend con la misma clave, que la reconoce como la
++// MISMA solicitud en vez de repetir el comando de alta en la OLT (ver
++// POST /:id/onts/provision en routes/olt.ts). Cerrar y volver a abrir el
++// modal (ej. para otra ONU) si arranca una clave nueva.
++const idempotencyKey = ref(crypto.randomUUID());
++const provisionOperationId = ref<string | null>(null);
++const lastOutcome = ref<ProvisionOutcome | null>(null);
++// true solo para 'uncertain' (timeout/cierre en la escritura, Fase 2 requisito
++// 8) — ahi el boton normal se oculta y se exige pasar por "Verificar antes de
++// reintentar" (reconcile), nunca un resubmit ciego que repetiria el comando.
++const needsReconcile = computed(() => lastOutcome.value?.kind === 'uncertain');
++
++function describeOutcome(outcome: ProvisionOutcome): string {
++  switch (outcome.kind) {
++    case 'rejected':
++      return outcome.message ?? 'La OLT rechazo el comando de alta.';
++    case 'uncertain':
++      return `${outcome.message ?? 'La OLT no confirmo si el comando se aplico.'} Usa "Verificar antes de reintentar" en vez de volver a enviar el formulario.`;
++    case 'verify_mismatch': {
++      const campos = (outcome.mismatches ?? []).map((m) => m.field).join(', ');
++      return `La OLT quedo con datos distintos a los solicitados (${campos}) — revisa antes de continuar, no se marco como completado.`;
++    }
++    case 'conflict_elsewhere':
++      return `Ese serial ya esta registrado en gpon-onu_${outcome.at?.shelf}/${outcome.at?.slot}/${outcome.at?.port}:${outcome.at?.onuId} — no se toco nada. Si es una reconexion, gestionala desde "Desconfiguradas / Por Reconectar".`;
++    case 'conflict_same_position_different_config':
++      return 'Ya existe una ONU distinta en esa misma posicion de la OLT, con otra configuracion — no se sobreescribio. Revisa manualmente antes de continuar.';
++    case 'capacity_full':
++      return 'No quedan onu-id libres en ese puerto PON (capacidad agotada).';
++    case 'invalid':
++      return outcome.message ?? 'Datos invalidos.';
++    default:
++      return 'No se pudo confirmar el registro en la OLT.';
++  }
++}
++
++async function handleReconcile() {
++  if (!provisionOperationId.value) return;
++  submitting.value = true;
++  submitError.value = null;
++  try {
++    const result = await oltStore.reconcileProvisioning(props.deviceId, provisionOperationId.value);
++    lastOutcome.value = result.outcome;
++    if (result.outcome.kind === 'registered' || result.outcome.kind === 'already_registered') {
++      ontCreated.value = true;
++      await continueAfterOlt(result.ont!);
++    } else {
++      submitError.value = describeOutcome(result.outcome);
++    }
++  } catch (e) {
++    submitError.value = getErrorMessage(e, 'Error al verificar/reconciliar la operacion');
++  } finally {
++    submitting.value = false;
++  }
++}
++
+ function validate(): string | null {
+   if (!serial.value.trim()) return 'El serial es obligatorio';
+   if (!onuType.value.trim()) return 'El tipo de ONU es obligatorio';
+@@ -394,10 +453,16 @@ async function handleAuthorize() {
+   submitError.value = null;
+   submitWarnings.value = [];
+ 
+-  // PASO 1 — OLT (duro: si falla, no se ejecuta nada mas).
+-  let ontRow: OltOnt;
++  // PASO 1 — OLT, idempotente y verificada (Fase 2, ver
++  // oltProvisioningService.ts): el backend reescanea la OLT en vivo antes
++  // de escribir (serial-existe / id-libre), y relee despues de escribir
++  // para confirmar que quedo tal como se pidio. Un resultado que no sea
++  // "registered"/"already_registered" NUNCA se trata como exito, y nunca
++  // se sigue con los pasos 2-6 sobre una OLT que no esta confirmada.
++  let result: Awaited<ReturnType<typeof oltStore.provisionOnt>>;
+   try {
+-    ontRow = await oltStore.registerOnt(props.deviceId, {
++    result = await oltStore.provisionOnt(props.deviceId, {
++      idempotencyKey: idempotencyKey.value,
+       slot: slot.value,
+       port: port.value,
+       serial: serial.value,
+@@ -407,6 +472,7 @@ async function handleAuthorize() {
+       tcontProfile: tcontProfile.value,
+       trafficProfile: trafficProfile.value,
+       clientId: selectedClientId.value,
++      contractId: selectedContractId.value,
+       onuId: isLocked.value ? undefined : onuId.value === '' ? undefined : onuId.value,
+     });
+   } catch (e) {
+@@ -414,11 +480,38 @@ async function handleAuthorize() {
+     submitting.value = false;
+     return;
+   }
++
++  provisionOperationId.value = result.operation.id;
++  lastOutcome.value = result.outcome;
++
++  if (result.outcome.kind !== 'registered' && result.outcome.kind !== 'already_registered') {
++    submitError.value = describeOutcome(result.outcome);
++    submitting.value = false;
++    return;
++  }
++  if (!result.ont) {
++    // No deberia pasar (la OLT quedo bien pero sin fila en olt_onts) — se
++    // trata como aviso, nunca como "exito silencioso".
++    submitError.value = 'La OLT quedo registrada y verificada, pero no se pudo confirmar la fila en la base de datos. Usa "Verificar antes de reintentar".';
++    submitting.value = false;
++    return;
++  }
++
+   ontCreated.value = true;
++  await continueAfterOlt(result.ont);
++  submitting.value = false;
++}
+ 
+-  // A partir de aqui la ONT YA existe en la OLT — cada paso siguiente es
+-  // best-effort (igual que handleContractSubmit en ClientServiceDetailView.vue):
+-  // nunca revierte el paso 1, solo acumula avisos.
++/**
++ * Pasos 2-6 (cliente/contrato/zona, caja NAP, MikroTik, referencia en el
++ * contrato, WAN/PPPoE por OMCI) — SOLO se llega aqui cuando el paso 1 (OLT)
++ * ya quedo confirmado y verificado. Cada paso es best-effort, igual que
++ * antes (nunca revierte la OLT, solo acumula avisos) — se separo de
++ * handleAuthorize() para poder reusarse tambien desde handleReconcile()
++ * (cuando un "uncertain" se verifica despues y resulta que SI se aplico).
++ */
++async function continueAfterOlt(ontRow: OltOnt) {
++  submitWarnings.value = [];
+ 
+   // PASO 2 — vincular cliente/contrato/zona.
+   try {
+@@ -501,13 +594,13 @@ async function handleAuthorize() {
+     }
+   }
+ 
+-  submitting.value = false;
+   emit('authorized');
+   // El modal se queda abierto mostrando el resultado (exito o avisos) — el
+   // tecnico lo lee y cierra a mano (ver template, boton "Cerrar"). Los pasos
+   // que fallaron se pueden completar despues desde las pantallas ya
+   // existentes (ficha del cliente para MikroTik/NAP, tabla de ONTs para
+-  // reintentar vinculo).
++  // reintentar vinculo). `submitting` lo libera quien llamo a esta funcion
++  // (handleAuthorize o handleReconcile), no esta funcion misma.
+ }
+ 
+ onMounted(async () => {
+@@ -779,21 +872,31 @@ onMounted(async () => {
+           </div>
+         </template>
+ 
+-        <p v-if="submitError" class="text-sm text-red-600 mb-3">{{ submitError }}</p>
++        <div v-if="submitError && needsReconcile" class="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
++          <p class="text-sm font-semibold text-amber-800 mb-1">No se pudo confirmar si la OLT aplico el comando</p>
++          <p class="text-xs text-amber-800">{{ submitError }}</p>
++        </div>
++        <p v-else-if="submitError" class="text-sm text-red-600 mb-3">{{ submitError }}</p>
+         <div v-if="ontCreated && !submitWarnings.length" class="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3">
+           <p class="text-sm font-semibold text-emerald-800">
+-            ONU registrada exitosamente en OLT y sincronizada con MikroTik.
++            ONU registrada y VERIFICADA en la OLT (serial/posición/VLAN/perfiles confirmados contra el equipo), sincronizada con MikroTik.
+           </p>
+         </div>
+         <div v-if="submitWarnings.length" class="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+-          <p class="text-sm font-semibold text-amber-800 mb-1">La ONU quedó registrada, pero con avisos:</p>
++          <p class="text-sm font-semibold text-amber-800 mb-1">La ONU quedó registrada y verificada en la OLT, pero con avisos:</p>
+           <ul class="text-xs text-amber-800 list-disc pl-4 space-y-0.5">
+             <li v-for="(w, i) in submitWarnings" :key="i">{{ w }}</li>
+           </ul>
+         </div>
+ 
+         <div class="flex justify-end gap-2">
+-          <template v-if="!ontCreated">
++          <template v-if="!ontCreated && needsReconcile">
++            <button type="button" class="btn-ghost" @click="emit('close')">Cancelar</button>
++            <button type="button" :disabled="submitting" class="btn-primary" @click="handleReconcile">
++              {{ submitting ? 'Verificando...' : 'Verificar antes de reintentar' }}
++            </button>
++          </template>
++          <template v-else-if="!ontCreated">
+             <button type="button" class="btn-ghost" @click="emit('close')">Cancelar</button>
+             <button type="submit" :disabled="submitting" class="btn-primary">
+               {{ submitting ? 'Autorizando...' : 'Autorizar y Activar' }}
+diff --git a/supabase/migrations/20261009100000_fase136_olt_aprovisionamiento_confiable.sql b/supabase/migrations/20261009100000_fase136_olt_aprovisionamiento_confiable.sql
+new file mode 100644
+index 0000000..6190a58
+--- /dev/null
++++ b/supabase/migrations/20261009100000_fase136_olt_aprovisionamiento_confiable.sql
+@@ -0,0 +1,102 @@
++-- Fase 136 (Fase 2 del plan de confiabilidad OLT, ver docs/auditoria/
++-- fase-2-aprovisionamiento.html): registro de operaciones de aprovisionamiento
++-- ("Autorizar y Activar") para que la Fase 2 pueda ser idempotente y
++-- reconciliable en vez de "todo o nada" como hasta ahora.
++--
++-- Por que hace falta una tabla nueva en vez de solo mas columnas en olt_onts:
++-- una operacion de aprovisionamiento abarca VARIAS etapas que no viven todas
++-- en esa tabla (OLT, vinculo a cliente/contrato, MikroTik) y puede fallar a
++-- mitad de camino — se necesita un registro propio, independiente de si la
++-- fila de olt_onts llego a crearse, para:
++--   1) Detectar un reintento/doble-clic de la MISMA solicitud (idempotency_key)
++--      sin volver a ejecutar comandos de escritura ya aplicados.
++--   2) Saber EXACTAMENTE que etapa quedo pendiente si algo fallo a mitad de
++--      camino, para reconciliar/reintentar solo eso (nunca repetir desde cero).
++--   3) Dejar constancia de un resultado INCIERTO (timeout de escritura o
++--      conexion perdida) como su propio estado, distinto de "fallo" y de
++--      "exito" — nunca se asume ninguna de las dos sin verificar.
++--
++-- Mismo criterio de acceso que olt_onts/olt_devices (Fase 4): RLS activado,
++-- SIN policies — acceso exclusivo via supabaseAdmin (service role) desde el
++-- backend Hono, nunca directo desde el cliente.
++
++create table public.olt_provisioning_operations (
++  id uuid primary key default gen_random_uuid(),
++
++  -- Identifica una solicitud LOGICA (no una fila): el frontend genera esta
++  -- clave una sola vez por intento de "Autorizar y Activar" y la reenvia tal
++  -- cual en cualquier reintento/doble-clic sobre la MISMA solicitud. Unica
++  -- por OLT (dos OLTs distintas nunca comparten una operacion).
++  idempotency_key text not null,
++  olt_device_id uuid not null references public.olt_devices(id) on delete cascade,
++
++  serial text not null,
++  frame integer not null default 1,
++  slot integer not null,
++  port integer not null,
++  -- NULL mientras no se resolvio un onu-id libre todavia (ver etapa
++  -- "resolve_id" en steps). Se fija apenas se elige, antes de escribir nada.
++  onu_id integer,
++
++  client_id uuid references public.clients(id),
++  contract_id uuid references public.service_contracts(id),
++
++  -- Snapshot de los datos de la solicitud (onuType/vlan/perfiles/zona/etc) —
++  -- a proposito NUNCA incluye credenciales (clave PPPoE): eso se pide de
++  -- nuevo si hace falta reintentar el paso de WAN/PPPoE, nunca se persiste.
++  requested jsonb not null,
++
++  -- Maquina de estados de la operacion completa (ver oltProvisioningService.ts):
++  --   pending            -> creada, todavia no se tocó la OLT
++  --   olt_uncertain      -> el comando de escritura tuvo timeout/conexion
++  --                         perdida: NO se sabe si se aplico o no, pendiente
++  --                         de verificar antes de reintentar o seguir
++  --   olt_verify_failed  -> la OLT respondio pero la lectura posterior NO
++  --                         coincide con lo solicitado (serial/posicion/vlan/
++  --                         perfiles) — nunca se reporta como éxito
++  --   olt_registered     -> OLT escrita y VERIFICADA correcta
++  --   linking            -> vinculando cliente/contrato/zona/NAP en Supabase
++  --   mikrotik_pending   -> falta MikroTik (secreto PPPoE)
++  --   completed          -> todas las etapas con las que se pidio avanzar
++  --                         quedaron hechas y verificadas
++  --   failed             -> una etapa fallo de forma definitiva (ej. la OLT
++  --                         rechazo el comando con un error CLI real)
++  status text not null default 'pending' check (status in (
++    'pending', 'olt_uncertain', 'olt_verify_failed', 'olt_registered',
++    'linking', 'mikrotik_pending', 'completed', 'failed'
++  )),
++
++  -- Historial de etapas, en orden: [{ stage, status, at, detail? }, ...].
++  -- "detail" es texto para humanos (ya pasado por redactSensitive si viene
++  -- de la OLT) — nunca un objeto con credenciales.
++  steps jsonb not null default '[]'::jsonb,
++
++  -- Fila resultante en olt_onts, apenas se sabe (puede quedar NULL si la
++  -- operacion nunca llego a escribir nada en la OLT).
++  ont_db_id uuid references public.olt_onts(id) on delete set null,
++
++  error text,
++
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++
++  unique (olt_device_id, idempotency_key)
++);
++
++comment on table public.olt_provisioning_operations is
++  'Seguimiento idempotente y reconciliable de "Autorizar y Activar" (Fase 2 OLT) — ver oltProvisioningService.ts.';
++
++create index olt_provisioning_operations_serial_idx
++  on public.olt_provisioning_operations (olt_device_id, serial);
++
++create index olt_provisioning_operations_status_idx
++  on public.olt_provisioning_operations (status)
++  where status not in ('completed', 'failed');
++
++alter table public.olt_provisioning_operations enable row level security;
++-- A proposito sin policies (ver comentario de arriba) — mismo patron que
++-- olt_onts/olt_devices desde la Fase 4.
++
++create trigger olt_provisioning_operations_set_updated_at
++  before update on public.olt_provisioning_operations
++  for each row execute function public.set_updated_at();
+diff --git a/supabase/migrations/20261009110000_fase136b_provisioning_atomic_steps.sql b/supabase/migrations/20261009110000_fase136b_provisioning_atomic_steps.sql
+new file mode 100644
+index 0000000..6098e4b
+--- /dev/null
++++ b/supabase/migrations/20261009110000_fase136b_provisioning_atomic_steps.sql
+@@ -0,0 +1,45 @@
++-- Fase 136b (correccion de revision externa sobre la Fase 2 OLT, ver
++-- docs/auditoria/fase-2-aprovisionamiento.html): el historial de una
++-- operacion de aprovisionamiento (olt_provisioning_operations.steps) se
++-- actualizaba con un SELECT + mutacion en memoria + UPDATE desde el backend
++-- (ver appendProvisioningStep() en routes/olt.ts antes de esta correccion) —
++-- una carrera clasica de "lost update": si dos etapas se registran casi al
++-- mismo tiempo (ej. el escaneo y, en paralelo, otra operacion sobre la
++-- MISMA fila), cada UPDATE podia pisar por completo el array que el otro
++-- ya habia escrito, perdiendo esa etapa del historial en silencio.
++--
++-- Esta funcion hace el append DENTRO de un solo UPDATE — Postgres bloquea
++-- la fila mientras dura esa sentencia, asi que una segunda llamada
++-- concurrente espera, vuelve a leer el valor YA actualizado por la primera,
++-- y le agrega la suya encima: ninguna etapa se pierde, sin necesidad de
++-- ningun SELECT previo desde el backend.
++
++create or replace function public.append_provisioning_step(
++  p_operation_id uuid,
++  p_stage text,
++  p_status text,
++  p_detail text default null
++)
++returns public.olt_provisioning_operations
++language plpgsql
++as $$
++declare
++  v_result public.olt_provisioning_operations;
++begin
++  update public.olt_provisioning_operations
++  set steps = steps || jsonb_build_array(
++    jsonb_build_object('stage', p_stage, 'status', p_status, 'at', now(), 'detail', p_detail)
++  )
++  where id = p_operation_id
++  returning * into v_result;
++
++  if v_result.id is null then
++    raise exception 'olt_provisioning_operations % no existe', p_operation_id;
++  end if;
++
++  return v_result;
++end;
++$$;
++
++comment on function public.append_provisioning_step is
++  'Agrega una etapa al historial de una operacion de aprovisionamiento de forma atomica (un solo UPDATE, sin SELECT previo desde el backend) — ver oltProvisioningService.ts / routes/olt.ts, Fase 2.';
