@@ -1,10 +1,11 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión),
-mas los fixes 13c, 13d, 13e y 13f, todos el mismo día — **13e es la
-versión final y vigente del isotipo web, 13f la aplicó también al ícono/
-splash de la APK** (12 y 13d quedaron supersedidas en cuanto al diseño del
-isotipo, ver nota en 12). Este documento es la
+mas los fixes 13c-13g, todos el mismo día — **13e es la versión final y
+vigente del isotipo web, 13f la aplicó también al ícono/splash de la APK,
+13g reemplazó los FAB por una franja nativa** (12 y 13d quedaron
+supersedidas en cuanto al diseño del isotipo, ver nota en 12). Este
+documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -550,13 +551,47 @@ mismos archivos desde la sesión 12.
 - Ahora el ícono del teléfono, el splash y el logo dentro del WebView
   (Login/sidebar) usan **el mismo isotipo** — ya no hay inconsistencia.
 
+## 13g. FAB flotantes reemplazados por franja superior compacta — RESUELTO
+
+Pedido del usuario: los FAB de Inicio/Recargar (bottom-left) tapaban el
+perfil del técnico y los botones "Marcar asistencia"/"Cambiar contraseña"
+del sidebar (`AppLayout.vue`) cuando estaba abierto en el celular.
+
+- **Alternativa evaluada y descartada**: integrar los controles en la
+  cabecera web existente. `AppLayout.vue` ya tiene un logo clicable
+  ("Ir al inicio"), pero `CampoLayout.vue` — la cabecera de las pantallas
+  de trabajo de campo, donde más molestaban los FAB (tapaban el recuadro
+  de firma, motivo original de moverlos a la izquierda en una sesión
+  previa) — no tiene ningún enlace de inicio, y "Recargar" (
+  `WebViewController.reload()`) no es algo que el JS del panel pueda
+  disparar sin un puente nuevo Flutter↔JS. Se descartó por introducir un
+  segundo sistema de navegación solo para una de las dos funciones.
+- **Solución implementada**: `mobile_app/lib/main.dart` — franja nativa
+  propia de 36dp arriba del WebView (dentro de un `Column`, no flotando
+  sobre el contenido como los FAB) con solo 2 iconos chicos (sin logo ni
+  texto, evita duplicar la cabecera del panel). Al no flotar, nunca se
+  superpone a nada del panel sin importar el estado del sidebar — no hizo
+  falta detectar si está abierto/cerrado. Reusa `_goHome`/`_reload`
+  (mismas funciones de antes) y `_isPublicRoute` (oculta en Login, misma
+  lógica de la sesión 13d). Sin `AppBar`/`FloatingActionButton` de
+  Material.
+- `flutter analyze` limpio. **Sin dispositivo/emulador Android en este
+  entorno** (`flutter devices` solo lista Windows desktop y navegadores)
+  — no se pudo probar en vivo abrir/cerrar sidebar, navegar entre
+  módulos ni refrescar. Queda como validación de campo pendiente.
+- Commit `7f4de75`, pusheado a `origin/main`. APK recompilada y copiada a
+  `C:\Users\USER\Desktop\SmartRayco.apk` (pisa la build de 13f — esta
+  tiene FAB→franja + ícono/splash definitivos + todo lo anterior). No
+  instalada ni distribuida.
+
 ## 13. Próximo paso recomendado
 
-1. Instalar `C:\Users\USER\Desktop\SmartRayco.apk` (ya con FAB + ícono/
-   splash definitivos, ver 13d/13f) en un equipo real y confirmar: ícono
-   correcto con máscara circular/redondeada, splash centrado, botones
-   Inicio/Recargar ausentes en Login — validación de campo pendiente, no
-   hecha todavía.
+1. Instalar `C:\Users\USER\Desktop\SmartRayco.apk` (franja de navegación
+   nueva + ícono/splash definitivos, ver 13f/13g) en un equipo real y
+   confirmar: ícono/splash correctos, franja con Inicio/Recargar ausente
+   en Login, sidebar/perfil del técnico ya no tapados al abrir el menú,
+   refrescar y volver al dashboard funcionan — validación de campo
+   pendiente, no hecha todavía (sin emulador disponible en este entorno).
 2. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
    flujo de Drop prefabricado/bobina (fase anterior a la de identidad
    visual) antes de seguir iterando sobre esa pantalla.
