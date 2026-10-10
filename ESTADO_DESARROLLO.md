@@ -1,7 +1,7 @@
 # SmartRayco — Estado de desarrollo
 
-Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión).
-Este documento es la
+Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión),
+mas el fix de despliegue del mismo día (sección 13c). Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -365,6 +365,56 @@ el working tree).
   para cuando exista) — el release sigue firmando con el keystore de debug
   de Android (`android/app/build.gradle.kts:39`), sin tocar en esta
   sesión.
+
+## 13c. Fix: Login/cabecera seguían con el logo Rayco HD — RESUELTO
+
+Reportado por el usuario tras instalar el APK (sección 12) en su celular e
+instalar/probar: el ícono de la APK sí se veía nuevo, pero Login y la
+cabecera del panel (cargados por la APK vía WebView, no empaquetados —
+`mobile_app/lib/main.dart` carga siempre `https://panel.rayconetworks.com/`)
+seguían mostrando el logo "Rayco HD" viejo.
+
+- **Causa raíz confirmada**: los cambios de logo web (sección 12) se
+  habían generado en la sesión anterior pero **nunca se commitearon** — la
+  autorización de esa sesión cubrió solo `mobile_app/` (sección 13b), no
+  el fix de logo web, que quedó en el working tree. La VM seguía en el
+  commit `463720b` (anterior a cualquier cambio de logo), confirmado con
+  `git log` por SSH antes de tocar nada.
+- **No era un problema de caché**: `deploy/nginx.conf` sirve `/assets/`
+  con `Cache-Control: public, immutable`, pero Vite fingerprinted el
+  nombre del archivo por contenido (`logo-icon-BpUCWDs3.png` el viejo →
+  `logo-icon-C8NG61wu.png` el nuevo) — un build nuevo nunca choca con el
+  caché del anterior, el navegador/WebView simplemente pide una URL que
+  nunca vio. No hizo falta ninguna lógica de invalidación de caché ni se
+  tocaron sesiones/`localStorage` de los técnicos.
+- **Fix**: se commiteó exactamente lo que ya estaba verificado
+  (`src/assets/logo-icon.png`, `logo-full.png`, el agrandado de símbolo en
+  `LoginView.vue`/`CambiarPasswordView.vue`, `smartray.md`) — confirmado
+  sin archivos ajenos antes de `git add` — commit `1c427fd` ("Reemplazar
+  logo Rayco HD por el isotipo SmartRayco en Login/cabecera"), push a
+  `origin/main`, y `bash deploy/update.sh` en la VM. **No se tocó
+  Supabase** (`update.sh` solo hace `git pull` + `docker compose up -d
+  --build`, sin ningún paso de base de datos).
+- **Verificado en vivo** (sin entrar al celular): VM en `1c427fd`
+  (`git rev-parse HEAD` por SSH == local). `curl
+  https://panel.rayconetworks.com/` devuelve
+  `<link rel="icon" ... href="/assets/logo-icon-C8NG61wu.png">`; se
+  descargó ese asset real desde el dominio público y pesa exactamente
+  277674 bytes, igual que `src/assets/logo-icon.png` en el repo — es el
+  isotipo nuevo, no el logo viejo.
+- **AppLayout.vue y CampoLayout.vue no tenían ningún cambio pendiente** —
+  ya importaban `@/assets/logo-icon.png` desde la sesión anterior, solo
+  heredan el binario corregido sin tocar su código.
+- **Cómo lo confirma el usuario desde el celular**: cerrar del todo la app
+  SmartRayco (quitarla de recientes, no solo minimizarla) y volver a
+  abrirla — al cargar `panel.rayconetworks.com` de nuevo en el WebView
+  debería traer el HTML/assets nuevos. Si por algún motivo seguía viendo
+  el logo viejo, probar "Borrar caché" de la app desde Ajustes de Android
+  (no borra sesión, solo el caché HTTP del WebView) — no debería hacer
+  falta según el análisis de caché de arriba, pero es la vía si persiste.
+- **No se recompiló la APK** — no hacía falta: el ícono/splash ya estaban
+  bien (confirmado por el propio usuario) y Login/cabecera los sirve la
+  VM vía WebView, no el binario.
 
 ## 13. Próximo paso recomendado
 
