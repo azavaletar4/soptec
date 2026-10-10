@@ -748,6 +748,42 @@ completo en `docs/ERRORES-CAMPO.md` (primera entrada real del archivo).
 - Commit `0c2ba8a`, pusheado a `origin/main`. **No desplegado** — no
   autorizado en este turno.
 
+## 13k. Plan/tarifa/zona/dirección del prospecto hasta la orden de Alta — RESUELTO, pendiente de desplegar
+
+Seguimiento de 13j, mismo día: el cliente y la Alta ya se creaban al
+convertir, pero sin contrato — sin plan ni tarifa, y el prospecto perdía
+el plan de interés y la zona/PON que sí había capturado. Pedido:
+replicar lo que antes el administrador mandaba a mano por WhatsApp al
+técnico (nombre, DNI, teléfonos, dirección, plan, tarifa — PPPoE solo si
+ya existe, sin tocarlo).
+
+- Revisado primero (solo lectura): columnas reales de
+  `clients`/`installations`/`service_contracts` vía
+  `information_schema`, el flujo real de "+ Nuevo servicio" en
+  `ClientDetailView.vue` (de ahí sale el patrón reusado: `monthly_fee`
+  del plan elegido, `installation_address` = dirección del cliente), y
+  cómo `CampoTrabajoDetailView.vue` arma `clientDetail`/`activeContract`
+  — confirmando que el técnico ya veía DNI/teléfonos (fetch directo por
+  `client_id`, no dependía de esto) pero NO plan/zona (sí dependía de un
+  contrato real, que faltaba).
+- `ProspectosView.vue`: `convertToClient()` ahora también pasa `zone_id`
+  y `plan_interes_id` del prospecto (antes se perdían en el redirect).
+- `ClientesView.vue`: al convertir, además del cliente se crea el
+  contrato (`plan_id`, `monthly_fee` del plan, `zone_id`,
+  `installation_address`) **antes** de la instalación, y se la vincula
+  (`contract_id`). Dirección pasa a ser obligatoria solo durante la
+  conversión. El aviso del modal ahora también pide el teléfono
+  alternativo si existe y muestra qué plan/zona se van a precargar antes
+  de guardar. `pppoe_username`/`mikrotik_*` sin tocar — esa vinculación
+  sigue siendo manual, vía el flujo de provisión existente.
+- Sin tabla, estado ni migración nueva — se reutilizan columnas reales ya
+  existentes. `vue-tsc` limpio. Sin prueba end-to-end contra Supabase
+  real (crearía un cliente/contrato/instalación reales) — validado por
+  lectura de código, siguiendo el patrón ya probado de "+ Nuevo
+  servicio".
+- Commit `ba49334`, pusheado a `origin/main`. **No desplegado** — no
+  autorizado en este turno.
+
 ## 13. Próximo paso recomendado
 
 1. **Frontend ya desplegado** (VM en `d59759a`, ver 13h) — falta instalar
