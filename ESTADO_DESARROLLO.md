@@ -355,8 +355,16 @@ el working tree).
 - **Resultado — autorizado e incorporado 2026-10-10b**: usuario autorizó
   explícitamente. `git add mobile_app` quedó en 44 archivos en staging
   (código Dart + proyecto Android + recursos de marca nuevos), verificado
-  sin `.apk`/`build/`/`.idea`/keystore/`.env`/screenshots. Commit y push a
-  `origin/main` realizados — hash y confirmación al pie de esta sección.
+  sin `.apk`/`build/`/`.idea`/keystore/`.env`/screenshots. Commit
+  `5563332` ("Versionar mobile_app/ (Flutter/Android) con icono y splash
+  de SmartRayco") empujado a `origin/main` y confirmado sincronizado
+  (`git rev-parse main` == `git rev-parse origin/main` ==
+  `556333282142b0b76c9829f975c6b60c0fd7413e`).
+- **Pendiente futuro registrado**: configurar una firma de release de
+  producción real (keystore propio + `key.properties`, hoy gitignorado
+  para cuando exista) — el release sigue firmando con el keystore de debug
+  de Android (`android/app/build.gradle.kts:39`), sin tocar en esta
+  sesión.
 
 ## 13. Próximo paso recomendado
 
