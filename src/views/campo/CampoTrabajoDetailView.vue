@@ -493,11 +493,15 @@ interface KitLine {
   match: RegExp;
   defaultQty: number;
 }
+// Conector: exige "optic" ademas de "conector" para no mezclarse con
+// "CONECTOR RJ45" (mismo nombre generico "conector", distinto producto) —
+// punto explicito del pedido: "no depender unicamente de nombres" se cubre
+// combinando categoria (ferreteria, ya filtrado abajo) + un patron mas
+// preciso que una subcadena generica.
 const KIT_ALTA: KitLine[] = [
   { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 1 },
   { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 1 },
-  { key: 'conector', label: 'Conectores Ópticos', match: /conector/i, defaultQty: 2 },
-  { key: 'drop', label: 'Cable Drop', match: /drop/i, defaultQty: 0 },
+  { key: 'conector', label: 'Conector Óptico', match: /conector.*ptic/i, defaultQty: 2 },
 ];
 // "Cliente vuelve / Reconexión": conserva la acometida ya tendida — no tiene
 // sentido descontar Drop ni Roseta de nuevo.
@@ -509,13 +513,66 @@ const kitRows = computed(() =>
   KIT_ALTA.map((line) => {
     const matches = ferreteriaProducts.value.filter((p) => line.match.test(p.name));
     const chosenId = matches.length > 1 ? kitProductChoice.value[line.key] : matches[0]?.id;
-    const excluded = kitReconexion.value && (line.key === 'drop' || line.key === 'roseta');
+    const excluded = kitReconexion.value && line.key === 'roseta';
     return { ...line, matches, product: matches.find((p) => p.id === chosenId) ?? null, excluded };
   }),
 );
+
+// ---- Cable Drop (kit base): dos modalidades, nunca ambas a la vez.
+// A) Prefabricado (habitual): se elige el largo ya armado (50/100/150/220/
+//    300m, cada largo es su propio producto en Inventario) y se descuenta 1
+//    unidad de ESE producto por cada tramo usado.
+// B) Bobina suelta (excepcional): "bobina drop" se descuenta por metros
+//    reales usados (ej. 3000m de stock, 85m usados -> queda 2915m), nunca
+//    una bobina completa. Se muestra en segundo plano (toggle) para no
+//    complicar el flujo habitual.
+// Los nombres reales en Inventario no son consistentes ("drop 50 metros"
+// vs "drop de 100 metros") — se detecta por patron (numero + "metros"), no
+// por una subcadena fija, y "bobina drop" se excluye explicitamente de la
+// lista de prefabricados.
+function dropLengthMeters(name: string): number {
+  const m = name.match(/(\d+)\s*metros/i);
+  return m ? Number(m[1]) : 0;
+}
+const dropPrefabProducts = computed(() =>
+  ferreteriaProducts.value
+    .filter((p) => /drop/i.test(p.name) && !/bobina/i.test(p.name) && dropLengthMeters(p.name) > 0)
+    .sort((a, b) => dropLengthMeters(a.name) - dropLengthMeters(b.name)),
+);
+const dropBobinaProduct = computed(() => ferreteriaProducts.value.find((p) => /bobina/i.test(p.name) && /drop/i.test(p.name)) ?? null);
+const dropMode = ref<'prefab' | 'bobina'>('prefab');
+const dropPrefabProductId = ref('');
+const dropPrefabTramos = ref(1);
+const dropBobinaMetros = ref<number | null>(null);
+
+// Productos ya cubiertos por el Kit base (patchcord/roseta/conector/drop) —
+// se excluyen del selector generico de "Materiales usados" para no duplicar
+// el mismo consumo por dos caminos distintos. El Kit base solo existe para
+// Altas (el panel ni siquiera se muestra en una averia) — en un ticket esos
+// mismos productos (ej. Patchcord) siguen siendo materiales validos para
+// registrar aca, no hay otro lugar donde hacerlo.
+const kitCoveredProductIds = computed(() => {
+  if (jobType !== 'installation') return new Set<string>();
+  const ids = new Set<string>();
+  for (const row of kitRows.value) if (row.product) ids.add(row.product.id);
+  for (const p of dropPrefabProducts.value) ids.add(p.id);
+  if (dropBobinaProduct.value) ids.add(dropBobinaProduct.value.id);
+  return ids;
+});
+// Fase 143: "Materiales usados" (Paso 3) es para CONSUMIBLES — excluye
+// equipos serializados (ONT/Mesh/TV Box, ya se asignan por serie/MAC en el
+// Paso 2) y lo que ya se registra desde el Kit base de arriba.
+const materialSelectableProducts = computed(() =>
+  inventoryStore.products.filter((p) => p.is_active && !p.is_serialized && !kitCoveredProductIds.value.has(p.id)),
+);
+
 function resetKitQuantities() {
   kitQuantities.value = Object.fromEntries(KIT_ALTA.map((l) => [l.key, l.defaultQty]));
   kitProductChoice.value = {};
+  dropMode.value = 'prefab';
+  dropPrefabProductId.value = '';
+  dropPrefabTramos.value = 1;
+  dropBobinaMetros.value = null;
 }
 resetKitQuantities();
 const savingKit = ref(false);
@@ -523,7 +580,9 @@ const kitError = ref<string | null>(null);
 
 async function handleRegisterKit() {
   const rows = kitRows.value.filter((row) => !row.excluded && (kitQuantities.value[row.key] ?? 0) > 0 && row.product);
-  if (!rows.length) {
+  const dropPrefabQty = !kitReconexion.value && dropMode.value === 'prefab' && dropPrefabProductId.value ? dropPrefabTramos.value : 0;
+  const dropBobinaQty = !kitReconexion.value && dropMode.value === 'bobina' ? dropBobinaMetros.value ?? 0 : 0;
+  if (!rows.length && dropPrefabQty <= 0 && dropBobinaQty <= 0) {
     toast.info('No hay cantidades para registrar — escribe lo que usaste en cada material.');
     return;
   }
@@ -540,6 +599,30 @@ async function handleRegisterKit() {
       });
     } catch (e) {
       failures.push(`${row.label}: ${getErrorMessage(e)}`);
+    }
+  }
+  if (dropPrefabQty > 0 && dropPrefabProductId.value) {
+    try {
+      await inventoryStore.registerUsage({
+        productId: dropPrefabProductId.value,
+        quantity: dropPrefabQty,
+        installationId: jobId,
+        reason: `App de Campo — ${trabajo.value?.clienteNombre ?? jobId} — drop prefabricado`,
+      });
+    } catch (e) {
+      failures.push(`Cable Drop: ${getErrorMessage(e)}`);
+    }
+  }
+  if (dropBobinaQty > 0 && dropBobinaProduct.value) {
+    try {
+      await inventoryStore.registerUsage({
+        productId: dropBobinaProduct.value.id,
+        quantity: dropBobinaQty,
+        installationId: jobId,
+        reason: `App de Campo — ${trabajo.value?.clienteNombre ?? jobId} — drop de bobina (${dropBobinaQty} m)`,
+      });
+    } catch (e) {
+      failures.push(`Cable Drop (bobina): ${getErrorMessage(e)}`);
     }
   }
   await loadMaterials();
@@ -1862,6 +1945,50 @@ async function handleCloseSubmit() {
               <p v-else class="text-[11px] text-slate-400 mt-1">Excluido (reconexión).</p>
             </div>
           </div>
+
+          <!-- Cable Drop: modalidad A (prefabricado, habitual) / B (bobina
+               suelta, excepcional — se muestra en segundo plano). -->
+          <div class="py-2 border-t border-slate-100 mt-1">
+            <span class="text-xs text-slate-700">Cable Drop</span>
+            <p v-if="kitReconexion" class="text-[11px] text-slate-400 mt-1">Excluido (reconexión).</p>
+            <template v-else>
+              <div class="flex items-center gap-2 mt-1.5">
+                <select v-model="dropPrefabProductId" class="field-input w-full py-1 text-xs">
+                  <option value="">Selecciona el largo prefabricado...</option>
+                  <option v-for="p in dropPrefabProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ p.current_stock }} {{ p.unit }})</option>
+                </select>
+              </div>
+              <div v-if="dropPrefabProductId" class="flex items-center gap-2 mt-1.5">
+                <span class="flex-1 text-[11px] text-slate-400">Tramos usados</span>
+                <input v-model.number="dropPrefabTramos" type="number" min="1" step="1" class="field-input w-20 py-1 text-xs" />
+              </div>
+              <p v-if="!dropPrefabProducts.length" class="text-[11px] text-amber-700 mt-1">No hay Drop prefabricado en Inventario.</p>
+
+              <button
+                v-if="dropMode === 'prefab'"
+                type="button"
+                class="text-[11px] text-sky-700 mt-2 underline"
+                @click="dropMode = 'bobina'; dropPrefabProductId = ''"
+              >
+                ¿Usaste bobina suelta en vez de un tramo prefabricado?
+              </button>
+              <template v-else>
+                <div class="mt-2 pt-2 border-t border-dashed border-slate-200">
+                  <p class="text-[11px] text-slate-500 mb-1">
+                    Bobina suelta ({{ dropBobinaProduct ? `${dropBobinaProduct.current_stock} ${dropBobinaProduct.unit} disponibles` : 'sin stock en Inventario' }})
+                  </p>
+                  <div class="flex items-center gap-2">
+                    <span class="flex-1 text-[11px] text-slate-400">Metros usados</span>
+                    <input v-model.number="dropBobinaMetros" type="number" min="0" step="1" class="field-input w-24 py-1 text-xs" placeholder="0" />
+                  </div>
+                  <button type="button" class="text-[11px] text-sky-700 mt-1.5 underline" @click="dropMode = 'prefab'; dropBobinaMetros = null">
+                    Volver a Drop prefabricado
+                  </button>
+                </div>
+              </template>
+            </template>
+          </div>
+
           <div class="flex justify-end mt-3">
             <button type="button" :disabled="savingKit" class="btn-secondary text-xs" @click="handleRegisterKit">
               {{ savingKit ? 'Registrando...' : 'Registrar kit base' }}
@@ -1920,7 +2047,7 @@ async function handleCloseSubmit() {
           <form class="flex gap-2" @submit.prevent="handleAddMaterial">
             <select v-model="materialForm.productId" required class="field-input text-sm flex-1">
               <option value="" disabled>Producto...</option>
-              <option v-for="p in inventoryStore.products" :key="p.id" :value="p.id">{{ p.name }} ({{ p.current_stock }})</option>
+              <option v-for="p in materialSelectableProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ p.current_stock }} {{ p.unit }})</option>
             </select>
             <input v-model.number="materialForm.quantity" type="number" min="1" class="field-input text-sm w-16" />
             <button type="submit" :disabled="savingMaterial" class="btn-secondary text-xs shrink-0">+</button>
