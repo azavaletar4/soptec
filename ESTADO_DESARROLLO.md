@@ -1,8 +1,9 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión),
-mas el fix de despliegue (13c) y el fix de isotipo/FAB (13d), mismo día.
-Este documento es la
+mas los fixes de despliegue 13c, 13d y 13e, todos el mismo día — **13e es
+la versión final y vigente del isotipo** (13 y 13d quedaron supersedidos,
+ver nota en 12). Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -277,7 +278,17 @@ cierre/consumo en `src/stores/campo.ts`.
   (UPDATE no crea vínculo nuevo; DELETE libera al técnico, no es bypass),
   no un bug, pero vale tenerlo presente.
 
-## 12. Identidad visual unificada (sesión 2026-10-10b) — IMPLEMENTADO
+## 12. Identidad visual unificada (sesión 2026-10-10b) — SUPERSEDIDA POR 13e
+
+**El isotipo descrito en esta sección (derivado de "Ícono SmartRayco con R
+Neón.png" por recorte/cutout) ya NO es el que está en producción.** El
+usuario lo rechazo dos veces (caja de fondo visible, "trazos borrosos") y
+entrego un archivo distinto e independiente que es el vigente desde 13e —
+ver esa sección para el estado real de `src/assets/logo-icon.png`. Esta
+sección 12 queda como registro histórico de cómo se llegó ahí, no como
+descripción del estado actual. El ícono/splash de la APK Android (ver 13d)
+**sí siguen usando** el diseño descrito aquí (no se actualizaron a 13e,
+ver sección 13 "Próximo paso").
 
 - Referencia usada: `C:\Users\USER\Downloads\Ícono SmartRayco con R Neón.png`
   (isotipo R azul + efecto fibra óptica, provisto por el usuario cuando el
@@ -446,25 +457,94 @@ nativos (Inicio/Recargar) encima del Login.
   nativos en Login"), pusheado a `origin/main`. **APK recompilada**
   (necesario, el fix de FAB es código Dart) y copiada a
   `C:\Users\USER\Desktop\SmartRayco.apk`.
-- **Pendiente de autorización**: el fix de logo vive en
-  `src/assets/logo-icon.png`, servido por la VM — **no desplegado todavía**
-  (no autorizado en este turno). Hasta desplegar, el Login seguirá
-  mostrando el logo con la caja vieja tanto en PC como dentro del WebView
-  de la APK nueva. El fix de FAB sí es efectivo de inmediato al instalar
-  la APK nueva (no depende de la VM).
+- Desplegado a la VM el mismo día (autorización explícita del usuario en
+  turno siguiente) — en ese momento se dio por resuelto. **El FAB nativo
+  sigue correcto y vigente.** El isotipo (flood-fill) resultó rechazado
+  por el usuario poco después al verlo en el celular — ver 13e para el
+  reemplazo definitivo.
+
+## 13e. Reemplazo definitivo del isotipo (archivo entregado por el usuario) — RESUELTO
+
+El usuario vio el fix de 13d desplegado y lo rechazo: "sigues utilizando
+una version anterior de la R, con trazos borrosos y un recorte que no
+corresponde al nuevo diseño de referencia". Pidió explícitamente **no**
+seguir reconstruyendo/recortando/aplicando flood-fill sobre ningún archivo
+existente, y que esperara un archivo nuevo e independiente.
+
+- **Primero, un rediseño de Login pedido aparte** (no relacionado al
+  isotipo): el usuario mandó un mockup
+  (`Panel de Gestión SmartRayco.png`) con el Login completo — logo más
+  grande, wordmark "SmartRayco" en dos tonos, iconos dentro de los campos
+  (usuario/candado), boton mostrar/ocultar contraseña, botón "Ingresar"
+  con degradado azul→cian y flecha, fondo con degradado suave. Implementado
+  en `LoginView.vue` sin tocar `.field-input`/`.btn-primary`/`.modal-panel`
+  (clases compartidas con el resto del panel) — todo el estilo nuevo es
+  local a esa vista. Commit `47d3cc7`. Verificado en `localhost:5173` antes
+  y después de desplegar.
+- **Intento 1 de archivo nuevo** (`Ícono SmartRayco con R Neón.png`
+  reenviado): resultó ser **el mismo archivo byte a byte** (mismo MD5) que
+  el usado desde la sesión 12 — no era un archivo nuevo. Se le informó esto
+  al usuario antes de tocar nada (regla: nunca asumir, verificar hash).
+- **Intento 2** (`Kit de Marca SmartRayco_ Logos y Mockups.png`): resultó
+  ser un mockup/moodboard compuesto (imagen plana con varios paneles de
+  ejemplo), no un archivo de isotipo independiente — tampoco se uso.
+- **Archivos reales entregados** (3 PNG independientes,
+  `C:\Users\USER\Downloads\`):
+  - `smartrayco-logo.png` (1254x1254) — **NO tenia transparencia real**
+    pese a estar etiquetado como tal: el "cuadriculado transparente" del
+    editor quedo horneado como pixeles grises reales (verificado leyendo
+    los pixeles de esquina, `~(198,197,198)`). Se informo al usuario en
+    vez de intentar "arreglarlo" con un filtro. El usuario autorizo usar en
+    su lugar el isotipo de `smartrayco-favicon.png` (mismo diseño, con
+    alfa real) para este proposito.
+  - `smartrayco-logo-horizontal.png` (2172x724, alfa real confirmado) —
+    isotipo + texto en un solo lockup. Guardado como referencia en
+    `assets/smartrayco-logo-horizontal.png` pero **no se uso** en ningun
+    componente (el usuario pidio mantener el nombre como texto HTML, no
+    incrustado en la imagen).
+  - `smartrayco-favicon.png` (1261x1247, alfa real confirmado) — isotipo
+    solo, diseño nuevo (cinta/listón con la R, distinto del anillo
+    completo de las versiones 12/13d). **Este es el archivo vigente.**
+- **Uso**: copiado **tal cual, sin ningún procesamiento** (sin recorte, sin
+  flood-fill, sin resize) a `src/assets/logo-icon.png` — confirmado
+  idéntico byte a byte (mismo MD5) contra el original entregado, tanto en
+  el repo como luego en el archivo servido en vivo por la VM. Un solo
+  archivo sigue alimentando Login, sidebar, cabecera móvil y favicon — cero
+  cambios de `.vue`. Copia de referencia también en
+  `assets/smartrayco-favicon.png`.
+- Verificado visualmente contra el archivo fuente en `localhost:5173/login`
+  (zoom del logo renderizado) **antes** de pedir confirmación al usuario, y
+  de nuevo en producción tras desplegar (`cmp` byte a byte entre el PNG
+  descargado de `panel.rayconetworks.com` y el archivo del repo — idéntico).
+- Commits: `db1188b` (reemplazo del logo). Desplegado a la VM
+  (commit `db1188b` confirmado via SSH) tras autorización explícita.
+- **No se toco `mobile_app/android/` en ningún punto de 13e** (ícono de
+  launcher y splash de la APK) — eso sigue usando el diseño de la sesión
+  12 (el primero, con el recorte por umbral de luminancia), **no** el
+  isotipo nuevo de esta sección. Es una inconsistencia real conocida, no
+  un olvido — no se pidió tocarlo y el usuario pidió explícitamente no
+  modificar ícono/splash en 13e. Queda pendiente, ver sección 13.
 
 ## 13. Próximo paso recomendado
 
-1. Instalar `C:\Users\USER\Desktop\SmartRayco.apk` en un equipo real y
-   confirmar que el ícono/splash se ven bien (máscara circular, modo
-   oscuro, pantalla de inicio) — validación de campo pendiente de esta
-   sesión.
-2. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
-   flujo de Drop prefabricado/bobina antes de seguir iterando sobre esa
-   pantalla — son los cambios más grandes de la sesión anterior sobre una
-   herramienta en uso diario.
-3. Decidir si vale la pena una revisión de seguridad más amplia sobre los
+1. **Actualizar el ícono de launcher y el splash de la APK Android**
+   (`mobile_app/android/app/src/main/res/mipmap-*/ic_launcher*.png`,
+   `drawable-*dpi/launch_image.png`) para que usen el isotipo definitivo
+   de 13e (`src/assets/logo-icon.png` / `assets/smartrayco-favicon.png`)
+   en vez del diseño de la sesión 12 — hoy el ícono del teléfono no
+   coincide con el logo que se ve dentro de la app. No se hizo en 13e
+   porque no se pidió y el usuario pidió explícitamente no tocarlo en ese
+   momento; requeriría recompilar la APK. Confirmar con el usuario antes.
+2. Instalar `C:\Users\USER\Desktop\SmartRayco.apk` (build de 13d, con el
+   fix de FAB) en un equipo real y confirmar que el ícono/splash se ven
+   bien (máscara circular, modo oscuro, pantalla de inicio) y que los
+   botones Inicio/Recargar ya no aparecen en Login — validación de campo
+   pendiente.
+3. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
+   flujo de Drop prefabricado/bobina (fase anterior a la de identidad
+   visual) antes de seguir iterando sobre esa pantalla.
+4. Decidir si vale la pena una revisión de seguridad más amplia sobre los
    grants por defecto de Supabase (sección 11) — es un hallazgo real pero
    no urgente (la autorización real ya vive dentro de cada función).
-4. Empezar a registrar en `docs/ERRORES-CAMPO.md` los bugs reales que
+5. Empezar a registrar en `docs/ERRORES-CAMPO.md` los bugs reales que
    reporten los técnicos, para no perder ese historial.
