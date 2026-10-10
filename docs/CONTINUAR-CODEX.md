@@ -1,50 +1,34 @@
-﻿# Continuidad de SmartRayco
+# SmartRayco — continuidad de fase 2
 
-**Actualizado:** 10 de octubre de 2026. **La fase 2 sigue abierta.** El frontend y las correcciones de aprovisionamiento están desplegados. No se modificaron la ONU, MikroTik, asignaciones NAP ni datos de Supabase durante el ajuste visual de esta sesión.
+10 de octubre de 2026, Lima. **Lista para revisión y aprobación del usuario con los límites indicados. No iniciar fase 3.**
 
-## Prueba reciente confirmada por el usuario
+## Aplicado
 
-- El usuario eliminó y volvió a autorizar la ONT de prueba `HWTCABD21CB4` desde el panel con WAN manual. Después de esa autorización, informó que volvió a navegar.
-- Para esta prueba no resincronizó ni envió credenciales PPPoE desde la OLT. El resultado confirma satisfactoriamente el flujo de autorización con WAN manual en esta ONT.
-- No se comprobaron de nuevo otros detalles de OLT, PPPoE, MikroTik, contrato o NAP después de esta autorización. No asumir su estado actual a partir de las consultas anteriores.
-- El usuario confirmó que la verificación SQL de `assign_contract_nap` (136d) ya se ejecutó y que las comprobaciones esperadas resultaron `true`. No está pendiente y no se repitió.
+- Contrato obligatorio para nuevas autorizaciones; históricos consultables.
+- PPPoE existente como referencia, sin modificar usuario, contraseña, perfil ni estado en MikroTik.
+- Servicio GEM/VLAN independiente de la WAN manual u opcional. VLAN de prueba: 120.
+- Reserva NAP transaccional y recuperación de operaciones sin altas duplicadas.
+- Plan visible desde la ONT o el contrato cuando coinciden sus perfiles OLT.
+- Autorización exclusiva para ADMIN y SUPERADMIN.
 
-## Estado desplegado
+## Resultados finales
 
-- La corrección de la ficha del contrato ya está en el frontend: usa el plan directo de la ONT si existe; si falta, muestra el plan del contrato solo cuando los perfiles T-CONT y de tráfico de la ONT coinciden con los perfiles OLT de ese plan. Pruebas unitarias de la función: 3/3 aprobadas.
-- Se reconstruyó y recreó únicamente `frontend` con `docker-compose.onprem.yml`. El contenedor está activo; el panel por HTTPS, el índice, y el paquete JavaScript que contiene el cambio respondieron HTTP 200. El paquete servido incluye la lógica de respaldo y los perfiles OLT.
-- En el contrato `CTR-2026-00214`, el plan está en `service_contracts.plan_id` (“DE SANDRO O MICHEL”); la fila de la ONT tenía `plan_id` vacío y perfiles OLT coincidentes. La ficha ya puede mostrar el plan coherente sin escribir en Supabase.
-- La etiqueta NAP `7/16` indica 7 puertos ocupados de 16. La asignación del contrato está en el puerto 7. La consulta de solo lectura no encontró puertos duplicados.
-- La asociación de servicio GPON para la ONT operativa y la sesión PPPoE fueron verificadas en el trabajo anterior. No se reconfiguró la ONT en esta sesión.
+- WAN manual: HWTCABD21CB4 reautorizada; navegación confirmada por el usuario sin resincronizar ni enviar credenciales desde la OLT.
+- WAN opcional: HWTCE5AFB8B6 sustituyó a la ONT de prueba anterior. Panel confirmó registro/verificación, vínculo a CTR-2026-00214 y envío WAN/PPPoE; usuario confirmó internet el 10/10 a las 08:54.
+- Capturas: plan DE SANDRO O MICHEL, ONT anterior en línea y NAP SM-01 seleccionada; menú restringido a soporte para técnico/soporte.
+- Revisión independiente del ZIP: 105/105 pruebas aprobadas y compilación correcta. Incluyen contratos, referencias PPPoE, idempotencia, recuperación y guardas de roles con identidad simulada.
+- Nueve escenarios SQL NAP aprobados según Codex local; código de pruebas revisado sin repetir ejecución aquí. Supabase 136d instalada y verificada mediante consulta aportada. No repetir migraciones.
 
-## Correcciones de fase 2 desplegadas
+## Límites de aceptación
 
-1. El backend exige un contrato válido para nuevas autorizaciones y conserva la lectura de registros históricos sin contrato.
-2. Los consumidores de la ruta anterior usan las garantías del flujo común verificado e idempotente.
-3. El backend valida que las referencias PPPoE correspondan al contrato. El flujo de autorización no cambia en MikroTik el nombre de usuario, contraseña, perfil ni estado.
-4. La reserva de NAP es transaccional: un fallo al reservar el destino conserva la asignación de origen.
-5. El transporte de servicio GPON (`service 1 gemport 1 vlan 120`) no depende del envío opcional de WAN/PPPoE. WAN manual sigue disponible.
-6. La ficha muestra el plan del contrato solo cuando concuerda con los perfiles OLT configurados en la ONT.
+No se hicieron peticiones directas con JWT reales de cada rol ni una nueva consulta del puerto NAP tras el último reemplazo. El puerto 7 sin duplicados se verificó antes; “7/16” es ocupación. La conservación de atributos MikroTik está cubierta por código/simulaciones, sin comparación independiente antes/después en la última prueba real. No se certifican todos los modelos ONT ni todos los escritores NAP.
 
-## Pruebas y verificaciones
+## Guardado y respaldos
 
-- La entrega de fase 2 anterior pasó 101/101 pruebas locales, nueve escenarios SQL con PostgreSQL 17, comprobaciones de tipos y build. Eran pruebas simuladas/aisladas, no una certificación completa de operaciones productivas.
-- En el despliegue previo se ejecutaron las pruebas de aprovisionamiento y Telnet y se construyó el backend. En esta sesión pasaron 3/3 pruebas del resolvedor visual y `npm run build`.
-- Verificación posterior del frontend: contenedor activo, panel HTTPS HTTP 200 y paquete nuevo HTTP 200.
-- Supabase: el usuario confirmó que la migración 136d fue instalada con `SmartRayco_136d_instalar.sql`; `funcion_instalada`, `authenticated_permitido` y `anon_bloqueado` dieron `true`. La revisión previa encontró 136/136b/136c instaladas aunque sin filas de registro. No se repitió ninguna migración ni se cambió la base para el ajuste visual.
+- Base revisada: caabb99, sobre 66d86f5; captura local con main y origin/main alineados. Este cierre necesita un nuevo commit y push.
+- Frontend: /opt/smartrayco-backups/antes-ficha-plan-20261010-003020/
+- Backend: /opt/smartrayco-backups/antes-service-gem-vlan-20261010-001709/backend-codigo-configuracion.tar.gz
+- Contratos/NAP: /opt/smartrayco-backups/antes-contratos-nap-20261009-2130/codigo-configuracion.tar.gz
+- Estos respaldos no contienen los datos remotos de Supabase.
 
-## Respaldos
-
-- Frontend previo a este despliegue: `/opt/smartrayco-backups/antes-ficha-plan-20261010-003020/` (`frontend-codigo-configuracion.tar.gz`, ID de imagen y `frontend-image.tar`).
-- Backend previo al cambio de servicio GEM/VLAN: `/opt/smartrayco-backups/antes-service-gem-vlan-20261010-001709/backend-codigo-configuracion.tar.gz`.
-- Despliegue previo de contratos/NAP: `/opt/smartrayco-backups/antes-contratos-nap-20261009-2130/codigo-configuracion.tar.gz`.
-- Respaldo anterior de fase 2: `/opt/smartrayco-backups/antes-fase2-20261009-185510` (código/configuración/imágenes; no contiene datos de Supabase).
-
-## Pendientes reales de fase 2
-
-1. Revisar el panel con una sesión autenticada y roles reales: permisos y lecturas de contrato/plan, estado de ONT y asignación NAP. No autorizar, eliminar ni reconfigurar equipos para esta comprobación.
-2. Completar pruebas aisladas de contrato ausente/inválido, referencias PPPoE discordantes, conservación de atributos del secreto MikroTik, resultados inciertos de OLT y rollback/concurrencia NAP.
-3. Probar el envío opcional de WAN en una ONT de laboratorio independiente. La prueba reciente de `HWTCABD21CB4` cubrió el flujo manual; no usarla para reprovisionar como parte de la revisión restante.
-4. Hacer una prueba de extremo a extremo en laboratorio que compruebe contrato, OLT, asociación GEM/VLAN, referencias PPPoE y NAP sin afectar registros históricos.
-
-La fase 2 permanece abierta hasta revisar las verificaciones autenticadas y las pruebas reales/aisladas pendientes. No avanzar a otra fase sin revisión y aprobación del usuario.
+Siguiente paso: guardar la documentación y recibir aprobación explícita sobre este alcance. No repetir pruebas satisfechas ni modificar equipos para el cierre documental. Conservar archivos ajenos y secretos fuera del commit.
