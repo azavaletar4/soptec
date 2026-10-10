@@ -2,6 +2,13 @@
 
 **Actualizado:** 10 de octubre de 2026. **La fase 2 sigue abierta.** El frontend y las correcciones de aprovisionamiento están desplegados. No se modificaron la ONU, MikroTik, asignaciones NAP ni datos de Supabase durante el ajuste visual de esta sesión.
 
+## Prueba reciente confirmada por el usuario
+
+- El usuario eliminó y volvió a autorizar la ONT de prueba `HWTCABD21CB4` desde el panel con WAN manual. Después de esa autorización, informó que volvió a navegar.
+- Para esta prueba no resincronizó ni envió credenciales PPPoE desde la OLT. El resultado confirma satisfactoriamente el flujo de autorización con WAN manual en esta ONT.
+- No se comprobaron de nuevo otros detalles de OLT, PPPoE, MikroTik, contrato o NAP después de esta autorización. No asumir su estado actual a partir de las consultas anteriores.
+- El usuario confirmó que la verificación SQL de `assign_contract_nap` (136d) ya se ejecutó y que las comprobaciones esperadas resultaron `true`. No está pendiente y no se repitió.
+
 ## Estado desplegado
 
 - La corrección de la ficha del contrato ya está en el frontend: usa el plan directo de la ONT si existe; si falta, muestra el plan del contrato solo cuando los perfiles T-CONT y de tráfico de la ONT coinciden con los perfiles OLT de ese plan. Pruebas unitarias de la función: 3/3 aprobadas.
@@ -35,10 +42,9 @@
 
 ## Pendientes reales de fase 2
 
-1. En el SQL Editor, ejecutar solo las consultas de lectura preparadas para confirmar definición, propietario, `SECURITY DEFINER`, `search_path`, ACL efectiva de `authenticated`, `anon` y `PUBLIC`, y estado del registro de 136d. No reinstalar migraciones.
-2. Revisar el panel con una sesión autenticada y roles reales: permisos, ficha de contrato/plan, estados de ONT y lectura de asignación NAP. No autorizar, eliminar ni reconfigurar equipos para esta comprobación.
-3. Completar pruebas aisladas de contrato ausente/inválido, referencias PPPoE discordantes, conservación de atributos del secreto MikroTik, resultados inciertos de OLT y rollback/concurrencia NAP.
-4. Probar WAN manual y el envío opcional de WAN en una ONT de laboratorio independiente. La ONT `HWTCABD21CB4` ya navega y no debe utilizarse para reprovisionar.
-5. Hacer una prueba de extremo a extremo en laboratorio que compruebe contrato, OLT, asociación GEM/VLAN, referencias PPPoE y NAP sin afectar registros históricos.
+1. Revisar el panel con una sesión autenticada y roles reales: permisos y lecturas de contrato/plan, estado de ONT y asignación NAP. No autorizar, eliminar ni reconfigurar equipos para esta comprobación.
+2. Completar pruebas aisladas de contrato ausente/inválido, referencias PPPoE discordantes, conservación de atributos del secreto MikroTik, resultados inciertos de OLT y rollback/concurrencia NAP.
+3. Probar el envío opcional de WAN en una ONT de laboratorio independiente. La prueba reciente de `HWTCABD21CB4` cubrió el flujo manual; no usarla para reprovisionar como parte de la revisión restante.
+4. Hacer una prueba de extremo a extremo en laboratorio que compruebe contrato, OLT, asociación GEM/VLAN, referencias PPPoE y NAP sin afectar registros históricos.
 
 La fase 2 permanece abierta hasta revisar las verificaciones autenticadas y las pruebas reales/aisladas pendientes. No avanzar a otra fase sin revisión y aprobación del usuario.
