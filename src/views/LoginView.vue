@@ -46,7 +46,7 @@ async function handleSubmit() {
 
     <form class="w-full max-w-sm modal-panel relative" @submit.prevent="handleSubmit">
       <div class="flex flex-col items-center text-center mb-6">
-        <img :src="logoIcon" alt="SmartRayco" class="w-16 h-16 mb-3 drop-shadow-[0_0_20px_rgba(14,165,233,0.35)]" />
+        <img :src="logoIcon" alt="SmartRayco" class="w-24 h-24 mb-3 drop-shadow-[0_0_20px_rgba(14,165,233,0.35)]" />
         <h1 class="text-xl font-bold">SmartRayco</h1>
         <p class="text-sm text-slate-500 mt-1">Ingresa a tu panel de gestión</p>
       </div>

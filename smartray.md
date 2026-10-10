@@ -505,6 +505,45 @@ Pantalla nueva completa, dentro del mismo lenguaje visual claro del resto del pa
 
 ---
 
+## 2026-10-10
+
+### Identidad visual unificada (isotipo SmartRayco)
+- Logo anterior ("Rayco HD": R + antena de TV + texto "HD") reemplazado en **toda la app** por
+  el nuevo isotipo SmartRayco (R azul con efecto de fibra óptica, estilo neón/cristal), derivado
+  de la referencia `C:\Users\USER\Downloads\Ícono SmartRayco con R Neón.png`. Un solo archivo
+  (`src/assets/logo-icon.png`, PNG con fondo transparente) alimenta los 4 puntos donde se usaba
+  el logo viejo — no hubo que tocar código de layout, solo el binario:
+  - Favicon del navegador (`index.html` ya apuntaba a este mismo archivo).
+  - Login (`LoginView.vue`): símbolo más grande y nítido (antes `w-16 h-16`, ahora `w-24 h-24`).
+  - Cambiar contraseña (`CambiarPasswordView.vue`): mismo criterio (`w-14`→`w-20`).
+  - Barra lateral y header móvil (`AppLayout.vue`) y header de App de Campo (`CampoLayout.vue`)
+    — sin cambio de tamaño, solo el ícono nuevo.
+  - `src/assets/logo-full.png` (no usado por ningún componente hoy) también actualizado al
+    logotipo completo (símbolo + texto "SmartRayco"), por consistencia a futuro.
+- No se tocó autenticación, rutas, validaciones ni ningún otro texto del Login (subtítulo "Ingresa
+  a tu panel de gestión", campos Usuario/Contraseña, botón Ingresar, todo igual).
+- App de Campo (WebView en `mobile_app/`) hereda el cambio automáticamente al cargar el mismo
+  panel — no requirió tocar Dart.
+- Assets maestros centralizados en `D:\SmartRayco\assets\` (`smartrayco-icon-master.png`,
+  `smartrayco-symbol.png`, `smartrayco-logo.png`) para reutilizar en el futuro sin tener que
+  volver a recortar/generar variantes desde cero.
+
+### APK Android — ícono de lanzador y splash
+- Ícono del launcher: antes era el logo genérico de Flutter (nunca se había personalizado,
+  independientemente de Rayco HD). Reemplazado por el isotipo SmartRayco sobre fondo azul marino
+  de marca (`#030714`), en legacy (`mipmap-*/ic_launcher.png`) **y** adaptive icon nuevo
+  (`mipmap-anydpi-v26/ic_launcher.xml` + foreground/monochrome por densidad) — se ve correcto con
+  máscaras circulares/redondeadas del launcher y soporta ícono temático (Android 13+).
+  `android:label`, `android:icon`, package ID, firma y permisos sin cambios.
+- Splash nativo: antes pantalla en blanco sin imagen (plantilla default de Flutter, nunca
+  personalizada). Ahora fondo azul marino de marca + isotipo centrado
+  (`drawable*/launch_background.xml` + `drawable-*dpi/launch_image.png`), mismo comportamiento y
+  tiempo de arranque (no se agregó pantalla de espera nueva).
+- APK compilada y copiada a `C:\Users\USER\Desktop\SmartRayco.apk` para probar en un dispositivo
+  real.
+
+---
+
 ## Cómo se sigue actualizando este archivo
 
 Cada vez que se aplique un cambio visual nuevo (color, layout, componente, texto de interfaz,

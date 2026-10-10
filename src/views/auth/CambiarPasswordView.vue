@@ -48,7 +48,7 @@ async function handleLogout() {
 
     <form class="w-full max-w-sm modal-panel relative" @submit.prevent="handleSubmit">
       <div class="flex flex-col items-center text-center mb-6">
-        <img :src="logoIcon" alt="SmartRayco" class="w-14 h-14 mb-3" />
+        <img :src="logoIcon" alt="SmartRayco" class="w-20 h-20 mb-3" />
         <h1 class="text-xl font-bold">{{ forced ? 'Debes cambiar tu contraseña' : 'Cambiar contraseña' }}</h1>
         <p class="text-sm text-slate-500 mt-1">
           {{
