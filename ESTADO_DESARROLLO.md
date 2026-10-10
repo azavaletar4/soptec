@@ -1,12 +1,11 @@
 # SmartRayco — Estado de desarrollo
 
-Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión),
-mas los fixes 13c-13h, todos el mismo día — **13e es la versión final y
-vigente del isotipo web, 13f la aplicó también al ícono/splash de la APK,
-13h es la cabecera móvil vigente (reemplazó la franja nativa de 13g, que
-quedó supersedida) y ya está desplegada en producción (VM en commit
-`d59759a`)** (12 y 13d quedaron supersedidas en cuanto al diseño del
-isotipo, ver nota en 12). Este documento es la
+Última actualización: 2026-10-10, sesión de identidad visual + Prospectos
+CRM, cortada por límite de uso justo después de desplegar 13l. **VM de
+producción en commit `718e4c1`** (incluye 13c-13l: isotipo definitivo,
+cabecera única de la APK, y el fix completo de conversión de prospectos
+con sus tres correcciones sucesivas 13j/13k/13l). 12 y 13d/13g quedaron
+supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -781,23 +780,61 @@ ya existe, sin tocarlo).
   real (crearía un cliente/contrato/instalación reales) — validado por
   lectura de código, siguiendo el patrón ya probado de "+ Nuevo
   servicio".
-- Commit `ba49334`, pusheado a `origin/main`. **No desplegado** — no
-  autorizado en este turno.
+- Commit `ba49334`, pusheado a `origin/main`.
+
+## 13l. Verificación final del flujo + fix real encontrado + despliegue — RESUELTO Y DESPLEGADO
+
+Pedido explícito: verificar punto por punto el flujo completo antes de
+autorizar el despliegue. Se encontró y corrigió un problema real
+releyendo el código (sin tocar Supabase):
+
+- **Hallazgo**: `markConverted()` se llamaba siempre que el cliente se
+  hubiera creado, sin importar si el contrato y la instalación habían
+  fallado — el prospecto podía quedar "convertido" sin ninguna orden de
+  Alta real. Corregido: solo se marca convertido si las TRES escrituras
+  (cliente, contrato, instalación) terminaron bien. Si algo falla, el
+  cliente (y el contrato, si llegó a crearse) quedan en pie — no se
+  revierten — pero el prospecto sigue "por convertir"; un reintento
+  vuelve a pasar por el chequeo de documento/teléfono ya existente (avisa,
+  no es garantía de unicidad a nivel de BD — así quedó documentado en el
+  mensaje al usuario, sin prometer de más).
+- Guard `if (saving.value) return` agregado al inicio de `handleSubmit`
+  contra reenvíos mientras una llamada anterior sigue en vuelo.
+- Verificado leyendo código (cero consultas a Supabase esta vez): la Alta
+  aparece en Soporte (`installation.status: 'pending'` está en
+  `ACTIVE_STATUS` de `useUnifiedJobs.ts`); App de Campo recibe nombre/
+  DNI/teléfono principal y alternativo/dirección/plan, confirmado campo
+  por campo en `CampoTrabajoDetailView.vue` + `campo.ts` — **corrección a
+  13k: la tarifa NO se le muestra al técnico en ningún lado de esa vista**
+  (diseño existente, el rol técnico no ve montos — 13k afirmaba de más);
+  la instalación nunca asigna técnico automáticamente.
+- Commit `718e4c1`, pusheado a `origin/main`.
+- **Desplegado** (autorización condicionada a que las verificaciones
+  pasaran): respaldo `rollback-20261010231717` (mismo mecanismo de 13h/
+  13i) antes de reconstruir. VM confirmada en `718e4c1`, `/login`
+  responde 200.
+- **Sesión cortada por límite de uso justo después del deploy** — no se
+  alcanzó a hacer la verificación visual en navegador (solo HTTP
+  200 + lectura de código). Sin cambios pendientes sin commitear.
 
 ## 13. Próximo paso recomendado
 
-1. **Frontend ya desplegado** (VM en `d59759a`, ver 13h) — falta instalar
+1. Verificar visualmente en el navegador (no se alcanzó a hacer hoy):
+   login, y con un prospecto de prueba real (no "prueba2", no otro dato
+   productivo) completar una conversión y confirmar en Soporte + App de
+   Campo que todo aparece como se documentó arriba.
+2. **Frontend ya desplegado** (VM en `718e4c1`) — falta instalar
    `C:\Users\USER\Desktop\SmartRayco.apk` (cabecera única + ícono/splash
    definitivos) en un equipo real y confirmar: una sola cabecera azul
    visible con sesión iniciada, Login sin ella, menú lateral abre/cierra
    sin superposiciones, Inicio/Recargar funcionan, App de Campo conserva
    su propia navegación — validación de campo pendiente, no hecha
    todavía (sin emulador Android en este entorno).
-2. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
+3. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
    flujo de Drop prefabricado/bobina (fase anterior a la de identidad
    visual) antes de seguir iterando sobre esa pantalla.
-3. Decidir si vale la pena una revisión de seguridad más amplia sobre los
+4. Decidir si vale la pena una revisión de seguridad más amplia sobre los
    grants por defecto de Supabase (sección 11) — es un hallazgo real pero
    no urgente (la autorización real ya vive dentro de cada función).
-4. Empezar a registrar en `docs/ERRORES-CAMPO.md` los bugs reales que
+5. Seguir registrando en `docs/ERRORES-CAMPO.md` los bugs reales que
    reporten los técnicos, para no perder ese historial.
