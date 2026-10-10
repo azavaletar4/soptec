@@ -1,11 +1,12 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión),
-mas los fixes 13c-13g, todos el mismo día — **13e es la versión final y
+mas los fixes 13c-13h, todos el mismo día — **13e es la versión final y
 vigente del isotipo web, 13f la aplicó también al ícono/splash de la APK,
-13g reemplazó los FAB por una franja nativa** (12 y 13d quedaron
-supersedidas en cuanto al diseño del isotipo, ver nota en 12). Este
-documento es la
+13h es la cabecera móvil vigente (reemplazó la franja nativa de 13g, que
+quedó supersedida)** (12 y 13d quedaron supersedidas en cuanto al diseño
+del isotipo, ver nota en 12). **Pendiente de autorización para desplegar
+el frontend web** (13h). Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -583,15 +584,73 @@ del sidebar (`AppLayout.vue`) cuando estaba abierto en el celular.
   `C:\Users\USER\Desktop\SmartRayco.apk` (pisa la build de 13f — esta
   tiene FAB→franja + ícono/splash definitivos + todo lo anterior). No
   instalada ni distribuida.
+- **Superseded por 13h**: la franja descrita acá se reemplazó por una
+  cabecera unificada en el propio Vue — ver esa sección.
+
+## 13h. Cabecera única (Vue) en vez de franja Flutter — RESUELTO, pendiente de desplegar
+
+Pedido del usuario tras probar 13g en su Samsung: seguía viendo **dos**
+cabeceras apiladas (la franja nativa de Flutter + la cabecera blanca del
+panel). Se unificaron en una sola.
+
+- **Detección WebView vs. navegador — mecanismo explícito, no screen-width**:
+  `mobile_app/lib/main.dart` le agrega el sufijo `SmartRaycoApp/1.0` al
+  User-Agent **real** del dispositivo (lee el actual con `getUserAgent()`
+  y lo reusa, no lo reemplaza por uno inventado) antes de la primera
+  carga. `src/lib/nativeApp.ts` (nuevo) expone `isNativeApp` leyendo
+  `navigator.userAgent.includes('SmartRaycoApp')`. En un navegador normal
+  (celular o escritorio) esto da `false` siempre — la cabecera web **no
+  cambia en absoluto** para esos usuarios.
+- **`AppLayout.vue`**: la cabecera móvil (`md:hidden`, la única que existía
+  en celular) ahora es azul (`bg-sky-600`) con Inicio + Recargar + Menú en
+  blanco **solo cuando `isNativeApp`** — en navegador sigue el diseño
+  blanco de siempre (campana + menú), sin tocar una línea de esa rama.
+  "Inicio" reusa `:to="homeTo"` (el mismo que ya tenía el logo — rutas y
+  permisos de siempre, cero lógica nueva). "Menú" es el mismo
+  `sidebarOpen = true` de siempre — **ningún sistema de apertura/cierre
+  aparte**. "Recargar" pide confirmación con `useConfirm` (el mismo
+  composable que ya usa el resto del panel) antes de
+  `window.location.reload()`, para no perder formularios sin guardar.
+- **`mobile_app/lib/main.dart`**: se eliminó toda la franja nativa
+  (`_buildNavBar`, `_NavBarButton`, `_isPublicRoute`/`_updatePublicRoute`/
+  `onUrlChange`, `_goHome`) — Flutter ya no necesita saber en qué ruta
+  está, el Vue decide todo solo. Vuelve a ser solo el host del WebView +
+  el overlay de "sin conexión".
+- **`CampoLayout.vue` sin cambios a propósito** — conserva su propia
+  navegación (volver atrás, cambiar contraseña, cerrar sesión), tal como
+  se pidió explícitamente ("conservar la navegación correspondiente al
+  técnico"). Las pantallas de trabajo de campo ya **no tienen ningún** FAB
+  ni franja flotando encima (mejora neta ahí, sin agregar nada nuevo).
+- `flutter analyze` y `vue-tsc` limpios. Verificado el diseño de la
+  cabecera azul (colores, iconos, alineación) en un mockup HTML aislado
+  con los mismos estilos exactos — **no se pudo** verificar dentro de la
+  APK real (sin emulador Android disponible) ni iniciando sesión real
+  para verla autenticada en vivo (se evitó deliberadamente usar la
+  sesión/contraseña real guardada en el navegador solo para una prueba
+  visual). Validación de campo pendiente.
+- Commit `785b8fd`, pusheado a `origin/main`. APK recompilada y copiada a
+  `C:\Users\USER\Desktop\SmartRayco.apk` (pisa 13g). No instalada ni
+  distribuida.
+- **Pendiente de autorización — requiere DOS pasos, no uno**: a diferencia
+  de 13g (que era 100% Flutter), este fix toca `AppLayout.vue` — hace
+  falta **desplegar el frontend web a la VM** (`bash deploy/update.sh`)
+  ADEMÁS de instalar la APK nueva, o la cabecera azul no aparecerá (el
+  WebView seguiría cargando la versión vieja del panel desde
+  `panel.rayconetworks.com`). Usuario pidió explícitamente no desplegar
+  sin autorización — **no se desplegó**.
 
 ## 13. Próximo paso recomendado
 
-1. Instalar `C:\Users\USER\Desktop\SmartRayco.apk` (franja de navegación
-   nueva + ícono/splash definitivos, ver 13f/13g) en un equipo real y
-   confirmar: ícono/splash correctos, franja con Inicio/Recargar ausente
-   en Login, sidebar/perfil del técnico ya no tapados al abrir el menú,
-   refrescar y volver al dashboard funcionan — validación de campo
-   pendiente, no hecha todavía (sin emulador disponible en este entorno).
+1. **Autorizar el despliegue del frontend web** (`bash deploy/update.sh`)
+   para que la cabecera azul unificada de 13h tome efecto en
+   `panel.rayconetworks.com` — sin eso, instalar la APK nueva no alcanza
+   (el WebView sigue cargando el panel viejo desde la VM). Luego instalar
+   `C:\Users\USER\Desktop\SmartRayco.apk` (cabecera única + ícono/splash
+   definitivos, ver 13f/13h) en un equipo real y confirmar: una sola
+   cabecera azul visible con sesión iniciada, Login sin ella, menú lateral
+   abre/cierra sin superposiciones, Inicio/Recargar funcionan, App de
+   Campo conserva su propia navegación — validación de campo pendiente,
+   no hecha todavía (sin emulador Android en este entorno).
 2. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
    flujo de Drop prefabricado/bobina (fase anterior a la de identidad
    visual) antes de seguir iterando sobre esa pantalla.
