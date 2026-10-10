@@ -1,9 +1,10 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión),
-mas los fixes de despliegue 13c, 13d y 13e, todos el mismo día — **13e es
-la versión final y vigente del isotipo** (13 y 13d quedaron supersedidos,
-ver nota en 12). Este documento es la
+mas los fixes 13c, 13d, 13e y 13f, todos el mismo día — **13e es la
+versión final y vigente del isotipo web, 13f la aplicó también al ícono/
+splash de la APK** (12 y 13d quedaron supersedidas en cuanto al diseño del
+isotipo, ver nota en 12). Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -518,33 +519,49 @@ existente, y que esperara un archivo nuevo e independiente.
   descargado de `panel.rayconetworks.com` y el archivo del repo — idéntico).
 - Commits: `db1188b` (reemplazo del logo). Desplegado a la VM
   (commit `db1188b` confirmado via SSH) tras autorización explícita.
-- **No se toco `mobile_app/android/` en ningún punto de 13e** (ícono de
-  launcher y splash de la APK) — eso sigue usando el diseño de la sesión
-  12 (el primero, con el recorte por umbral de luminancia), **no** el
-  isotipo nuevo de esta sección. Es una inconsistencia real conocida, no
-  un olvido — no se pidió tocarlo y el usuario pidió explícitamente no
-  modificar ícono/splash en 13e. Queda pendiente, ver sección 13.
+- **`mobile_app/android/` actualizado en 13f** (ícono de launcher y
+  splash) — ya no aplica la inconsistencia descrita antes; ver esa
+  sección.
+
+## 13f. Ícono de launcher y splash de la APK con el isotipo definitivo — RESUELTO
+
+Pedido explícito del usuario tras 13e. Regenerados los 20 PNG
+(`mipmap-*/ic_launcher.png` legacy, `ic_launcher_foreground.png` +
+`ic_launcher_monochrome.png` del adaptive icon por densidad,
+`drawable-*dpi/launch_image.png` del splash) a partir de
+`assets/smartrayco-favicon.png` (el archivo que entregó el usuario, alfa
+real, sin procesar) — mismo pipeline de composición que ya existía desde
+la sesión 12 (recorte al bounding box real sin alterar contenido, centrado
+al ~66% de zona segura sobre lienzo transparente para el foreground,
+compuesto sobre el navy de marca `#030714` ya definido en `colors.xml`
+para el ícono legacy, silueta blanca con el mismo alfa para el ícono
+temático). **Ningún flood-fill ni filtro sobre el isotipo en sí** — el
+origen ya tenía transparencia real, solo se reescaló/compuso. Sin cambios
+de XML/código: `colors.xml` e `ic_launcher.xml` ya apuntaban a estos
+mismos archivos desde la sesión 12.
+
+- Commit `c1185dc`, pusheado a `origin/main`.
+- **APK recompilada** (imprescindible — ícono/splash están embebidos en el
+  binario) y copiada a `C:\Users\USER\Desktop\SmartRayco.apk`, pisando la
+  build anterior (la de 13d, que ya traía el fix de FAB). Esta build nueva
+  tiene **ambos** fixes: FAB oculto en Login + ícono/splash definitivos.
+- **No desplegado a técnicos ni distribuido** — solo en el Desktop de la
+  máquina de desarrollo, pendiente de que el usuario la instale/pruebe.
+- Ahora el ícono del teléfono, el splash y el logo dentro del WebView
+  (Login/sidebar) usan **el mismo isotipo** — ya no hay inconsistencia.
 
 ## 13. Próximo paso recomendado
 
-1. **Actualizar el ícono de launcher y el splash de la APK Android**
-   (`mobile_app/android/app/src/main/res/mipmap-*/ic_launcher*.png`,
-   `drawable-*dpi/launch_image.png`) para que usen el isotipo definitivo
-   de 13e (`src/assets/logo-icon.png` / `assets/smartrayco-favicon.png`)
-   en vez del diseño de la sesión 12 — hoy el ícono del teléfono no
-   coincide con el logo que se ve dentro de la app. No se hizo en 13e
-   porque no se pidió y el usuario pidió explícitamente no tocarlo en ese
-   momento; requeriría recompilar la APK. Confirmar con el usuario antes.
-2. Instalar `C:\Users\USER\Desktop\SmartRayco.apk` (build de 13d, con el
-   fix de FAB) en un equipo real y confirmar que el ícono/splash se ven
-   bien (máscara circular, modo oscuro, pantalla de inicio) y que los
-   botones Inicio/Recargar ya no aparecen en Login — validación de campo
-   pendiente.
-3. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
+1. Instalar `C:\Users\USER\Desktop\SmartRayco.apk` (ya con FAB + ícono/
+   splash definitivos, ver 13d/13f) en un equipo real y confirmar: ícono
+   correcto con máscara circular/redondeada, splash centrado, botones
+   Inicio/Recargar ausentes en Login — validación de campo pendiente, no
+   hecha todavía.
+2. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
    flujo de Drop prefabricado/bobina (fase anterior a la de identidad
    visual) antes de seguir iterando sobre esa pantalla.
-4. Decidir si vale la pena una revisión de seguridad más amplia sobre los
+3. Decidir si vale la pena una revisión de seguridad más amplia sobre los
    grants por defecto de Supabase (sección 11) — es un hallazgo real pero
    no urgente (la autorización real ya vive dentro de cada función).
-5. Empezar a registrar en `docs/ERRORES-CAMPO.md` los bugs reales que
+4. Empezar a registrar en `docs/ERRORES-CAMPO.md` los bugs reales que
    reporten los técnicos, para no perder ese historial.
