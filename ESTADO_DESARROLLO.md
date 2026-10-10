@@ -1,6 +1,7 @@
 # SmartRayco — Estado de desarrollo
 
-Última actualización: 2026-10-10 (fin de sesión). Este documento es la
+Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión).
+Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -29,8 +30,11 @@ mencionado/pedido, sin código).
   Acceso SSH: `root@192.168.55.201`, key en `~/.ssh/smartrayco-deploy` (en la
   máquina de desarrollo, no en este repo).
 - **App móvil**: Flutter WebView en `mobile_app/` (APK `com.smartrayco.app`).
-  Vive en el working tree pero **no está trackeada en git** (decisión
-  deliberada, repo propio aparte).
+  **Versionada en este mismo repo desde 2026-10-10b** (antes vivía solo en
+  el working tree, sin trackear — ver sección 13b). `.gitignore` propio
+  (estándar Flutter) excluye `build/`, `.dart_tool/`, `.idea/`,
+  `local.properties`, `key.properties`, keystores y las capturas
+  `screenshot_*.png` de prueba (siguen en disco, fuera de git).
 - **Pruebas**: sin framework de componentes Vue. Los cambios de triggers/RPC
   de Supabase se validan con Postgres real en Docker, aislado — ver
   `server/tests/*.sql.test.ts` (patrón: `napAssignment.sql.test.ts`,
@@ -261,27 +265,111 @@ cierre/consumo en `src/stores/campo.ts`.
 - `docs/ERRORES-CAMPO.md` existe (plantilla) pero está vacío — todavía no
   se ha registrado ningún bug real de campo ahí.
 - Archivos sueltos sin trackear en la máquina de desarrollo (NO están en
-  la VM): `SmartRayco_config.zip`, `mobile_app/`, `revision-fase2/` —
-  dejados fuera de git a propósito (contienen posibles secretos o son
-  carpetas de trabajo de revisiones externas). No tocar sin pedido
-  explícito.
+  la VM): `SmartRayco_config.zip`, `revision-fase2/`. No tocar sin pedido
+  explícito — el motivo original (zip + carpetas de revisión externa) no se
+  ha verificado a fondo. **`mobile_app/` ya NO está en esta lista**: se
+  versionó el 2026-10-10b (ver sección 13b) — dejó de ser un caso de
+  "archivo suelto sin trackear".
 - Reasignar cuadrilla cambiando de líder (`setLeader`, UPDATE) o quitando a
   alguien (`removeAssignee`, DELETE) en `job_assignees` no pasa por el
   candado de "un trabajo a la vez" — es una decisión de diseño documentada
   (UPDATE no crea vínculo nuevo; DELETE libera al técnico, no es bypass),
   no un bug, pero vale tenerlo presente.
 
-## 12. Próximo paso recomendado
+## 12. Identidad visual unificada (sesión 2026-10-10b) — IMPLEMENTADO
 
-No hay una tarea siguiente pedida explícitamente. Sugerencias, en orden de
-valor/riesgo:
+- Referencia usada: `C:\Users\USER\Downloads\Ícono SmartRayco con R Neón.png`
+  (isotipo R azul + efecto fibra óptica, provisto por el usuario cuando el
+  path inicial `D:\SmartRayco\assets\smartRayco-icon.png` no existía).
+- Isotipo (sin texto) derivado con `sharp` (recorte + cutout por
+  luminancia, sin ImageMagick/Python disponibles en el entorno) y
+  centralizado en `D:\SmartRayco\assets\` (`smartrayco-icon-master.png`,
+  `smartrayco-symbol.png` con fondo navy, `smartrayco-logo.png` completo).
+- **Panel web**: único archivo real en uso, `src/assets/logo-icon.png`
+  (PNG transparente), referenciado por favicon (`index.html`), Login,
+  Cambiar contraseña, `AppLayout.vue` (sidebar/header) y
+  `CampoLayout.vue` — los 4 puntos se actualizan con un solo swap de
+  binario, sin tocar lógica. `src/assets/logo-full.png` (no usado por
+  ningún componente) también actualizado por consistencia. Símbolo del
+  Login agrandado (`w-16`→`w-24`) y Cambiar contraseña (`w-14`→`w-20`).
+  Sin PWA/manifest en el proyecto (no se inventó uno, fuera de alcance).
+- **APK (`mobile_app/`, WebView)**: launcher icon reemplazado (legacy +
+  adaptive icon nuevo con foreground/monochrome por densidad,
+  `mipmap-anydpi-v26/ic_launcher.xml`, `values/colors.xml`) — antes era el
+  logo default de Flutter, nunca se había personalizado. Splash nativo
+  (`drawable*/launch_background.xml`) antes en blanco sin imagen, ahora
+  fondo navy de marca (`#030714`) + isotipo centrado
+  (`drawable-*dpi/launch_image.png`). `android:label/icon`, package ID,
+  firma y permisos intactos. APK compilada (`flutter build apk --release`)
+  y copiada a `C:\Users\USER\Desktop\SmartRayco.apk`.
+- `mobile_app/` sigue sin trackear en git (ver sección 11) — estos cambios
+  existen en disco pero no se commitearon vía el repo principal; el build
+  de Flutter los toma igual porque lee del working tree, no de git.
+- **Pendiente/no pedido en esta sesión**: separar el PNG maestro en capas
+  reales (symbol/background) con una herramienta de diseño si se quiere
+  una adaptive-icon/monochrome más prolija — el cutout actual usa un
+  umbral de luminancia automático (buen resultado visual, no un recorte
+  manual de capas). Probar el ícono/splash en un dispositivo real (solo se
+  validó compilando y revisando los PNG generados).
 
-1. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
+## 13b. Investigación: versionar `mobile_app/` en git — PENDIENTE DE AUTORIZACIÓN
+
+Investigado 2026-10-10b a pedido del usuario, tras la sesión de identidad
+visual, para no perder los cambios de ícono/splash de la APK (viven solo en
+el working tree).
+
+- **Por qué no está en git hoy**: no hay ninguna regla en `.gitignore` (raíz
+  ni dentro de `mobile_app/`) que la excluya, ni carpeta `.git` propia
+  anidada. `git check-ignore mobile_app` no devuelve nada. Es decir, nunca
+  se decidió técnicamente excluirla — simplemente nadie corrió
+  `git add mobile_app/`. La nota previa en este documento ("fuera de git a
+  propósito, contienen posibles secretos") no se sostiene para esta carpeta
+  puntual; corregida en sección 11.
+- **Secretos verificados — ninguno encontrado**: sin `*.jks`/`*.keystore`,
+  sin `key.properties`, sin `google-services.json`, sin `.env`. El build de
+  release firma hoy con el **keystore de debug** de Android
+  (`android/app/build.gradle.kts:39`, `signingConfig =
+  signingConfigs.getByName("debug")`, con el TODO original de Flutter sin
+  resolver) — no es un release firmado de producción real, así que no hay
+  una clave de firma real que proteger todavía. **No se tocó** (regla de no
+  cambiar firma/config funcional), solo se deja documentado.
+- **`.gitignore` ya existente es el estándar de Flutter y es suficiente**:
+  `mobile_app/.gitignore` excluye `.dart_tool/`, `/build/`, `.idea/`,
+  `*.iml`; `mobile_app/android/.gitignore` excluye `/local.properties`,
+  `/.gradle`, `key.properties`, `**/*.keystore`, `**/*.jks`, `gradlew`/
+  `gradlew.bat`. `android/local.properties` (el único archivo "sensible" en
+  disco) solo tiene rutas locales del SDK (`sdk.dir`, `flutter.sdk`), nada
+  secreto, y ya queda excluido por esa regla.
+- **Simulación (`git add --dry-run mobile_app`) desde la raíz del repo**:
+  51 archivos quedarían versionados — código Dart (`lib/main.dart`,
+  `pubspec.yaml`, `pubspec.lock`, `test/widget_test.dart`), el proyecto
+  Android completo (`android/app/build.gradle.kts`, manifests, `MainActivity.kt`,
+  `styles.xml`, `colors.xml`, gradle wrapper/properties) y los recursos de
+  marca nuevos (`mipmap-*/ic_launcher*.png`, `drawable*/launch_*`). **Cero**
+  coincidencias de `.apk`, `build/`, `.idea`, `keystore`, `.jks`,
+  `local.properties`, `key.properties` o `.env` en esa simulación.
+- **Hallazgo aparte, resuelto**: las 7 capturas de prueba
+  (`screenshot_now.png`, `screenshot_test.png` a `test6.png`, ~1.5 MB) se
+  excluyeron agregando `/screenshot_*.png` a `mobile_app/.gitignore` —
+  siguen en disco, solo quedan fuera de git.
+- **Resultado — autorizado e incorporado 2026-10-10b**: usuario autorizó
+  explícitamente. `git add mobile_app` quedó en 44 archivos en staging
+  (código Dart + proyecto Android + recursos de marca nuevos), verificado
+  sin `.apk`/`build/`/`.idea`/keystore/`.env`/screenshots. Commit y push a
+  `origin/main` realizados — hash y confirmación al pie de esta sección.
+
+## 13. Próximo paso recomendado
+
+1. Instalar `C:\Users\USER\Desktop\SmartRayco.apk` en un equipo real y
+   confirmar que el ícono/splash se ven bien (máscara circular, modo
+   oscuro, pantalla de inicio) — validación de campo pendiente de esta
+   sesión.
+2. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
    flujo de Drop prefabricado/bobina antes de seguir iterando sobre esa
-   pantalla — son los cambios más grandes de esta sesión sobre una
+   pantalla — son los cambios más grandes de la sesión anterior sobre una
    herramienta en uso diario.
-2. Decidir si vale la pena una revisión de seguridad más amplia sobre los
+3. Decidir si vale la pena una revisión de seguridad más amplia sobre los
    grants por defecto de Supabase (sección 11) — es un hallazgo real pero
    no urgente (la autorización real ya vive dentro de cada función).
-3. Empezar a registrar en `docs/ERRORES-CAMPO.md` los bugs reales que
+4. Empezar a registrar en `docs/ERRORES-CAMPO.md` los bugs reales que
    reporten los técnicos, para no perder ese historial.
