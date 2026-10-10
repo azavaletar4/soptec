@@ -1,7 +1,8 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-10, sesión de identidad visual (fin de sesión),
-mas el fix de despliegue del mismo día (sección 13c). Este documento es la
+mas el fix de despliegue (13c) y el fix de isotipo/FAB (13d), mismo día.
+Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -415,6 +416,42 @@ seguían mostrando el logo "Rayco HD" viejo.
 - **No se recompiló la APK** — no hacía falta: el ícono/splash ya estaban
   bien (confirmado por el propio usuario) y Login/cabecera los sirve la
   VM vía WebView, no el binario.
+
+## 13d. Fix: isotipo con fondo cuadrado + FAB nativos visibles en Login
+
+Reportado por el usuario tras el fix 13c: el logo se veía con una caja
+azul marino/blanca detrás, y en el celular aparecían dos botones flotantes
+nativos (Inicio/Recargar) encima del Login.
+
+- **Isotipo**: el recorte de la sesión de identidad visual (12) usaba un
+  umbral de luminancia global para generar transparencia — el fondo del
+  PNG original no es uniformemente oscuro (tiene un degradado/glow real),
+  así que gran parte quedó semi-opaca, visible como una caja. Confirmado
+  componiendo el PNG sobre magenta sólido antes de tocar nada. Corregido
+  con flood-fill (sigue el degradado real desde los bordes, se detiene en
+  los bordes duros del símbolo) — verificado sobre blanco y magenta, sin
+  caja ni restos. Mismo archivo (`src/assets/logo-icon.png`), ningún `.vue`
+  cambió. Validado en vivo en `localhost:5173/login` (Chrome) antes de
+  commitear.
+- **FAB nativos**: `mobile_app/lib/main.dart` — `floatingActionButton`
+  del `Scaffold` es global, sin noción de auth. Se ocultan ahora según la
+  ruta real del WebView (`onUrlChange`, no solo `onPageFinished` —
+  necesario porque el panel es una SPA con Vue Router en modo `history`:
+  login→dashboard es `router.push`, no recarga de página, así que
+  `onPageFinished` no se entera). `/cambiar-password` siempre exige sesión
+  en el router (`requiresAuth: true`), así que "cambio de contraseña sin
+  sesión" no es un estado alcanzable en este app — no se le aplicó
+  lógica aparte. `flutter analyze` limpio.
+- **Commit** `7727484` ("Corregir isotipo con fondo cuadrado y ocultar FAB
+  nativos en Login"), pusheado a `origin/main`. **APK recompilada**
+  (necesario, el fix de FAB es código Dart) y copiada a
+  `C:\Users\USER\Desktop\SmartRayco.apk`.
+- **Pendiente de autorización**: el fix de logo vive en
+  `src/assets/logo-icon.png`, servido por la VM — **no desplegado todavía**
+  (no autorizado en este turno). Hasta desplegar, el Login seguirá
+  mostrando el logo con la caja vieja tanto en PC como dentro del WebView
+  de la APK nueva. El fix de FAB sí es efectivo de inmediato al instalar
+  la APK nueva (no depende de la VM).
 
 ## 13. Próximo paso recomendado
 
