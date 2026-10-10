@@ -678,6 +678,31 @@ panel). Se unificaron en una sola.
        `git checkout db1188b && bash deploy/update.sh` — vuelve al
        commit que estaba desplegado antes de esta sesión.
 
+## 13i. Fix: faltaba "Inicio" en App de Campo (CampoLayout) — RESUELTO, pendiente de desplegar
+
+Bug real reportado tras probar 13h en el Samsung: en "Mis trabajos" (y en
+el detalle de un trabajo) ya no había forma de ir al inicio — 13h agregó
+Inicio/Recargar/Menú solo en `AppLayout.vue`, `CampoLayout.vue` quedó
+intacto a propósito mientras tanto, perdiendo sin querer la función que
+antes daba la franja nativa de Flutter (ya eliminada).
+
+- `src/components/campo/CampoLayout.vue`: ícono de Inicio nuevo (casa),
+  visible solo con `isNativeApp` (mismo mecanismo de 13h), reusa
+  `homePath(auth.role)` de `src/lib/navigation.ts` — la misma función que
+  ya usa `AppLayout.vue`, que ya resuelve el rol correctamente
+  (TECNICO_RED no tiene Dashboard, su pantalla propia es `/soporte`). Sin
+  rutas nuevas, sin lógica duplicada. No depende de `showBack`, así que
+  aparece igual en "Mis trabajos" y en el detalle de un trabajo. Resto de
+  la cabecera (back/logo, badge de sincronización, cambiar contraseña,
+  cerrar sesión) intacto.
+- `vue-tsc` limpio. Verificado visualmente con un mockup HTML aislado
+  (mismos estilos/iconos) en 3 escenarios — cabe sin reorganizar nada.
+- **No se tocó `mobile_app/` — no hace falta recompilar la APK.** El
+  mecanismo de detección por User-Agent ya está en el binario instalado
+  desde 13h; este fix es 100% frontend web y toma efecto con un deploy.
+- Commit `76c2cfb`, pusheado a `origin/main`. **No desplegado** — no
+  autorizado en este turno.
+
 ## 13. Próximo paso recomendado
 
 1. **Frontend ya desplegado** (VM en `d59759a`, ver 13h) — falta instalar
