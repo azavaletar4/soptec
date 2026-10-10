@@ -11,9 +11,11 @@ import { useInstallationsStore } from '@/stores/installations';
 import { useRoutinesStore } from '@/stores/routines';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
-import { getErrorMessage } from '@/lib/errors';
+import { getErrorHint, getErrorMessage } from '@/lib/errors';
 import { telLink, waLink } from '@/lib/phone';
 import { PRIORITY_CLASS, PRIORITY_ICON, PRIORITY_LABEL } from '@/lib/ticketPriority';
+import { activeJobMessage, campoJobPath, parseActiveJobHint, type ActiveJobRef } from '@/lib/singleActiveJob';
+import ConfirmModal from '@/components/ConfirmModal.vue';
 import type { Installation, Routine, Ticket } from '@/types/domain';
 
 const router = useRouter();
@@ -138,6 +140,22 @@ function isInProgress(t: TrabajoItem): boolean {
   return false;
 }
 
+// Fase 137: un tecnico solo puede tener UN trabajo en ejecucion a la vez
+// (ver campoStore.myActiveJob + la migracion 20261010140000/trigger
+// enforce_single_active_job, que es quien de verdad impone la regla). Esto
+// solo decide si hay que avisar ANTES de intentarlo — nunca oculta el boton
+// "Iniciar Orden" (el tecnico igual ve que la orden esta lista), solo
+// cambia que el clic muestre el aviso en vez de arrancar la marcacion.
+function blockingActiveJob(t: TrabajoItem): ActiveJobRef | null {
+  const activo = campoStore.myActiveJob;
+  return activo && activo.id !== t.id ? activo : null;
+}
+const activeJobAlert = ref<ActiveJobRef | null>(null);
+function goToActiveJob() {
+  if (activeJobAlert.value) router.push(campoJobPath(activeJobAlert.value));
+  activeJobAlert.value = null;
+}
+
 async function startJob(t: TrabajoItem): Promise<boolean> {
   if (enAlmuerzo.value) {
     toast.error(ALMUERZO_BLOCKED_MESSAGE);
@@ -150,7 +168,16 @@ async function startJob(t: TrabajoItem): Promise<boolean> {
     else if (t.jobType === 'routine') await routinesStore.updateStatus(t.id, 'in_progress');
     return true;
   } catch (e) {
-    toast.error(getErrorMessage(e, 'No se pudo iniciar la orden'));
+    // Carrera real (2 dispositivos/pestañas) atrapada recien por el trigger
+    // del backend — el chequeo de blockingActiveJob() de arriba no alcanzo a
+    // verla porque campoStore.trabajos todavia no se habia refrescado.
+    const hint = parseActiveJobHint(getErrorHint(e));
+    if (hint) {
+      await campoStore.fetchAll().catch(() => {});
+      activeJobAlert.value = { jobType: hint.jobType, id: hint.id, number: null };
+    } else {
+      toast.error(getErrorMessage(e, 'No se pudo iniciar la orden'));
+    }
     return false;
   } finally {
     startingId.value = null;
@@ -158,10 +185,22 @@ async function startJob(t: TrabajoItem): Promise<boolean> {
 }
 
 async function handleStartClick(t: TrabajoItem) {
+  const blocking = blockingActiveJob(t);
+  if (blocking) {
+    activeJobAlert.value = blocking;
+    return;
+  }
   if (await startJob(t)) openTrabajo(t);
 }
 
 async function handleCardClick(t: TrabajoItem) {
+  if (canStart(t)) {
+    const blocking = blockingActiveJob(t);
+    if (blocking) {
+      activeJobAlert.value = blocking;
+      return;
+    }
+  }
   if (canStart(t) && enAlmuerzo.value) {
     toast.error(ALMUERZO_BLOCKED_MESSAGE);
     openTrabajo(t);
@@ -328,5 +367,16 @@ onUnmounted(() => {
         </div>
       </li>
     </ul>
+
+    <ConfirmModal
+      :open="!!activeJobAlert"
+      title="Ya tienes un ticket en ejecución"
+      :message="activeJobAlert ? activeJobMessage(activeJobAlert) : ''"
+      confirm-label="Ver ticket activo"
+      cancel-label="Entendido"
+      :focus-cancel="true"
+      @confirm="goToActiveJob"
+      @cancel="activeJobAlert = null"
+    />
   </CampoLayout>
 </template>

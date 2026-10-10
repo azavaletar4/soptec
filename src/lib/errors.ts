@@ -17,3 +17,12 @@ export function getErrorMessage(e: unknown, fallback = 'Ocurrio un error inesper
 
   return fallback;
 }
+
+/** Mismo criterio que getErrorMessage, para leer el HINT de un PostgrestError (ver enforce_single_active_job, Fase 137). */
+export function getErrorHint(e: unknown): string | null {
+  if (typeof e === 'object' && e !== null && 'hint' in e) {
+    const hint = (e as { hint?: unknown }).hint;
+    if (typeof hint === 'string' && hint) return hint;
+  }
+  return null;
+}

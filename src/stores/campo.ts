@@ -34,6 +34,7 @@ import {
   type Ticket,
   type TicketMotivoAveria,
 } from '@/types/domain';
+import type { ActiveJobRef } from '@/lib/singleActiveJob';
 
 const BUCKET = 'work-evidence';
 
@@ -261,6 +262,22 @@ export const useCampoStore = defineStore('campo', () => {
       .filter((r) => !soloPropios || r.assigned_to === uid || isMyCrewJob('routine', r.id))
       .map(fromRoutine);
     return [...instalaciones, ...tickets, ...rutinas].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? '') * -1);
+  });
+
+  // ---- Fase 137: un tecnico solo puede tener UN trabajo "en ejecucion"
+  // (status='in_progress') a la vez, global a los 3 tipos — ver la
+  // migracion 20261010140000 (trigger enforce_single_active_job) para la
+  // regla real, que se aplica siempre en el backend. Este computed solo
+  // sirve para avisar ANTES de intentarlo (bloquear el boton, mostrar a cual
+  // ticket pertenece la atencion activa) — reusa `trabajos`, que ya viene
+  // filtrado a "lo mio + mi cuadrilla" para TECNICO_RED. ----
+  const myActiveJob = computed<ActiveJobRef | null>(() => {
+    if (auth.role !== 'TECNICO_RED') return null;
+    const activo = trabajos.value.find((t) => (t.raw as { status: string }).status === 'in_progress');
+    if (!activo) return null;
+    const number =
+      activo.jobType === 'ticket' ? (activo.raw as Ticket).ticket_number : activo.jobType === 'routine' ? (activo.raw as Routine).routine_number : null;
+    return { jobType: activo.jobType, id: activo.id, number };
   });
 
   // ---- Tickets libres (Fase 98): averias 'open' sin ningun tecnico
@@ -691,6 +708,7 @@ export const useCampoStore = defineStore('campo', () => {
     syncing,
     queuedCount,
     trabajos,
+    myActiveJob,
     availableTickets,
     availableInstallations,
     availableRoutines,

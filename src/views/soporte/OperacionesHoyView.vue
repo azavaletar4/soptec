@@ -16,11 +16,13 @@ import { useAuthStore } from '@/stores/auth';
 import { useAsistenciaStore } from '@/stores/asistencia';
 import { JOB_STATUS_CLASS, JOB_STATUS_LABEL, useUnifiedJobs, type UnifiedJob } from '@/composables/useUnifiedJobs';
 import { useConfirm } from '@/composables/useConfirm';
-import { getErrorMessage } from '@/lib/errors';
+import { getErrorHint, getErrorMessage } from '@/lib/errors';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { fechaLimaISO } from '@/lib/asistenciaReglas';
 import { MOTIVO_AVERIA_OPTIONS } from '@/lib/ticketMotivoAveria';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
+import { activeJobMessage, parseActiveJobHint, soporteJobPath, type ActiveJobRef } from '@/lib/singleActiveJob';
+import ConfirmModal from '@/components/ConfirmModal.vue';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
 import { findScheduleConflict, conflictConfirmMessage } from '@/lib/scheduleConflict';
 import { AVERIA_TICKET_CATEGORIES } from '@/types/domain';
@@ -77,13 +79,48 @@ function canActOn(t: Ticket): boolean {
   return t.assigned_to === auth.user?.id;
 }
 
+// Fase 137/137b: un tecnico solo puede tener UN trabajo en ejecucion a la
+// vez — la regla real la impone el trigger enforce_single_active_job
+// (backend, migraciones 20261010140000/150000); esto solo avisa antes de
+// intentarlo. Esta vista solo inicia tickets desde aqui (Altas/Rutinas se
+// inician desde la App de Campo), pero el chequeo cruza los 3 tipos: si el
+// tecnico ya tiene una Alta/Rutina en curso (iniciada desde su celular),
+// tambien debe bloquear el "Iniciar orden" de un ticket aca. Fase 137b:
+// ahora SI es consciente de cuadrilla/apoyo (antes solo miraba
+// assignedId === uid, igual que canActOn()) — reusa crewAssignments, que
+// esta vista ya cargaba para TechnicianStatusBar (Fase 128), sin fetch
+// nuevo.
+const myActiveJob = computed<ActiveJobRef | null>(() => {
+  if (auth.role !== 'TECNICO_RED' || !auth.user?.id) return null;
+  const uid = auth.user.id;
+  const job = allJobs.value.find(
+    (j) => j.status === 'in_progress' && (j.assignedId === uid || crewAssignments.value.some((a) => a.job_type === j.jobType && a.job_id === j.id && a.technician_id === uid)),
+  );
+  return job ? { jobType: job.jobType, id: job.id, number: job.number } : null;
+});
+const activeJobAlert = ref<ActiveJobRef | null>(null);
+function goToActiveJob() {
+  if (activeJobAlert.value) router.push(soporteJobPath(activeJobAlert.value));
+  activeJobAlert.value = null;
+}
+
 const startingId = ref<string | null>(null);
 async function handleQuickStart(t: Ticket) {
+  if (myActiveJob.value && myActiveJob.value.id !== t.id) {
+    activeJobAlert.value = myActiveJob.value;
+    return;
+  }
   startingId.value = t.id;
   try {
     await ticketsStore.updateTicketStatus(t.id, 'in_progress');
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al iniciar la orden'));
+    const hint = parseActiveJobHint(getErrorHint(e));
+    if (hint) {
+      await Promise.all([ticketsStore.fetchTickets(), installationsStore.fetchInstallations(), routinesStore.fetchRoutines()]).catch(() => {});
+      activeJobAlert.value = { jobType: hint.jobType, id: hint.id, number: null };
+    } else {
+      alert(getErrorMessage(e, 'Error al iniciar la orden'));
+    }
   } finally {
     startingId.value = null;
   }
@@ -689,5 +726,16 @@ function formatDate(value: string) {
         </form>
       </div>
     </Teleport>
+
+    <ConfirmModal
+      :open="!!activeJobAlert"
+      title="Ya tienes un ticket en ejecución"
+      :message="activeJobAlert ? activeJobMessage(activeJobAlert) : ''"
+      confirm-label="Ver ticket activo"
+      cancel-label="Entendido"
+      :focus-cancel="true"
+      @confirm="goToActiveJob"
+      @cancel="activeJobAlert = null"
+    />
   </AppLayout>
 </template>
