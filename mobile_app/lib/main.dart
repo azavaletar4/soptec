@@ -53,6 +53,15 @@ class _PanelWebViewState extends State<PanelWebView> {
   bool _loading = true;
   String? _loadError;
 
+  // Controla los FAB nativos (Inicio/Recargar): deben ocultarse en pantallas
+  // publicas sin sesion (hoy solo /login -- /cambiar-password siempre exige
+  // sesion en el router de Vue, asi que nunca se alcanza "sin sesion"). Se
+  // infiere de la ruta real que ya decide el router del panel (el mismo
+  // requiresAuth que usa el panel web), no de un sistema de auth propio del
+  // lado de Flutter. Empieza en true para no mostrar los FAB un instante
+  // antes de saber en que pantalla se entra.
+  bool _isPublicRoute = true;
+
   @override
   void initState() {
     super.initState();
@@ -60,10 +69,19 @@ class _PanelWebViewState extends State<PanelWebView> {
     _loadInitialUrl();
   }
 
+  void _updatePublicRoute(String? url) {
+    final path = Uri.tryParse(url ?? '')?.path ?? '';
+    final isPublic = path.isEmpty || path == '/' || path == '/login';
+    if (isPublic != _isPublicRoute) {
+      setState(() => _isPublicRoute = isPublic);
+    }
+  }
+
   Future<void> _loadInitialUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final lastUrl = prefs.getString(_lastUrlPrefsKey);
     final target = lastUrl != null && Uri.tryParse(lastUrl)?.host == _panelHost ? lastUrl : _panelUrl;
+    _updatePublicRoute(target);
     await _controller.loadRequest(Uri.parse(target));
   }
 
@@ -73,11 +91,15 @@ class _PanelWebViewState extends State<PanelWebView> {
       ..setBackgroundColor(Colors.white)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (_) => setState(() {
-            _loading = true;
-            _loadError = null;
-          }),
+          onPageStarted: (url) {
+            _updatePublicRoute(url);
+            setState(() {
+              _loading = true;
+              _loadError = null;
+            });
+          },
           onPageFinished: (url) {
+            _updatePublicRoute(url);
             setState(() => _loading = false);
             // Para que, si Android mata el proceso en segundo plano, la app
             // vuelva a abrir en la misma pagina en vez de desde cero.
@@ -85,6 +107,13 @@ class _PanelWebViewState extends State<PanelWebView> {
               SharedPreferences.getInstance().then((p) => p.setString(_lastUrlPrefsKey, url));
             }
           },
+          // El panel es una SPA (Vue Router en modo history): navegar de
+          // /login a /dashboard tras iniciar sesion NO dispara una carga de
+          // pagina nueva (onPageStarted/onPageFinished no se enteran), solo
+          // cambia la URL via pushState. onUrlChange si se entera de eso --
+          // es la unica forma de que los FAB reaccionen a un login/logout
+          // sin recargar la pagina.
+          onUrlChange: (change) => _updatePublicRoute(change.url),
           onWebResourceError: (error) {
             // Solo los errores de navegacion principal (no un recurso suelto,
             // como un icono o un script de terceros que falle) deben tapar la
@@ -244,28 +273,33 @@ class _PanelWebViewState extends State<PanelWebView> {
         // FAB, que siempre flotan por encima del WebView sin importar el
         // scroll de la pagina).
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-        floatingActionButton: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FloatingActionButton(
-              heroTag: 'home',
-              onPressed: _goHome,
-              tooltip: 'Inicio',
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF0EA5E9),
-              child: const Icon(Icons.home_outlined),
-            ),
-            const SizedBox(height: 12),
-            FloatingActionButton(
-              heroTag: 'reload',
-              onPressed: _reload,
-              tooltip: 'Recargar',
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF0EA5E9),
-              child: const Icon(Icons.refresh),
-            ),
-          ],
-        ),
+        // Ocultos en pantallas publicas sin sesion (Login) -- ver
+        // _updatePublicRoute. No tiene sentido "ir al Inicio" o "recargar"
+        // desde una pantalla que ya es el punto de entrada.
+        floatingActionButton: _isPublicRoute
+            ? null
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton(
+                    heroTag: 'home',
+                    onPressed: _goHome,
+                    tooltip: 'Inicio',
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF0EA5E9),
+                    child: const Icon(Icons.home_outlined),
+                  ),
+                  const SizedBox(height: 12),
+                  FloatingActionButton(
+                    heroTag: 'reload',
+                    onPressed: _reload,
+                    tooltip: 'Recargar',
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF0EA5E9),
+                    child: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
       ),
     );
   }
