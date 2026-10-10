@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useCampoStore } from '@/stores/campo';
 import ToastHost from '@/components/ToastHost.vue';
 import ConfirmHost from '@/components/ConfirmHost.vue';
 import logoIcon from '@/assets/logo-icon.png';
+import { homePath } from '@/lib/navigation';
+import { isNativeApp } from '@/lib/nativeApp';
 
 withDefaults(defineProps<{ title: string; showBack?: boolean }>(), { showBack: false });
 
@@ -13,6 +15,15 @@ const auth = useAuthStore();
 const router = useRouter();
 const campoStore = useCampoStore();
 const online = ref(navigator.onLine);
+
+// Mismo destino de "Inicio" que usa AppLayout.vue (Fase 144) -- ya
+// considera el rol (TECNICO_RED no tiene Dashboard, su pantalla propia es
+// /soporte). Solo visible dentro de la APK (isNativeApp): en la App de
+// Campo no habia forma de "ir al inicio" desde que se quito la franja
+// nativa de Flutter -- el logo de esta cabecera no es clickeable (a
+// diferencia del de AppLayout) porque esta pantalla no tiene Dashboard al
+// que volver sin salir del flujo de campo.
+const homeTo = computed(() => homePath(auth.role));
 
 async function handleOnline() {
   online.value = true;
@@ -69,6 +80,17 @@ onBeforeUnmount(() => {
         {{ campoStore.syncing ? 'Sincronizando…' : `${campoStore.queuedCount} por sincronizar` }}
       </span>
 
+      <router-link
+        v-if="isNativeApp"
+        :to="homeTo"
+        class="p-2 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
+        aria-label="Inicio"
+        title="Inicio"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </router-link>
       <button
         class="p-2 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
         aria-label="Cambiar contraseña"
