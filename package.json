@@ -21,7 +21,8 @@
     "test:provisioning": "node --import tsx --test server/src/services/__tests__/*.test.ts",
     "test:fetch-timeout": "node --import tsx --test src/lib/__tests__/*.test.ts",
     "test:nap-sql": "node --import tsx --test server/tests/napAssignment.sql.test.ts",
-    "test:single-active-job-sql": "node --import tsx --test server/tests/singleActiveJob.sql.test.ts"
+    "test:single-active-job-sql": "node --import tsx --test server/tests/singleActiveJob.sql.test.ts",
+    "test:work-order-photo-approval-sql": "node --import tsx --test server/tests/workOrderPhotoApproval.sql.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.1",

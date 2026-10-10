@@ -283,7 +283,11 @@ onMounted(async () => {
   // efectivamente toque "Ejecutar" (leyo la ficha, llamo al cliente...) la
   // respuesta de la OLT frecuentemente ya esta lista o casi, en vez de
   // recien arrancar los ~20-60s que tarda leer RX+TX por Telnet.
-  runDiagnostico();
+  // No aplica a un Alta (Fase 141): el diagnostico es para averia/rutina —
+  // una instalacion nueva ya tiene su propia validacion de aprovisionamiento
+  // ("Provisionar en OLT" mas abajo), no necesita leer una señal que todavia
+  // no deberia existir.
+  if (jobType !== 'installation') runDiagnostico();
   await loadMaterials();
   // Una rutina sin cliente puntual (apunta a zona/caja NAP, Fase 101) no
   // tiene ficha de cliente que cargar.
@@ -1686,8 +1690,9 @@ async function handleCloseSubmit() {
         </button>
       </section>
 
-      <!-- Diagnostico express (no aplica a una rutina sin cliente puntual) -->
-      <section v-if="trabajo.clientId" class="surface p-3.5 mb-3">
+      <!-- Diagnostico express: averia/rutina (no aplica a un Alta, Fase 141;
+           tampoco a una rutina sin cliente puntual) -->
+      <section v-if="jobType !== 'installation' && trabajo.clientId" class="surface p-3.5 mb-3">
         <div class="flex items-center justify-between mb-2">
           <h2 class="text-sm font-semibold">Diagnóstico express</h2>
           <button class="btn-primary text-xs py-1.5" :disabled="diagLoading" @click="runDiagnostico">
