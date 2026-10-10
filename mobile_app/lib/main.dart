@@ -53,13 +53,13 @@ class _PanelWebViewState extends State<PanelWebView> {
   bool _loading = true;
   String? _loadError;
 
-  // Controla los FAB nativos (Inicio/Recargar): deben ocultarse en pantallas
-  // publicas sin sesion (hoy solo /login -- /cambiar-password siempre exige
-  // sesion en el router de Vue, asi que nunca se alcanza "sin sesion"). Se
-  // infiere de la ruta real que ya decide el router del panel (el mismo
-  // requiresAuth que usa el panel web), no de un sistema de auth propio del
-  // lado de Flutter. Empieza en true para no mostrar los FAB un instante
-  // antes de saber en que pantalla se entra.
+  // Controla la franja de Inicio/Recargar (_buildNavBar): debe ocultarse en
+  // pantallas publicas sin sesion (hoy solo /login -- /cambiar-password
+  // siempre exige sesion en el router de Vue, asi que nunca se alcanza "sin
+  // sesion"). Se infiere de la ruta real que ya decide el router del panel
+  // (el mismo requiresAuth que usa el panel web), no de un sistema de auth
+  // propio del lado de Flutter. Empieza en true para no mostrar la franja
+  // un instante antes de saber en que pantalla se entra.
   bool _isPublicRoute = true;
 
   @override
@@ -111,7 +111,7 @@ class _PanelWebViewState extends State<PanelWebView> {
           // /login a /dashboard tras iniciar sesion NO dispara una carga de
           // pagina nueva (onPageStarted/onPageFinished no se enteran), solo
           // cambia la URL via pushState. onUrlChange si se entera de eso --
-          // es la unica forma de que los FAB reaccionen a un login/logout
+          // es la unica forma de que la franja reaccione a un login/logout
           // sin recargar la pagina.
           onUrlChange: (change) => _updatePublicRoute(change.url),
           onWebResourceError: (error) {
@@ -249,57 +249,59 @@ class _PanelWebViewState extends State<PanelWebView> {
       canPop: false,
       onPopInvokedWithResult: _handleBack,
       child: Scaffold(
-        // Sin AppBar propia: el panel ya trae su propia barra/sidebar, y una
-        // barra extra encima solo duplicaria la navegacion y restaria
-        // pantalla util a formularios e instalaciones en el celular.
+        // Sin AppBar de Flutter (58dp fijos, con titulo/logo) -- el panel ya
+        // trae su propia cabecera. En vez de eso, una franja angosta propia
+        // de solo 2 iconos (sin logo/titulo, cero duplicacion) que vive en
+        // su PROPIO espacio por encima del WebView. A diferencia de los FAB
+        // flotantes anteriores (que tapaban el perfil del tecnico y los
+        // botones inferiores del sidebar cuando estaba abierto, y el
+        // recuadro de firma del cliente), esta franja nunca se superpone a
+        // nada del panel porque no flota sobre el contenido -- le resta su
+        // propia altura fija, chica, al WebView.
         body: SafeArea(
-          child: Stack(
+          child: Column(
             children: [
-              WebViewWidget(controller: _controller),
-              if (_loading)
-                const Positioned.fill(
-                  child: ColoredBox(
-                    color: Color(0x11000000),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
+              if (!_isPublicRoute) _buildNavBar(),
+              Expanded(
+                child: Stack(
+                  children: [
+                    WebViewWidget(controller: _controller),
+                    if (_loading)
+                      const Positioned.fill(
+                        child: ColoredBox(
+                          color: Color(0x11000000),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      ),
+                    if (_loadError != null) _buildErrorOverlay(),
+                  ],
                 ),
-              if (_loadError != null) _buildErrorOverlay(),
+              ),
             ],
           ),
         ),
-        // Abajo a la IZQUIERDA (no a la derecha, default de Flutter): a la
-        // derecha tapaban el recuadro de firma del cliente (el boton
-        // "Limpiar firma" y el lienzo mismo quedaban justo debajo de estos
-        // FAB, que siempre flotan por encima del WebView sin importar el
-        // scroll de la pagina).
-        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-        // Ocultos en pantallas publicas sin sesion (Login) -- ver
-        // _updatePublicRoute. No tiene sentido "ir al Inicio" o "recargar"
-        // desde una pantalla que ya es el punto de entrada.
-        floatingActionButton: _isPublicRoute
-            ? null
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FloatingActionButton(
-                    heroTag: 'home',
-                    onPressed: _goHome,
-                    tooltip: 'Inicio',
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF0EA5E9),
-                    child: const Icon(Icons.home_outlined),
-                  ),
-                  const SizedBox(height: 12),
-                  FloatingActionButton(
-                    heroTag: 'reload',
-                    onPressed: _reload,
-                    tooltip: 'Recargar',
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF0EA5E9),
-                    child: const Icon(Icons.refresh),
-                  ),
-                ],
-              ),
+      ),
+    );
+  }
+
+  // Franja compacta (36dp) con Inicio/Recargar -- reemplaza a los FAB
+  // flotantes. Mismas funciones (_goHome/_reload), ningun sistema de
+  // navegacion nuevo. Solo iconos (sin logo ni texto "SmartRayco": eso ya
+  // lo muestra la cabecera del panel debajo, evita duplicarlo).
+  Widget _buildNavBar() {
+    return Container(
+      height: 36,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          _NavBarButton(icon: Icons.home_outlined, tooltip: 'Inicio', onPressed: _goHome),
+          _NavBarButton(icon: Icons.refresh, tooltip: 'Recargar', onPressed: _reload),
+          const SizedBox(width: 4),
+        ],
       ),
     );
   }
@@ -329,6 +331,31 @@ class _PanelWebViewState extends State<PanelWebView> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// Boton chico de icono solo (sin el padding/tamaño de un IconButton
+// default de Material, pensado para caber en una franja de 36dp).
+class _NavBarButton extends StatelessWidget {
+  const _NavBarButton({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 20, color: const Color(0xFF0EA5E9)),
         ),
       ),
     );
