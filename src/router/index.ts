@@ -35,6 +35,18 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Clientes' }] },
     },
     {
+      // Fase 140 — declarada antes de /clientes/:id para que no choque con
+      // el param dinamico (mismo criterio que /soporte/instalaciones).
+      path: '/clientes/prospectos',
+      name: 'prospectos',
+      component: () => import('@/views/clientes/ProspectosView.vue'),
+      meta: {
+        requiresAuth: true,
+        roles: NOT_TECNICO,
+        breadcrumb: [{ label: 'Clientes', to: '/clientes' }, { label: 'Prospectos' }],
+      },
+    },
+    {
       path: '/clientes/:id',
       name: 'cliente-detalle',
       component: () => import('@/views/clientes/ClientDetailView.vue'),

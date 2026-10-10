@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
 import { useAuthStore } from '@/stores/auth';
 import { useReferidosStore } from '@/stores/referidos';
+import { useProspectsStore } from '@/stores/prospects';
 import { getErrorMessage } from '@/lib/errors';
 import type { Client, ClientStatus, ContractPriority, DocumentType } from '@/types/domain';
 
+const route = useRoute();
 const router = useRouter();
 const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const mikrotikStore = useMikrotikStore();
 const auth = useAuthStore();
 const referidosStore = useReferidosStore();
+const prospectsStore = useProspectsStore();
+
+// Fase 140 — conversion de un prospecto (ver ProspectosView.vue):
+// /clientes?prospect_id=..&name=..&phone=..&address=.. precarga el modal de
+// "+ Nuevo cliente" y, recien si el alta tiene exito, marca el prospecto
+// 'convertido' con la referencia al cliente real (punto 8/9 del pedido).
+const convertingProspectId = ref<string | null>(null);
 
 // TECNICO_RED puede ver/editar clientes (GPS, fotos), pero no crearlos ni
 // eliminarlos — eso queda para SOPORTE/ADMIN/FACTURACION.
@@ -167,12 +176,28 @@ onMounted(async () => {
   if (mikrotikStore.devices.length === 1) {
     unlinkedDeviceId.value = mikrotikStore.devices[0].id;
   }
+
+  const prospectId = route.query.prospect_id as string | undefined;
+  if (prospectId) {
+    openCreate();
+    convertingProspectId.value = prospectId;
+    const fullName = ((route.query.name as string) ?? '').trim();
+    const [first, ...rest] = fullName.split(/\s+/).filter(Boolean);
+    form.value.first_name = first ?? '';
+    form.value.last_name = rest.join(' ');
+    form.value.phone = (route.query.phone as string) ?? '';
+    form.value.address = (route.query.address as string) ?? '';
+    // Limpia los query params para no reabrir/reprecargar el modal si el
+    // tecnico recarga la pagina o navega de vuelta.
+    router.replace('/clientes');
+  }
 });
 
 function openCreate(fromSecret?: PppSecret) {
   editing.value = null;
   form.value = emptyForm();
   pendingPppoeHint.value = fromSecret ? fromSecret.name : null;
+  convertingProspectId.value = null;
   formError.value = null;
   referenteId.value = '';
   referenteFilter.value = '';
@@ -228,6 +253,19 @@ async function handleSubmit() {
           alert(getErrorMessage(e, 'El cliente se guardó, pero no se pudo registrar el referido'));
         }
       }
+
+      // Fase 140 — el cliente YA se creo correctamente (savedId real, no
+      // supuesto): recien aca se marca el prospecto 'convertido', nunca
+      // antes (punto 9 del pedido). Si falla, el cliente igual queda
+      // creado — solo se avisa, no se revierte el alta.
+      if (convertingProspectId.value) {
+        try {
+          await prospectsStore.markConverted(convertingProspectId.value, savedId);
+        } catch (e) {
+          alert(getErrorMessage(e, 'El cliente se creó, pero no se pudo marcar el prospecto como convertido'));
+        }
+        convertingProspectId.value = null;
+      }
     }
 
     showModal.value = false;
@@ -267,13 +305,10 @@ function goToDetail(client: Client) {
           {{ searchQuery ? `${filteredClientsList.length} de ${clientsStore.clients.length}` : `${clientsStore.clients.length} registrados` }}
         </p>
       </div>
-      <button
-        v-if="canManageClients"
-        class="btn-primary"
-        @click="openCreate()"
-      >
-        + Nuevo cliente
-      </button>
+      <div v-if="canManageClients" class="flex gap-2">
+        <router-link to="/clientes/prospectos" class="btn-secondary">🙋 Prospectos</router-link>
+        <button class="btn-primary" @click="openCreate()">+ Nuevo cliente</button>
+      </div>
     </div>
 
     <p v-if="clientsStore.error" class="mb-4 text-sm text-red-600">{{ clientsStore.error }}</p>

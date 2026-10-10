@@ -199,6 +199,38 @@ export interface DebtHoldEvent {
   created_at: string;
 }
 
+export type ProspectEstado = 'interesado' | 'por_contactar' | 'en_negociacion' | 'no_interesado' | 'convertido';
+
+export interface Prospect {
+  id: string;
+  full_name: string;
+  phone: string;
+  zone_id: string | null;
+  address: string | null;
+  plan_interes_id: string | null;
+  canal_contacto: string;
+  estado: ProspectEstado;
+  observaciones: string | null;
+  proximo_seguimiento: string | null;
+  converted_client_id: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+  zones?: Pick<Zone, 'id' | 'name'> | null;
+  plans?: Pick<Plan, 'id' | 'name'> | null;
+}
+
+export interface ProspectFollowup {
+  id: string;
+  prospect_id: string;
+  fecha: string;
+  author_id: string | null;
+  notas: string;
+  created_at: string;
+  profiles?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
 export interface StaffProfile {
   id: string;
   email: string;
