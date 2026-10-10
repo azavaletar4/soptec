@@ -678,7 +678,7 @@ panel). Se unificaron en una sola.
        `git checkout db1188b && bash deploy/update.sh` — vuelve al
        commit que estaba desplegado antes de esta sesión.
 
-## 13i. Fix: faltaba "Inicio" en App de Campo (CampoLayout) — RESUELTO, pendiente de desplegar
+## 13i. Fix: faltaba "Inicio" en App de Campo (CampoLayout) — RESUELTO Y DESPLEGADO
 
 Bug real reportado tras probar 13h en el Samsung: en "Mis trabajos" (y en
 el detalle de un trabajo) ya no había forma de ir al inicio — 13h agregó
@@ -700,8 +700,13 @@ antes daba la franja nativa de Flutter (ya eliminada).
 - **No se tocó `mobile_app/` — no hace falta recompilar la APK.** El
   mecanismo de detección por User-Agent ya está en el binario instalado
   desde 13h; este fix es 100% frontend web y toma efecto con un deploy.
-- Commit `76c2cfb`, pusheado a `origin/main`. **No desplegado** — no
-  autorizado en este turno.
+- Commits `76c2cfb` (código) y `5e6c0ff` (docs), pusheados a
+  `origin/main`. **Desplegado** — respaldo de imágenes
+  `rollback-20261010221710` (mismo mecanismo de 13h) antes de
+  reconstruir. VM confirmada en `5e6c0ff` tras el deploy, `/login` y `/`
+  responden 200, bundle nuevo (`index--dAi1_qt.js`), backend con los 6
+  schedulers reiniciados sin error. Sin migraciones, sin tocar
+  Supabase/OLT/MikroTik.
 
 ## 13. Próximo paso recomendado
 
