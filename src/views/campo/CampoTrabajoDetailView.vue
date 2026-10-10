@@ -970,7 +970,10 @@ const napElementosAll = computed(() =>
     .filter((e) => e.tipo === 'caja_nap')
     .map((e) => {
       const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
-      const used = puertos.filter((p) => p.estado === 'ocupado').length;
+      // Mismo criterio que ZonasView.vue/selectedNapClients: cuenta CLIENTES
+      // reales (ocupado + client_id), no filas "ocupado" sueltas/duplicadas
+      // sin cliente asociado — asi el contador coincide con Operaciones > Zonas.
+      const used = puertos.filter((p) => p.estado === 'ocupado' && p.client_id).length;
       return { id: e.id, name: e.name, used, capacity: e.puertos_total ?? NAP_CLIENT_LIMIT, zoneId: e.zone_id };
     })
     .sort((a, b) => a.name.localeCompare(b.name)),
