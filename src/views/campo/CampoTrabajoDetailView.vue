@@ -1027,6 +1027,27 @@ const installZoneNapMissing = computed(
   () => jobType === 'installation' && (!closureForm.value.zoneId || !closureForm.value.napElementoId),
 );
 
+// ---- Fase 142: reorganiza la pantalla de Alta en 5 pasos (Cliente y orden /
+// Instalacion y red / Materiales / Evidencias / Cierre) — SOLO reordena
+// secciones ya existentes (ningun v-if de contenido se toca, se les agrega
+// un v-show adicional). Averia/Rutina NO usan wizard: showStep() siempre
+// devuelve true para ellas, asi que sus secciones quedan exactamente como
+// estaban (todas visibles a la vez, sin paginar).
+const INSTALL_STEPS = [
+  { n: 1, label: 'Cliente y orden' },
+  { n: 2, label: 'Instalación y red' },
+  { n: 3, label: 'Materiales' },
+  { n: 4, label: 'Evidencias' },
+  { n: 5, label: 'Cierre' },
+] as const;
+const installStep = ref(1);
+function showStep(n: number): boolean {
+  return jobType !== 'installation' || installStep.value === n;
+}
+function goToStep(n: number) {
+  if (jobType === 'installation') installStep.value = n;
+}
+
 // ---- Cierre de trabajo ----
 const INSTALL_PHOTO_CATEGORIES: { value: ClientPhotoCategory; label: string }[] = [
   { value: 'facade', label: 'Fachada' },
@@ -1039,6 +1060,28 @@ const TICKET_PHOTO_CATEGORIES = [
   { value: 'evidencia_1', label: 'Evidencia 1' },
   { value: 'evidencia_2', label: 'Evidencia 2' },
 ];
+
+// Paso 5 (Cierre): "resumen / datos pendientes" — reusa EXACTAMENTE las
+// mismas condiciones que ya exige handleCloseSubmit (zona/NAP, codigo de
+// cliente, firma); las fotos no son una validacion nueva, solo informativas
+// (hoy no bloquean el cierre, igual que antes de esta fase).
+const installSummary = computed(() => {
+  if (jobType !== 'installation') return [];
+  const missingPhotos = INSTALL_PHOTO_CATEGORIES.filter(
+    (c) => !closurePhotos.value[c.value] && !existingPhotoByCategory.value.get(c.value)?.url,
+  );
+  return [
+    { step: 2, label: 'Zona y Caja NAP', ok: !!closureForm.value.zoneId && !!closureForm.value.napElementoId },
+    { step: 2, label: 'Código de cliente / Cintillo Drop', ok: !!closureForm.value.clientCode.trim() },
+    {
+      step: 4,
+      label: 'Fotografías de instalación',
+      ok: !missingPhotos.length,
+      detail: missingPhotos.length ? `Faltan: ${missingPhotos.map((c) => c.label).join(', ')}` : null,
+    },
+    { step: 5, label: 'Firma del cliente', ok: !!signatureBlob.value },
+  ];
+});
 
 const closureForm = ref({
   latitude: null as number | null,
@@ -1549,29 +1592,32 @@ async function handleCloseSubmit() {
         <p class="text-xs text-amber-700">{{ TOMAR_LABEL[jobType] }} para habilitar materiales, equipos y cierre de trabajo.</p>
       </section>
 
-      <!-- Fotos ya registradas del cliente (instalaciones: solo lectura) -->
-      <section v-if="jobType === 'installation' && (loadingPhotos || existingPhotos.length)" class="surface p-3.5 mb-3">
-        <h2 class="text-sm font-semibold mb-2">Fotos anteriores</h2>
-        <p v-if="loadingPhotos" class="text-xs text-slate-400">Cargando fotos...</p>
-        <p v-else-if="!existingPhotos.length" class="text-xs text-slate-400">Sin fotos registradas todavía.</p>
-        <div v-else class="grid grid-cols-2 gap-2">
-          <button
-            v-for="p in existingPhotos"
-            :key="p.id"
-            type="button"
-            class="block text-left"
-            @click="
-              openLightbox(
-                existingPhotos.map((ep) => ({ id: ep.id, url: ep.url ?? '', label: PHOTO_LABEL[ep.category] })),
-                p.id,
-              )
-            "
-          >
-            <img :src="p.url ?? undefined" :alt="PHOTO_LABEL[p.category]" class="w-full h-28 object-cover rounded-lg border border-slate-200" />
-            <p class="text-[11px] text-slate-500 mt-1 text-center">{{ PHOTO_LABEL[p.category] }}</p>
-          </button>
-        </div>
-      </section>
+      <!-- Fotos ya registradas del cliente (instalaciones: solo lectura) —
+           Paso 4 (Evidencias) del wizard de Alta. -->
+      <div v-show="showStep(4)">
+        <section v-if="jobType === 'installation' && (loadingPhotos || existingPhotos.length)" class="surface p-3.5 mb-3">
+          <h2 class="text-sm font-semibold mb-2">Fotos anteriores</h2>
+          <p v-if="loadingPhotos" class="text-xs text-slate-400">Cargando fotos...</p>
+          <p v-else-if="!existingPhotos.length" class="text-xs text-slate-400">Sin fotos registradas todavía.</p>
+          <div v-else class="grid grid-cols-2 gap-2">
+            <button
+              v-for="p in existingPhotos"
+              :key="p.id"
+              type="button"
+              class="block text-left"
+              @click="
+                openLightbox(
+                  existingPhotos.map((ep) => ({ id: ep.id, url: ep.url ?? '', label: PHOTO_LABEL[ep.category] })),
+                  p.id,
+                )
+              "
+            >
+              <img :src="p.url ?? undefined" :alt="PHOTO_LABEL[p.category]" class="w-full h-28 object-cover rounded-lg border border-slate-200" />
+              <p class="text-[11px] text-slate-500 mt-1 text-center">{{ PHOTO_LABEL[p.category] }}</p>
+            </button>
+          </div>
+        </section>
+      </div>
 
       <!-- Censo fotografico (averias): "Actualizar" si ya existe, "Pendiente
            de registro" si es un cliente antiguo sin censar. Las fotos nuevas
@@ -1627,7 +1673,9 @@ async function handleCloseSubmit() {
       </section>
 
       <!-- Fotos de serie de equipos (Fase 105): galeria dinamica, no un
-           slot unico — ticket e installation, solo si hay contrato. -->
+           slot unico — ticket e installation, solo si hay contrato.
+           Paso 4 (Evidencias) del wizard de Alta. -->
+      <div v-show="showStep(4)">
       <section
         v-if="(jobType === 'ticket' || jobType === 'installation') && !isLockedForTecnico && !isUnassignedTicket && !ticketFrozen && trabajo.contractId"
         class="surface p-3.5 mb-3"
@@ -1689,6 +1737,7 @@ async function handleCloseSubmit() {
           + Agregar foto de serie de otro equipo
         </button>
       </section>
+      </div>
 
       <!-- Diagnostico express: averia/rutina (no aplica a un Alta, Fase 141;
            tampoco a una rutina sin cliente puntual) -->
@@ -1723,22 +1772,25 @@ async function handleCloseSubmit() {
         </div>
       </section>
 
-      <!-- Provisionamiento OLT (solo instalaciones, solo admin/super) -->
-      <section v-if="jobType === 'installation' && canProvisionOnt" class="surface p-3.5 mb-3">
-        <h2 class="text-sm font-semibold mb-2">Provisionar en OLT</h2>
-        <div class="space-y-2.5">
-          <select v-model="provisionDeviceId" class="field-input text-sm">
-            <option value="" disabled>Selecciona la OLT...</option>
-            <option v-for="d in oltStore.devices" :key="d.id" :value="d.id">{{ d.name }}</option>
-          </select>
-          <p class="text-xs text-slate-500">Autoriza con el contrato del trabajo y sus referencias PPPoE. La WAN se configura manualmente por defecto.</p>
-          <p v-if="provisionConfirmed" class="text-xs text-green-700">Registro y vínculo confirmados. Verifica la navegación desde la ONT.</p>
-          <button type="button" :disabled="!provisionDeviceId || !trabajo.contractId" class="btn-primary w-full text-sm" @click="showAuthorizeModal = true">
-            Abrir autorización de ONU
-          </button>
-          <p v-if="!trabajo.contractId" class="text-xs text-amber-700">Vincula primero un contrato a este trabajo.</p>
-        </div>
-      </section>
+      <!-- Provisionamiento OLT (solo instalaciones, solo admin/super) —
+           Paso 2 (Instalación y red) del wizard de Alta. -->
+      <div v-show="showStep(2)">
+        <section v-if="jobType === 'installation' && canProvisionOnt" class="surface p-3.5 mb-3">
+          <h2 class="text-sm font-semibold mb-2">Provisionar en OLT</h2>
+          <div class="space-y-2.5">
+            <select v-model="provisionDeviceId" class="field-input text-sm">
+              <option value="" disabled>Selecciona la OLT...</option>
+              <option v-for="d in oltStore.devices" :key="d.id" :value="d.id">{{ d.name }}</option>
+            </select>
+            <p class="text-xs text-slate-500">Autoriza con el contrato del trabajo y sus referencias PPPoE. La WAN se configura manualmente por defecto.</p>
+            <p v-if="provisionConfirmed" class="text-xs text-green-700">Registro y vínculo confirmados. Verifica la navegación desde la ONT.</p>
+            <button type="button" :disabled="!provisionDeviceId || !trabajo.contractId" class="btn-primary w-full text-sm" @click="showAuthorizeModal = true">
+              Abrir autorización de ONU
+            </button>
+            <p v-if="!trabajo.contractId" class="text-xs text-amber-700">Vincula primero un contrato a este trabajo.</p>
+          </div>
+        </section>
+      </div>
 
       <!-- Materiales -->
       <section v-if="isLockedForTecnico" class="surface p-3.5 mb-3 bg-slate-50">
@@ -1761,9 +1813,29 @@ async function handleCloseSubmit() {
       </section>
 
       <template v-else-if="!isUnassignedTicket">
+        <!-- Fase 142 — stepper del wizard de Alta (solo installation; no
+             afecta a averia/rutina, que siguen viendo todo en una pantalla). -->
+        <section v-if="jobType === 'installation'" class="surface p-2.5 mb-3">
+          <div class="flex items-center gap-1">
+            <button
+              v-for="s in INSTALL_STEPS"
+              :key="s.n"
+              type="button"
+              class="flex-1 text-center py-1.5 rounded-lg text-[11px] font-medium transition-colors"
+              :class="installStep === s.n ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+              @click="goToStep(s.n)"
+            >
+              {{ s.n }}. {{ s.label }}
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1.5 text-center">Paso {{ installStep }} de {{ INSTALL_STEPS.length }}</p>
+        </section>
+
         <!-- Kit base de materiales (Fase 123, solo Altas) — Averias arranca
              sin nada precargado a proposito (el tecnico agrega solo lo que
-             de verdad uso, ver "Materiales usados" mas abajo). -->
+             de verdad uso, ver "Materiales usados" mas abajo).
+             Paso 3 (Materiales) del wizard de Alta. -->
+        <div v-show="showStep(3)">
         <section v-if="jobType === 'installation'" class="surface p-3.5 mb-3">
           <h2 class="text-sm font-semibold mb-1">📦 Kit base de instalación</h2>
           <label class="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-2 mb-3">
@@ -1855,10 +1927,13 @@ async function handleCloseSubmit() {
           </form>
           <p v-if="materialError" class="text-xs text-red-600 mt-1.5">{{ materialError }}</p>
         </section>
+        </div>
 
         <!-- Equipos por serie/MAC (Fase 123, Altas) — mismo stock de bodega
              central que ya se usa desde el Panel Web (status='in_stock'),
-             no hay un stock personal por tecnico. -->
+             no hay un stock personal por tecnico.
+             Paso 2 (Instalación y red) del wizard de Alta. -->
+        <div v-show="showStep(2)">
         <section v-if="jobType === 'installation'" class="surface p-3.5 mb-3">
           <h2 class="text-sm font-semibold mb-2">🔧 Equipos asignados (serie/MAC)</h2>
           <p v-if="loadingInstallEquipment" class="text-xs text-slate-400">Cargando...</p>
@@ -1902,6 +1977,7 @@ async function handleCloseSubmit() {
             <p v-if="installUnitError" class="text-xs text-red-600 mt-2">{{ installUnitError }}</p>
           </template>
         </section>
+        </div>
 
         <!-- Registro / Cambio de equipos (averias) -->
         <section v-if="jobType === 'ticket'" class="surface p-3.5 mb-3">
@@ -1983,13 +2059,13 @@ async function handleCloseSubmit() {
 
         <!-- Cierre de trabajo -->
         <section class="surface p-3.5 mb-3">
-          <h2 class="text-sm font-semibold mb-2">Cierre de trabajo</h2>
+          <h2 v-show="jobType !== 'installation' || installStep === 5" class="text-sm font-semibold mb-2">Cierre de trabajo</h2>
 
-          <button type="button" :disabled="gettingLocation" class="text-xs text-sky-700 mb-2.5 block" @click="useCurrentLocation">
+          <button v-show="showStep(4)" type="button" :disabled="gettingLocation" class="text-xs text-sky-700 mb-2.5 block" @click="useCurrentLocation">
             {{ gettingLocation ? 'Obteniendo ubicación...' : `📍 ${closureForm.latitude ? 'Ubicación capturada' : 'Usar mi ubicación actual'}` }}
           </button>
 
-          <div class="grid grid-cols-2 gap-2 mb-3">
+          <div v-show="showStep(4)" class="grid grid-cols-2 gap-2 mb-3">
             <div
               v-for="cat in jobType === 'installation' ? INSTALL_PHOTO_CATEGORIES : TICKET_PHOTO_CATEGORIES"
               :key="cat.value"
@@ -2019,6 +2095,7 @@ async function handleCloseSubmit() {
             </div>
           </div>
 
+          <div v-show="showStep(2)">
           <template v-if="jobType === 'installation'">
             <p class="text-xs font-medium text-slate-600 mb-1">
               Datos de red / Planta externa<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
@@ -2062,8 +2139,9 @@ async function handleCloseSubmit() {
               <p class="text-[11px] text-slate-500 mt-1">Código colocado en el cintillo del cable Drop de la caja NAP.</p>
             </div>
           </template>
+          </div>
 
-          <textarea v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
+          <textarea v-show="showStep(5)" v-model="closureForm.closureNotes" rows="2" placeholder="Notas del cierre..." class="field-input text-sm mb-3"></textarea>
 
           <template v-if="jobType === 'ticket'">
             <p class="text-xs font-medium text-slate-600 mb-1">Parámetros de red (opcional, si recableaste)</p>
@@ -2132,7 +2210,25 @@ async function handleCloseSubmit() {
             </template>
           </template>
 
+          <!-- Resumen / datos pendientes (Paso 5, solo Alta) — reusa las
+               mismas validaciones de handleCloseSubmit, nunca inventa una
+               nueva; cada item lleva al paso donde se completa. -->
+          <div v-if="jobType === 'installation' && installStep === 5" class="mb-3 text-xs border border-slate-200 rounded-lg divide-y divide-slate-100">
+            <button
+              v-for="item in installSummary"
+              :key="item.label"
+              type="button"
+              class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left"
+              @click="goToStep(item.step)"
+            >
+              <span>{{ item.ok ? '✅' : '⚠️' }} {{ item.label }}</span>
+              <span v-if="!item.ok && item.detail" class="text-[11px] text-amber-700">{{ item.detail }}</span>
+              <span v-else-if="!item.ok" class="text-[11px] text-sky-700">Ir al paso {{ item.step }}</span>
+            </button>
+          </div>
+
           <SignaturePad
+            v-show="showStep(5)"
             ref="signaturePadRef"
             :required="jobType === 'installation'"
             :invalid="signatureMissing"
@@ -2145,7 +2241,7 @@ async function handleCloseSubmit() {
           </p>
           <p v-if="closeResult === 'ok'" class="text-sm text-green-600 mt-3">Trabajo cerrado correctamente.</p>
 
-          <button type="button" :disabled="closing || installZoneNapMissing" class="btn-primary w-full text-sm mt-3" @click="handleCloseSubmit">
+          <button v-show="showStep(5)" type="button" :disabled="closing || installZoneNapMissing" class="btn-primary w-full text-sm mt-3" @click="handleCloseSubmit">
             {{
               closing
                 ? 'Guardando...'
