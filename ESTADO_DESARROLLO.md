@@ -1,12 +1,11 @@
 # SmartRayco — Estado de desarrollo
 
-**⚠ INCIDENCIA ACTIVA (2026-10-12): los técnicos NO pueden cerrar
-Rutinas ni Altas desde App de Campo** — error real de producción
+**✅ INCIDENCIA RESUELTA (2026-10-12): los técnicos no podían cerrar
+Rutinas ni Altas desde App de Campo** — error
 `invalid input value for enum routine_status/installation_status`.
-Causa raíz encontrada y corrección preparada en **13w (Fase 150b)** —
-**pendiente de autorización para aplicar la migración en Supabase**
-(es lo único que falta; no requiere desplegar frontend). Ver 13w antes
-de cualquier otra cosa en esta sesión.
+Causa raíz encontrada y corregida, migración **aplicada en Supabase**
+(ver **13w/13w.1**). Pendiente solo que un técnico confirme en campo
+cerrando una Rutina o Alta real.
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
 conversión de prospectos (13m), de separación admin/técnico en
@@ -17,15 +16,15 @@ instalación" (13r), de mejoras en la ventana Clientes (13s), de ajustes
 puntuales a esa misma ventana (13t), de corregir el conteo de ocupación
 de cajas NAP (13u, confirmado por el administrador: los 4 clientes de
 NAP - 01 son reales), de prevenir puertos NAP fantasma a futuro con 2
-triggers `BEFORE DELETE` (13v) y del hotfix de la incidencia de cierre
-de Rutinas/Altas (13w, ver aviso arriba) — **13m-13v aplicadas; 13w
-preparada y probada (16/16), pendiente de autorización para aplicar
-SOLO la migración (sin despliegue de frontend)**. **VM de producción en
-commit `6bfdc42`**, migraciones de Fase 151 y Fase 150 aplicadas en
-Supabase (13r/13s/13t/13u no requirieron migración; 13v sí —
-`20261012191318_fase156_...`, aplicada y verificada, ver 13v.1; 13w
-tiene migración lista, **no aplicada**, ver 13w). 12 y 13d/13g quedaron
-supersedidas, ver notas en cada una. Este documento es la
+triggers `BEFORE DELETE` (13v) y del hotfix de la incidencia crítica de
+cierre de Rutinas/Altas (13w, ver aviso arriba) — **todas aplicadas**.
+**VM de producción en commit `6bfdc42`** (13w no tiene cambios de
+frontend, nada que desplegar), migraciones de Fase 151 y Fase 150
+aplicadas en Supabase (13r/13s/13t/13u no requirieron migración; 13v —
+`20261012191318_fase156_...` — y 13w —
+`20261012192807_fase150b_fix_track_job_work_session_enum` — sí,
+**ambas aplicadas y verificadas**). 12 y 13d/13g quedaron supersedidas,
+ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1714,7 +1713,7 @@ restricción (simulada) después de que el trigger ya corrió, y un
   2–6 de NAP - 01, decisión aparte del administrador en una fase
   separada.
 
-## 13w. Fase 150b — INCIDENCIA CRÍTICA: técnicos no podían cerrar Rutinas ni Altas — RESUELTO, pendiente de aprobación (no aplicado)
+## 13w. Fase 150b — INCIDENCIA CRÍTICA: técnicos no podían cerrar Rutinas ni Altas — RESUELTO Y APLICADO EN SUPABASE
 
 Reporte del usuario (captura de App de Campo): al pulsar "Completar
 rutina", error visible en pantalla `invalid input value for enum
@@ -1837,11 +1836,27 @@ migración en Supabase** (`CREATE OR REPLACE FUNCTION`, aditiva, no
 toca datos ni otros objetos). **No requiere desplegar frontend** — cero
 archivos de `src/` cambiaron.
 
-**No aplicado a Supabase** — pendiente de autorización explícita del
-usuario. Dado que es una incidencia activa que bloquea a los técnicos
-hoy mismo, se recomienda aplicar en cuanto se autorice; el riesgo de la
-migración en sí es bajo (mismo patrón ya usado y probado en Fase 151/
-156, reemplaza una función existente sin tocar triggers ni datos).
+### 13w.1 — Migración aplicada a Supabase de producción (pedido explícito del usuario, incidencia crítica)
+
+- **Verificado antes de aplicar**: commit `d9e4211` = `origin/main`,
+  sin diferencias locales.
+- **Aplicada** vía `apply_migration`, registrada como
+  `20261012192807_fase150b_fix_track_job_work_session_enum` en
+  `supabase_migrations.schema_migrations`.
+- **Verificado con SQL de solo lectura**: código fuente de
+  `public.track_job_work_session()` confirmado con `new.status::text
+  in (...)` (el cast correcto) vía `pg_proc.prosrc`. Los 3 triggers
+  (`trg_track_work_session` en `tickets`/`installations`/`routines`)
+  siguen intactos — la migración solo reemplazó la función, no tocó
+  ningún trigger.
+- **No se tocó ningún dato real**: no se insertó, actualizó ni cerró
+  ninguna orden (ticket/instalación/rutina) real para probar — la
+  verificación se hizo enteramente con la suite aislada en Docker
+  (16/16) antes de aplicar, más la lectura del código ya instalado
+  después. **Recomendado**: que un técnico confirme en campo cerrando
+  una Rutina o Alta real — esa es la prueba definitiva de que el
+  incidente quedó resuelto.
+- **Sin despliegue de frontend** — no había cambios de `src/`.
 
 ## 13. Próximo paso recomendado
 
