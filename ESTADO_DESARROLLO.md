@@ -7,11 +7,13 @@ Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
 en el Histórico (13q), de resumen de coordinación + "Copiar datos de
 instalación" (13r), de mejoras en la ventana Clientes (13s), de ajustes
 puntuales a esa misma ventana (13t) y de corregir el conteo de ocupación
-de cajas NAP (13u) — **13m a 13t aplicadas/desplegadas, 13u lista en
-local pendiente de despliegue**. **VM de producción en commit
-`2967782`**, migraciones de Fase 151 y Fase 150 aplicadas en Supabase
-(13r/13s/13t/13u no requirieron migración, solo frontend). 12 y 13d/13g
-quedaron supersedidas, ver notas en cada una. Este documento es la
+de cajas NAP (13u) — **todas aplicadas/desplegadas**. **VM de producción
+en commit `6bfdc42`**, migraciones de Fase 151 y Fase 150 aplicadas en
+Supabase (13r/13s/13t/13u no requirieron migración, solo frontend). 12 y
+13d/13g quedaron supersedidas, ver notas en cada una. Pendiente real
+abierto: prevenir puertos NAP fantasma a futuro (trigger de `DELETE`,
+ver sección 13 punto 6) — deliberadamente fuera de 13u. Este documento es
+la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1537,8 +1539,42 @@ prueba y las elimina, sus puertos NAP quedarán libres automáticamente en
 el conteo (sin acción adicional) — pero **no quedan libres físicamente**
 en la caja real hasta que un técnico confirme que no hay un
 ONT/equipo conectado en ese puerto. Este fix corrige el **conteo**, no
-reemplaza la verificación física. **No desplegado** — pendiente de
-autorización explícita del usuario.
+reemplaza la verificación física.
+
+**Pendiente para una fase separada (no incluido en 13u)**: prevenir que
+se vuelvan a crear puertos NAP fantasma cuando se elimine un cliente o un
+contrato — por ejemplo un trigger de `DELETE` en `clients`/
+`service_contracts` que, además de la FK `ON DELETE SET NULL` ya
+existente, resetee `estado='libre'` en `fo_nap_puertos` cuando
+`client_id`/`contract_id` queden en null. Hoy el conteo ya los ignora
+(13u), pero la fila fantasma sigue existiendo en la base con
+`estado='ocupado'` — correcto para lo pedido (no liberar nada sin
+autorización), pero deja la causa raíz sin cerrar del todo. Evaluar en
+una fase propia, con su propia migración y aprobación explícita.
+
+### 13u.1 — Desplegada (pedido explícito del usuario, solo este commit)
+
+- **Destino verificado**: VM `192.168.55.201` en `2967782` (limpia, sana).
+  Sin migración (esta fase no toca Supabase).
+- **Respaldo**: `rollback-20261012182252` antes de reconstruir.
+- **Desplegado**: `bash deploy/update.sh` — git pull `2967782`→`6bfdc42`.
+  VM confirmada en `6bfdc42`, contenedores `frontend`/`backend` `Up`,
+  `/login` responde 200.
+- **Verificado en producción, solo lectura**: NAP - 01 (PON 2 - SM)
+  muestra **4/16**, no 3/16 — `Operaciones → Zonas` y `Clientes →
+  Detalle de servicio ("gloria rayco villarreal") → Ubicación` coinciden
+  exactos, mismos 4 clientes (oficina ofi, prueba zava, gloria rayco
+  villarreal, sala sala). El fix funciona correctamente: ya **no** cuenta
+  las 5 filas fantasma (puertos 2–6, antes incluidas en el 8/9 original).
+  La diferencia frente a los "3 clientes físicos" reportados por el
+  usuario es el registro "sala sala" (CTR-2026-00296), asignado el
+  2026-10-10 23:15 — posterior, según todo indica, a la captura del
+  reporte original de 8/16 — **sigue pendiente de confirmar con el
+  administrador** (ver "Dato que debe confirmar el administrador" en
+  13u): si es una instalación real reciente o si también debe tratarse
+  como prueba. No se liberaron los puertos 2–6, no se eliminó ningún
+  cliente/contrato/equipo, no se guardó ningún formulario durante la
+  verificación.
 
 ## 13. Próximo paso recomendado
 
@@ -1559,3 +1595,16 @@ autorización explícita del usuario.
    no urgente (la autorización real ya vive dentro de cada función).
 5. Seguir registrando en `docs/ERRORES-CAMPO.md` los bugs reales que
    reporten los técnicos, para no perder ese historial.
+6. **Pendiente (ver 13u)**: evaluar en una fase separada un trigger de
+   `DELETE` en `clients`/`service_contracts` que libere (`estado='libre'`)
+   el puerto NAP correspondiente en `fo_nap_puertos` cuando se elimine el
+   cliente o contrato — hoy la FK `ON DELETE SET NULL` limpia
+   `client_id`/`contract_id` pero deja el puerto fantasma `ocupado` para
+   siempre. 13u ya corrige el conteo (los ignora), pero no cierra la
+   causa raíz en la base. Requiere su propia migración y aprobación
+   explícita — no incluido en 13u a pedido del usuario.
+7. **Pendiente (ver 13u)**: confirmar con el administrador si "oficina
+   ofi", "prueba zava", "gloria rayco villarreal" y "sala sala" (caja
+   NAP - 01) son clientes reales o cuentas de prueba/oficina — determina
+   si corresponde eliminarlas (y, si se eliminan, verificar en campo que
+   sus puertos no tengan un ONT conectado antes de reasignarlos).
