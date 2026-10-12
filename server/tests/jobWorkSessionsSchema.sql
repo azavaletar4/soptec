@@ -13,20 +13,33 @@ $$;
 create type public.user_role as enum ('SUPERADMIN','ADMIN','TECNICO_RED','SOPORTE','FACTURACION','CLIENTE');
 create table public.profiles(id uuid primary key, role public.user_role, active boolean default true);
 
+-- Fase 150b: status va como ENUM DE VERDAD (igual que produccion), no
+-- texto+check como antes de este fix. Con `text`, una comparacion como
+-- `new.status in ('completed','resolved','closed')` nunca intenta castear
+-- los literales a ningun tipo — asi que esta misma suite pasaba en verde
+-- contra la version de track_job_work_session() que SI rompia en
+-- produccion (installation_status/routine_status no tienen
+-- 'resolved'/'closed', y Postgres castea cada literal del IN-list al tipo
+-- de new.status). Son los 3 enums reales de produccion (confirmado via
+-- pg_enum en la sesion de Fase 150b), no una aproximacion.
+create type public.ticket_status as enum ('open','in_progress','rescheduled','resolved','closed');
+create type public.installation_status as enum ('pending','scheduled','in_progress','completed','cancelled');
+create type public.routine_status as enum ('pending','scheduled','in_progress','completed','cancelled');
+
 create table public.tickets(
   id uuid primary key default gen_random_uuid(),
-  status text not null default 'open' check (status in ('open','in_progress','resolved','closed','rescheduled')),
+  status public.ticket_status not null default 'open',
   assigned_to uuid references public.profiles(id),
   ticket_number text
 );
 create table public.installations(
   id uuid primary key default gen_random_uuid(),
-  status text not null default 'pending' check (status in ('pending','scheduled','in_progress','completed','cancelled')),
+  status public.installation_status not null default 'pending',
   assigned_to uuid references public.profiles(id)
 );
 create table public.routines(
   id uuid primary key default gen_random_uuid(),
-  status text not null default 'pending' check (status in ('pending','scheduled','in_progress','completed','cancelled')),
+  status public.routine_status not null default 'pending',
   assigned_to uuid references public.profiles(id),
   routine_number text
 );

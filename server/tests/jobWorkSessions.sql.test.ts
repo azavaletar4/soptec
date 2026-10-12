@@ -57,6 +57,11 @@ test('PostgreSQL isolated: sesiones de trabajo por orden (Fase 150, propuesta)',
     query(roleSql);
     query(sqlFile('../../supabase/migrations/20261010140000_fase137_un_ticket_activo_por_tecnico.sql'));
     query(sqlFile('../../supabase/migrations/20261012140000_fase150_sesiones_trabajo.sql'));
+    // Fase 150b: hotfix del bug real de produccion — sin esto, cualquier
+    // UPDATE que saque una instalacion/rutina de 'in_progress' revienta con
+    // "invalid input value for enum installation_status/routine_status"
+    // (ver migracion para la causa raiz completa).
+    query(sqlFile('../../supabase/migrations/20261012200000_fase150b_fix_track_job_work_session_enum.sql'));
     // job_work_sessions se crea recien arriba — el GRANT de tabla de
     // jobWorkSessionsSchema.sql (que corre antes) no la alcanza.
     query(`grant all on public.job_work_sessions to anon, authenticated, service_role;`);
@@ -83,6 +88,21 @@ test('PostgreSQL isolated: sesiones de trabajo por orden (Fase 150, propuesta)',
       setStatus('installations', installE, 'in_progress');
       setStatus('installations', installE, 'completed');
       assert.ok(sessionsFor('installation', installE).includes('|finished'));
+    });
+
+    await t.test('rutina completada cierra con end_reason=finished (escenario exacto del incidente real: "Completar rutina")', () => {
+      reset();
+      setStatus('routines', routineF, 'in_progress');
+      setStatus('routines', routineF, 'completed');
+      assert.ok(sessionsFor('routine', routineF).includes('|finished'));
+      assert.equal(openSessionCount('routine', routineF), 0);
+    });
+
+    await t.test('rutina cancelada en curso cierra con end_reason=cancelled_order (mismo enum, otra transicion fuera de in_progress)', () => {
+      reset();
+      setStatus('routines', routineF, 'in_progress');
+      setStatus('routines', routineF, 'cancelled');
+      assert.ok(sessionsFor('routine', routineF).includes('|cancelled_order'));
     });
 
     await t.test('cancelar una orden en curso cierra la sesion con end_reason=cancelled_order (se cuenta el tiempo trabajado)', () => {

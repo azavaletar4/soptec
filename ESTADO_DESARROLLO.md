@@ -1,5 +1,13 @@
 # SmartRayco — Estado de desarrollo
 
+**⚠ INCIDENCIA ACTIVA (2026-10-12): los técnicos NO pueden cerrar
+Rutinas ni Altas desde App de Campo** — error real de producción
+`invalid input value for enum routine_status/installation_status`.
+Causa raíz encontrada y corrección preparada en **13w (Fase 150b)** —
+**pendiente de autorización para aplicar la migración en Supabase**
+(es lo único que falta; no requiere desplegar frontend). Ver 13w antes
+de cualquier otra cosa en esta sesión.
+
 Última actualización: 2026-10-12, sesión de verificación visual de la
 conversión de prospectos (13m), de separación admin/técnico en
 Instalaciones (13n, corregida por 13o), de proteger órdenes de
@@ -8,12 +16,15 @@ en el Histórico (13q), de resumen de coordinación + "Copiar datos de
 instalación" (13r), de mejoras en la ventana Clientes (13s), de ajustes
 puntuales a esa misma ventana (13t), de corregir el conteo de ocupación
 de cajas NAP (13u, confirmado por el administrador: los 4 clientes de
-NAP - 01 son reales) y de prevenir puertos NAP fantasma a futuro con 2
-triggers `BEFORE DELETE` (13v) — **todas aplicadas; 13v no tiene cambios
-de frontend que desplegar**. **VM de producción en commit `6bfdc42`**,
-migraciones de Fase 151 y Fase 150 aplicadas en Supabase (13r/13s/13t/13u
-no requirieron migración; 13v sí — `20261012191318_fase156_...`,
-**aplicada y verificada**, ver 13v.1). 12 y 13d/13g quedaron
+NAP - 01 son reales), de prevenir puertos NAP fantasma a futuro con 2
+triggers `BEFORE DELETE` (13v) y del hotfix de la incidencia de cierre
+de Rutinas/Altas (13w, ver aviso arriba) — **13m-13v aplicadas; 13w
+preparada y probada (16/16), pendiente de autorización para aplicar
+SOLO la migración (sin despliegue de frontend)**. **VM de producción en
+commit `6bfdc42`**, migraciones de Fase 151 y Fase 150 aplicadas en
+Supabase (13r/13s/13t/13u no requirieron migración; 13v sí —
+`20261012191318_fase156_...`, aplicada y verificada, ver 13v.1; 13w
+tiene migración lista, **no aplicada**, ver 13w). 12 y 13d/13g quedaron
 supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
@@ -1702,6 +1713,135 @@ restricción (simulada) después de que el trigger ya corrió, y un
 - **Pendiente** (sin cambios desde 13v): limpiar los 5 puertos fantasma
   2–6 de NAP - 01, decisión aparte del administrador en una fase
   separada.
+
+## 13w. Fase 150b — INCIDENCIA CRÍTICA: técnicos no podían cerrar Rutinas ni Altas — RESUELTO, pendiente de aprobación (no aplicado)
+
+Reporte del usuario (captura de App de Campo): al pulsar "Completar
+rutina", error visible en pantalla `invalid input value for enum
+routine_status: "resolved"`. Pidió suspender Fase 157 y tratar esto como
+prioridad absoluta — investigar Rutinas y Altas, sin tocar OLT/MikroTik/
+PPPoE/facturación, sin cerrar órdenes reales para probar, sin aplicar
+nada sin autorización.
+
+**Causa raíz — UNA SOLA, cubre Rutinas Y Altas a la vez** (confirmada,
+no es una suposición): `public.track_job_work_session()` (Fase 150,
+`20261012140000_fase150_sesiones_trabajo.sql`) es la MISMA función
+registrada en 3 triggers — `tickets`, `installations`, `routines`. Su
+lógica para cerrar una sesión de trabajo tiene:
+
+```sql
+when new.status in ('completed', 'resolved', 'closed') then 'finished'
+```
+
+`new.status` es de un **enum distinto según la tabla** que dispare el
+trigger. Confirmado contra `pg_enum` en Supabase de producción:
+- `ticket_status`: open, in_progress, rescheduled, **resolved**,
+  **closed**.
+- `installation_status`: pending, scheduled, in_progress, completed,
+  cancelled — **sin resolved/closed**.
+- `routine_status`: pending, scheduled, in_progress, completed,
+  cancelled — **sin resolved/closed**.
+
+Para evaluar el `IN`, Postgres necesita castear CADA literal al tipo de
+`new.status`. En `installations`/`routines` eso falla de inmediato
+porque `'resolved'`/`'closed'` no existen en esos dos enums — el error
+salta apenas una orden sale de `'in_progress'` hacia **cualquier**
+estado (no solo `'completed'`), rompiendo tanto "Completar rutina"
+(Rutinas) como "Completar instalación" (Altas) por igual, desde que se
+aplicó Fase 150. `tickets` nunca mostró el error porque `ticket_status`
+sí tiene esos dos valores.
+
+**Rutinas**: `CampoTrabajoDetailView.vue`/`stores/campo.ts` ya enviaban
+el estado correcto (`'completed'`, válido para `routine_status`) — el
+frontend NO tiene el bug. El error ocurre dentro del trigger de Supabase
+al procesar ese UPDATE, antes de que exista ninguna fila nueva — por
+eso la rutina queda intacta en `'in_progress'` (el UPDATE completo se
+revierte), fotos/firma/observaciones YA se habían guardado en pasos
+previos (ver abajo), y el botón se puede reintentar sin duplicar nada
+una vez aplicado el fix.
+
+**Altas**: mismo diagnóstico — `installationsStore.updateStatus(id,
+'completed')` ya era correcto, mismo trigger compartido, mismo error
+("invalid input value for enum installation_status..."), mismo arreglo.
+No se encontró ningún bloqueo adicional ni distinto en el flujo de
+Completar instalación (materiales, equipos serie/MAC, evidencias,
+firma) — no era necesario investigar más, un solo trigger explica
+ambos casos.
+
+**Por qué las pruebas aisladas de Fase 150 no lo detectaron antes de
+desplegar**: `server/tests/jobWorkSessionsSchema.sql` (el fixture de
+`jobWorkSessions.sql.test.ts`) declaraba `tickets/installations/
+routines.status` como `text` + `CHECK`, no como los ENUM reales de
+producción — una comparación `text in (...)` nunca intenta castear
+nada, así que la suite pasaba en verde aunque el código real rompiera.
+Corregido como parte de este fix (ver Archivos) para que sea un
+fixture fiel a producción — confirmado que, sin el fix de la función,
+la suite corregida SÍ reproduce el error real exacto
+(`invalid input value for enum ticket_status/installation_status:
+"completed"`, reproducido en esta sesión antes de aplicar el parche).
+
+**Corrección mínima** (migración nueva
+`20261012200000_fase150b_fix_track_job_work_session_enum.sql`, **no
+aplicada**): `CREATE OR REPLACE` de la misma función, cambiando
+`new.status in (...)` por `new.status::text in (...)` — compara como
+texto plano, sin intentar castear ningún literal al enum de la tabla.
+No cambia ninguna otra lógica (misma detección de entrada/salida de
+`in_progress`, mismo `cancelled_order`/`paused`), no toca los triggers
+(siguen apuntando a la misma función), no toca ningún enum ni ninguna
+tabla de datos.
+
+**Duplicados/cierres parciales al reintentar** (verificado, sin
+cambios necesarios): `performClosureSubmit()` en `stores/campo.ts` ya
+es idempotente para fotos (`alreadyUploaded`, comentario explícito de
+un fix anterior) y usa `upsert` para `work_order_closures` — un
+reintento tras este error no duplica evidencia ni firma. El cambio de
+estado final es atómico (el `UPDATE` que falla se revierte entero), así
+que la orden nunca queda "a medias". Única observación preexistente,
+NO introducida por este bug ni corregida en esta fase (fuera del
+alcance de "corrección mínima urgente"): las fotos de equipo
+(`equipmentPhotos`, Fase 105) no tienen el mismo chequeo de
+`alreadyUploaded` — un reintento podría agregar una entrada de galería
+duplicada. Se deja documentado como pendiente menor, no bloquea el
+cierre.
+
+**Pruebas (aisladas, Postgres real en Docker, sin tocar producción)**:
+- `server/tests/jobWorkSessionsSchema.sql` corregido a enums reales.
+- `server/tests/jobWorkSessions.sql.test.ts`: **16/16 en verde** con el
+  fix cargado (antes: reproducido el error exacto sin el fix, con el
+  fixture ya corregido). Incluye 2 pruebas nuevas que exercitan
+  exactamente el escenario del incidente: "rutina completada cierra con
+  end_reason=finished" y "rutina cancelada cierra con
+  cancelled_order" — ambas sobre `routine_status`, el enum del
+  reporte original.
+- Confirmado que Averías (tickets) sigue funcionando: "terminar con
+  éxito cierra la sesión con end_reason=finished" (usa `'resolved'`,
+  válido en `ticket_status`) sigue en verde, sin cambios de
+  comportamiento.
+- Verificado que Fase 137 (`test:single-active-job-sql`, 14/14) y Fase
+  151 (`test:closed-orders-sql`, 20/20) siguen pasando sin ningún
+  cambio — este fix no los toca, se corrieron para descartar
+  regresión cruzada antes de entregar.
+
+**Archivos modificados**:
+`supabase/migrations/20261012200000_fase150b_fix_track_job_work_session_enum.sql`
+(nuevo, no aplicado), `supabase/rollback/fase150b_rollback.sql` (nuevo,
+restaura el texto literal de Fase 150 — esa versión SI tiene el bug,
+solo para revertir si este fix causara algo inesperado),
+`server/tests/jobWorkSessionsSchema.sql` (enums reales en vez de
+text+check), `server/tests/jobWorkSessions.sql.test.ts` (carga la
+migración del fix + 2 pruebas nuevas). **Sin cambios de frontend** — el
+bug estaba enteramente en Supabase, nada que desplegar en la VM.
+
+**¿Requiere migración o despliegue?** Requiere **únicamente aplicar la
+migración en Supabase** (`CREATE OR REPLACE FUNCTION`, aditiva, no
+toca datos ni otros objetos). **No requiere desplegar frontend** — cero
+archivos de `src/` cambiaron.
+
+**No aplicado a Supabase** — pendiente de autorización explícita del
+usuario. Dado que es una incidencia activa que bloquea a los técnicos
+hoy mismo, se recomienda aplicar en cuanto se autorice; el riesgo de la
+migración en sí es bajo (mismo patrón ya usado y probado en Fase 151/
+156, reemplaza una función existente sin tocar triggers ni datos).
 
 ## 13. Próximo paso recomendado
 
