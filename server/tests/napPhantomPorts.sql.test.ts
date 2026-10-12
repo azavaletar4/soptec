@@ -116,6 +116,36 @@ test('PostgreSQL isolated: eliminar cliente/contrato libera solo SU puerto NAP, 
       query(`delete from public.clients where id = '${clientB}';`);
       assert.equal(query(`select estado, client_id, contract_id, puerto_numero from public.fo_nap_puertos where puerto_numero = 1;`), before);
     });
+
+    await t.test('eliminacion fallida (otra restriccion aborta el DELETE) no deja el puerto liberado a medias', () => {
+      reset();
+      query(`insert into public.fo_nap_puertos(infra_elemento_id, puerto_numero, estado, client_id, contract_id) values
+        ('${nap}', 1, 'ocupado', '${clientA}', '${contractA}');`);
+      // Simula otra restriccion ajena (ej. una factura con ON DELETE NO
+      // ACTION) que aborta el DELETE DESPUES de que nuestro trigger ya
+      // corrio. Nombrado para disparar alfabeticamente despues de
+      // "trg_service_contracts_free_nap_puerto", igual que lo haria
+      // cualquier trigger de sistema de otra FK restrictiva.
+      query(`create function public.zz_force_contract_delete_fail() returns trigger language plpgsql as $$
+          begin raise exception 'forced: factura u otra referencia impide borrar este contrato'; end $$;
+        create trigger zz_force_contract_delete_fail before delete on public.service_contracts
+          for each row execute function public.zz_force_contract_delete_fail();`);
+      const before = query(`select estado, client_id, contract_id from public.fo_nap_puertos where puerto_numero = 1;`);
+      assert.throws(() => query(`delete from public.service_contracts where id = '${contractA}';`), /forced: factura/);
+      assert.equal(query(`select estado, client_id, contract_id from public.fo_nap_puertos where puerto_numero = 1;`), before);
+      assert.equal(query(`select count(*) from public.service_contracts where id = '${contractA}';`), '1');
+      query('drop trigger zz_force_contract_delete_fail on public.service_contracts; drop function public.zz_force_contract_delete_fail();');
+    });
+
+    await t.test('ROLLBACK explicito de la transaccion deshace tambien la liberacion del puerto', () => {
+      reset();
+      query(`insert into public.fo_nap_puertos(infra_elemento_id, puerto_numero, estado, client_id, contract_id) values
+        ('${nap}', 1, 'ocupado', '${clientA}', '${contractA}');`);
+      const before = query(`select estado, client_id, contract_id from public.fo_nap_puertos where puerto_numero = 1;`);
+      query(`begin; delete from public.service_contracts where id = '${contractA}'; rollback;`);
+      assert.equal(query(`select estado, client_id, contract_id from public.fo_nap_puertos where puerto_numero = 1;`), before);
+      assert.equal(query(`select count(*) from public.service_contracts where id = '${contractA}';`), '1');
+    });
   } finally {
     try { docker(['stop', container]); } catch { /* Already removed after a startup failure. */ }
   }
