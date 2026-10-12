@@ -1,11 +1,10 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
-conversión de prospectos (13m, desplegada) y de separación admin/técnico
-en Instalaciones (13n desplegada, corregida por 13o tras feedback real en
-producción — **13o commiteada, NO desplegada**). **VM de producción en
-commit `d2462d1`** (13n sin la corrección 13o todavía). 12 y 13d/13g
-quedaron supersedidas, ver notas en cada una. Este documento es la
+conversión de prospectos (13m) y de separación admin/técnico en
+Instalaciones (13n, corregida por 13o tras feedback real en producción) —
+**todas desplegadas**. **VM de producción en commit `8069b4f`**. 12 y
+13d/13g quedaron supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -927,7 +926,7 @@ recién creadas, sin técnico, generando confusión administrativa.
     `status === 'pending'`, bajo riesgo). Validar visualmente la próxima
     vez que exista una orden `pending` real.
 
-## 13o. Fase 149 — correción a 13n: ocultar materiales en TODOS los estados, no solo pending — IMPLEMENTADO, NO DESPLEGADO
+## 13o. Fase 149 — correción a 13n: ocultar materiales en TODOS los estados, no solo pending — IMPLEMENTADO Y DESPLEGADO
 
 El usuario revisó una orden real `scheduled` ("Programada") en producción
 tras desplegar 13n y encontró que "Plantilla de materiales"/"Otro
@@ -956,8 +955,25 @@ material"/"Registrar plantilla" seguían apareciendo — la condición de 13n
   formulario de asignación intacto; "Editar notas" sigue funcionando (no
   se tocó esa parte). Sin editar ninguna orden real.
 - Archivo tocado: solo `src/views/instalaciones/InstalacionDetailView.vue`.
-- **Commit hecho y pusheado, NO desplegado** — pendiente de autorización
-  explícita.
+- **Desplegado** (pedido explícito del usuario): respaldo
+  `rollback-20261012130400` antes de reconstruir. `bash deploy/update.sh`
+  — git pull trajo `d2462d1`→`8069b4f`. Sin migraciones, sin tocar
+  Supabase/OLT/MikroTik/PPPoE/inventario. VM confirmada en `8069b4f`, 5
+  contenedores `Up`/healthy, schedulers reiniciados limpios, `/login`
+  responde 200, bundle nuevo (`index-yEzfw67_.js`).
+  - **Verificado de verdad contra producción, como SUPERADMIN** (sesión
+    reiniciada — el primer intento quedó logueado con una sesión de
+    TECNICO_RED guardada en el navegador, se cerró sesión y se volvió a
+    entrar con la cuenta admin antes de verificar): sobre la misma orden
+    real `187e8cbc...` (`scheduled`) — "Materiales usados" muestra
+    únicamente la consulta de solo lectura + el aviso de que se registra
+    desde la App de Campo, sin ningún formulario; "Equipos asignados
+    (serie/MAC)" sigue con su formulario de asignación intacto; "Editar
+    notas" visible. Sin editar ninguna orden real.
+  - De paso, se confirmó el comportamiento correcto para TECNICO_RED (vista
+    previa con la sesión equivocada): banner "🔒 Vista de solo lectura" +
+    "Gestiona materiales desde la App de Campo" — sin cambios, como ya
+    estaba.
 
 ## 13. Próximo paso recomendado
 
