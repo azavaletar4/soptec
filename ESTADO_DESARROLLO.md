@@ -1417,9 +1417,9 @@ acciones y compatibilidad móvil. Alcance acotado a
   colapsado con "Mostrar ▼"; al expandir, el selector de router y la
   tabla aparecen igual que antes (13s). `pm2 stop` después de verificar.
 
-**Commit**: pendiente de crear en este mismo turno (ver git log tras esta
-sección). Sin migración. **No desplegado** — pendiente de autorización
-explícita del usuario.
+**Commit**: `b76034c` (pusheado a `origin/main`). Sin migración. **No
+desplegado** — VM de producción sigue en `38e553f`, pendiente de
+autorización explícita del usuario.
 
 ## 13. Próximo paso recomendado
 
