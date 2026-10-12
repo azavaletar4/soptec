@@ -1,10 +1,10 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
-conversión de prospectos (13m) y de separación admin/técnico en
-Instalaciones (13n) — ambas **desplegadas**. **VM de producción en commit
-`d2462d1`**. Pendiente real: validar visualmente 13n contra una orden
-`pending` real cuando exista una (no hay ninguna ahora). 12 y 13d/13g
+conversión de prospectos (13m, desplegada) y de separación admin/técnico
+en Instalaciones (13n desplegada, corregida por 13o tras feedback real en
+producción — **13o commiteada, NO desplegada**). **VM de producción en
+commit `d2462d1`** (13n sin la corrección 13o todavía). 12 y 13d/13g
 quedaron supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
@@ -926,6 +926,38 @@ recién creadas, sin técnico, generando confusión administrativa.
     `vue-tsc` limpio y lectura de código (condición de una línea,
     `status === 'pending'`, bajo riesgo). Validar visualmente la próxima
     vez que exista una orden `pending` real.
+
+## 13o. Fase 149 — correción a 13n: ocultar materiales en TODOS los estados, no solo pending — IMPLEMENTADO, NO DESPLEGADO
+
+El usuario revisó una orden real `scheduled` ("Programada") en producción
+tras desplegar 13n y encontró que "Plantilla de materiales"/"Otro
+material"/"Registrar plantilla" seguían apareciendo — la condición de 13n
+(`isPreDispatch`, solo `status === 'pending'`) no cubría `scheduled`,
+`in_progress` ni `completed`.
+
+- **Corrección real, no un parche de la condición**: en vez de agregar más
+  estados a la condición, se sacó el formulario de registro de materiales
+  **por completo** de `InstalacionDetailView.vue` — para
+  SUPERADMIN/ADMIN, en cualquier estado, solo queda la consulta de solo
+  lectura de lo ya registrado + un aviso de que se registra desde la App
+  de Campo. Se eliminó también el código ahora muerto que quedaba sin
+  ningún `v-if` que lo alcanzara (`MATERIAL_TEMPLATE`, `templateRows`,
+  `handleRegisterTemplate`, `handleAddMaterial`, `materialForm` y
+  variables asociadas) — `tsconfig.app.json` tiene `noUnusedLocals: true`,
+  así que dejarlo sin usar no hubiera pasado el type-check.
+- **Equipos asignados (serie/MAC) sigue intacto**, sin tocar — confirma lo
+  ya decidido en 13n (reserva administrativa, propósito distinto).
+- **App de Campo sin cambios** — `CampoTrabajoDetailView.vue` tiene su
+  propio registro de materiales/equipos independiente, nunca se tocó.
+- Validado: `vue-tsc -p tsconfig.app.json` limpio (confirma que no quedó
+  código muerto). Visual en local contra la misma orden real `scheduled`
+  (187e8cbc...): "Materiales usados" ahora solo muestra la consulta + el
+  aviso, sin ningún formulario; "Equipos asignados" sigue con su
+  formulario de asignación intacto; "Editar notas" sigue funcionando (no
+  se tocó esa parte). Sin editar ninguna orden real.
+- Archivo tocado: solo `src/views/instalaciones/InstalacionDetailView.vue`.
+- **Commit hecho y pusheado, NO desplegado** — pendiente de autorización
+  explícita.
 
 ## 13. Próximo paso recomendado
 

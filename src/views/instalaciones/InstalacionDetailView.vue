@@ -144,11 +144,12 @@ async function handleSaveNotes() {
 }
 
 // ---- Materiales usados (Fase 11b) ----
+// Fase 149: el registro (plantilla + "otro material") se saco de esta
+// vista — queda consulta de solo lectura. Es flujo de ejecucion tecnica,
+// vive solo en CampoTrabajoDetailView.vue (misma inventoryStore.registerUsage,
+// sin duplicar logica, solo se dejo de invocar desde aca).
 const materials = ref<InventoryMovement[]>([]);
 const loadingMaterials = ref(false);
-const materialForm = ref({ productId: '', quantity: 1 });
-const savingMaterial = ref(false);
-const materialError = ref<string | null>(null);
 
 async function loadMaterialsAndUnits() {
   if (!installation.value) return;
@@ -184,94 +185,6 @@ async function setServiceType(type: ContractServiceType) {
     serviceTypeError.value = getErrorMessage(e, 'Error al cambiar el tipo de servicio');
   } finally {
     serviceTypeSaving.value = false;
-  }
-}
-
-// ---- Plantilla de materiales de ferreteria (Fase 45/63) ----
-interface MaterialTemplateLine {
-  key: string;
-  label: string;
-  match: RegExp;
-  defaultQty: number;
-}
-const MATERIAL_TEMPLATE: MaterialTemplateLine[] = [
-  { key: 'drop', label: 'Cable Drop', match: /drop/i, defaultQty: 0 },
-  { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 0 },
-  { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 0 },
-  { key: 'conector', label: 'Conector Óptico', match: /conector/i, defaultQty: 0 },
-];
-const ferreteriaProducts = computed(() => inventoryStore.products.filter((p) => p.is_active && p.inventory_categories?.slug === 'ferreteria'));
-const templateProductChoice = ref<Record<string, string>>({});
-const templateRows = computed(() =>
-  MATERIAL_TEMPLATE.map((line) => {
-    const matches = ferreteriaProducts.value.filter((p) => line.match.test(p.name));
-    const chosenId = matches.length > 1 ? templateProductChoice.value[line.key] : matches[0]?.id;
-    return { ...line, matches, product: matches.find((p) => p.id === chosenId) ?? null };
-  }),
-);
-const templateProductIds = computed(() => new Set(templateRows.value.flatMap((r) => r.matches.map((p) => p.id))));
-const otherMaterialProducts = computed(() => inventoryStore.products.filter((p) => !p.is_serialized && !templateProductIds.value.has(p.id)));
-const templateQuantities = ref<Record<string, number>>({});
-const templateReuse = ref<Record<string, boolean>>({});
-function resetTemplateQuantities() {
-  templateQuantities.value = Object.fromEntries(MATERIAL_TEMPLATE.map((l) => [l.key, l.defaultQty]));
-  templateProductChoice.value = {};
-  templateReuse.value = {};
-}
-const savingTemplate = ref(false);
-const templateError = ref<string | null>(null);
-
-async function handleRegisterTemplate() {
-  if (!installation.value) return;
-  const rowsToRegister = templateRows.value.filter((row) => !templateReuse.value[row.key] && (templateQuantities.value[row.key] ?? 0) > 0 && row.product);
-  if (!rowsToRegister.length) {
-    toast.info('No hay cantidades para registrar — escribe lo que usaste en cada material.');
-    return;
-  }
-  savingTemplate.value = true;
-  templateError.value = null;
-  const failures: string[] = [];
-  for (const row of rowsToRegister) {
-    const qty = templateQuantities.value[row.key] ?? 0;
-    try {
-      await inventoryStore.registerUsage({
-        productId: row.product!.id,
-        quantity: qty,
-        installationId: installation.value.id,
-        reason: `Instalación ${installation.value.contracts?.contract_number ?? installation.value.id} — plantilla`,
-      });
-    } catch (e) {
-      failures.push(`${row.label}: ${getErrorMessage(e)}`);
-    }
-  }
-  materials.value = await inventoryStore.fetchMovementsByInstallation(installation.value.id);
-  resetTemplateQuantities();
-  if (failures.length) {
-    toast.error(`No se pudo registrar: ${failures.join(' · ')}`);
-  } else {
-    toast.success(`Materiales registrados: ${rowsToRegister.map((r) => r.label).join(', ')}.`);
-  }
-  templateError.value = failures.length ? failures.join(' · ') : null;
-  savingTemplate.value = false;
-}
-
-async function handleAddMaterial() {
-  if (!installation.value || !materialForm.value.productId || materialForm.value.quantity <= 0) return;
-  savingMaterial.value = true;
-  materialError.value = null;
-  try {
-    await inventoryStore.registerUsage({
-      productId: materialForm.value.productId,
-      quantity: materialForm.value.quantity,
-      installationId: installation.value.id,
-      reason: `Instalación ${installation.value.contracts?.contract_number ?? installation.value.id}`,
-    });
-    materialForm.value = { productId: '', quantity: 1 };
-    materials.value = await inventoryStore.fetchMovementsByInstallation(installation.value.id);
-  } catch (e) {
-    materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa el stock disponible)');
-  } finally {
-    savingMaterial.value = false;
   }
 }
 
@@ -599,7 +512,6 @@ onMounted(async () => {
   loading.value = false;
   if (installation.value) {
     iptvNoteDraft.value = installation.value.iptv_account_note ?? '';
-    resetTemplateQuantities();
     initCompleteForm();
     await loadMaterialsAndUnits();
   }
@@ -751,69 +663,15 @@ onMounted(async () => {
               </ul>
             </template>
 
-            <template v-if="canEditMaterials(installation) && !isPreDispatch">
-              <div class="border border-slate-200 rounded-lg p-3 mb-4">
-                <h3 class="text-sm font-semibold mb-1">Plantilla de materiales</h3>
-                <p class="text-[11px] text-slate-400 mb-2">
-                  Si el cliente regresa y reutiliza lo que ya tenía (ej. el drop tendido), marca esa línea en vez de
-                  registrar cantidad — si quedan todas así, no hace falta esta sección: solo Equipos asignados.
-                </p>
-                <div class="divide-y divide-slate-100">
-                  <div v-for="row in templateRows" :key="row.key" class="py-2 first:pt-0 last:pb-0">
-                    <div class="flex items-center gap-2">
-                      <span class="flex-1 text-xs text-slate-700">{{ row.label }}</span>
-                      <label class="flex items-center gap-1 text-[11px] text-slate-500 whitespace-nowrap">
-                        <input type="checkbox" v-model="templateReuse[row.key]" />
-                        Cliente regresa
-                      </label>
-                    </div>
-                    <template v-if="!templateReuse[row.key]">
-                      <select v-if="row.matches.length > 1" v-model="templateProductChoice[row.key]" class="field-input w-full py-1 text-xs mt-1.5">
-                        <option value="">Selecciona la medida usada...</option>
-                        <option v-for="p in row.matches" :key="p.id" :value="p.id">{{ p.name }}</option>
-                      </select>
-                      <div v-if="row.product" class="flex items-center gap-2 mt-1.5">
-                        <span class="flex-1 text-[11px] text-slate-400">Cantidad</span>
-                        <input v-model.number="templateQuantities[row.key]" type="number" min="0" step="1" class="field-input w-20 py-1 text-xs" />
-                        <span class="text-[11px] text-slate-400 w-16">{{ row.product.unit }}</span>
-                      </div>
-                      <p v-else-if="!row.matches.length" class="text-[11px] text-amber-700 mt-1">
-                        Falta crear "{{ row.label }}" en <router-link to="/inventario/album/ferreteria" class="underline">Inventario</router-link>
-                      </p>
-                    </template>
-                  </div>
-                </div>
-                <div class="flex justify-end mt-3">
-                  <button type="button" :disabled="savingTemplate" class="btn-secondary text-xs" @click="handleRegisterTemplate">
-                    {{ savingTemplate ? 'Registrando...' : 'Registrar plantilla' }}
-                  </button>
-                </div>
-                <p v-if="templateError" class="text-xs text-red-600 mt-2">{{ templateError }}</p>
-              </div>
-
-              <form class="flex flex-wrap items-end gap-2" @submit.prevent="handleAddMaterial">
-                <div class="flex-1 min-w-[160px]">
-                  <label class="block text-xs text-slate-600 mb-1">Otro material</label>
-                  <select v-model="materialForm.productId" required class="field-input">
-                    <option value="" disabled>Selecciona...</option>
-                    <option v-for="p in otherMaterialProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ p.current_stock }} {{ p.unit }} disp.)</option>
-                  </select>
-                </div>
-                <div class="w-24">
-                  <label class="block text-xs text-slate-600 mb-1">Cantidad</label>
-                  <input v-model.number="materialForm.quantity" type="number" min="1" step="1" class="field-input" />
-                </div>
-                <button type="submit" :disabled="savingMaterial || !materialForm.productId" class="btn-secondary text-xs">
-                  {{ savingMaterial ? 'Registrando...' : '+ Usar' }}
-                </button>
-              </form>
-              <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
-            </template>
-            <p v-else-if="isPreDispatch && canEdit(installation)" class="text-xs text-slate-400">
-              Los materiales se registran desde la App de Campo una vez que el técnico tome la orden.
+            <!-- Fase 149: el registro (plantilla/otro material) se saco de
+                 esta vista para TODOS los roles y estados — es flujo de
+                 ejecucion tecnica, vive solo en la App de Campo. Aca queda
+                 unicamente la consulta de lo ya registrado (arriba). -->
+            <p v-if="canEdit(installation)" class="text-xs text-slate-400">
+              Los materiales se registran desde la App de Campo al tomar la orden.
             </p>
             <p v-else-if="isTecnico" class="text-xs text-slate-400">Gestiona materiales desde la App de Campo</p>
-            <p v-else-if="!canEdit(installation)" class="text-xs text-slate-400">Materiales (solo admin)</p>
+            <p v-else class="text-xs text-slate-400">Materiales (solo admin)</p>
           </div>
 
           <div class="surface p-4 text-sm">
