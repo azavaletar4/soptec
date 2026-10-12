@@ -75,6 +75,16 @@ function canEditMaterials(inst: Installation) {
   return canEdit(inst) && inst.status !== 'completed';
 }
 const canEditStatus = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+// Fase 148 — antes de que un tecnico tome la orden no hay nada que "usar":
+// el formulario de registro de materiales (plantilla + "otro material") es
+// flujo de ejecucion en campo, igual que ya pasa con equipos/completar para
+// TECNICO_RED mas abajo (isTecnico). Se oculta solo el formulario para
+// admin en 'pending' — el listado de lo ya registrado (si hubiera) sigue
+// visible, y "Equipos asignados" NO se toca: sirve para que administracion
+// reserve/pre-asigne una serie especifica antes de despachar al tecnico
+// (inventoryUnitsStore.assignUnit ya soporta esto, es la misma funcion que
+// usa la App de Campo — no es una forma nueva ni un flujo distinto).
+const isPreDispatch = computed(() => installation.value?.status === 'pending');
 const canEditPriority = computed(() => auth.role !== 'TECNICO_RED');
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
@@ -93,6 +103,45 @@ const STATUS_CLASS: Record<InstallationStatus, string> = {
   completed: 'bg-green-500/15 text-green-600',
   cancelled: 'bg-slate-500/15 text-slate-600',
 };
+
+// ---- Notas/indicaciones administrativas (Fase 148) ----
+// `notes` lo escribe solo administracion (al crear la orden o aqui) — el
+// tecnico SOLO lo lee como `trabajoDescripcion` en CampoTrabajoDetailView.vue
+// (computed de solo lectura, nunca un v-model), asi que editarlo no pisa
+// nada que el tecnico haya escrito. Mismo patron ya probado que
+// `handleSaveIptvNote` mas abajo (textarea + updateInstallation).
+const editingNotes = ref(false);
+const notesDraft = ref('');
+const savingNotes = ref(false);
+const notesError = ref<string | null>(null);
+
+function startEditNotes() {
+  if (!installation.value) return;
+  notesDraft.value = installation.value.notes ?? '';
+  notesError.value = null;
+  editingNotes.value = true;
+}
+function cancelEditNotes() {
+  editingNotes.value = false;
+  notesError.value = null;
+}
+async function handleSaveNotes() {
+  if (!installation.value) return;
+  savingNotes.value = true;
+  notesError.value = null;
+  try {
+    const updated = await installationsStore.updateInstallation(installation.value.id, { notes: notesDraft.value.trim() || null });
+    installation.value.notes = updated.notes;
+    editingNotes.value = false;
+    toast.success('Notas actualizadas');
+  } catch (e) {
+    const msg = getErrorMessage(e, 'Error al guardar las notas');
+    notesError.value = msg;
+    toast.error(msg);
+  } finally {
+    savingNotes.value = false;
+  }
+}
 
 // ---- Materiales usados (Fase 11b) ----
 const materials = ref<InventoryMovement[]>([]);
@@ -608,9 +657,30 @@ onMounted(async () => {
             <CrewAssignEditor job-type="installation" :job-id="installation.id" :technicians="technicians" :readonly="!canEditCrew" />
           </div>
 
-          <div v-if="installation.notes" class="surface p-4 text-sm">
-            <div class="text-slate-500 text-xs mb-2">Notas</div>
-            <p class="whitespace-pre-wrap">{{ installation.notes }}</p>
+          <div v-if="installation.notes || canEdit(installation)" class="surface p-4 text-sm">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-slate-500 text-xs">Notas</div>
+              <button
+                v-if="canEdit(installation) && !editingNotes"
+                type="button"
+                class="text-xs text-sky-700 hover:underline"
+                @click="startEditNotes"
+              >
+                {{ installation.notes ? 'Editar notas' : '+ Agregar notas' }}
+              </button>
+            </div>
+            <template v-if="editingNotes">
+              <textarea v-model="notesDraft" rows="4" class="field-input" placeholder="Indicaciones para el técnico..."></textarea>
+              <p v-if="notesError" class="text-xs text-red-600 mt-2">{{ notesError }}</p>
+              <div class="flex justify-end gap-2 mt-2">
+                <button type="button" class="btn-ghost text-xs" :disabled="savingNotes" @click="cancelEditNotes">Cancelar</button>
+                <button type="button" class="btn-primary text-xs" :disabled="savingNotes" @click="handleSaveNotes">
+                  {{ savingNotes ? 'Guardando...' : 'Guardar' }}
+                </button>
+              </div>
+            </template>
+            <p v-else-if="installation.notes" class="whitespace-pre-wrap">{{ installation.notes }}</p>
+            <p v-else class="text-slate-400 text-xs">Sin notas todavía.</p>
           </div>
 
           <div v-if="canEdit(installation) && installation.status !== 'completed' && installation.status !== 'cancelled'" class="surface p-4 text-sm">
@@ -681,7 +751,7 @@ onMounted(async () => {
               </ul>
             </template>
 
-            <template v-if="canEditMaterials(installation)">
+            <template v-if="canEditMaterials(installation) && !isPreDispatch">
               <div class="border border-slate-200 rounded-lg p-3 mb-4">
                 <h3 class="text-sm font-semibold mb-1">Plantilla de materiales</h3>
                 <p class="text-[11px] text-slate-400 mb-2">
@@ -739,6 +809,9 @@ onMounted(async () => {
               </form>
               <p v-if="materialError" class="text-xs text-red-600 mt-2">{{ materialError }}</p>
             </template>
+            <p v-else-if="isPreDispatch && canEdit(installation)" class="text-xs text-slate-400">
+              Los materiales se registran desde la App de Campo una vez que el técnico tome la orden.
+            </p>
             <p v-else-if="isTecnico" class="text-xs text-slate-400">Gestiona materiales desde la App de Campo</p>
             <p v-else-if="!canEdit(installation)" class="text-xs text-slate-400">Materiales (solo admin)</p>
           </div>
@@ -749,6 +822,10 @@ onMounted(async () => {
               <span v-if="materialsServiceType === 'internet_combo'" class="text-amber-600 font-normal">— obligatorio</span>
               <span v-else class="text-slate-400 font-normal">— opcional: ONT como puente o TV Box si el TV no es Smart</span>
             </h2>
+            <p v-if="isPreDispatch && canEditMaterials(installation)" class="text-[11px] text-slate-400 mb-2">
+              Puedes reservar aquí un equipo específico antes de despachar al técnico; si no, el técnico también puede
+              asignarlo él mismo desde la App de Campo al tomar la orden.
+            </p>
             <p v-if="!equipmentProducts.length" class="text-xs text-slate-500">
               {{ materialsServiceType === 'solo_iptv' ? 'No hay productos de ONT o TV Box configurados en Inventario.' : 'No hay productos con control por serie/MAC configurados en Inventario.' }}
             </p>

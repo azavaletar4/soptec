@@ -2,9 +2,11 @@
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
 conversión de prospectos → encontró, corrigió y **desplegó** un bug real
-que 13j/13k/13l no detectaban por lectura de código (ver 13m). **VM de
-producción en commit `61da3a1`** (incluye 13m). 12 y 13d/13g quedaron
-supersedidas, ver notas en cada una. Este documento es la
+que 13j/13k/13l no detectaban por lectura de código (ver 13m), y de
+separación admin/técnico en Instalaciones (ver 13n, commiteado pero **NO
+desplegado**). **VM de producción en commit `61da3a1`** (incluye hasta
+13m, falta 13n). 12 y 13d/13g quedaron supersedidas, ver notas en cada
+una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -861,6 +863,53 @@ invisible por lectura de código, solo se vio probando en vivo.
   (`replaceState`). No se repitió la prueba visual completa de conversión
   contra la VM (ya validada end-to-end en local antes de desplegar, mismo
   código).
+
+## 13n. Fase 148 — separar gestión administrativa de ejecución técnica en Instalaciones — IMPLEMENTADO, NO DESPLEGADO
+
+Pedido explícito del usuario, mismo día: en `InstalacionDetailView.vue`
+(detalle admin de una orden de Alta) las notas quedaban de solo lectura
+tras crear la orden, y los formularios de "Materiales usados"/"Plantilla
+de materiales"/"Otro material" aparecían incluso en órdenes `pending`
+recién creadas, sin técnico, generando confusión administrativa.
+
+- **Notas editables**: nuevo bloque "Editar notas"/"+ Agregar notas"
+  (textarea + Cancelar/Guardar) para `canEdit` (SUPERADMIN/ADMIN),
+  reutilizando `installationsStore.updateInstallation()` — la misma
+  función y columna (`installations.notes`) que ya usa el formulario de
+  creación (`InstalacionesView.vue:436`) y que la App de Campo ya leía de
+  solo lectura (`CampoTrabajoDetailView.vue:116`, `trabajoDescripcion` —
+  computed, nunca un `v-model`, confirmado que el técnico nunca escribe
+  ahí). Sin migración: RLS ya permitía a SUPERADMIN/ADMIN actualizar
+  cualquier columna de `installations` en cualquier estado
+  (`installations_update_staff`, fase70) — no hubo que abrir nada nuevo.
+- **Materiales ocultos antes del despacho**: nuevo computed `isPreDispatch`
+  (`status === 'pending'`) oculta para admin el formulario de "Plantilla
+  de materiales" y "Otro material" (deja el listado de lo ya registrado,
+  si hubiera, y un aviso de que se registra desde la App de Campo). Es
+  puramente de UX — no es un límite de permisos nuevo: el admin sigue
+  teniendo el mismo acceso real de siempre (RLS sin cambios).
+- **Equipos asignados (serie/MAC) — NO se ocultó**: tras revisar el
+  propósito (`inventoryUnitsStore.assignUnit`, misma función que usa la
+  App de Campo), se dejó intacto porque sirve para que administración
+  reserve/pre-asigne una serie específica antes de despachar al técnico —
+  un flujo administrativo legítimo y separado, no una duplicación de la
+  ejecución técnica. Solo se agregó una nota aclaratoria cuando
+  `isPreDispatch`.
+- **Validado**: `vue-tsc -p tsconfig.app.json` limpio. Visual en local
+  (`smartrayco-web`/`smartrayco-api`, misma Supabase, sin escrituras)
+  contra una orden `scheduled` real: "Editar notas" precarga el texto,
+  Cancelar no escribe nada (no se probó Guardar para no tocar una orden
+  real), materiales siguen igual que antes (no es `pending`, sin
+  regresión). **No se pudo probar visualmente el caso `pending`** — no
+  existe ninguna instalación `pending` en producción ahora mismo y no se
+  creó una real para la prueba (instrucción explícita); cubierto por
+  lectura de código + type-check únicamente (condición de una sola línea,
+  bajo riesgo).
+- Archivo tocado: solo `src/views/instalaciones/InstalacionDetailView.vue`.
+  Sin cambios en `CampoTrabajoDetailView.vue`, stores, RLS ni migraciones.
+- **Commit hecho y pusheado, NO desplegado** — solo requiere build de
+  frontend (no hay migración), pendiente de autorización explícita para
+  `bash deploy/update.sh`.
 
 ## 13. Próximo paso recomendado
 
