@@ -19,13 +19,9 @@ NAP - 01 son reales), de prevenir puertos NAP fantasma a futuro con 2
 triggers `BEFORE DELETE` (13v), del hotfix de la incidencia crítica de
 cierre de Rutinas/Altas (13w, ver aviso arriba) y de simplificar el
 control NAP en Zonas contando servicios en vez de puertos (13x) —
-**13m-13w aplicadas; 13x lista en local (35/35 pruebas), pendiente de
-autorización para desplegar frontend (sin migración)**. **VM de
-producción en commit `6bfdc42`** (13w y 13x no tienen cambios de
-frontend/Supabase pendientes de VM respectivamente — 13w ya aplicada en
-Supabase, 13x es solo frontend y todavía no desplegada), migraciones de
-Fase 151 y Fase 150 aplicadas en Supabase (13r/13s/13t/13u no
-requirieron migración; 13v —
+**todas aplicadas/desplegadas**. **VM de producción en commit
+`a5c67c4`**, migraciones de Fase 151 y Fase 150 aplicadas en Supabase
+(13r/13s/13t/13u no requirieron migración; 13v —
 `20261012191318_fase156_...` — y 13w —
 `20261012192807_fase150b_fix_track_job_work_session_enum` — sí, ambas
 aplicadas y verificadas; 13x no requiere migración). 12 y 13d/13g
@@ -1864,7 +1860,7 @@ archivos de `src/` cambiaron.
   cerrada.**
 - **Sin despliegue de frontend** — no había cambios de `src/`.
 
-## 13x. Fase 157 — simplificación mínima del control NAP (Operaciones → Zonas) — RESUELTO, pendiente de despliegue
+## 13x. Fase 157 — simplificación mínima del control NAP (Operaciones → Zonas) — APLICADA Y DESPLEGADA
 
 Aclaración del propietario: `Operaciones → Zonas` ya muestra caja NAP +
 abonados + capacidad, no crear otra pantalla. El "código Drop" es el
@@ -1962,8 +1958,28 @@ transaccional de `assign_provisioning_nap` a la edición manual de
 puertos).
 
 **¿Requiere migración o despliegue?** Sin migración (no se tocó
-Supabase). Requiere únicamente **desplegar frontend** — commit
-pendiente de autorización, igual que las fases anteriores.
+Supabase). Requiere únicamente **desplegar frontend**.
+
+### 13x.1 — Desplegada (pedido explícito del usuario)
+
+- **Destino verificado**: VM `192.168.55.201` en `6bfdc42` (limpia,
+  sana). Sin migración (esta fase no toca Supabase).
+- **Respaldo**: `rollback-20261012194208` antes de reconstruir.
+- **Desplegado**: `bash deploy/update.sh` — git pull `6bfdc42`→`a5c67c4`.
+  VM confirmada en `a5c67c4`, contenedores `frontend`/`backend` `Up`,
+  `/login` responde 200.
+- **Verificado en producción, solo lectura**:
+  - `Operaciones → Zonas` → NAP - 01 muestra **4/16** con los 4
+    abonados (oficina ofi, prueba zava, Gloria Rayco Villarreal, sala
+    sala).
+  - Clic en "Gloria Rayco Villarreal" desde Zonas → navegó
+    correctamente a su Detalle de servicio (`CTR-2026-00295`) — el
+    enlace funciona.
+  - `Detalle de servicio → Ubicación` muestra "Caja NAP: NAP - 01 —
+    **4/16**" — **coincide exacto con Zonas**.
+  - No se modificó ningún puerto, cliente, contrato, inventario, OLT
+    ni MikroTik — ningún formulario se guardó durante la
+    verificación.
 
 ## 13. Próximo paso recomendado
 
