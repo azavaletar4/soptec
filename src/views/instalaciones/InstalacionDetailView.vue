@@ -173,6 +173,81 @@ async function handleSaveNotes() {
   }
 }
 
+// ---- Resumen de coordinación para el técnico (Fase 152) ----
+// Antes esto se armaba a mano por WhatsApp (admin copiaba nombre/DNI/
+// telefono/direccion/plan de la ficha del cliente y del prospecto). Reusa
+// datos ya cargados — ningun fetch nuevo, ninguna tabla nueva:
+// instalacion.clients (nombre/telefono/telefono alterno/direccion, ya
+// venian del join de installationsStore, aca solo se le agrego phone_2) +
+// el contrato ya cargado en contractsStore (DNI, plan, tarifa real
+// monthly_fee, zona/PON, direccion de ESTE servicio si difiere de la del
+// titular, Fase 37). La tarifa sigue sin mostrarsele al tecnico en ningun
+// lado (eso no cambia, Fase 13l) — este resumen es solo para
+// administracion/despacho, igual que ya lo era el mensaje de WhatsApp.
+const linkedContract = computed(() => contractsStore.contracts.find((c) => c.id === installation.value?.contract_id) ?? null);
+
+interface CoordinationSummary {
+  nombre: string;
+  dni: string;
+  telefono: string;
+  telefonoAlterno: string | null;
+  direccion: string;
+  plan: string;
+  tarifa: string;
+  zona: string;
+  contrato: string;
+}
+const coordinationSummary = computed<CoordinationSummary | null>(() => {
+  const inst = installation.value;
+  if (!inst) return null;
+  const contract = linkedContract.value;
+  const nombre = inst.clients ? `${inst.clients.first_name} ${inst.clients.last_name}`.trim() : '—';
+  return {
+    nombre: nombre || '—',
+    dni: contract?.clients?.document_number || 'Sin registrar',
+    telefono: inst.clients?.phone || 'Sin registrar',
+    telefonoAlterno: inst.clients?.phone_2 || null,
+    direccion: contract?.installation_address || inst.clients?.address || 'Sin registrar',
+    plan: contract?.plans?.name || 'Sin plan asignado',
+    tarifa: contract ? `S/ ${Number(contract.monthly_fee).toFixed(2)}` : 'Sin registrar',
+    zona: contract?.zones?.name || 'Sin zona asignada',
+    contrato: contract?.contract_number || inst.contracts?.contract_number || 'Sin contrato',
+  };
+});
+// Visible solo para quien gestiona el despacho — el tecnico ya ve lo mismo
+// (menos la tarifa) en su propia App de Campo, no hace falta duplicarlo aca.
+const showCoordinationSummary = computed(() => !isTecnico.value && !!coordinationSummary.value);
+
+function coordinationSummaryText(): string {
+  const s = coordinationSummary.value;
+  if (!s) return '';
+  const lines = [
+    `📍 Nueva instalación — ${s.nombre}`,
+    `DNI: ${s.dni}`,
+    `Tel: ${s.telefono}${s.telefonoAlterno ? ` (alterno: ${s.telefonoAlterno})` : ''}`,
+    `Dirección: ${s.direccion}`,
+    `Plan: ${s.plan} — ${s.tarifa}`,
+    `Zona/PON: ${s.zona}`,
+    `Orden: ${s.contrato}`,
+  ];
+  return lines.join('\n');
+}
+
+const copyingSummary = ref(false);
+async function copyInstallationSummary() {
+  const text = coordinationSummaryText();
+  if (!text) return;
+  copyingSummary.value = true;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success('Datos copiados — pégalos en WhatsApp para coordinar con el técnico');
+  } catch (e) {
+    toast.error(getErrorMessage(e, 'No se pudo copiar — selecciona y copia el texto manualmente'));
+  } finally {
+    copyingSummary.value = false;
+  }
+}
+
 // ---- Materiales usados (Fase 11b) ----
 // Fase 149: el registro (plantilla + "otro material") se saco de esta
 // vista — queda consulta de solo lectura. Es flujo de ejecucion tecnica,
@@ -624,6 +699,37 @@ onMounted(async () => {
             </template>
             <p v-else-if="installation.notes" class="whitespace-pre-wrap">{{ installation.notes }}</p>
             <p v-else class="text-slate-400 text-xs">Sin notas todavía.</p>
+          </div>
+
+          <!-- Fase 152: resumen de coordinacion — reemplaza el mensaje que
+               antes se armaba a mano por WhatsApp. Mismos datos que ya
+               llegaron del prospecto convertido (13j/13k/13l): nombre, DNI,
+               telefonos, direccion, plan, tarifa y zona/PON. -->
+          <div v-if="showCoordinationSummary" class="surface p-4 text-sm">
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="text-sm font-semibold">📋 Resumen de instalación</h2>
+              <button type="button" class="btn-secondary text-xs" :disabled="copyingSummary" @click="copyInstallationSummary">
+                {{ copyingSummary ? 'Copiando...' : '📋 Copiar datos de instalación' }}
+              </button>
+            </div>
+            <dl class="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs">
+              <dt class="text-slate-500">Cliente</dt>
+              <dd class="text-slate-900">{{ coordinationSummary!.nombre }}</dd>
+              <dt class="text-slate-500">DNI</dt>
+              <dd class="text-slate-900">{{ coordinationSummary!.dni }}</dd>
+              <dt class="text-slate-500">Teléfono</dt>
+              <dd class="text-slate-900">
+                {{ coordinationSummary!.telefono }}<span v-if="coordinationSummary!.telefonoAlterno"> (alterno: {{ coordinationSummary!.telefonoAlterno }})</span>
+              </dd>
+              <dt class="text-slate-500">Dirección</dt>
+              <dd class="text-slate-900">{{ coordinationSummary!.direccion }}</dd>
+              <dt class="text-slate-500">Plan</dt>
+              <dd class="text-slate-900">{{ coordinationSummary!.plan }} — {{ coordinationSummary!.tarifa }}</dd>
+              <dt class="text-slate-500">Zona/PON</dt>
+              <dd class="text-slate-900">{{ coordinationSummary!.zona }}</dd>
+              <dt class="text-slate-500">Orden</dt>
+              <dd class="text-slate-900 font-mono">{{ coordinationSummary!.contrato }}</dd>
+            </dl>
           </div>
 
           <div v-if="canEdit(installation) && installation.status !== 'completed' && installation.status !== 'cancelled'" class="surface p-4 text-sm">

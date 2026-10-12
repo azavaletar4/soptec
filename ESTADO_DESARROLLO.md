@@ -3,10 +3,12 @@
 Última actualización: 2026-10-12, sesión de verificación visual de la
 conversión de prospectos (13m), de separación admin/técnico en
 Instalaciones (13n, corregida por 13o), de proteger órdenes de
-Instalación cerradas (13p) y de sesiones de trabajo / "Tiempo de trabajo"
-en el Histórico (13q) — **todas aplicadas/desplegadas**. **VM de
-producción en commit `72b2f1f`**, migraciones de Fase 151 y Fase 150
-aplicadas en Supabase. 12 y 13d/13g quedaron
+Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
+en el Histórico (13q) y de resumen de coordinación + "Copiar datos de
+instalación" (13r) — **13m-13q aplicadas/desplegadas, 13r commiteada y
+sin desplegar**. **VM de producción en commit `72b2f1f`** (sin 13r
+todavía), migraciones de Fase 151 y Fase 150 aplicadas en Supabase (13r
+no requiere migración). 12 y 13d/13g quedaron
 supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
@@ -1198,6 +1200,60 @@ commiteado y validado; esta sesión agrega el **frontend** y refuerza las
   el cierre real de un trabajo desde la App de Campo para no tocar una
   orden real, cubierto por las 14 pruebas aisladas ya validadas.
 - No se tocó ningún otro módulo ni dato operativo.
+
+## 13r. Fase 152 — resumen de coordinación + "Copiar datos de instalación" en Instalaciones — CÓDIGO LISTO, NO desplegado
+
+Pedido explícito: reemplazar el mensaje de WhatsApp que antes se armaba a
+mano (admin copiaba nombre/DNI/teléfono/dirección/plan de la ficha del
+cliente y del prospecto) por un resumen automático + botón de copiar en
+`InstalacionDetailView.vue`. Sin tablas nuevas, sin tocar OLT/MikroTik/
+PPPoE/inventario/facturación.
+
+- **Punto 1 (verificar que los datos llegan)**: no se repitió la
+  auditoría — ya está confirmado en 13j/13k/13l (misma sesión) que
+  nombre/DNI/teléfonos/dirección/plan/tarifa/zona-PON llegan correctamente
+  del prospecto convertido hasta el contrato y la instalación. Esta fase
+  solo necesitó **un dato que faltaba**: `phone_2` (teléfono alterno) no
+  estaba en el `select` de `installationsStore` — se agregó (1 línea,
+  `src/stores/installations.ts` + el tipo `Installation` en
+  `src/types/domain.ts`). Todo lo demás (DNI, plan, tarifa real
+  `monthly_fee`, zona/PON, dirección de la instalación) ya estaba cargado
+  en `contractsStore.contracts`, reusando el mismo patrón de búsqueda que
+  ya existía en `initCompleteForm()` (`contractsStore.contracts.find(c =>
+  c.id === installation.value?.contract_id)`) — **cero fetches nuevos**.
+- **Punto 2 (resumen visible)**: tarjeta "📋 Resumen de instalación" en la
+  columna izquierda (después de Notas) — Cliente, DNI, Teléfono (+
+  alterno si existe), Dirección, Plan — Tarifa, Zona/PON, Orden. Oculta
+  para `TECNICO_RED` (ya ve lo mismo, menos la tarifa, en su propia App de
+  Campo — no se le duplica). La tarifa sigue sin mostrársele al técnico en
+  ningún lado (eso no cambió, es la regla de 13l).
+- **Punto 3 (botón de copiar, sin envío automático)**: "📋 Copiar datos de
+  instalación" arma el mismo texto en formato lista (como el mensaje de
+  WhatsApp de antes) y lo copia con `navigator.clipboard.writeText()` —
+  el usuario decide dónde pegarlo, nada se envía solo. Toast de
+  confirmación/error.
+- **Punto 4 (reusar, no duplicar)**: ninguna tabla nueva, ninguna columna
+  nueva salvo el `phone_2` que ya existía en `clients` y solo faltaba
+  seleccionarlo aquí. El cálculo de tarifa (`S/ ${monthly_fee.toFixed(2)}`)
+  sigue el mismo patrón inline que ya usa `ClientDetailView.vue` — no se
+  creó un helper de moneda nuevo.
+- **Punto 5**: no se tocó ningún archivo de OLT/MikroTik/PPPoE/inventario/
+  facturación.
+- **Validado**: `vue-tsc -p tsconfig.app.json` limpio. Visual en local
+  (dev server contra la misma Supabase de producción, **solo lectura**)
+  contra una orden real completada (`fa380e18...`, Luis Romero León): el
+  resumen muestra DNI, teléfono, dirección, plan+tarifa y zona/PON reales
+  y correctos; "Copiar datos de instalación" funcionó — toast de éxito
+  confirmó que `clipboard.writeText()` resolvió sin error (no se pudo
+  releer el portapapeles vía automatización para confirmar el texto
+  exacto — un intento de `navigator.clipboard.readText()` vía DevTools
+  quedó colgado por el prompt de permiso del navegador; el toast de éxito
+  real de la app ya es evidencia suficiente de que la escritura
+  funcionó). No se guardó ni modificó ningún dato real.
+- Archivos: `src/views/instalaciones/InstalacionDetailView.vue`,
+  `src/stores/installations.ts`, `src/types/domain.ts`.
+- **Commiteado y pusheado, NO desplegado** — pendiente de autorización
+  explícita. No requiere migración (no se tocó Supabase).
 
 ## 13. Próximo paso recomendado
 

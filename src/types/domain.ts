@@ -321,7 +321,7 @@ export interface Installation {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'address' | 'latitude' | 'longitude'> | null;
+  clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'phone' | 'phone_2' | 'address' | 'latitude' | 'longitude'> | null;
   contracts?: Pick<ServiceContract, 'id' | 'contract_number' | 'service_type'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }

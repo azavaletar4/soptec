@@ -3,8 +3,12 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Installation, InstallationStatus } from '@/types/domain';
 
+// Fase 152: se agrega phone_2 (telefono alternativo) al join de clients —
+// ya lo capturaba la conversion de prospecto (13k) pero esta vista no lo
+// pedia, asi que el resumen para el tecnico (InstalacionDetailView.vue) no
+// lo podia mostrar sin una consulta aparte.
 const INSTALLATION_SELECT =
-  '*, clients(id, first_name, last_name, phone, address, latitude, longitude), contracts:service_contracts(id, contract_number, service_type), assigned_profile:profiles!installations_assigned_to_fkey(id, full_name, email)';
+  '*, clients(id, first_name, last_name, phone, phone_2, address, latitude, longitude), contracts:service_contracts(id, contract_number, service_type), assigned_profile:profiles!installations_assigned_to_fkey(id, full_name, email)';
 
 export const useInstallationsStore = defineStore('installations', () => {
   const installations = ref<Installation[]>([]);
