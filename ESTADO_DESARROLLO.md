@@ -5,11 +5,12 @@ conversión de prospectos (13m), de separación admin/técnico en
 Instalaciones (13n, corregida por 13o), de proteger órdenes de
 Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
 en el Histórico (13q), de resumen de coordinación + "Copiar datos de
-instalación" (13r) y de mejoras en la ventana Clientes (13s) — **todas
-aplicadas/desplegadas**. **VM de producción en commit `38e553f`**,
-migraciones de Fase 151 y Fase 150 aplicadas en Supabase (13r/13s no
-requirieron migración, solo frontend). 12 y 13d/13g quedaron
-supersedidas, ver notas en cada una. Este documento es la
+instalación" (13r), de mejoras en la ventana Clientes (13s) y de ajustes
+puntuales a esa misma ventana (13t) — **13m a 13s aplicadas/desplegadas,
+13t lista en local pendiente de despliegue**. **VM de producción en
+commit `38e553f`**, migraciones de Fase 151 y Fase 150 aplicadas en
+Supabase (13r/13s/13t no requirieron migración, solo frontend). 12 y
+13d/13g quedaron supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1368,6 +1369,57 @@ estados ni rutas nuevas.
     correctamente a `/soporte/instalaciones/4c308c56-...` (su orden real,
     "Programada").
   - Sin modificar ningún dato real ni otro módulo.
+
+## 13t. Fase 154 — ajustes puntuales de Clientes (estado vs. instalación, PPPoE plegado) — RESUELTO, pendiente de desplegar
+
+Pedido del usuario: distinguir visualmente el estado del cliente del
+estado de instalación (sin tocar Supabase), mantener los filtros de 13s
+intactos, plegar "Usuarios PPPoE sin contrato" por defecto, conservar
+acciones y compatibilidad móvil. Alcance acotado a
+`src/views/clientes/ClientesView.vue`, sin migración.
+
+- **Punto 1 — estado del cliente vs. estado de instalación**:
+  `clientDisplayStatus()` (13s) reemplazaba la etiqueta de `clients.status`
+  por "Pendiente de instalación" cuando era `'prospect'` + Alta abierta —
+  eso ocultaba el estado real del cliente. Ahora `clientDisplayStatus()`
+  siempre devuelve la etiqueta real (`STATUS_LABEL[c.status]`) y se agregó
+  `pendingInstallLabel()`, un badge independiente "📋 Alta pendiente" que
+  aparece junto al de estado (no lo reemplaza) cuando
+  `hasOpenInstallation(c.id)` es verdadero — sin importar si
+  `c.status` es `'prospect'` o ya quedó en `'active'` sin actualizar a
+  mano. Verificado en datos reales (ver abajo): Cesar Valverde Reyes y
+  Angel Chávez Velasquez muestran "Prospecto" + "📋 Alta pendiente"; Miler
+  Sanchez Cesias muestra "Activo" + "📋 Alta pendiente" — los tres casos
+  reales que motivaron este cambio. Ningún estado se escribe en Supabase,
+  es solo presentación.
+- **Punto 2 — filtros**: sin cambios en `quickFilter` ni en
+  `filteredClientsList` (siguen usando `hasOpenInstallation` como en 13s).
+  Verificado que "Pendientes de instalación" sigue devolviendo los mismos
+  3 clientes.
+- **Punto 3 — "Usuarios PPPoE sin contrato" plegado**: nuevo
+  `showUnlinkedSection = ref(false)` con botón "Mostrar ▼"/"Ocultar ▲" en
+  la cabecera de la tarjeta; el contenido (selector de router, tabla,
+  nota) queda dentro de un `<template v-if="showUnlinkedSection">`. No se
+  tocó `loadUnlinked()` ni el auto-select del primer router en
+  `onMounted` — la sección sigue cargando los mismos datos una vez
+  expandida, solo cambia la visibilidad inicial.
+- **Punto 4 — acciones y móvil**: `handleDelete`, `openEdit`, `openCreate`,
+  los accesos rápidos "📋 Alta"/"🛠 Servicio" y el layout
+  `table-shell`/`min-w-[720px]` con scroll horizontal quedaron intactos —
+  no se tocó compatibilidad móvil ni ninguna acción existente.
+
+**Pruebas**:
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → limpio, sin errores.
+- Verificación visual local (`pm2 start smartrayco-web smartrayco-api`,
+  contra Supabase de producción, solo lectura): filtro "Pendientes de
+  instalación" (3 de 306) muestra los badges dobles correctos para los 3
+  clientes reales mencionados arriba; "Usuarios PPPoE sin contrato" carga
+  colapsado con "Mostrar ▼"; al expandir, el selector de router y la
+  tabla aparecen igual que antes (13s). `pm2 stop` después de verificar.
+
+**Commit**: pendiente de crear en este mismo turno (ver git log tras esta
+sección). Sin migración. **No desplegado** — pendiente de autorización
+explícita del usuario.
 
 ## 13. Próximo paso recomendado
 

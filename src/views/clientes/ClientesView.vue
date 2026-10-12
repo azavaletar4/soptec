@@ -163,17 +163,22 @@ function latestInstallationFor(clientId: string): Installation | null {
   return openInstallationFor(clientId) ?? [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 }
 
-// Estado real mostrado en la tabla (Fase 153): clients.status='prospect'
-// literal se confunde con el modulo de Prospectos CRM (son cosas
-// distintas, ver ProspectosView.vue/prospects store) — si ademas tiene
-// una Alta abierta, se muestra "Pendiente de instalación" en vez de
-// "Prospecto" para no mezclarlos. No se inventa un estado nuevo: sigue
-// siendo clients.status='prospect' en la base, esto es solo la etiqueta.
+// Estado real mostrado en la tabla: siempre clients.status tal cual esta en
+// Supabase (Fase 154 — antes la Fase 153 lo reemplazaba por "Pendiente de
+// instalación" cuando era 'prospect' + Alta abierta, lo que ocultaba el
+// estado real del cliente). No se cambia ningun estado en la base, solo la
+// etiqueta visible.
 function clientDisplayStatus(c: Client): { label: string; cls: string } {
-  if (c.status === 'prospect' && hasOpenInstallation(c.id)) {
-    return { label: 'Pendiente de instalación', cls: 'bg-sky-500/15 text-sky-700' };
-  }
   return { label: STATUS_LABEL[c.status], cls: STATUS_CLASS[c.status] };
+}
+
+// Fase 154: indicador separado del estado de instalación — se muestra junto
+// al badge de estado del cliente (sin reemplazarlo) cuando hay una Alta
+// abierta, sin importar si clients.status es 'prospect' o quedo en 'active'
+// desactualizado. Distingue visualmente "estado del cliente" de "estado de
+// instalación", que es justo lo que pide esta fase.
+function pendingInstallLabel(c: Client): string | null {
+  return hasOpenInstallation(c.id) ? 'Alta pendiente' : null;
 }
 
 // Filtros rapidos (Fase 153) — un solo seleccionado a la vez, mismo patron
@@ -211,6 +216,10 @@ const filteredClientsList = computed(() => {
 const unlinkedDeviceId = ref('');
 const unlinkedSecrets = ref<PppSecret[]>([]);
 const loadingUnlinked = ref(false);
+// Fase 154: plegado por defecto — es una sección de mantenimiento ocasional,
+// no la tarea principal de esta vista. Solo cambia la visibilidad, no la
+// carga de datos (sigue igual que antes una vez expandida).
+const showUnlinkedSection = ref(false);
 
 async function loadUnlinked() {
   if (!unlinkedDeviceId.value) {
@@ -594,9 +603,18 @@ function goToDetail(client: Client) {
               <span v-else class="text-slate-600">{{ contractsByClient.get(c.id)?.length ?? 0 }}</span>
             </td>
             <td class="px-4 py-3">
-              <span class="badge" :class="clientDisplayStatus(c).cls">
-                {{ clientDisplayStatus(c).label }}
-              </span>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="badge" :class="clientDisplayStatus(c).cls">
+                  {{ clientDisplayStatus(c).label }}
+                </span>
+                <span
+                  v-if="pendingInstallLabel(c)"
+                  class="badge bg-amber-500/15 text-amber-700"
+                  title="Tiene una orden de Alta pendiente, programada o en curso"
+                >
+                  📋 {{ pendingInstallLabel(c) }}
+                </span>
+              </div>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
               <router-link
@@ -631,45 +649,54 @@ function goToDetail(client: Client) {
     </div>
 
     <div class="rounded-xl border border-slate-200 bg-slate-100 p-5 mb-6">
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div class="flex flex-wrap items-center justify-between gap-3" :class="showUnlinkedSection ? 'mb-3' : ''">
         <h2 class="text-sm font-semibold">Usuarios PPPoE sin contrato</h2>
+        <button
+          type="button"
+          class="text-xs font-medium text-sky-700 hover:underline"
+          @click="showUnlinkedSection = !showUnlinkedSection"
+        >
+          {{ showUnlinkedSection ? 'Ocultar ▲' : 'Mostrar ▼' }}
+        </button>
+      </div>
+      <template v-if="showUnlinkedSection">
         <select
           v-model="unlinkedDeviceId"
-          class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm"
+          class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm mb-3"
         >
           <option value="">Selecciona un router MikroTik</option>
           <option v-for="d in mikrotikStore.devices" :key="d.id" :value="d.id">{{ d.name }}</option>
         </select>
-      </div>
-      <p v-if="!unlinkedDeviceId" class="text-sm text-slate-500">Elige un router para ver sus usuarios PPPoE sin contrato.</p>
-      <p v-else-if="loadingUnlinked" class="text-sm text-slate-500">Cargando...</p>
-      <p v-else-if="!unlinkedSecrets.length" class="text-sm text-green-600">Todos los usuarios PPPoE de este router ya tienen contrato.</p>
-      <div v-else class="rounded-lg border border-slate-200 overflow-hidden overflow-x-auto">
-        <table class="w-full text-sm min-w-[560px]">
-          <thead class="bg-white text-slate-600 text-xs uppercase">
-            <tr>
-              <th class="text-left px-4 py-2">Usuario</th>
-              <th class="text-left px-4 py-2">Perfil</th>
-              <th class="text-left px-4 py-2">Comentario</th>
-              <th class="text-right px-4 py-2">Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="s in unlinkedSecrets" :key="s['.id']" class="border-t border-slate-200">
-              <td class="px-4 py-2 font-mono text-xs">{{ s.name }}</td>
-              <td class="px-4 py-2 text-slate-600">{{ s.profile }}</td>
-              <td class="px-4 py-2 text-slate-600">{{ s.comment || '—' }}</td>
-              <td class="px-4 py-2 text-right">
-                <button v-if="canManageClients" class="text-sky-700 hover:underline text-xs" @click="openCreate(s)">Crear cliente</button>
-                <span v-else class="text-xs text-slate-400">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="text-xs text-slate-400 mt-2">
-        Al crear el cliente pasas directo a su ficha para armar el contrato y terminar de vincularlo ahi.
-      </p>
+        <p v-if="!unlinkedDeviceId" class="text-sm text-slate-500">Elige un router para ver sus usuarios PPPoE sin contrato.</p>
+        <p v-else-if="loadingUnlinked" class="text-sm text-slate-500">Cargando...</p>
+        <p v-else-if="!unlinkedSecrets.length" class="text-sm text-green-600">Todos los usuarios PPPoE de este router ya tienen contrato.</p>
+        <div v-else class="rounded-lg border border-slate-200 overflow-hidden overflow-x-auto">
+          <table class="w-full text-sm min-w-[560px]">
+            <thead class="bg-white text-slate-600 text-xs uppercase">
+              <tr>
+                <th class="text-left px-4 py-2">Usuario</th>
+                <th class="text-left px-4 py-2">Perfil</th>
+                <th class="text-left px-4 py-2">Comentario</th>
+                <th class="text-right px-4 py-2">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in unlinkedSecrets" :key="s['.id']" class="border-t border-slate-200">
+                <td class="px-4 py-2 font-mono text-xs">{{ s.name }}</td>
+                <td class="px-4 py-2 text-slate-600">{{ s.profile }}</td>
+                <td class="px-4 py-2 text-slate-600">{{ s.comment || '—' }}</td>
+                <td class="px-4 py-2 text-right">
+                  <button v-if="canManageClients" class="text-sky-700 hover:underline text-xs" @click="openCreate(s)">Crear cliente</button>
+                  <span v-else class="text-xs text-slate-400">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-slate-400 mt-2">
+          Al crear el cliente pasas directo a su ficha para armar el contrato y terminar de vincularlo ahi.
+        </p>
+      </template>
     </div>
 
     <Teleport to="body">
