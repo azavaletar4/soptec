@@ -5,12 +5,11 @@ conversión de prospectos (13m), de separación admin/técnico en
 Instalaciones (13n, corregida por 13o), de proteger órdenes de
 Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
 en el Histórico (13q), de resumen de coordinación + "Copiar datos de
-instalación" (13r) y de mejoras en la ventana Clientes (13s) — **13m-13r
-aplicadas/desplegadas, 13s commiteada y sin desplegar**. **VM de
-producción en commit `e2254ce`** (sin 13s todavía), migraciones de Fase
-151 y Fase 150 aplicadas en Supabase (13r/13s no requirieron migración,
-solo frontend). 12 y 13d/13g quedaron supersedidas, ver notas en cada
-una. Este documento es la
+instalación" (13r) y de mejoras en la ventana Clientes (13s) — **todas
+aplicadas/desplegadas**. **VM de producción en commit `38e553f`**,
+migraciones de Fase 151 y Fase 150 aplicadas en Supabase (13r/13s no
+requirieron migración, solo frontend). 12 y 13d/13g quedaron
+supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1273,7 +1272,7 @@ PPPoE/inventario/facturación.
   Sin tocar ninguna orden real.
 - No se tocó ningún otro módulo.
 
-## 13s. Fase 153 — mejoras de la ventana Clientes (filtros, estado real, acciones rápidas) — CÓDIGO LISTO, NO desplegado
+## 13s. Fase 153 — mejoras de la ventana Clientes (filtros, estado real, acciones rápidas) — APLICADA Y DESPLEGADA
 
 Pedido explícito: filtros rápidos, distinguir Prospectos CRM de "pendiente
 de instalación", mejorar la tabla (servicios, abrir ficha desde el
@@ -1350,6 +1349,25 @@ estados ni rutas nuevas.
 - Archivo: `src/views/clientes/ClientesView.vue` (único).
 - **Commiteado y pusheado, NO desplegado** — pendiente de autorización
   explícita. No requiere migración (no se tocó Supabase).
+
+### 13s.1 — Desplegada (pedido explícito del usuario)
+
+- **Destino verificado**: VM `192.168.55.201` en `e2254ce` (limpia, sana).
+  Sin migración (esta fase no toca Supabase).
+- **Respaldo**: `rollback-20261012175424` antes de reconstruir.
+- **Desplegado**: `bash deploy/update.sh` — git pull `e2254ce`→`38e553f`.
+  VM confirmada en `38e553f`, 5 contenedores `Up`/healthy, `/login`
+  responde 200.
+- **Verificado en producción, solo lectura, con datos reales**:
+  - "Pendientes de instalación": **3 de 305** — Cesar Valverde Reyes,
+    Angel Chávez Velasquez, Miler Sanchez Cesias — excluye correctamente
+    a Luis Romero León (mismo resultado que en local).
+  - "Con múltiples servicios" + búsqueda "Jessica" combinados: **1 de
+    305** — Jessica Aurora Cardoso (3 servicios).
+  - Clic real en "📋 Alta" de Cesar Valverde Reyes → navegó
+    correctamente a `/soporte/instalaciones/4c308c56-...` (su orden real,
+    "Programada").
+  - Sin modificar ningún dato real ni otro módulo.
 
 ## 13. Próximo paso recomendado
 
