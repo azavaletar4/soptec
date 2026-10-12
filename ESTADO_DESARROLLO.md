@@ -1049,6 +1049,52 @@ tenía que cerrarlo de verdad.
   pendiente de autorización explícita para ambas cosas por separado
   (aplicar en Supabase y desplegar el frontend).
 
+### 13p.1 — Validación final puntual pedida antes de autorizar producción
+
+Sin repetir las 17 pruebas ya hechas — se agregaron 3 pruebas nuevas al
+mismo archivo (`npm run test:closed-orders-sql`, ahora **20/20**):
+
+1. **ADMIN completa/cancela una orden abierta, pero no toca una cerrada**:
+   ya cubierto por las pruebas originales (3 y 4 de la lista).
+2. **El técnico cierra normalmente desde App de Campo** (asignar equipo →
+   registrar material → completar su propia orden → intenta seguir
+   tocándola después de cerrada): prueba nueva de punta a punta, las 4
+   partes pasan — la política nueva no toca la rama de `TECNICO_RED`.
+3. **SUPERADMIN hace la corrección excepcional**: cubierto en backend
+   (prueba original); en frontend, verificado por lectura de código (el
+   clic real en "Habilitar edición" no se puede probar por automatización
+   — dispara un `confirm()` nativo, prohibido).
+4. **La protección es RLS real, no solo frontend**: las 20 pruebas corren
+   contra SQL puro (`psql` como `role authenticated` con distintos JWT),
+   sin pasar por el frontend en ningún momento.
+5. **No altera históricos ni toca Averías/Rutinas/OLT/MikroTik/PPPoE/
+   facturación**: confirmado por `grep` directo sobre el archivo — cero
+   referencias a esas tablas (solo en comentarios explicando por qué se
+   excluyen a propósito) y cero sentencias `UPDATE`/`DELETE`/`INSERT`
+   fuera de los cuerpos de los triggers (que solo actúan sobre escrituras
+   nuevas, nunca sobre filas existentes).
+6. **Rollback probado, no solo redactado**: `supabase/rollback/
+   fase151_rollback.sql` (fuera de `supabase/migrations/` a propósito,
+   para que ninguna herramienta lo aplique por error junto a las demás) —
+   restaura el texto literal de las 4 definiciones previas (Fase 70/94/
+   95b/69). Prueba nueva: aplica Fase 151 → aplica el rollback → confirma
+   que ADMIN vuelve a poder editar una instalación `completed` y que
+   `'cancelled'` vuelve a quedar sin protección en `inventory_unit_events`
+   (reproduce el hueco original exacto) → re-aplica Fase 151 para dejar la
+   base de pruebas consistente para lo que sigue.
+
+**Riesgos residuales** (ninguno bloqueante, documentados para que quede
+explícito):
+- El clic real en "Habilitar edición" no se probó en navegador (solo
+  lectura de código) — limitación de la herramienta de automatización, no
+  del diseño.
+- El rollback se probó contra Postgres aislado en Docker, no contra la
+  copia real de producción — mismo nivel de confianza que toda la
+  validación de esta sesión (no se iba a escribir en producción para
+  probarlo).
+- Tickets/Rutinas quedan con el mismo nivel de protección de antes (sin
+  cambios) — ya documentado como alcance deliberado, no es un olvido.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

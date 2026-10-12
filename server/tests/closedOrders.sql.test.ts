@@ -204,6 +204,75 @@ test('PostgreSQL isolated: proteger ordenes cerradas (Fase 151, propuesta)', { t
       asUser(`insert into public.inventory_movements (product_id, movement_type, quantity, installation_id) values ('${dropProduct}','egreso',5,'${installG}');`, tecnico);
       assert.equal(asSuper(`select current_stock from public.inventory_products where id='${dropProduct}';`), '95.00');
     });
+
+    // ---- 6) El tecnico asignado cierra su propia orden con normalidad (punto pedido explicitamente) ----
+    await t.test('El tecnico asignado puede: asignar equipo, registrar material Y completar su propia instalacion, de punta a punta', () => {
+      reset();
+      asSuper(`update public.installations set status='in_progress', assigned_to='${tecnico}' where id='${installG}';`);
+
+      // 1) Asigna un equipo (ONU) a su propia instalacion, todavia abierta.
+      const unit = asSuper(`insert into public.inventory_units (product_id, serial_number) values ('${ontProduct}','SN-CIERRE-1') returning id;`);
+      asUser(`insert into public.inventory_unit_events (unit_id, to_status, client_id, installation_id) values ('${unit}','assigned','${client1}','${installG}');`, tecnico);
+      assert.equal(asSuper(`select status from public.inventory_units where id='${unit}';`), 'assigned');
+
+      // 2) Registra material consumido.
+      asUser(`insert into public.inventory_movements (product_id, movement_type, quantity, installation_id) values ('${dropProduct}','egreso',3,'${installG}');`, tecnico);
+
+      // 3) Cierra la orden (el mismo UPDATE que dispara CampoTrabajoDetailView.vue
+      // -> installationsStore.updateStatus(id,'completed') al completar en App de
+      // Campo). La rama de TECNICO_RED en installations_update_staff NO la toco
+      // Fase 151 -- debe seguir funcionando exactamente igual que antes.
+      asUser(`update public.installations set status='completed' where id='${installG}';`, tecnico);
+      assert.equal(asSuper(`select status from public.installations where id='${installG}';`), 'completed');
+
+      // 4) Una vez cerrada, el propio tecnico YA NO puede seguir tocandola (regla
+      // de Fase 70, sin cambios) -- ni agregar otro equipo.
+      const unit2 = asSuper(`insert into public.inventory_units (product_id, serial_number) values ('${ontProduct}','SN-CIERRE-2') returning id;`);
+      assert.throws(
+        () => asUser(`insert into public.inventory_unit_events (unit_id, to_status, client_id, installation_id) values ('${unit2}','assigned','${client1}','${installG}');`, tecnico),
+        /completada o cancelada/,
+      );
+    });
+
+    // ---- 7) Rollback probado de punta a punta: revierte y confirma el comportamiento ANTERIOR ----
+    await t.test('ROLLBACK: tras revertir, ADMIN vuelve a poder editar una instalacion completed (comportamiento pre-Fase 151 restaurado)', () => {
+      reset();
+      asSuper(sqlFile('../../supabase/rollback/fase151_rollback.sql'));
+      try {
+        asUser(`update public.installations set assigned_to='${tecnico}' where id='${installE}';`, admin);
+        assert.equal(asSuper(`select assigned_to from public.installations where id='${installE}';`), tecnico);
+
+        asUser(`insert into public.job_assignees values ('installation','${installF}','${tecnico}','leader');`, admin);
+        assert.equal(asSuper(`select count(*) from public.job_assignees where job_type='installation' and job_id='${installF}';`), '1');
+
+        // installE esta 'completed' (no installF/'cancelled' -- ESE caso se
+        // prueba aparte abajo, porque el rollback NO lo protege, es
+        // justamente el hueco original).
+        const unit = asSuper(`insert into public.inventory_units (product_id, serial_number) values ('${ontProduct}','SN-ROLLBACK-1') returning id;`);
+        assert.throws(
+          () => asUser(`insert into public.inventory_unit_events (unit_id, to_status, client_id, installation_id) values ('${unit}','assigned','${client1}','${installE}');`, tecnico),
+          /ya fue completada; solo un administrador/, // mensaje viejo (sin "o cancelada")
+        );
+      } finally {
+        // Deja la base lista para lo que siga: vuelve a aplicar Fase 151.
+        asSuper(sqlFile('./../../supabase/migrations/20261012150000_fase151_proteger_ordenes_cerradas.sql'));
+      }
+    });
+
+    await t.test('ROLLBACK: tras revertir, "cancelled" ya NO esta protegido en inventory_unit_events (confirma que se volvio al hueco original)', () => {
+      reset();
+      asSuper(sqlFile('../../supabase/rollback/fase151_rollback.sql'));
+      try {
+        const unit = asSuper(`insert into public.inventory_units (product_id, serial_number) values ('${ontProduct}','SN-ROLLBACK-2') returning id;`);
+        // Con el rollback aplicado, TECNICO_RED SI puede tocar una instalacion
+        // cancelada (el candado viejo solo miraba 'completed') -- confirma que
+        // el rollback de verdad reproduce el hueco que tenia produccion antes.
+        asUser(`insert into public.inventory_unit_events (unit_id, to_status, client_id, installation_id) values ('${unit}','assigned','${client1}','${installF}');`, tecnico);
+        assert.equal(asSuper(`select status from public.inventory_units where id='${unit}';`), 'assigned');
+      } finally {
+        asSuper(sqlFile('./../../supabase/migrations/20261012150000_fase151_proteger_ordenes_cerradas.sql'));
+      }
+    });
   } finally {
     try { docker(['stop', container]); } catch { /* Already removed after a startup failure. */ }
   }
