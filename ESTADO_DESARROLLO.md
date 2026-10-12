@@ -16,15 +16,20 @@ instalación" (13r), de mejoras en la ventana Clientes (13s), de ajustes
 puntuales a esa misma ventana (13t), de corregir el conteo de ocupación
 de cajas NAP (13u, confirmado por el administrador: los 4 clientes de
 NAP - 01 son reales), de prevenir puertos NAP fantasma a futuro con 2
-triggers `BEFORE DELETE` (13v) y del hotfix de la incidencia crítica de
-cierre de Rutinas/Altas (13w, ver aviso arriba) — **todas aplicadas**.
-**VM de producción en commit `6bfdc42`** (13w no tiene cambios de
-frontend, nada que desplegar), migraciones de Fase 151 y Fase 150
-aplicadas en Supabase (13r/13s/13t/13u no requirieron migración; 13v —
+triggers `BEFORE DELETE` (13v), del hotfix de la incidencia crítica de
+cierre de Rutinas/Altas (13w, ver aviso arriba) y de simplificar el
+control NAP en Zonas contando servicios en vez de puertos (13x) —
+**13m-13w aplicadas; 13x lista en local (35/35 pruebas), pendiente de
+autorización para desplegar frontend (sin migración)**. **VM de
+producción en commit `6bfdc42`** (13w y 13x no tienen cambios de
+frontend/Supabase pendientes de VM respectivamente — 13w ya aplicada en
+Supabase, 13x es solo frontend y todavía no desplegada), migraciones de
+Fase 151 y Fase 150 aplicadas en Supabase (13r/13s/13t/13u no
+requirieron migración; 13v —
 `20261012191318_fase156_...` — y 13w —
-`20261012192807_fase150b_fix_track_job_work_session_enum` — sí,
-**ambas aplicadas y verificadas**). 12 y 13d/13g quedaron supersedidas,
-ver notas en cada una. Este documento es la
+`20261012192807_fase150b_fix_track_job_work_session_enum` — sí, ambas
+aplicadas y verificadas; 13x no requiere migración). 12 y 13d/13g
+quedaron supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1858,6 +1863,107 @@ archivos de `src/` cambiaron.
   técnico cerró una Rutina/Alta real sin el error. **Incidencia
   cerrada.**
 - **Sin despliegue de frontend** — no había cambios de `src/`.
+
+## 13x. Fase 157 — simplificación mínima del control NAP (Operaciones → Zonas) — RESUELTO, pendiente de despliegue
+
+Aclaración del propietario: `Operaciones → Zonas` ya muestra caja NAP +
+abonados + capacidad, no crear otra pantalla. El "código Drop" es el
+código de cliente del cintillo (no un inventario aparte). No hace falta
+controlar el puerto individual — solo caja, abonados y capacidad.
+
+**Investigación dirigida (sin repetir auditorías ya hechas en 155/156/
+150b)**:
+
+1. **¿El conteo depende de `fo_nap_puertos` o de contratos?** De
+   `fo_nap_puertos` — `ZonasView.vue`/`buildNap()` filtra filas
+   `estado='ocupado' && client_id` y las cuenta/lista una por una (por
+   fila de puerto, no por contrato).
+2. **¿Puede haber duplicados?** El asignador transaccional
+   (`assign_provisioning_nap`, Fase 2/136) nunca deja 2 puertos
+   `ocupado` para el mismo `contract_id` — libera el anterior en la
+   misma transacción. Pero `SpliceDiagramModal.vue` (Mapa de Red >
+   Puertos de cliente) permite asignar un cliente/contrato a un puerto
+   a mano, vía `upsertNapPuerto()`, **sin** esa misma protección — en
+   teoría podría dejar al mismo contrato en 2 puertos de una vez.
+   Verificado contra producción (solo lectura): **hoy no existe ningún
+   caso así** (`contract_id` repetido con `estado='ocupado'` → 0
+   filas). Es un riesgo teórico, no un bug visible actualmente.
+3. **Cómo se guarda y conserva la asociación NAP de un servicio**:
+   siempre vía `fo_nap_puertos` (client_id + contract_id en la fila del
+   puerto), escrita por `assign_contract_nap`/`assign_provisioning_nap`.
+   Al completar una Alta, `performClosureSubmit()` en `stores/campo.ts`
+   llama `fibra.assignContractToNap(...)` **antes** de marcar la
+   instalación `completed` — la asociación queda persistida en la
+   misma caja/contrato de forma durable, no se pierde ni se
+   recalcula luego.
+4. **¿Se exige elegir un puerto individual en una Alta nueva?** No, en
+   ningún flujo (Panel Web `InstalacionDetailView.vue`, App de Campo
+   `CampoTrabajoDetailView.vue`, OLT `AuthorizeOnuModal.vue`): el
+   selector siempre es por CAJA (`<select v-model="napId">`), nunca por
+   número de puerto — el puerto se asigna automático dentro de
+   `assign_provisioning_nap` (primer puerto libre). El número de puerto
+   tampoco se muestra en ningún lado de `ZonasView.vue`. **No hacía
+   falta ningún cambio para este punto** — ya cumplía la restricción.
+
+**Corrección mínima aplicada** (un solo archivo de pantalla + helper
+compartido, sin crear pantallas nuevas, sin tocar diseño ni enlaces):
+`ZonasView.vue`/`buildNap()` ahora cuenta y lista **servicios**
+(deduplicados por `contract_id`, o por `client_id` cuando el puerto no
+tiene contrato ligado — caso ambiguo de cliente multi-servicio), no
+filas de puerto sueltas. Nueva función compartida
+`serviciosOcupados()` en `src/lib/napOccupancy.ts` (junto a
+`countOcupadosReales()`, de Fase 155) — devuelve un puerto
+representativo por servicio (el de menor `puerto_numero`, que sigue sin
+mostrarse en la UI). Es una corrección **preventiva**: con los datos
+reales de hoy el resultado es idéntico al anterior (no hay duplicados
+en producción), pero blinda el conteo si `SpliceDiagramModal.vue`
+llegara a crear uno. No se tocó ningún otro archivo ni pantalla (Mapa
+de Red, Detalle de servicio, Instalaciones, OLT) — siguen usando
+`countOcupadosReales()` tal cual, sin cambios, porque hoy producen el
+mismo número (no hay nada que corregir ahí) y no eran parte de lo
+pedido.
+
+**Archivos modificados**: `src/lib/napOccupancy.ts` (nueva función
+`serviciosOcupados()`), `src/lib/__tests__/napOccupancy.test.ts` (4
+pruebas nuevas), `src/views/zonas/ZonasView.vue` (usa la función nueva
+en `buildNap()`, mismo diseño/enlaces, sin cambios visuales). Ningún
+cambio de Supabase — no hay migración en esta fase.
+
+**Pruebas**:
+- `src/lib/__tests__/napOccupancy.test.ts` (`npm run test:fetch-timeout`):
+  **35/35 en verde** (31 ya existentes + 4 nuevas de
+  `serviciosOcupados`: sin duplicados, mismo contrato en 2 puertos
+  cuenta una vez, caso ambiguo sin contrato, puertos fantasma/inactivos
+  excluidos igual que antes).
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → limpio.
+- Verificación visual local (solo lectura, contra Supabase de
+  producción): `Operaciones → Zonas` → NAP - 01 sigue en **4/16** con
+  los mismos 4 clientes (oficina ofi, prueba zava, Gloria Rayco
+  Villarreal, sala sala) — idéntico a antes del cambio, como se
+  esperaba sin duplicados reales. `Clientes → Detalle de servicio
+  (Gloria Rayco Villarreal) → Ubicación` muestra el mismo "NAP - 01 —
+  4/16" — **coincide exacto con Zonas**, confirmando el requisito de
+  la prueba.
+- "Alta nueva conserva su asociación NAP": verificado por revisión de
+  código (`performClosureSubmit` llama `assignContractToNap` antes de
+  marcar `completed`, vía el mismo RPC transaccional probado en
+  `napAssignment.sql.test.ts`, 10/10 — no se repitió esa suite porque
+  no se tocó ningún archivo que la afecte) — **no se creó ni cerró
+  ninguna Alta real para probar**, por restricción explícita.
+
+**Riesgos**: ninguno nuevo — cambio puramente de lectura/presentación,
+no escribe nada en `fo_nap_puertos` ni en ninguna otra tabla. El riesgo
+teórico de duplicado vía `SpliceDiagramModal.vue` sigue existiendo en
+el ORIGEN (no se tocó esa pantalla, fuera de alcance de "cambios
+mínimos") — esta fase solo blinda el CONTEO/listado contra esa
+posibilidad, no la previene en la fuente. Si se quisiera cerrar eso
+también, sería una fase aparte (agregar la misma protección
+transaccional de `assign_provisioning_nap` a la edición manual de
+puertos).
+
+**¿Requiere migración o despliegue?** Sin migración (no se tocó
+Supabase). Requiere únicamente **desplegar frontend** — commit
+pendiente de autorización, igual que las fases anteriores.
 
 ## 13. Próximo paso recomendado
 

@@ -9,6 +9,7 @@ import { useAsyncAction } from '@/composables/useAsyncAction';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
+import { serviciosOcupados } from '@/lib/napOccupancy';
 import { NAP_CLIENT_LIMIT, ZONE_CLIENT_LIMIT, ZONE_NAP_LIMIT, type Zone } from '@/types/domain';
 
 const catalogs = useCatalogsStore();
@@ -58,18 +59,18 @@ const napsByZone = computed(() => {
 
   function buildNap(el: (typeof infraStore.elementos)[number]) {
     const puertos = fibra.napPuertosPorElemento[el.id] ?? [];
-    const ocupados = puertos.filter((p) => p.estado === 'ocupado' && p.client_id);
+    // Fase 157: cuenta SERVICIOS (contratos), no filas de puerto sueltas —
+    // ver src/lib/napOccupancy.ts (serviciosOcupados) para por que hace
+    // falta el dedupe.
+    const servicios = serviciosOcupados(puertos);
     const capacity = el.puertos_total ?? NAP_CLIENT_LIMIT;
-    const clients = ocupados
-      .map((p) => ({
-        id: p.client_id as string,
-        contractId: p.contract_id,
-        name: p.clients ? `${p.clients.first_name} ${p.clients.last_name}`.trim() : 'Cliente',
-        contractNumber: p.service_contracts?.contract_number ?? null,
-        puerto: p.puerto_numero,
-      }))
-      .sort((a, b) => a.puerto - b.puerto);
-    return { id: el.id, name: el.name, used: ocupados.length, capacity, clients };
+    const clients = servicios.map((p) => ({
+      id: p.client_id as string,
+      contractId: p.contract_id,
+      name: p.clients ? `${p.clients.first_name} ${p.clients.last_name}`.trim() : 'Cliente',
+      contractNumber: p.service_contracts?.contract_number ?? null,
+    }));
+    return { id: el.id, name: el.name, used: servicios.length, capacity, clients };
   }
 });
 
