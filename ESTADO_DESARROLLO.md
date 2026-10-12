@@ -6,13 +6,16 @@ Instalaciones (13n, corregida por 13o), de proteger órdenes de
 Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
 en el Histórico (13q), de resumen de coordinación + "Copiar datos de
 instalación" (13r), de mejoras en la ventana Clientes (13s), de ajustes
-puntuales a esa misma ventana (13t) y de corregir el conteo de ocupación
-de cajas NAP (13u) — **todas aplicadas/desplegadas**. **VM de producción
-en commit `6bfdc42`**, migraciones de Fase 151 y Fase 150 aplicadas en
-Supabase (13r/13s/13t/13u no requirieron migración, solo frontend). 12 y
-13d/13g quedaron supersedidas, ver notas en cada una. Pendiente real
-abierto: prevenir puertos NAP fantasma a futuro (trigger de `DELETE`,
-ver sección 13 punto 6) — deliberadamente fuera de 13u. Este documento es
+puntuales a esa misma ventana (13t), de corregir el conteo de ocupación
+de cajas NAP (13u, confirmado por el administrador: los 4 clientes de
+NAP - 01 son reales) y de preparar (sin aplicar) la prevención de
+puertos NAP fantasma a futuro (13v) — **13m a 13u aplicadas/
+desplegadas, 13v preparada en local (migración + 8/8 pruebas), pendiente
+de autorización para aplicarse a Supabase**. **VM de producción en
+commit `6bfdc42`**, migraciones de Fase 151 y Fase 150 aplicadas en
+Supabase (13r/13s/13t/13u no requirieron migración; 13v sí tiene una
+migración nueva, `20261012190000_fase156_...`, **no aplicada**). 12 y
+13d/13g quedaron supersedidas, ver notas en cada una. Este documento es
 la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
@@ -1576,6 +1579,100 @@ una fase propia, con su propia migración y aprobación explícita.
   cliente/contrato/equipo, no se guardó ningún formulario durante la
   verificación.
 
+## 13v. Fase 156 — prevenir puertos NAP fantasma a futuro — RESUELTO, pendiente de aprobación (no aplicado)
+
+Confirmado por el administrador (cierre de Fase 155): los 4 clientes de
+NAP - 01 (oficina ofi, prueba zava, gloria rayco villarreal, sala sala)
+son reales — el contador 4/16 es correcto. **No se vuelve a investigar
+eso aquí.**
+
+**Causa raíz** (ya confirmada en Fase 155, no se repite la auditoría):
+`fo_nap_puertos.client_id`/`.contract_id` tienen FK `ON DELETE SET NULL`
+hacia `clients`/`service_contracts`, pero ningún trigger de `DELETE`
+existía en esas tablas para resetear `estado` a `'libre'` — el puerto
+queda `'ocupado'` sin dueño para siempre.
+
+**Corrección preparada (migración `20261012190000_fase156_prevenir_puertos_nap_fantasma.sql`,
+NO aplicada)** — dos triggers `BEFORE DELETE`, mínimos, sin tocar ninguna
+definición previa:
+1. `trg_service_contracts_free_nap_puerto` (en `service_contracts`):
+   libera (`estado='libre'`, `client_id`/`contract_id=null`) el puerto
+   cuyo `contract_id` coincide con el contrato que se borra. Cubre tanto
+   borrar un solo contrato de un cliente con varios servicios (conserva
+   el puerto de los OTROS) como el borrado en cascada de todos los
+   contratos al eliminar el cliente (`service_contracts.client_id` es
+   `ON DELETE CASCADE`, dispara este trigger una vez por cada contrato
+   cascadeado).
+2. `trg_clients_free_nap_puerto` (en `clients`): libera el puerto ligado
+   solo al `client_id` (sin `contract_id` — caso ambiguo de cliente
+   multi-servicio, ver comentario de `FoNapPuerto.contract_id` en
+   `src/types/domain.ts`), que el trigger de contratos no alcanzaría.
+   Corre antes de que el cliente se borre y antes de la cascada hacia sus
+   contratos, sin solaparse con el otro trigger.
+
+`BEFORE DELETE` (no `AFTER`) a propósito: la FK `ON DELETE SET NULL` de
+Postgres es un trigger de sistema `AFTER DELETE`; si el nuestro también
+fuera `AFTER`, el orden de ejecución frente al de sistema no está
+garantizado. Con `BEFORE DELETE` nuestro código siempre corre primero,
+mientras `client_id`/`contract_id` en `fo_nap_puertos` todavía coinciden
+con el id que se está borrando. Solo se tocan puertos `estado='ocupado'`
+(uno `'reservado'`/`'dañado'` con la misma referencia no se toca). Deja
+rastro en `notes` (se agrega, nunca se borra una nota manual existente)
+con qué cliente/contrato lo liberó y cuándo — para que no vuelva a pasar
+la confusión de Fase 155.
+
+**Restricción 3 cumplida explícitamente**: esta migración **no toca** los
+5 puertos fantasma 2–6 de NAP - 01 identificados en Fase 155 (ni ningún
+otro ya existente) — es puramente preventiva hacia adelante, sin
+backfill ni UPDATE sobre datos existentes. Verificado con un test
+dedicado (ver abajo) que un puerto fantasma ya existente permanece
+intacto ante cualquier DELETE.
+
+**Pruebas (aisladas, Postgres real en Docker, sin tocar producción)**:
+nuevo `server/tests/napPhantomPorts.sql.test.ts` (`npm run
+test:nap-phantom-sql`), mismo patrón que `napAssignment.sql.test.ts` —
+carga el fixture `napSchema.sql` existente, alinea sus reglas de borrado
+con las REALES de producción (`ON DELETE CASCADE`/`SET NULL`,
+confirmadas en Fase 155) y aplica la migración nueva. **8/8 pasan**:
+- Borrar un contrato libera solo su puerto; el de otro contrato/cliente
+  queda intacto.
+- Borrar un cliente cascadea a sus contratos y libera cada puerto
+  propio, sin tocar el de otro cliente.
+- Un puerto ligado solo al cliente (sin contrato) también se libera al
+  borrar el cliente.
+- Cliente con 2 servicios: borrar solo uno conserva el puerto del otro
+  (requisito explícito de esta fase).
+- Un puerto `'reservado'`/`'dañado'` con la misma referencia no se toca.
+- Una nota manual existente se conserva, no se sobreescribe.
+- Un puerto fantasma YA existente (client_id/contract_id ya null, estilo
+  Fase 155) no se toca con ningún DELETE — confirma la restricción 3.
+Se confirmó además que `napAssignment.sql.test.ts` (10/10) sigue
+pasando sin cambios — el fixture compartido `napSchema.sql` no se tocó.
+
+**Rollback preparado**: `supabase/rollback/fase156_rollback.sql` — quita
+los 2 triggers y las 2 funciones (Fase 156 solo agrega objetos nuevos, no
+modifica ninguno existente; revertir no borra ni toca ningún dato).
+
+**Archivos**: `supabase/migrations/20261012190000_fase156_prevenir_puertos_nap_fantasma.sql`
+(nuevo, no aplicado), `supabase/rollback/fase156_rollback.sql` (nuevo),
+`server/tests/napPhantomPorts.sql.test.ts` (nuevo), `package.json`
+(nuevo script `test:nap-phantom-sql`). Sin cambios de frontend.
+
+**Riesgos residuales**:
+- Los 5 puertos fantasma 2–6 de NAP - 01 (y cualquier otro ya existente
+  de antes de esta fase) siguen `'ocupado'` sin dueño en la base — esta
+  fase deliberadamente no los toca (restricción 3). Limpiarlos requiere
+  una decisión aparte del administrador (fase separada, con su propia
+  autorización).
+- Si en el futuro se agrega otra tabla con FK hacia `clients`/
+  `service_contracts` que también pueda dejar un puerto NAP "fantasma"
+  por una vía distinta a estas dos tablas, estos triggers no la cubren
+  (hoy `fo_nap_puertos` solo referencia `client_id`/`contract_id`
+  directamente, no hay vía indirecta conocida).
+- **No aplicado a Supabase, no desplegado** — pendiente de autorización
+  explícita del usuario para aplicar la migración (y, por separado, para
+  desplegar si hubiera cambios de frontend, que en esta fase no los hay).
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
@@ -1595,16 +1692,18 @@ una fase propia, con su propia migración y aprobación explícita.
    no urgente (la autorización real ya vive dentro de cada función).
 5. Seguir registrando en `docs/ERRORES-CAMPO.md` los bugs reales que
    reporten los técnicos, para no perder ese historial.
-6. **Pendiente (ver 13u)**: evaluar en una fase separada un trigger de
-   `DELETE` en `clients`/`service_contracts` que libere (`estado='libre'`)
-   el puerto NAP correspondiente en `fo_nap_puertos` cuando se elimine el
-   cliente o contrato — hoy la FK `ON DELETE SET NULL` limpia
-   `client_id`/`contract_id` pero deja el puerto fantasma `ocupado` para
-   siempre. 13u ya corrige el conteo (los ignora), pero no cierra la
-   causa raíz en la base. Requiere su propia migración y aprobación
-   explícita — no incluido en 13u a pedido del usuario.
-7. **Pendiente (ver 13u)**: confirmar con el administrador si "oficina
-   ofi", "prueba zava", "gloria rayco villarreal" y "sala sala" (caja
-   NAP - 01) son clientes reales o cuentas de prueba/oficina — determina
-   si corresponde eliminarlas (y, si se eliminan, verificar en campo que
-   sus puertos no tengan un ONT conectado antes de reasignarlos).
+6. **Resuelto por el administrador** (confirmado al cerrar 13u/abrir
+   13v): "oficina ofi", "prueba zava", "gloria rayco villarreal" y "sala
+   sala" (caja NAP - 01) son los 4 clientes reales — el contador 4/16 es
+   correcto, no son pruebas. No requiere acción.
+7. **Pendiente (ver 13v)**: trigger de `DELETE` en
+   `clients`/`service_contracts` que libere (`estado='libre'`) el puerto
+   NAP correspondiente ya está **preparado** (migración
+   `20261012190000_fase156_prevenir_puertos_nap_fantasma.sql`, 8/8
+   pruebas aisladas en verde) pero **no aplicado a Supabase** — pendiente
+   de autorización explícita del usuario para aplicarla.
+8. **Pendiente (ver 13v)**: los 5 puertos fantasma 2–6 de NAP - 01 (y
+   cualquier otro ya existente) siguen `'ocupado'` sin dueño en la base —
+   13v es deliberadamente preventiva hacia adelante, no los toca.
+   Limpiarlos (si se decide hacerlo) requiere una fase separada con su
+   propia autorización explícita.
