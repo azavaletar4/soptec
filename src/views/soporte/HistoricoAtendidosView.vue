@@ -73,8 +73,9 @@ const filteredJobs = computed(() => {
   });
 });
 
-onMounted(() => {
-  Promise.all([ticketsStore.fetchTickets(), installationsStore.fetchInstallations(), routinesStore.fetchRoutines(), catalogs.fetchStaff()]);
+onMounted(async () => {
+  await Promise.all([ticketsStore.fetchTickets(), installationsStore.fetchInstallations(), routinesStore.fetchRoutines(), catalogs.fetchStaff()]);
+  workDurationsMs.value = await fetchWorkDurations(finishedJobs.value);
 });
 
 function goToJob(job: UnifiedJob) {
@@ -133,6 +134,50 @@ function slaPlainLabel(job: UnifiedJob): string {
   return slaInfo(job)?.label.replace('⏱️ ', '') ?? '';
 }
 
+// ---- Tiempo de trabajo (Fase 150) — tiempo EFECTIVO en ejecucion, distinto
+// del "Tiempo de respuesta" de arriba (creacion -> atencion, sin tocar). Se
+// calcula sumando las sesiones CERRADAS de job_work_sessions (abre al entrar
+// a 'in_progress', cierra al salir — ver supabase/migrations/
+// 20261012140000_fase150_sesiones_trabajo.sql). Reusa los cambios de estado
+// que ya hace la App de Campo (Iniciar Orden, completar, Cliente Ausente,
+// etc.) — ningun boton nuevo, el trigger escribe esta tabla solo.
+// Ordenes sin ninguna sesion cerrada (historicas, o completadas sin pasar
+// nunca por 'in_progress') quedan en null -> "No registrado", nunca se
+// inventa un tiempo.
+const workDurationsMs = ref<Map<string, number>>(new Map());
+
+async function fetchWorkDurations(jobs: UnifiedJob[]): Promise<Map<string, number>> {
+  const durations = new Map<string, number>();
+  const idsByType: Record<JobType, string[]> = { ticket: [], installation: [], routine: [] };
+  for (const j of jobs) idsByType[j.jobType].push(j.id);
+  for (const jobType of Object.keys(idsByType) as JobType[]) {
+    const ids = idsByType[jobType];
+    if (!ids.length) continue;
+    const { data } = await supabase
+      .from('job_work_sessions')
+      .select('job_id, started_at, ended_at')
+      .eq('job_type', jobType)
+      .in('job_id', ids)
+      .not('ended_at', 'is', null);
+    for (const row of data ?? []) {
+      const ms = new Date(row.ended_at as string).getTime() - new Date(row.started_at as string).getTime();
+      if (!Number.isFinite(ms) || ms < 0) continue;
+      const key = `${jobType}:${row.job_id}`;
+      durations.set(key, (durations.get(key) ?? 0) + ms);
+    }
+  }
+  return durations;
+}
+
+function workDurationLabel(job: UnifiedJob): string {
+  const ms = workDurationsMs.value.get(`${job.jobType}:${job.id}`);
+  if (ms == null) return 'No registrado';
+  const totalMinutes = Math.round(ms / 60000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 // Notas de cierre: mismo campo que ya muestra cada detalle dedicado —
 // tickets.observacion_cierre (TicketDetailView) / routines.closure_notes
 // (RoutineDetailView, Fase 133). Instalaciones no tiene un campo de notas de
@@ -176,6 +221,7 @@ async function exportCsv() {
       'Creado',
       'Atendido',
       'Tiempo de respuesta',
+      'Tiempo de trabajo',
       'Notas de cierre',
       'Evidencias',
     ];
@@ -188,6 +234,7 @@ async function exportCsv() {
       formatDateTime(j.createdAt),
       formatDateTime(j.finishedAt),
       slaPlainLabel(j),
+      workDurationLabel(j),
       closureNotesFor(j),
       String(counts.get(`${j.jobType}:${j.id}`) ?? 0),
     ]);
@@ -302,6 +349,9 @@ async function openEvidencias(job: UnifiedJob) {
             Creado: {{ formatDateTime(job.createdAt) }}<br />
             Atendido: {{ formatDateTime(job.finishedAt) }}
           </div>
+          <div class="text-xs mt-1" :class="workDurationsMs.has(`${job.jobType}:${job.id}`) ? 'text-slate-500' : 'text-slate-400'">
+            Tiempo de trabajo: {{ workDurationLabel(job) }}
+          </div>
           <div class="flex items-center justify-between mt-2">
             <span v-if="slaInfo(job)" class="badge text-[11px]" :class="slaInfo(job)!.cls">{{ slaInfo(job)!.label }}</span>
             <span v-else />
@@ -328,6 +378,7 @@ async function openEvidencias(job: UnifiedJob) {
               <th class="text-left px-4 py-3">Asignado</th>
               <th class="text-left px-4 py-3">Atendido</th>
               <th class="text-left px-4 py-3">Tiempo de respuesta</th>
+              <th class="text-left px-4 py-3">Tiempo de trabajo</th>
               <th class="text-left px-4 py-3">Evidencias</th>
             </tr>
           </thead>
@@ -353,6 +404,9 @@ async function openEvidencias(job: UnifiedJob) {
               <td class="px-4 py-3">
                 <span v-if="slaInfo(job)" class="badge text-[11px] whitespace-nowrap" :class="slaInfo(job)!.cls">{{ slaInfo(job)!.label }}</span>
                 <span v-else class="text-slate-400 text-xs">—</span>
+              </td>
+              <td class="px-4 py-3 text-xs whitespace-nowrap" :class="workDurationsMs.has(`${job.jobType}:${job.id}`) ? 'text-slate-600' : 'text-slate-400'">
+                {{ workDurationLabel(job) }}
               </td>
               <td class="px-4 py-3">
                 <button

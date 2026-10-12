@@ -5,9 +5,10 @@ conversión de prospectos (13m), de separación admin/técnico en
 Instalaciones (13n, corregida por 13o) y de proteger órdenes de
 Instalación cerradas (13p) — **todas aplicadas/desplegadas**. **VM de
 producción en commit `bc5c09c`**, migración de Fase 151 aplicada en
-Supabase. Fase 150 (sesiones de trabajo, `job_work_sessions`) sigue solo
-como **diseño aprobado y commiteado, NO aplicada** — frontend pendiente,
-a la espera de que el usuario la retome. 12 y 13d/13g quedaron
+Supabase. Fase 150 (sesiones de trabajo, `job_work_sessions` + columna
+"Tiempo de trabajo" en el Histórico, 13q) **código y migración listos,
+commiteados — NINGUNO aplicado/desplegado todavía**, a la espera de
+autorización explícita. 12 y 13d/13g quedaron
 supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
@@ -1122,6 +1123,53 @@ explícito):
   esta fase ya se aplicó por separado, arriba).
 - No se tocó ningún otro módulo ni dato operativo — solo la migración y el
   build de frontend/backend de siempre.
+
+## 13q. Fase 150 — implementación completa: "Tiempo de trabajo" en Histórico — CÓDIGO LISTO, NO aplicada/desplegada
+
+Implementa el diseño ya aprobado (13n sección original de Fase 150,
+`job_work_sessions`) — la migración en sí no cambió respecto a lo ya
+commiteado y validado; esta sesión agrega el **frontend** y refuerza las
+**pruebas de permisos RLS** que el pedido explícito exigía.
+
+- **Frontend** (`HistoricoAtendidosView.vue`): nueva columna "Tiempo de
+  trabajo" (tabla de escritorio + tarjeta móvil) y columna nueva en el CSV
+  — "Tiempo de respuesta" queda intacto, sin cambiar su cálculo ni su
+  significado. `fetchWorkDurations()` suma por orden las sesiones
+  **cerradas** de `job_work_sessions` (una consulta por tipo de job, mismo
+  patrón que `fetchEvidenceCounts` ya existente) — una orden sin ninguna
+  sesión cerrada (histórica, o cerrada sin pasar nunca por `in_progress`)
+  queda en `null` → se muestra **"No registrado"**, nunca se inventa un
+  tiempo. **Ningún botón nuevo en App de Campo** — todo se deriva de los
+  cambios de estado que ya existen (Iniciar Orden, completar, Cliente
+  Ausente, etc.), tal como pedía el diseño original.
+- **Permisos RLS reforzados y probados de verdad** (antes la prueba de
+  Fase 150 usaba un `current_user_role()` fijo en `'SUPERADMIN'`, no
+  probaba RLS por rol): `jobWorkSessionsSchema.sql` ahora es consciente de
+  roles reales (mismo patrón que `closedOrdersSchema.sql`/
+  `napSchema.sql`) y `jobWorkSessions.sql.test.ts` agrega 4 pruebas
+  nuevas: todo el staff interno (SUPERADMIN/ADMIN/TECNICO_RED/SOPORTE/
+  FACTURACION) puede leer; CLIENTE no puede; **ningún rol, ni siquiera
+  SUPERADMIN, puede insertar/actualizar/borrar una sesión a mano** — solo
+  el trigger (`security definer`) escribe ahí, confirmado en vivo.
+- **Validado con Postgres real en Docker, aislado**: **14/14** pruebas
+  (`npm run test:job-work-sessions-sql`) — las 9 originales del trigger
+  (sin cambios de comportamiento) + las 4 de RLS nuevas.
+- `vue-tsc -p tsconfig.app.json` limpio.
+- **Validado visualmente en local** (dev server contra la misma Supabase
+  de producción, solo lectura): como `job_work_sessions` **todavía no
+  existe en producción** (migración sin aplicar), se confirmó que la
+  vista no se rompe — la columna nueva muestra "No registrado" en todas
+  las filas, sin errores en consola, y "Tiempo de respuesta" sigue
+  funcionando igual que siempre. Se probó también "Exportar a CSV" sin
+  errores.
+- Archivos: `src/views/soporte/HistoricoAtendidosView.vue`,
+  `server/tests/jobWorkSessionsSchema.sql`,
+  `server/tests/jobWorkSessions.sql.test.ts`. La migración
+  (`supabase/migrations/20261012140000_fase150_sesiones_trabajo.sql`) no
+  cambió — sigue siendo la misma ya commiteada y aprobada.
+- **Commiteado y pusheado, NO aplicada la migración, NO desplegado** —
+  pendiente de autorización explícita para ambas cosas por separado,
+  igual que se hizo con Fase 151.
 
 ## 13. Próximo paso recomendado
 

@@ -5,7 +5,12 @@ import { readFileSync } from 'node:fs';
 
 const sqlFile = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-const tech1 = '00000000-0000-0000-0000-000000000001';
+const superadmin = '00000000-0000-0000-0000-000000000001';
+const admin = '00000000-0000-0000-0000-000000000002';
+const tech1 = '00000000-0000-0000-0000-000000000003'; // TECNICO_RED
+const soporte = '00000000-0000-0000-0000-000000000004';
+const facturacion = '00000000-0000-0000-0000-000000000005';
+const cliente = '00000000-0000-0000-0000-000000000006';
 const ticketA = '10000000-0000-0000-0000-000000000001';
 const installE = '20000000-0000-0000-0000-000000000001';
 const routineF = '30000000-0000-0000-0000-000000000001';
@@ -16,6 +21,7 @@ test('PostgreSQL isolated: sesiones de trabajo por orden (Fase 150, propuesta)',
     execFileSync('docker', args, { input, encoding: 'utf8', windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   const psqlArgs = ['exec', '-i', container, 'psql', '-h', '127.0.0.1', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres'];
   const query = (sql: string) => docker(psqlArgs, sql).trim();
+  const asUser = (sql: string, user: string) => query(`set role authenticated; set request.jwt.claim.sub='${user}'; ${sql} reset role;`);
 
   const reset = () => query(`
     truncate public.job_work_sessions, public.job_assignees, public.tickets, public.installations, public.routines;
@@ -44,8 +50,16 @@ test('PostgreSQL isolated: sesiones de trabajo por orden (Fase 150, propuesta)',
     }
     assert.ok(ready, 'isolated Postgres must start');
     query(sqlFile('./jobWorkSessionsSchema.sql'));
+    // current_user_role() tal cual vive en produccion (Fase 13) — mismo
+    // patron de extraccion que closedOrders.sql.test.ts/napAssignment.sql.test.ts.
+    const roleSql = sqlFile('../../supabase/migrations/20260919020000_fase13_gestion_usuarios.sql')
+      .match(/create or replace function public\.current_user_role\(\)[\s\S]*?\$\$;/)![0];
+    query(roleSql);
     query(sqlFile('../../supabase/migrations/20261010140000_fase137_un_ticket_activo_por_tecnico.sql'));
     query(sqlFile('../../supabase/migrations/20261012140000_fase150_sesiones_trabajo.sql'));
+    // job_work_sessions se crea recien arriba — el GRANT de tabla de
+    // jobWorkSessionsSchema.sql (que corre antes) no la alcanza.
+    query(`grant all on public.job_work_sessions to anon, authenticated, service_role;`);
 
     await t.test('entrar a in_progress abre una sesion', () => {
       reset();
@@ -123,6 +137,44 @@ test('PostgreSQL isolated: sesiones de trabajo por orden (Fase 150, propuesta)',
       assert.throws(() => setStatus('installations', installE, 'in_progress'), /Ya tienes un ticket en ejecución/);
       // El intento bloqueado no debe haber abierto sesion para la instalacion.
       assert.equal(countSessions('installation', installE), 0);
+    });
+
+    // ---- Permisos RLS (pedido explicito: verificar RLS, no solo el trigger) ----
+    await t.test('RLS: todo el staff interno puede leer job_work_sessions (SUPERADMIN/ADMIN/TECNICO_RED/SOPORTE/FACTURACION)', () => {
+      reset();
+      setStatus('tickets', ticketA, 'in_progress');
+      for (const user of [superadmin, admin, tech1, soporte, facturacion]) {
+        const count = asUser(`select count(*) from public.job_work_sessions where job_type='ticket' and job_id='${ticketA}';`, user);
+        assert.equal(count, '1', `rol de ${user} deberia ver la sesion`);
+      }
+    });
+
+    await t.test('RLS: CLIENTE no puede leer job_work_sessions (no esta en la policy de select)', () => {
+      reset();
+      setStatus('tickets', ticketA, 'in_progress');
+      const count = asUser(`select count(*) from public.job_work_sessions where job_type='ticket' and job_id='${ticketA}';`, cliente);
+      assert.equal(count, '0');
+    });
+
+    await t.test('RLS: NINGUN rol (ni SUPERADMIN) puede insertar una sesion a mano — solo el trigger (security definer) escribe aca', () => {
+      reset();
+      for (const user of [superadmin, admin, tech1]) {
+        assert.throws(
+          () => asUser(`insert into public.job_work_sessions (job_type, job_id) values ('ticket', '${ticketA}');`, user),
+          /new row violates row-level security policy|permission denied/i,
+          `rol de ${user} no deberia poder insertar directo`,
+        );
+      }
+    });
+
+    await t.test('RLS: NINGUN rol puede actualizar/borrar una sesion a mano (0 filas afectadas, sin policy de write)', () => {
+      reset();
+      setStatus('tickets', ticketA, 'in_progress');
+      setStatus('tickets', ticketA, 'resolved');
+      const before = sessionsFor('ticket', ticketA);
+      asUser(`update public.job_work_sessions set end_reason='finished' where job_type='ticket' and job_id='${ticketA}' and end_reason='paused';`, superadmin);
+      asUser(`delete from public.job_work_sessions where job_type='ticket' and job_id='${ticketA}';`, superadmin);
+      assert.equal(sessionsFor('ticket', ticketA), before, 'la sesion real (escrita por el trigger) debe seguir intacta');
     });
   } finally {
     try { docker(['stop', container]); } catch { /* Already removed after a startup failure. */ }
