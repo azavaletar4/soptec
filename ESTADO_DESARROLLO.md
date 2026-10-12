@@ -2,13 +2,11 @@
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
 conversión de prospectos (13m), de separación admin/técnico en
-Instalaciones (13n, corregida por 13o) y de proteger órdenes de
-Instalación cerradas (13p) — **todas aplicadas/desplegadas**. **VM de
-producción en commit `bc5c09c`**, migración de Fase 151 aplicada en
-Supabase. Fase 150 (sesiones de trabajo, `job_work_sessions` + columna
-"Tiempo de trabajo" en el Histórico, 13q) **código y migración listos,
-commiteados — NINGUNO aplicado/desplegado todavía**, a la espera de
-autorización explícita. 12 y 13d/13g quedaron
+Instalaciones (13n, corregida por 13o), de proteger órdenes de
+Instalación cerradas (13p) y de sesiones de trabajo / "Tiempo de trabajo"
+en el Histórico (13q) — **todas aplicadas/desplegadas**. **VM de
+producción en commit `72b2f1f`**, migraciones de Fase 151 y Fase 150
+aplicadas en Supabase. 12 y 13d/13g quedaron
 supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
@@ -1124,7 +1122,7 @@ explícito):
 - No se tocó ningún otro módulo ni dato operativo — solo la migración y el
   build de frontend/backend de siempre.
 
-## 13q. Fase 150 — implementación completa: "Tiempo de trabajo" en Histórico — CÓDIGO LISTO, NO aplicada/desplegada
+## 13q. Fase 150 — implementación completa: "Tiempo de trabajo" en Histórico — APLICADA Y DESPLEGADA
 
 Implementa el diseño ya aprobado (13n sección original de Fase 150,
 `job_work_sessions`) — la migración en sí no cambió respecto a lo ya
@@ -1170,6 +1168,36 @@ commiteado y validado; esta sesión agrega el **frontend** y refuerza las
 - **Commiteado y pusheado, NO aplicada la migración, NO desplegado** —
   pendiente de autorización explícita para ambas cosas por separado,
   igual que se hizo con Fase 151.
+
+### 13q.1 — Aplicada y desplegada (pedido explícito del usuario)
+
+- **Destino verificado antes de tocar nada**: Supabase proyecto
+  `mzupdnjegfwmpajywckd` (`SMARTRAYCO`) y VM `192.168.55.201` en `bc5c09c`
+  (limpia, contenedores sanos) — mismos de siempre.
+- **Respaldo**: `rollback-20261012152322` (imágenes Docker) antes de
+  reconstruir.
+- **Migración aplicada** (texto idéntico al archivo versionado, sin
+  cambios respecto a lo ya aprobado) — verificada leyendo el catálogo real
+  después: tabla `job_work_sessions` (1), 3 índices (PK + job/tipo + único
+  de sesión abierta), 1 sola policy (`select`, sin ninguna de escritura —
+  confirma que nadie puede insertar/editar a mano, ni siquiera SUPERADMIN,
+  solo el trigger), 3 triggers (`tickets`/`installations`/`routines`). El
+  cuerpo de `track_job_work_session()` contiene `'paused'` y
+  `'cancelled_order'` tal como se diseñó.
+- **Desplegado**: `bash deploy/update.sh` — git pull `bc5c09c`→`72b2f1f`.
+  VM confirmada en `72b2f1f`, 5 contenedores `Up`/healthy, los 6
+  schedulers del backend reiniciados limpios, `/login` responde 200.
+- **Verificado en producción, solo lectura, sin tocar ninguna orden
+  real**: `/soporte/historico` carga bien, columna "Tiempo de trabajo"
+  muestra "No registrado" (ninguna orden existente pasó nunca por el
+  trigger nuevo, es el comportamiento esperado — recién a partir de ahora
+  se empiezan a registrar sesiones), "Tiempo de respuesta" sin cambios.
+  Confirmado por red: la consulta real a `job_work_sessions` responde 200.
+  Cero errores en consola. `/soporte` (Operaciones de Hoy/Dispatch, mismo
+  flujo de estados que usa App de Campo) carga sin errores — no se probó
+  el cierre real de un trabajo desde la App de Campo para no tocar una
+  orden real, cubierto por las 14 pruebas aisladas ya validadas.
+- No se tocó ningún otro módulo ni dato operativo.
 
 ## 13. Próximo paso recomendado
 
