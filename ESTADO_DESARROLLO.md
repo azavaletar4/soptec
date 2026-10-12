@@ -1,12 +1,10 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
-conversión de prospectos → encontró y corrigió un bug real que 13j/13k/13l
-no detectaban por lectura de código (ver 13m). **Corrección 13m en el
-repo, NO desplegada** — la VM de producción sigue en commit `718e4c1`
-(incluye 13c-13l), que tiene la conversión de prospectos **rota en vivo**
-hasta que se despliegue 13m. 12 y 13d/13g quedaron supersedidas, ver notas
-en cada una. Este documento es la
+conversión de prospectos → encontró, corrigió y **desplegó** un bug real
+que 13j/13k/13l no detectaban por lectura de código (ver 13m). **VM de
+producción en commit `61da3a1`** (incluye 13m). 12 y 13d/13g quedaron
+supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -818,7 +816,7 @@ releyendo el código (sin tocar Supabase):
   alcanzó a hacer la verificación visual en navegador (solo HTTP
   200 + lectura de código). Sin cambios pendientes sin commitear.
 
-## 13m. Verificación visual encontró bug real: modal de conversión nunca se mostraba — RESUELTO EN CÓDIGO, pendiente de desplegar
+## 13m. Verificación visual encontró bug real: modal de conversión nunca se mostraba — RESUELTO Y DESPLEGADO
 
 Sesión 2026-10-12: se hizo la verificación visual en navegador que 13l había
 dejado pendiente, con un prospecto ficticio nuevo ("DIAGNOSTICO CLAUDE
@@ -849,29 +847,37 @@ invisible por lectura de código, solo se vio probando en vivo.
   "DIAGNOSTICO CLAUDE TEST" (doc. `88776655`, tel. `999111222`) — no hay
   botón "Eliminar" para prospectos en el panel, requeriría un `DELETE`
   directo en Supabase.
-- **No desplegado** — no autorizado en este turno (la corrección de código
-  sí fue pedida explícitamente, el deploy no).
+- **Desplegado** (pedido explícito del usuario en el mismo turno):
+  respaldo `rollback-20261012123157` (mismo mecanismo de 13h/13i/13l)
+  antes de reconstruir. `bash deploy/update.sh` — git pull trajo
+  `718e4c1`→`61da3a1` (incluye también la actualización de
+  `ESTADO_DESARROLLO.md`/`docs/ERRORES-CAMPO.md` de esta sesión, sin
+  impacto en runtime). Sin migraciones, sin tocar Supabase/OLT/MikroTik.
+  **Verificado tras desplegar**: VM en `61da3a1` (`git rev-parse HEAD`),
+  los 5 contenedores `Up`/`healthy`, backend con los 6 schedulers
+  reiniciados limpios. `https://panel.rayconetworks.com/login` responde
+  200, bundle nuevo confirmado (`index-_Z8LLB7-.js`, hash distinto) y se
+  verificó que el bundle de `ClientesView` contiene el fix
+  (`replaceState`). No se repitió la prueba visual completa de conversión
+  contra la VM (ya validada end-to-end en local antes de desplegar, mismo
+  código).
 
 ## 13. Próximo paso recomendado
 
-1. **Desplegar la corrección 13m** cuando el usuario lo autorice
-   explícitamente (`bash deploy/update.sh` en la VM) — hasta entonces la
-   conversión de prospectos sigue rota en producción.
-2. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
-   (borrar o dejar).
-3. **Frontend ya desplegado** (VM en `718e4c1`, **desactualizado tras
-   13m**) — falta instalar
+1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
+   (borrar o dejar) — ver 13m.
+2. **Frontend ya desplegado** (VM en `61da3a1`) — falta instalar
    `C:\Users\USER\Desktop\SmartRayco.apk` (cabecera única + ícono/splash
    definitivos) en un equipo real y confirmar: una sola cabecera azul
    visible con sesión iniciada, Login sin ella, menú lateral abre/cierra
    sin superposiciones, Inicio/Recargar funcionan, App de Campo conserva
    su propia navegación — validación de campo pendiente, no hecha
    todavía (sin emulador Android en este entorno).
-4. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
+3. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
    flujo de Drop prefabricado/bobina (fase anterior a la de identidad
    visual) antes de seguir iterando sobre esa pantalla.
-5. Decidir si vale la pena una revisión de seguridad más amplia sobre los
+4. Decidir si vale la pena una revisión de seguridad más amplia sobre los
    grants por defecto de Supabase (sección 11) — es un hallazgo real pero
    no urgente (la autorización real ya vive dentro de cada función).
-6. Seguir registrando en `docs/ERRORES-CAMPO.md` los bugs reales que
+5. Seguir registrando en `docs/ERRORES-CAMPO.md` los bugs reales que
    reporten los técnicos, para no perder ese historial.
