@@ -1,12 +1,11 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
-conversión de prospectos → encontró, corrigió y **desplegó** un bug real
-que 13j/13k/13l no detectaban por lectura de código (ver 13m), y de
-separación admin/técnico en Instalaciones (ver 13n, commiteado pero **NO
-desplegado**). **VM de producción en commit `61da3a1`** (incluye hasta
-13m, falta 13n). 12 y 13d/13g quedaron supersedidas, ver notas en cada
-una. Este documento es la
+conversión de prospectos (13m) y de separación admin/técnico en
+Instalaciones (13n) — ambas **desplegadas**. **VM de producción en commit
+`d2462d1`**. Pendiente real: validar visualmente 13n contra una orden
+`pending` real cuando exista una (no hay ninguna ahora). 12 y 13d/13g
+quedaron supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -864,7 +863,7 @@ invisible por lectura de código, solo se vio probando en vivo.
   contra la VM (ya validada end-to-end en local antes de desplegar, mismo
   código).
 
-## 13n. Fase 148 — separar gestión administrativa de ejecución técnica en Instalaciones — IMPLEMENTADO, NO DESPLEGADO
+## 13n. Fase 148 — separar gestión administrativa de ejecución técnica en Instalaciones — IMPLEMENTADO Y DESPLEGADO
 
 Pedido explícito del usuario, mismo día: en `InstalacionDetailView.vue`
 (detalle admin de una orden de Alta) las notas quedaban de solo lectura
@@ -907,9 +906,26 @@ recién creadas, sin técnico, generando confusión administrativa.
   bajo riesgo).
 - Archivo tocado: solo `src/views/instalaciones/InstalacionDetailView.vue`.
   Sin cambios en `CampoTrabajoDetailView.vue`, stores, RLS ni migraciones.
-- **Commit hecho y pusheado, NO desplegado** — solo requiere build de
-  frontend (no hay migración), pendiente de autorización explícita para
-  `bash deploy/update.sh`.
+- **Desplegado** (pedido explícito del usuario): respaldo
+  `rollback-20261012125437` antes de reconstruir. `bash deploy/update.sh`
+  — git pull trajo `61da3a1`→`d2462d1`. Sin migraciones, sin tocar
+  Supabase/OLT/MikroTik/PPPoE/inventario. VM confirmada en `d2462d1`, 5
+  contenedores `Up`/healthy, schedulers reiniciados limpios,
+  `https://panel.rayconetworks.com/login` responde 200, bundle nuevo
+  (`index-qsOP1Xc4.js`).
+  - **Verificado de verdad contra producción** (solo lectura, sin tocar
+    ninguna orden real): se abrió `/soporte/instalaciones/187e8cbc-...`
+    (orden real `scheduled`, no `pending`) — carga bien, "Editar notas"
+    visible, nota existente se muestra correcta, "Materiales usados" +
+    "Equipos asignados" siguen apareciendo igual que siempre (comportamiento
+    esperado: esta orden no es `pending`, no debía ocultarse nada).
+  - **Pendiente de verificar en producción** (no se pudo): el ocultamiento
+    del formulario de materiales en una orden `pending` real — sigue sin
+    existir ninguna instalación `pending` en producción y no se creó una
+    para la prueba (instrucción explícita del usuario). Cubierto solo por
+    `vue-tsc` limpio y lectura de código (condición de una línea,
+    `status === 'pending'`, bajo riesgo). Validar visualmente la próxima
+    vez que exista una orden `pending` real.
 
 ## 13. Próximo paso recomendado
 
