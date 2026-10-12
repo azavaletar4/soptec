@@ -4,11 +4,13 @@
 conversión de prospectos (13m), de separación admin/técnico en
 Instalaciones (13n, corregida por 13o), de proteger órdenes de
 Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
-en el Histórico (13q) y de resumen de coordinación + "Copiar datos de
-instalación" (13r) — **todas aplicadas/desplegadas**. **VM de producción
-en commit `e2254ce`**, migraciones de Fase 151 y Fase 150 aplicadas en
-Supabase (13r no requirió migración, solo frontend). 12 y 13d/13g
-quedaron supersedidas, ver notas en cada una. Este documento es la
+en el Histórico (13q), de resumen de coordinación + "Copiar datos de
+instalación" (13r) y de mejoras en la ventana Clientes (13s) — **13m-13r
+aplicadas/desplegadas, 13s commiteada y sin desplegar**. **VM de
+producción en commit `e2254ce`** (sin 13s todavía), migraciones de Fase
+151 y Fase 150 aplicadas en Supabase (13r/13s no requirieron migración,
+solo frontend). 12 y 13d/13g quedaron supersedidas, ver notas en cada
+una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1270,6 +1272,84 @@ PPPoE/inventario/facturación.
   "✓ Datos copiados — pégalos en WhatsApp para coordinar con el técnico".
   Sin tocar ninguna orden real.
 - No se tocó ningún otro módulo.
+
+## 13s. Fase 153 — mejoras de la ventana Clientes (filtros, estado real, acciones rápidas) — CÓDIGO LISTO, NO desplegado
+
+Pedido explícito: filtros rápidos, distinguir Prospectos CRM de "pendiente
+de instalación", mejorar la tabla (servicios, abrir ficha desde el
+nombre, menos exposición del botón Eliminar), accesos rápidos a
+servicio/Alta. Solo se tocó `ClientesView.vue` — sin tablas, columnas,
+estados ni rutas nuevas.
+
+- **Hallazgo real antes de implementar** (confirmado en producción, solo
+  lectura): `clients.status` es un campo editado a mano por el staff, sin
+  ninguna transición automática — existen clientes reales con
+  `status='prospect'` cuya instalación ya está `completed` (ej. Luis
+  Romero León, el mismo cliente real usado para verificar 13r) u otros
+  con `status='active'` que además tienen una segunda Alta `scheduled`
+  abierta (ej. Miler Sanchez Cesias — cliente activo pidiendo una segunda
+  línea). Confiar solo en `clients.status` para "pendiente de
+  instalación" habría mostrado a Luis Romero como pendiente estando
+  realmente activo. Por eso el filtro y la etiqueta de estado se calculan
+  cruzando `clients.status` con sus `installations` reales, no solo
+  leyendo el campo tal cual.
+- **Punto 1 (filtros rápidos)**: Todos / Activos / Pendientes de
+  instalación / Suspendidos / Con múltiples servicios — mismo patrón de
+  botones ya usado en `HistoricoAtendidosView.vue` (`QUICK_FILTER_TABS`).
+  Se combinan con la búsqueda de texto existente (el filtro acota la
+  lista primero, la búsqueda filtra ese subconjunto).
+  - Activos: `clients.status === 'active'`.
+  - Pendientes de instalación: tiene al menos una `installations` con
+    status `pending`/`scheduled`/`in_progress` — **no** se basa en
+    `clients.status` (ver hallazgo arriba).
+  - Suspendidos: `clients.status === 'suspended'`.
+  - Con múltiples servicios: `contractsByClient.get(id).length >= 2`
+    (índice ya existente en el archivo, reusado tal cual).
+- **Punto 2 (diferenciar Prospectos CRM / pendiente de instalación /
+  activos)**: la tabla de Prospectos CRM (`prospects`) no se tocó, sigue
+  totalmente aparte. Nueva función `clientDisplayStatus(c)`: si
+  `status==='prospect'` Y tiene una Alta abierta, la etiqueta mostrada es
+  "Pendiente de instalación" (en vez de "Prospecto", que confundía con el
+  CRM) — **no se inventa un estado nuevo**, `clients.status` en la base
+  sigue siendo literalmente `'prospect'`, esto solo cambia la etiqueta
+  visible. Si no tiene Alta abierta, se muestra la etiqueta real tal cual
+  (`Prospecto`/`Activo`/`Suspendido`/`Baja`) — no se oculta ni se inventa
+  nada para los casos ambiguos (ej. Jhojania Mantilla, `status='prospect'`
+  sin ninguna instalación, sigue mostrando "Prospecto").
+- **Punto 3 (tabla)**: "Nombre" ya abría la ficha (sin cambios, ya
+  cumplía). Columna "Servicios" ahora resalta con badge cuando son 2+
+  (antes solo mostraba el número). "Eliminar" se des-enfatizó
+  visualmente (gris, se resalta en rojo solo al pasar el mouse) — sigue
+  pidiendo confirmación nativa igual que antes (`handleDelete`, sin
+  tocar), solo cambia qué tan expuesto se ve en la fila.
+- **Punto 4 (accesos rápidos, rutas reales existentes, ninguna
+  inventada)**: "📋 Alta" → `/soporte/instalaciones/:id` (la instalación
+  abierta si hay una, si no la más reciente — así también sirve para
+  revisar una Alta ya cerrada). "🛠 Servicio" → `/clientes/:id/servicios/
+  :contractId`, solo cuando el cliente tiene exactamente 1 contrato (con
+  2+ es ambiguo cuál mostrar, se deja que entre por la ficha general).
+  Ambos usan rutas que ya existían en `router/index.ts`, sin crear
+  ninguna.
+- **Restricciones respetadas**: no se tocó Supabase/RLS/contratos/
+  facturación/inventario (archivo único modificado:
+  `src/views/clientes/ClientesView.vue`, el único store tocado fue
+  agregar `installationsStore.fetchInstallations()` — ya importado,
+  ahora también se lee, no solo se usa para crear). El flujo de
+  conversión de prospecto (`handleSubmit`/`openCreate`/`openEdit`) no se
+  tocó ni una línea.
+- **Validado**: `vue-tsc -p tsconfig.app.json` limpio. Sin pruebas SQL
+  nuevas — no se tocó Supabase/RLS/triggers, es una vista derivada 100%
+  de datos ya cargados en el frontend. Visual en local (misma Supabase de
+  producción, solo lectura) — confirmado con datos reales: "Pendientes de
+  instalación" muestra exactamente 3 (Cesar Valverde, Angel Chávez,
+  Miler Sanchez) y **excluye correctamente a Luis Romero León**
+  (`status='prospect'` pero instalación `completed`); "Con múltiples
+  servicios" + búsqueda combinados muestran exactamente a Jessica Aurora
+  Cardoso (3 servicios); accesos rápidos "Alta"/"Servicio" aparecen solo
+  cuando corresponde. Sin escrituras de prueba.
+- Archivo: `src/views/clientes/ClientesView.vue` (único).
+- **Commiteado y pusheado, NO desplegado** — pendiente de autorización
+  explícita. No requiere migración (no se tocó Supabase).
 
 ## 13. Próximo paso recomendado
 

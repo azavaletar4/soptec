@@ -13,7 +13,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
-import type { Client, ClientStatus, ContractPriority, DocumentType } from '@/types/domain';
+import type { Client, ClientStatus, ContractPriority, DocumentType, Installation } from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
@@ -129,10 +129,77 @@ function clientPrioritiesOf(clientId: string): ContractPriority[] {
   return (contractsByClient.value.get(clientId) ?? []).map((ct) => ct.priority);
 }
 
+// Fase 153 — mismo indice que contractsByClient de arriba, pero para
+// instalaciones: lo necesita el filtro "Pendientes de instalacion" y la
+// columna de Estado (ver clientDisplayStatus) para distinguir un cliente
+// que de verdad esta esperando su Alta de uno que ya tiene todo
+// completado pero a quien nunca le actualizaron clients.status a 'active'
+// a mano (confirmado en produccion antes de escribir esto: existen
+// clientes reales con status='prospect' y una instalacion 'completed' —
+// confiar solo en clients.status los mostraria como "pendientes" estando
+// activos de verdad).
+const installationsByClient = computed(() => {
+  const map = new Map<string, Installation[]>();
+  for (const inst of installationsStore.installations) {
+    const arr = map.get(inst.client_id);
+    if (arr) arr.push(inst);
+    else map.set(inst.client_id, [inst]);
+  }
+  return map;
+});
+const OPEN_INSTALLATION_STATUSES = new Set(['pending', 'scheduled', 'in_progress']);
+function openInstallationFor(clientId: string): Installation | null {
+  return (installationsByClient.value.get(clientId) ?? []).find((i) => OPEN_INSTALLATION_STATUSES.has(i.status)) ?? null;
+}
+function hasOpenInstallation(clientId: string): boolean {
+  return openInstallationFor(clientId) !== null;
+}
+// Instalacion mas relevante para el acceso rapido "Ver orden de Alta": la
+// abierta si hay una, si no la mas reciente (asi el acceso rapido sigue
+// sirviendo incluso para revisar una Alta ya completada/cancelada).
+function latestInstallationFor(clientId: string): Installation | null {
+  const list = installationsByClient.value.get(clientId) ?? [];
+  if (!list.length) return null;
+  return openInstallationFor(clientId) ?? [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+}
+
+// Estado real mostrado en la tabla (Fase 153): clients.status='prospect'
+// literal se confunde con el modulo de Prospectos CRM (son cosas
+// distintas, ver ProspectosView.vue/prospects store) — si ademas tiene
+// una Alta abierta, se muestra "Pendiente de instalación" en vez de
+// "Prospecto" para no mezclarlos. No se inventa un estado nuevo: sigue
+// siendo clients.status='prospect' en la base, esto es solo la etiqueta.
+function clientDisplayStatus(c: Client): { label: string; cls: string } {
+  if (c.status === 'prospect' && hasOpenInstallation(c.id)) {
+    return { label: 'Pendiente de instalación', cls: 'bg-sky-500/15 text-sky-700' };
+  }
+  return { label: STATUS_LABEL[c.status], cls: STATUS_CLASS[c.status] };
+}
+
+// Filtros rapidos (Fase 153) — un solo seleccionado a la vez, mismo patron
+// que TYPE_TABS en HistoricoAtendidosView.vue. Se combinan con la busqueda
+// de texto (el filtro acota la lista primero, la busqueda filtra sobre
+// ese subconjunto).
+type QuickFilter = 'all' | 'active' | 'pending_install' | 'suspended' | 'multi_service';
+const quickFilter = ref<QuickFilter>('all');
+const QUICK_FILTER_TABS: { value: QuickFilter; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'active', label: 'Activos' },
+  { value: 'pending_install', label: 'Pendientes de instalación' },
+  { value: 'suspended', label: 'Suspendidos' },
+  { value: 'multi_service', label: 'Con múltiples servicios' },
+];
+
 const filteredClientsList = computed(() => {
+  let list = clientsStore.clients;
+  if (quickFilter.value === 'active') list = list.filter((c) => c.status === 'active');
+  else if (quickFilter.value === 'pending_install') list = list.filter((c) => hasOpenInstallation(c.id));
+  else if (quickFilter.value === 'suspended') list = list.filter((c) => c.status === 'suspended');
+  else if (quickFilter.value === 'multi_service') list = list.filter((c) => (contractsByClient.value.get(c.id)?.length ?? 0) >= 2);
+
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return clientsStore.clients;
-  return clientsStore.clients.filter((c) =>
+  if (!q) return list;
+  return list.filter((c) =>
     `${c.first_name} ${c.last_name} ${clientCodesOf(c.id)} ${c.document_number} ${c.phone ?? ''} ${c.phone_2 ?? ''} ${c.email ?? ''}`
       .toLowerCase()
       .includes(q),
@@ -197,6 +264,7 @@ onMounted(async () => {
   await Promise.all([
     clientsStore.fetchClients(),
     contractsStore.fetchContracts(),
+    installationsStore.fetchInstallations(),
     mikrotikStore.fetchDevices(),
     catalogs.fetchPlans(),
     catalogs.fetchZones(),
@@ -444,7 +512,7 @@ function goToDetail(client: Client) {
       <div>
         <h1 class="text-2xl font-semibold">Clientes</h1>
         <p class="text-slate-600 text-sm mt-1">
-          {{ searchQuery ? `${filteredClientsList.length} de ${clientsStore.clients.length}` : `${clientsStore.clients.length} registrados` }}
+          {{ searchQuery || quickFilter !== 'all' ? `${filteredClientsList.length} de ${clientsStore.clients.length}` : `${clientsStore.clients.length} registrados` }}
         </p>
       </div>
       <div v-if="canManageClients" class="flex gap-2">
@@ -454,6 +522,19 @@ function goToDetail(client: Client) {
     </div>
 
     <p v-if="clientsStore.error" class="mb-4 text-sm text-red-600">{{ clientsStore.error }}</p>
+
+    <div class="flex flex-wrap gap-2 mb-3">
+      <button
+        v-for="tab in QUICK_FILTER_TABS"
+        :key="tab.value"
+        type="button"
+        class="px-3 py-1.5 rounded-lg text-xs font-medium"
+        :class="quickFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+        @click="quickFilter = tab.value"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
 
     <input
       v-model="searchQuery"
@@ -480,7 +561,7 @@ function goToDetail(client: Client) {
           </tr>
           <tr v-else-if="!filteredClientsList.length">
             <td colspan="7" class="px-4 py-6 text-center text-slate-500">
-              {{ searchQuery ? 'Sin resultados para esa busqueda.' : 'No hay clientes. Crea el primero.' }}
+              {{ searchQuery || quickFilter !== 'all' ? 'Sin resultados para ese filtro/búsqueda.' : 'No hay clientes. Crea el primero.' }}
             </td>
           </tr>
           <tr v-for="c in filteredClientsList" :key="c.id" class="border-t border-slate-200 hover:bg-slate-50">
@@ -502,15 +583,47 @@ function goToDetail(client: Client) {
             </td>
             <td class="px-4 py-3 text-slate-600">{{ c.document_number }}</td>
             <td class="px-4 py-3 text-slate-600">{{ c.phone || '—' }}</td>
-            <td class="px-4 py-3 text-slate-600">{{ contractsStore.contracts.filter((ct) => ct.client_id === c.id).length }}</td>
             <td class="px-4 py-3">
-              <span class="badge" :class="STATUS_CLASS[c.status]">
-                {{ STATUS_LABEL[c.status] }}
+              <span
+                v-if="(contractsByClient.get(c.id)?.length ?? 0) >= 2"
+                class="badge bg-sky-500/15 text-sky-700 font-semibold"
+                title="Cliente con múltiples servicios"
+              >
+                {{ contractsByClient.get(c.id)?.length }} servicios
+              </span>
+              <span v-else class="text-slate-600">{{ contractsByClient.get(c.id)?.length ?? 0 }}</span>
+            </td>
+            <td class="px-4 py-3">
+              <span class="badge" :class="clientDisplayStatus(c).cls">
+                {{ clientDisplayStatus(c).label }}
               </span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+              <router-link
+                v-if="latestInstallationFor(c.id)"
+                :to="`/soporte/instalaciones/${latestInstallationFor(c.id)!.id}`"
+                class="text-slate-600 hover:text-sky-600 text-xs"
+                title="Ver orden de Alta"
+              >
+                📋 Alta
+              </router-link>
+              <router-link
+                v-if="(contractsByClient.get(c.id)?.length ?? 0) === 1"
+                :to="`/clientes/${c.id}/servicios/${contractsByClient.get(c.id)![0].id}`"
+                class="text-slate-600 hover:text-sky-600 text-xs"
+                title="Ver servicio"
+              >
+                🛠 Servicio
+              </router-link>
               <button class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(c)">Editar</button>
-              <button v-if="canManageClients" class="text-red-500/80 hover:text-red-600 text-xs" @click="handleDelete(c)">Eliminar</button>
+              <button
+                v-if="canManageClients"
+                class="text-slate-400 hover:text-red-600 text-xs"
+                title="Eliminar cliente"
+                @click="handleDelete(c)"
+              >
+                Eliminar
+              </button>
             </td>
           </tr>
         </tbody>
