@@ -23,7 +23,8 @@
     "test:nap-sql": "node --import tsx --test server/tests/napAssignment.sql.test.ts",
     "test:single-active-job-sql": "node --import tsx --test server/tests/singleActiveJob.sql.test.ts",
     "test:work-order-photo-approval-sql": "node --import tsx --test server/tests/workOrderPhotoApproval.sql.test.ts",
-    "test:job-work-sessions-sql": "node --import tsx --test server/tests/jobWorkSessions.sql.test.ts"
+    "test:job-work-sessions-sql": "node --import tsx --test server/tests/jobWorkSessions.sql.test.ts",
+    "test:closed-orders-sql": "node --import tsx --test server/tests/closedOrders.sql.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.1",

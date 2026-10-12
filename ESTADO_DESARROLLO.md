@@ -3,8 +3,11 @@
 Última actualización: 2026-10-12, sesión de verificación visual de la
 conversión de prospectos (13m) y de separación admin/técnico en
 Instalaciones (13n, corregida por 13o tras feedback real en producción) —
-**todas desplegadas**. **VM de producción en commit `8069b4f`**. 12 y
-13d/13g quedaron supersedidas, ver notas en cada una. Este documento es la
+**todas desplegadas**. **VM de producción en commit `8069b4f`**. Diseño
+aprobado de Fase 150 (sesiones de trabajo, `job_work_sessions`) y Fase 151
+(proteger órdenes de Instalación cerradas) — **ambas commiteadas, NINGUNA
+aplicada a Supabase ni desplegada**, a la espera de autorización explícita.
+12 y 13d/13g quedaron supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -974,6 +977,77 @@ material"/"Registrar plantilla" seguían apareciendo — la condición de 13n
     previa con la sesión equivocada): banner "🔒 Vista de solo lectura" +
     "Gestiona materiales desde la App de Campo" — sin cambios, como ya
     estaba.
+
+## 13p. Fase 151 — proteger órdenes de Instalación cerradas (solo lectura real) — PROPUESTA, NO aplicada/desplegada
+
+Pedido explícito del usuario: las órdenes `completed`/`cancelled` mostraban
+controles editables incluso para ADMIN (y "Quitar" equipos) — confirmó la
+sospecha de que ocultar botones en el frontend no alcanza, el backend
+tenía que cerrarlo de verdad.
+
+- **Backend investigado primero** (antes de tocar nada): confirmó que
+  equipos/materiales de una instalación `completed` YA estaban protegidos
+  de verdad por triggers reales (Fase 46/69 — `apply_inventory_unit_event`/
+  `apply_inventory_movement`, solo SUPERADMIN/ADMIN pueden tocarlos). Lo
+  que faltaba:
+  1. `installations` (estado/prioridad/notas): RLS sin ninguna distinción
+     ADMIN/SUPERADMIN en ningún estado.
+  2. `job_assignees` (cuadrilla): mismo hueco.
+  3. Los triggers de Fase 46/69 solo miraban `'completed'` — `'cancelled'`
+     nunca quedó cubierto.
+  4. Asimetría real en el trigger de equipos: el candado de `ticket_id`
+     (Fase 95b) solo se evaluaba al ASIGNAR equipo nuevo a una avería
+     resuelta/cerrada, nunca al QUITAR uno ya ligado.
+  5. Materiales de una avería (`inventory_movements.ticket_id`): CERO
+     protección, a cualquier estado.
+- **Alcance deliberadamente acotado a Instalaciones** (no a Averías/
+  Rutinas): confirmado que `tickets_update_staff` ya incluye SOPORTE sin
+  restricción y que `'resolved'` NO es un estado terminal real para un
+  ticket (admin/soporte sigue necesitando editarlo para pasarlo a
+  `'closed'`) — mezclar esa decisión aquí habría roto ese flujo. Queda
+  para una fase separada, con su propio diseño.
+- **Migración** (`supabase/migrations/20261012150000_fase151_proteger_ordenes_cerradas.sql`,
+  idempotente, **NO aplicada**): `installations_update_staff` y
+  `job_assignees_write_dispatch` (solo `job_type='installation'`)
+  restringen ADMIN/SOPORTE cuando la instalación está cerrada — la
+  restricción nueva va SOLO en `USING` (fila ANTES del update), nunca en
+  `WITH CHECK`, para que completar/cancelar una orden abierta siga
+  funcionando con normalidad; SUPERADMIN sin cambios (ya tenía paso
+  libre). Los dos triggers de inventario se extienden con `'cancelled'` +
+  el chequeo de `ticket_id` que faltaba, reusando el mismo grupo de roles
+  que Fase 95b ya estableció (SUPERADMIN/ADMIN/SOPORTE) para no romper el
+  flujo de aprobación de averías ya en uso.
+- **Validado con Postgres real en Docker, aislado** — 17/17 pruebas
+  (`npm run test:closed-orders-sql`), más las 14 de Fase 137 corridas de
+  nuevo para confirmar que no se rompió nada ahí (31/31 en total).
+- **Frontend** (`InstalacionDetailView.vue`): `closedReadOnly` nuevo
+  (cerrada AND no es SUPERADMIN-con-edición-activada) aplicado a
+  `canEdit`/`canEditMaterials`/`canEditStatus`/`canEditPriority`/
+  `canEditCrew`/`canRemoveUnit`. Botón "🔓 Habilitar edición" (solo
+  SUPERADMIN) con `confirm()` explícito, banner ámbar mientras el modo
+  excepcional está activo, "🔒 Salir del modo edición". Cada acción
+  conserva su propia confirmación (quitar equipo, cancelar, eliminar) —
+  habilitar edición no ejecuta ningún cambio por sí solo ni reabre nada.
+  `canDelete`/el formulario de "Completar instalación" quedaron sin tocar
+  a propósito (fuera del pedido, ya tenían su propio candado de estado).
+- **Validado visualmente** contra 2 órdenes reales de producción (lectura
+  únicamente, sin guardar nada), como SUPERADMIN: una `completed`
+  (`fa380e18...`) y una `cancelled` (`187e8cbc...`, la misma que se usó en
+  13n/13o — el usuario la canceló de verdad entre sesiones). Ambas
+  muestran el banner correcto + "Habilitar edición"; Estado/Prioridad como
+  badges fijos; sin "Editar notas"; materiales con el aviso "Solo lectura
+  — orden cerrada"; equipos sin formulario de asignación ni botón
+  "Quitar". **No se probó el clic real en "Habilitar edición"** — dispara
+  un `confirm()` nativo del navegador, que la automatización tiene
+  prohibido disparar; queda cubierto por lectura de código + type-check
+  únicamente (lógica de una línea: `editModeForClosed.value = true`).
+- Archivos: `supabase/migrations/20261012150000_fase151_proteger_ordenes_cerradas.sql`,
+  `server/tests/closedOrdersSchema.sql`, `server/tests/closedOrders.sql.test.ts`,
+  `package.json` (script `test:closed-orders-sql`),
+  `src/views/instalaciones/InstalacionDetailView.vue`.
+- **Commiteado y pusheado, NO aplicada la migración, NO desplegado** —
+  pendiente de autorización explícita para ambas cosas por separado
+  (aplicar en Supabase y desplegar el frontend).
 
 ## 13. Próximo paso recomendado
 

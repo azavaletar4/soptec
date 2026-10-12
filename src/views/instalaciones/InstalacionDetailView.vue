@@ -65,16 +65,46 @@ const isTecnico = computed(() => auth.role === 'TECNICO_RED');
 function canDelete(inst: Installation) {
   return inst.status === 'cancelled' && auth.role !== 'TECNICO_RED';
 }
-const canEditCrew = computed(() => ['SUPERADMIN', 'ADMIN', 'SOPORTE'].includes(auth.role ?? ''));
+
+// ---- Fase 151: ordenes cerradas (completed/cancelled) quedan en solo
+// lectura por defecto — ADMIN ya no puede escribir ahi ni a nivel de RLS
+// (ver supabase/migrations/20261012150000_fase151_proteger_ordenes_cerradas.sql,
+// PROPUESTA sin aplicar todavia). SUPERADMIN conserva edicion excepcional,
+// pero debe activarla explicitamente aca — por defecto arranca en solo
+// lectura igual que todos. "Habilitar edicion" es una confirmacion de UX,
+// no un mecanismo de permisos nuevo: SUPERADMIN ya tiene el permiso real
+// de por si: lo unico que hace este flag es ocultar los controles hasta
+// que decida activarlos, para no editar una orden cerrada sin querer.
+const editModeForClosed = ref(false);
+const isClosedOrder = computed(() => installation.value?.status === 'completed' || installation.value?.status === 'cancelled');
+const closedReadOnly = computed(() => isClosedOrder.value && !(auth.role === 'SUPERADMIN' && editModeForClosed.value));
+const canRequestEditMode = computed(() => auth.role === 'SUPERADMIN' && isClosedOrder.value && !editModeForClosed.value);
+
+function requestEditMode() {
+  const ok = confirm(
+    '⚠️ Esta orden ya está cerrada. Vas a habilitar edición excepcional — ' +
+      'se mantiene igual de cerrada para todos los demás roles, y ningún ' +
+      'cambio de estado o asignación se hace solo: cada acción sigue ' +
+      'pidiendo su propia confirmación. ¿Activar edición excepcional?',
+  );
+  if (ok) editModeForClosed.value = true;
+}
+function exitEditMode() {
+  editModeForClosed.value = false;
+}
+
+const canEditCrew = computed(() => ['SUPERADMIN', 'ADMIN', 'SOPORTE'].includes(auth.role ?? '') && !closedReadOnly.value);
 function canEdit(_inst: Installation) {
   if (isTecnico.value) return false;
+  if (closedReadOnly.value) return false;
   return auth.role === 'SUPERADMIN' || auth.role === 'ADMIN';
 }
 function canEditMaterials(inst: Installation) {
+  if (closedReadOnly.value) return false;
   if (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') return true;
   return canEdit(inst) && inst.status !== 'completed';
 }
-const canEditStatus = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+const canEditStatus = computed(() => (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') && !closedReadOnly.value);
 // Fase 148 — antes de que un tecnico tome la orden no hay nada que "usar":
 // el formulario de registro de materiales (plantilla + "otro material") es
 // flujo de ejecucion en campo, igual que ya pasa con equipos/completar para
@@ -85,7 +115,7 @@ const canEditStatus = computed(() => auth.role === 'SUPERADMIN' || auth.role ===
 // (inventoryUnitsStore.assignUnit ya soporta esto, es la misma funcion que
 // usa la App de Campo — no es una forma nueva ni un flujo distinto).
 const isPreDispatch = computed(() => installation.value?.status === 'pending');
-const canEditPriority = computed(() => auth.role !== 'TECNICO_RED');
+const canEditPriority = computed(() => auth.role !== 'TECNICO_RED' && !closedReadOnly.value);
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
 
@@ -265,6 +295,7 @@ const removingUnitId = ref<string | null>(null);
 const canRemoveUnit = computed(() => {
   const inst = installation.value;
   if (!inst) return false;
+  if (closedReadOnly.value) return false;
   if (inst.status !== 'completed') return canEdit(inst);
   return auth.role === 'SUPERADMIN' || auth.role === 'ADMIN';
 });
@@ -606,16 +637,27 @@ onMounted(async () => {
 
         <!-- Columna derecha: tipo de servicio, materiales, equipos, completar -->
         <div class="flex flex-col gap-4">
-          <!-- Instalacion ya completada/cancelada: todo lo de abajo queda solo-lectura -->
-          <div v-if="installation.status === 'completed'" class="surface p-4 text-sm bg-green-50 border border-green-200">
-            <h2 class="text-sm font-semibold mb-1">✅ Instalación completada</h2>
+          <!-- Fase 151 (propuesta): ordenes cerradas quedan en solo lectura
+               por defecto para TODOS — SUPERADMIN es el unico que puede
+               pedir edicion excepcional, con confirmacion explicita. -->
+          <div v-if="isClosedOrder && !editModeForClosed" class="surface p-4 text-sm" :class="installation.status === 'completed' ? 'bg-green-50 border border-green-200' : 'bg-slate-50 border border-slate-200'">
+            <h2 class="text-sm font-semibold mb-1">
+              {{ installation.status === 'completed' ? '✅ Instalación completada' : '🚫 Instalación cancelada' }} — solo lectura
+            </h2>
             <p class="text-xs text-slate-600">
-              Materiales, equipos y fotos quedan cerrados para evitar un doble envío. Si falta corregir algo, un
-              administrador puede regresar el estado a "Programada" desde la columna de la izquierda.
+              Estado, prioridad, notas, cuadrilla, materiales y equipos quedan cerrados para evitar una edición accidental.
             </p>
+            <button v-if="canRequestEditMode" type="button" class="btn-ghost text-xs mt-2" @click="requestEditMode">
+              🔓 Habilitar edición (excepcional, solo Super admin)
+            </button>
           </div>
-          <div v-else-if="installation.status === 'cancelled'" class="surface p-4 text-sm bg-slate-50 border border-slate-200">
-            <h2 class="text-sm font-semibold mb-1">🚫 Instalación cancelada</h2>
+          <div v-else-if="isClosedOrder && editModeForClosed" class="surface p-4 text-sm bg-amber-50 border border-amber-300">
+            <h2 class="text-sm font-semibold mb-1">⚠️ Editando una orden cerrada — modo excepcional activo</h2>
+            <p class="text-xs text-slate-600">
+              Cada acción (cambiar estado, quitar un equipo, etc.) sigue pidiendo su propia confirmación — esto solo
+              deja visibles los controles, no ejecuta ningún cambio por sí solo.
+            </p>
+            <button type="button" class="btn-ghost text-xs mt-2" @click="exitEditMode">🔒 Salir del modo edición</button>
           </div>
           <div v-else-if="isTecnico" class="surface p-4 text-sm bg-sky-50 border border-sky-200">
             <h2 class="text-sm font-semibold mb-1">🔒 Vista de solo lectura</h2>
@@ -670,6 +712,7 @@ onMounted(async () => {
             <p v-if="canEdit(installation)" class="text-xs text-slate-400">
               Los materiales se registran desde la App de Campo al tomar la orden.
             </p>
+            <p v-else-if="closedReadOnly" class="text-xs text-slate-400">Solo lectura — orden cerrada</p>
             <p v-else-if="isTecnico" class="text-xs text-slate-400">Gestiona materiales desde la App de Campo</p>
             <p v-else class="text-xs text-slate-400">Materiales (solo admin)</p>
           </div>
