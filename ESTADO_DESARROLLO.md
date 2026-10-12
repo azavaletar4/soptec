@@ -1,13 +1,14 @@
 # SmartRayco — Estado de desarrollo
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
-conversión de prospectos (13m) y de separación admin/técnico en
-Instalaciones (13n, corregida por 13o tras feedback real en producción) —
-**todas desplegadas**. **VM de producción en commit `8069b4f`**. Diseño
-aprobado de Fase 150 (sesiones de trabajo, `job_work_sessions`) y Fase 151
-(proteger órdenes de Instalación cerradas) — **ambas commiteadas, NINGUNA
-aplicada a Supabase ni desplegada**, a la espera de autorización explícita.
-12 y 13d/13g quedaron supersedidas, ver notas en cada una. Este documento es la
+conversión de prospectos (13m), de separación admin/técnico en
+Instalaciones (13n, corregida por 13o) y de proteger órdenes de
+Instalación cerradas (13p) — **todas aplicadas/desplegadas**. **VM de
+producción en commit `bc5c09c`**, migración de Fase 151 aplicada en
+Supabase. Fase 150 (sesiones de trabajo, `job_work_sessions`) sigue solo
+como **diseño aprobado y commiteado, NO aplicada** — frontend pendiente,
+a la espera de que el usuario la retome. 12 y 13d/13g quedaron
+supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -978,7 +979,7 @@ material"/"Registrar plantilla" seguían apareciendo — la condición de 13n
     "Gestiona materiales desde la App de Campo" — sin cambios, como ya
     estaba.
 
-## 13p. Fase 151 — proteger órdenes de Instalación cerradas (solo lectura real) — PROPUESTA, NO aplicada/desplegada
+## 13p. Fase 151 — proteger órdenes de Instalación cerradas (solo lectura real) — APLICADA Y DESPLEGADA
 
 Pedido explícito del usuario: las órdenes `completed`/`cancelled` mostraban
 controles editables incluso para ADMIN (y "Quitar" equipos) — confirmó la
@@ -1094,6 +1095,30 @@ explícito):
   probarlo).
 - Tickets/Rutinas quedan con el mismo nivel de protección de antes (sin
   cambios) — ya documentado como alcance deliberado, no es un olvido.
+
+### 13p.2 — Aplicada y desplegada (pedido explícito del usuario)
+
+- **Destino verificado antes de tocar nada**: Supabase proyecto
+  `mzupdnjegfwmpajywckd` (`SMARTRAYCO`, el único real) y VM
+  `192.168.55.201` en `8069b4f` (limpia, contenedores sanos) — mismos de
+  siempre, sin cambios desde la última sesión.
+- **Migración aplicada** vía herramienta de migración (texto idéntico al
+  archivo versionado) — verificado leyendo las policies/funciones reales
+  después: `installations_update_staff` y `job_assignees_write_dispatch`
+  con el texto exacto esperado; `apply_inventory_unit_event`/
+  `apply_inventory_movement` contienen `'cancelled'` y el chequeo de
+  `current_ticket_id` nuevo.
+- **Respaldo**: `rollback-20261012151259` (imágenes Docker) antes de
+  reconstruir — mismo mecanismo de siempre. Rollback completo también
+  disponible en `supabase/rollback/fase151_rollback.sql` (ya probado de
+  punta a punta, ver 13p.1).
+- **Desplegado**: `bash deploy/update.sh` — git pull `8069b4f`→`bc5c09c`.
+  VM confirmada en `bc5c09c`, 5 contenedores `Up`/healthy, los 6
+  schedulers del backend reiniciados limpios, `/login` responde 200. Sin
+  migraciones de Supabase adicionales en el deploy (la única migración de
+  esta fase ya se aplicó por separado, arriba).
+- No se tocó ningún otro módulo ni dato operativo — solo la migración y el
+  build de frontend/backend de siempre.
 
 ## 13. Próximo paso recomendado
 
