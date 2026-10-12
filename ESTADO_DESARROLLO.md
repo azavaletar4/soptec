@@ -1,11 +1,11 @@
 # SmartRayco — Estado de desarrollo
 
-**✅ INCIDENCIA RESUELTA (2026-10-12): los técnicos no podían cerrar
+**✅ INCIDENCIA CERRADA (2026-10-12): los técnicos no podían cerrar
 Rutinas ni Altas desde App de Campo** — error
 `invalid input value for enum routine_status/installation_status`.
-Causa raíz encontrada y corregida, migración **aplicada en Supabase**
-(ver **13w/13w.1**). Pendiente solo que un técnico confirme en campo
-cerrando una Rutina o Alta real.
+Causa raíz encontrada y corregida, migración aplicada en Supabase y
+**confirmada en campo por el usuario** (ver **13w/13w.1**). Sin
+pendientes.
 
 Última actualización: 2026-10-12, sesión de verificación visual de la
 conversión de prospectos (13m), de separación admin/técnico en
@@ -1853,9 +1853,10 @@ archivos de `src/` cambiaron.
   ninguna orden (ticket/instalación/rutina) real para probar — la
   verificación se hizo enteramente con la suite aislada en Docker
   (16/16) antes de aplicar, más la lectura del código ya instalado
-  después. **Recomendado**: que un técnico confirme en campo cerrando
-  una Rutina o Alta real — esa es la prueba definitiva de que el
-  incidente quedó resuelto.
+  después.
+- **CONFIRMADO EN CAMPO por el usuario** (2026-10-12, mismo día): un
+  técnico cerró una Rutina/Alta real sin el error. **Incidencia
+  cerrada.**
 - **Sin despliegue de frontend** — no había cambios de `src/`.
 
 ## 13. Próximo paso recomendado
