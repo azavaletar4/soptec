@@ -11,6 +11,7 @@ import { useFoFibraStore } from '@/stores/foFibra';
 import { NAP_CLIENT_LIMIT, type ServiceContract } from '@/types/domain';
 import { getErrorMessage } from '@/lib/errors';
 import { createProvisioningKey, classifyProvisioningResult, validateProvisioningWan } from '@/lib/provisioningUi';
+import { countOcupadosReales } from '@/lib/napOccupancy';
 
 const props = defineProps<{
   deviceId: string;
@@ -247,7 +248,7 @@ const napOptionsAll = computed(() =>
     .filter((e) => e.tipo === 'caja_nap')
     .map((e) => {
       const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
-      const used = puertos.filter((p) => p.estado === 'ocupado').length;
+      const used = countOcupadosReales(puertos);
       const capacity = e.puertos_total ?? NAP_CLIENT_LIMIT;
       return { id: e.id, name: e.name, used, capacity, zoneId: e.zone_id };
     }),

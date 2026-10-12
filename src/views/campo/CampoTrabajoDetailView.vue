@@ -27,6 +27,7 @@ import { saveDraft, loadDraft, clearDraft } from '@/lib/formDrafts';
 import { MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
+import { countOcupadosReales } from '@/lib/napOccupancy';
 import {
   NAP_CLIENT_LIMIT,
   type Client,
@@ -1057,10 +1058,7 @@ const napElementosAll = computed(() =>
     .filter((e) => e.tipo === 'caja_nap')
     .map((e) => {
       const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
-      // Mismo criterio que ZonasView.vue/selectedNapClients: cuenta CLIENTES
-      // reales (ocupado + client_id), no filas "ocupado" sueltas/duplicadas
-      // sin cliente asociado — asi el contador coincide con Operaciones > Zonas.
-      const used = puertos.filter((p) => p.estado === 'ocupado' && p.client_id).length;
+      const used = countOcupadosReales(puertos);
       return { id: e.id, name: e.name, used, capacity: e.puertos_total ?? NAP_CLIENT_LIMIT, zoneId: e.zone_id };
     })
     .sort((a, b) => a.name.localeCompare(b.name)),

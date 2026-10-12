@@ -11,6 +11,7 @@ import { useInfraElementosStore, type InfraElementoWithUrl } from '@/stores/infr
 import { useFoFibraStore } from '@/stores/foFibra';
 import SpliceDiagramModal from './SpliceDiagramModal.vue';
 import { CONTRACT_COLOR, infraIcon, permanentLabel } from './mapIcons';
+import { countOcupadosReales } from '@/lib/napOccupancy';
 
 const router = useRouter();
 const clientsStore = useClientsStore();
@@ -97,7 +98,7 @@ function ocupacionDe(elId: string): { usados: number; total: number } | null {
   const el = infraStore.elementos.find((e) => e.id === elId);
   if (!el?.puertos_total) return null;
   const puertos = fibra.napPuertosPorElemento[elId] ?? [];
-  const usados = puertos.filter((p) => p.estado === 'ocupado').length;
+  const usados = countOcupadosReales(puertos);
   return { usados, total: el.puertos_total };
 }
 

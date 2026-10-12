@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
+import { countOcupadosReales } from '@/lib/napOccupancy';
 import {
   NAP_CLIENT_LIMIT,
   type ClientPhotoCategory,
@@ -454,7 +455,7 @@ const napOptionsAll = computed(() =>
     .filter((e) => e.tipo === 'caja_nap')
     .map((e) => {
       const puertos = fibra.napPuertosPorElemento[e.id] ?? [];
-      const used = puertos.filter((p) => p.estado === 'ocupado').length;
+      const used = countOcupadosReales(puertos);
       const capacity = e.puertos_total ?? NAP_CLIENT_LIMIT;
       return { id: e.id, name: e.name, used, capacity, zoneId: e.zone_id };
     })

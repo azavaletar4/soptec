@@ -5,12 +5,13 @@ conversión de prospectos (13m), de separación admin/técnico en
 Instalaciones (13n, corregida por 13o), de proteger órdenes de
 Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
 en el Histórico (13q), de resumen de coordinación + "Copiar datos de
-instalación" (13r), de mejoras en la ventana Clientes (13s) y de ajustes
-puntuales a esa misma ventana (13t) — **todas aplicadas/desplegadas**.
-**VM de producción en commit `2967782`**, migraciones de Fase 151 y Fase
-150 aplicadas en Supabase (13r/13s/13t no requirieron migración, solo
-frontend). 12 y 13d/13g quedaron supersedidas, ver notas en cada una.
-Este documento es la
+instalación" (13r), de mejoras en la ventana Clientes (13s), de ajustes
+puntuales a esa misma ventana (13t) y de corregir el conteo de ocupación
+de cajas NAP (13u) — **13m a 13t aplicadas/desplegadas, 13u lista en
+local pendiente de despliegue**. **VM de producción en commit
+`2967782`**, migraciones de Fase 151 y Fase 150 aplicadas en Supabase
+(13r/13s/13t/13u no requirieron migración, solo frontend). 12 y 13d/13g
+quedaron supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1435,6 +1436,109 @@ acciones y compatibilidad móvil. Alcance acotado a
   - "Usuarios PPPoE sin contrato" carga colapsado con "Mostrar ▼" en la
     carga inicial de la vista.
   - Sin modificar ningún dato real ni otro módulo.
+
+## 13u. Fase 155 — corregir conteo de ocupación de cajas NAP — RESUELTO, pendiente de desplegar
+
+Reporte del usuario: la caja **NAP - 01** (zona **PON 2 - SM**) mostraba
+**8/16** en Clientes → Detalle de servicio → Ubicación, pero físicamente
+solo había **3 clientes conectados**.
+
+**Causa raíz confirmada con SQL de solo lectura contra producción**:
+`fo_nap_puertos.client_id` y `.contract_id` tienen FK `ON DELETE SET
+NULL` hacia `clients`/`service_contracts` (confirmado en
+`information_schema`). Cuando se elimina un cliente o un contrato, la fila
+del puerto NAP se queda con `client_id`/`contract_id = null`, pero **nada
+resetea `estado` de vuelta a `'libre'`** — no hay trigger de `DELETE` en
+`clients` ni en `service_contracts` que lo haga (confirmado:
+`information_schema.triggers` solo tiene triggers de `UPDATE`/`INSERT` en
+esas tablas). El puerto queda "fantasma": `estado='ocupado'` para
+siempre, sin dueño.
+
+**Los 8 registros contados en NAP - 01** (consulta real, antes de la
+corrección): puerto 1 → cliente "oficina ofi" (CTR-2026-00073, activo);
+puertos 2 a 6 → **5 filas fantasma**, `estado='ocupado'` pero
+`client_id`/`contract_id = null` (creadas 2026-10-01 a 2026-10-06, antes
+de que existiera el asignador transaccional de Fase 2/`fase136*` del
+2026-10-09 — residuo de pruebas o asignaciones manuales anteriores cuyo
+cliente fue borrado después); puerto 7 → "prueba zava" (CTR-2026-00214,
+activo); puerto 8 → "gloria rayco villarreal" (CTR-2026-00295, activo). Un
+9no puerto ("sala sala", CTR-2026-00296) se asignó el 2026-10-10 23:15,
+probablemente después de la captura del reporte (8 coincide exacto con
+1+5+1+1, sin ese 9no). Sin duplicados de `contract_id` ni contratos
+cancelados/suspendidos con puerto `ocupado` en todo el sistema
+(verificado con SQL agregado).
+
+**Los 3 clientes realmente conectados — NO se pudo confirmar con certeza
+solo con la base de datos**: los únicos 3 puertos con `client_id` +
+`contract_id` reales al momento del reporte (oficina ofi, prueba zava,
+gloria rayco villarreal) coinciden en cantidad (3) con lo que el
+administrador vio en campo, pero **sus nombres no parecen clientes
+reales** — "oficina ofi", "prueba zava" y el DNI de "gloria rayco
+villarreal" es `00000032` (correlativo, no un documento real) con plan
+"DE SANDRO O MICHEL" — todo sugiere datos de prueba o internos nunca
+limpiados, no necesariamente los 3 clientes físicos reales. **Dato que
+debe confirmar el administrador**: (1) si esos 3 registros son clientes
+reales facturables o cuentas de prueba/oficina que deberían eliminarse
+(y si se eliminan, sus puertos quedarán fantasma igual que los 5
+anteriores — ver corrección aplicada abajo, que sí los libera); (2) qué
+es el 4to registro "sala sala" (CTR-2026-00296, agregado el 2026-10-10)
+— una instalación reciente aún no visitada, u otra prueba.
+
+**Corrección aplicada (solo código, sin migración, sin tocar clientes/
+contratos/puertos)**: el cálculo de ocupación en
+`src/views/clientes/ClientServiceDetailView.vue`,
+`src/views/instalaciones/InstalacionDetailView.vue`,
+`src/views/olt/AuthorizeOnuModal.vue` y `src/views/mapa/ClientesMapView.vue`
+contaba **cualquier** fila `estado='ocupado'`, incluyendo las fantasma.
+Las Fase 139/139b ya habían corregido este mismo cálculo en
+`CampoTrabajoDetailView.vue`/`ZonasView.vue` (exigiendo también
+`client_id`), pero la corrección nunca se replicó a las otras 4 vistas —
+inconsistencia real confirmada entre pantallas. Se extrajo el criterio a
+una función compartida `countOcupadosReales()` en nuevo archivo
+`src/lib/napOccupancy.ts` (cuenta solo `estado==='ocupado' && client_id`)
+y las 6 vistas (las 4 con el bug + las 2 que ya lo tenían bien) ahora la
+usan, para que no se repita esta misma inconsistencia a futuro. La
+corrección es **autocurativa**: no requiere limpiar las filas fantasma
+existentes en la base — ignora cualquier puerto `ocupado` sin
+`client_id`, pasado o futuro, sin escribir nada en Supabase.
+
+**Impacto verificado en TODA la base de producción (solo lectura)**: de
+~95 cajas NAP, solo 3 tenían filas fantasma — NAP - 01 (9→4), NAP - SM -
+02 (2→1) y "nap 8"/PON 7-SS (3→2). Las ~92 cajas restantes no cambian
+(diferencia 0), confirmado con SQL agregado comparando conteo
+anterior/nuevo por caja.
+
+**Pruebas**:
+- Nuevo `src/lib/__tests__/napOccupancy.test.ts` (4 casos, incluye el
+  caso real de NAP - 01: 9 filas ocupado → 4 reales) — `npm run
+  test:fetch-timeout` (corre todo `src/lib/__tests__/*.test.ts`): **31/31
+  pasan**, incluidas las pruebas ya existentes de `napAssignment.test.ts`
+  (RPC de reserva, sin relación con este cambio, sin regresión).
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → limpio.
+- Verificación visual local (solo lectura, contra Supabase de
+  producción): `ClientServiceDetailView.vue` → servicio de "gloria rayco
+  villarreal" (CTR-2026-00295) muestra "Caja NAP: NAP - 01 — **4/16**"
+  (antes mostraba el valor inflado). `ZonasView.vue` (ya corregido desde
+  13n/Fase 139) muestra exactamente los mismos 4 clientes para NAP - 01
+  y coincide con NAP - SM - 02 en 1/16 — confirma coherencia entre
+  pantallas. No se guardó ningún cambio (no se tocó "Guardar cambios").
+
+**Archivos modificados**: `src/lib/napOccupancy.ts` (nuevo),
+`src/lib/__tests__/napOccupancy.test.ts` (nuevo),
+`src/views/clientes/ClientServiceDetailView.vue`,
+`src/views/instalaciones/InstalacionDetailView.vue`,
+`src/views/olt/AuthorizeOnuModal.vue`, `src/views/mapa/ClientesMapView.vue`,
+`src/views/campo/CampoTrabajoDetailView.vue` (refactor sin cambio de
+comportamiento, usa la misma función compartida).
+
+**Riesgos residuales**: si el administrador confirma que "oficina ofi" /
+"prueba zava" / "gloria rayco villarreal" / "sala sala" son cuentas de
+prueba y las elimina, sus puertos NAP quedarán libres automáticamente en
+el conteo (sin acción adicional) — pero **no quedan libres físicamente**
+en la caja real hasta que un técnico confirme que no hay un
+ONT/equipo conectado en ese puerto. Este fix corrige el **conteo**, no
+reemplaza la verificación física. **No desplegado** — pendiente de
+autorización explícita del usuario.
 
 ## 13. Próximo paso recomendado
 
