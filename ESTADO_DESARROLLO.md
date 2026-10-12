@@ -1086,9 +1086,12 @@ mismo archivo (`npm run test:closed-orders-sql`, ahora **20/20**):
 
 **Riesgos residuales** (ninguno bloqueante, documentados para que quede
 explícito):
-- El clic real en "Habilitar edición" no se probó en navegador (solo
-  lectura de código) — limitación de la herramienta de automatización, no
-  del diseño.
+- ~~El clic real en "Habilitar edición" no se probó en navegador~~ —
+  **cerrado**: el usuario lo probó a mano como SUPERADMIN directo en
+  producción (2026-10-12, después del despliegue) y confirmó que funciona
+  bien (botón → confirmación → modo excepcional se activa → controles se
+  habilitan). Era la única parte que la automatización no podía ejercitar
+  (dispara un `confirm()` nativo).
 - El rollback se probó contra Postgres aislado en Docker, no contra la
   copia real de producción — mismo nivel de confianza que toda la
   validación de esta sesión (no se iba a escribir en producción para
