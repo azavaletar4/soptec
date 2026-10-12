@@ -6,11 +6,11 @@ Instalaciones (13n, corregida por 13o), de proteger órdenes de
 Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
 en el Histórico (13q), de resumen de coordinación + "Copiar datos de
 instalación" (13r), de mejoras en la ventana Clientes (13s) y de ajustes
-puntuales a esa misma ventana (13t) — **13m a 13s aplicadas/desplegadas,
-13t lista en local pendiente de despliegue**. **VM de producción en
-commit `38e553f`**, migraciones de Fase 151 y Fase 150 aplicadas en
-Supabase (13r/13s/13t no requirieron migración, solo frontend). 12 y
-13d/13g quedaron supersedidas, ver notas en cada una. Este documento es la
+puntuales a esa misma ventana (13t) — **todas aplicadas/desplegadas**.
+**VM de producción en commit `2967782`**, migraciones de Fase 151 y Fase
+150 aplicadas en Supabase (13r/13s/13t no requirieron migración, solo
+frontend). 12 y 13d/13g quedaron supersedidas, ver notas en cada una.
+Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1417,9 +1417,24 @@ acciones y compatibilidad móvil. Alcance acotado a
   colapsado con "Mostrar ▼"; al expandir, el selector de router y la
   tabla aparecen igual que antes (13s). `pm2 stop` después de verificar.
 
-**Commit**: `b76034c` (pusheado a `origin/main`). Sin migración. **No
-desplegado** — VM de producción sigue en `38e553f`, pendiente de
-autorización explícita del usuario.
+**Commit**: `b76034c` (pusheado a `origin/main`). Sin migración.
+
+### 13t.1 — Desplegada (pedido explícito del usuario)
+
+- **Destino verificado**: VM `192.168.55.201` en `38e553f` (limpia, sana).
+  Sin migración (esta fase no toca Supabase).
+- **Respaldo**: `rollback-20261012180651` antes de reconstruir.
+- **Desplegado**: `bash deploy/update.sh` — git pull `38e553f`→`2967782`.
+  VM confirmada en `2967782`, contenedores `frontend`/`backend` `Up`,
+  `/login` responde 200.
+- **Verificado en producción, solo lectura, con datos reales**:
+  - "Pendientes de instalación": **3 de 306**, mismos tres clientes de
+    13s — ahora cada uno muestra dos badges independientes: Cesar
+    Valverde Reyes y Angel Chávez Velasquez → "Prospecto" + "📋 Alta
+    pendiente"; Miler Sanchez Cesias → "Activo" + "📋 Alta pendiente".
+  - "Usuarios PPPoE sin contrato" carga colapsado con "Mostrar ▼" en la
+    carga inicial de la vista.
+  - Sin modificar ningún dato real ni otro módulo.
 
 ## 13. Próximo paso recomendado
 
