@@ -5,11 +5,10 @@ conversión de prospectos (13m), de separación admin/técnico en
 Instalaciones (13n, corregida por 13o), de proteger órdenes de
 Instalación cerradas (13p), de sesiones de trabajo / "Tiempo de trabajo"
 en el Histórico (13q) y de resumen de coordinación + "Copiar datos de
-instalación" (13r) — **13m-13q aplicadas/desplegadas, 13r commiteada y
-sin desplegar**. **VM de producción en commit `72b2f1f`** (sin 13r
-todavía), migraciones de Fase 151 y Fase 150 aplicadas en Supabase (13r
-no requiere migración). 12 y 13d/13g quedaron
-supersedidas, ver notas en cada una. Este documento es la
+instalación" (13r) — **todas aplicadas/desplegadas**. **VM de producción
+en commit `e2254ce`**, migraciones de Fase 151 y Fase 150 aplicadas en
+Supabase (13r no requirió migración, solo frontend). 12 y 13d/13g
+quedaron supersedidas, ver notas en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -1201,7 +1200,7 @@ commiteado y validado; esta sesión agrega el **frontend** y refuerza las
   orden real, cubierto por las 14 pruebas aisladas ya validadas.
 - No se tocó ningún otro módulo ni dato operativo.
 
-## 13r. Fase 152 — resumen de coordinación + "Copiar datos de instalación" en Instalaciones — CÓDIGO LISTO, NO desplegado
+## 13r. Fase 152 — resumen de coordinación + "Copiar datos de instalación" en Instalaciones — APLICADA Y DESPLEGADA
 
 Pedido explícito: reemplazar el mensaje de WhatsApp que antes se armaba a
 mano (admin copiaba nombre/DNI/teléfono/dirección/plan de la ficha del
@@ -1254,6 +1253,23 @@ PPPoE/inventario/facturación.
   `src/stores/installations.ts`, `src/types/domain.ts`.
 - **Commiteado y pusheado, NO desplegado** — pendiente de autorización
   explícita. No requiere migración (no se tocó Supabase).
+
+### 13r.1 — Desplegada (pedido explícito del usuario)
+
+- **Destino verificado**: VM `192.168.55.201` en `72b2f1f` (limpia, sana)
+  — mismo de siempre. Sin migración que aplicar (esta fase no toca
+  Supabase).
+- **Respaldo**: `rollback-20261012171128` antes de reconstruir.
+- **Desplegado**: `bash deploy/update.sh` — git pull `72b2f1f`→`e2254ce`.
+  VM confirmada en `e2254ce`, 5 contenedores `Up`/healthy, los 6
+  schedulers reiniciados limpios, `/login` responde 200.
+- **Verificado en producción, solo lectura**: `/soporte/instalaciones/
+  fa380e18...` (Luis Romero León, real) carga bien; "Resumen de
+  instalación" muestra DNI, teléfono, dirección, plan+tarifa y zona/PON
+  correctos; clic real en "Copiar datos de instalación" → toast
+  "✓ Datos copiados — pégalos en WhatsApp para coordinar con el técnico".
+  Sin tocar ninguna orden real.
+- No se tocó ningún otro módulo.
 
 ## 13. Próximo paso recomendado
 
