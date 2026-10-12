@@ -1,11 +1,12 @@
 # SmartRayco — Estado de desarrollo
 
-Última actualización: 2026-10-10, sesión de identidad visual + Prospectos
-CRM, cortada por límite de uso justo después de desplegar 13l. **VM de
-producción en commit `718e4c1`** (incluye 13c-13l: isotipo definitivo,
-cabecera única de la APK, y el fix completo de conversión de prospectos
-con sus tres correcciones sucesivas 13j/13k/13l). 12 y 13d/13g quedaron
-supersedidas, ver notas en cada una. Este documento es la
+Última actualización: 2026-10-12, sesión de verificación visual de la
+conversión de prospectos → encontró y corrigió un bug real que 13j/13k/13l
+no detectaban por lectura de código (ver 13m). **Corrección 13m en el
+repo, NO desplegada** — la VM de producción sigue en commit `718e4c1`
+(incluye 13c-13l), que tiene la conversión de prospectos **rota en vivo**
+hasta que se despliegue 13m. 12 y 13d/13g quedaron supersedidas, ver notas
+en cada una. Este documento es la
 referencia compartida para retomar el trabajo con Claude Code o ChatGPT sin
 repetir análisis. Verificar siempre contra el código/Supabase real antes de
 asumir que algo sigue igual — esto es una fotografía de un momento dado.
@@ -817,24 +818,60 @@ releyendo el código (sin tocar Supabase):
   alcanzó a hacer la verificación visual en navegador (solo HTTP
   200 + lectura de código). Sin cambios pendientes sin commitear.
 
+## 13m. Verificación visual encontró bug real: modal de conversión nunca se mostraba — RESUELTO EN CÓDIGO, pendiente de desplegar
+
+Sesión 2026-10-12: se hizo la verificación visual en navegador que 13l había
+dejado pendiente, con un prospecto ficticio nuevo ("DIAGNOSTICO CLAUDE
+TEST", distinto de "prueba2"). Resultado: **0 clientes/contratos/
+instalaciones creados** pese a "ejecutar" la conversión — el bug era
+invisible por lectura de código, solo se vio probando en vivo.
+
+- **Causa raíz**: `App.vue:16` monta la vista con `:key="route.fullPath"`.
+  `ClientesView.vue` abre el modal de conversión en `onMounted` al leer
+  `route.query.prospect_id`, pero la misma función terminaba con
+  `router.replace('/clientes')` para limpiar la URL — ese cambio de
+  `fullPath` disparaba el `:key`, destruyendo la instancia recién montada
+  (con el modal ya abierto) y montando una instancia nueva sin query, que
+  ya no abre el modal. Abría y se cerraba en el mismo tick, sin errores de
+  consola — por eso pasó 13j/13k/13l sin detectarse.
+- **Corrección**: `ClientesView.vue` ahora limpia la URL con
+  `window.history.replaceState(...)` en vez de `router.replace()` — cambia
+  la URL visible sin tocar la ruta reactiva de Vue Router, así no dispara
+  el `:key` y el componente no se remonta.
+- **Validado end-to-end** en local (`smartrayco-web` + `smartrayco-api` vía
+  PM2, misma Supabase de producción, **sin desplegar**): conversión
+  completa confirmada por SQL de solo lectura — cliente, contrato
+  (plan/tarifa/zona/dirección correctos), instalación `pending`, prospecto
+  `convertido`. `vue-tsc -p tsconfig.app.json` limpio.
+- Detalle completo en `docs/ERRORES-CAMPO.md` (fila 2026-10-12).
+- **Dato de prueba que quedó en Supabase de producción** (pendiente de que
+  el usuario decida si lo borra): prospecto/cliente/contrato/instalación
+  "DIAGNOSTICO CLAUDE TEST" (doc. `88776655`, tel. `999111222`) — no hay
+  botón "Eliminar" para prospectos en el panel, requeriría un `DELETE`
+  directo en Supabase.
+- **No desplegado** — no autorizado en este turno (la corrección de código
+  sí fue pedida explícitamente, el deploy no).
+
 ## 13. Próximo paso recomendado
 
-1. Verificar visualmente en el navegador (no se alcanzó a hacer hoy):
-   login, y con un prospecto de prueba real (no "prueba2", no otro dato
-   productivo) completar una conversión y confirmar en Soporte + App de
-   Campo que todo aparece como se documentó arriba.
-2. **Frontend ya desplegado** (VM en `718e4c1`) — falta instalar
+1. **Desplegar la corrección 13m** cuando el usuario lo autorice
+   explícitamente (`bash deploy/update.sh` en la VM) — hasta entonces la
+   conversión de prospectos sigue rota en producción.
+2. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
+   (borrar o dejar).
+3. **Frontend ya desplegado** (VM en `718e4c1`, **desactualizado tras
+   13m**) — falta instalar
    `C:\Users\USER\Desktop\SmartRayco.apk` (cabecera única + ícono/splash
    definitivos) en un equipo real y confirmar: una sola cabecera azul
    visible con sesión iniciada, Login sin ella, menú lateral abre/cierra
    sin superposiciones, Inicio/Recargar funcionan, App de Campo conserva
    su propia navegación — validación de campo pendiente, no hecha
    todavía (sin emulador Android en este entorno).
-3. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
+4. Probar en campo real (con un técnico) el wizard de 5 pasos y el nuevo
    flujo de Drop prefabricado/bobina (fase anterior a la de identidad
    visual) antes de seguir iterando sobre esa pantalla.
-4. Decidir si vale la pena una revisión de seguridad más amplia sobre los
+5. Decidir si vale la pena una revisión de seguridad más amplia sobre los
    grants por defecto de Supabase (sección 11) — es un hallazgo real pero
    no urgente (la autorización real ya vive dentro de cada función).
-5. Seguir registrando en `docs/ERRORES-CAMPO.md` los bugs reales que
+6. Seguir registrando en `docs/ERRORES-CAMPO.md` los bugs reales que
    reporten los técnicos, para no perder ese historial.

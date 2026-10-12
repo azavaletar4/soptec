@@ -219,8 +219,17 @@ onMounted(async () => {
     convertingZoneId.value = (route.query.zone_id as string) || null;
     convertingPlanId.value = (route.query.plan_id as string) || null;
     // Limpia los query params para no reabrir/reprecargar el modal si el
-    // tecnico recarga la pagina o navega de vuelta.
-    router.replace('/clientes');
+    // tecnico recarga la pagina o navega de vuelta. OJO: NO usar
+    // router.replace() aca — App.vue monta la vista con
+    // :key="route.fullPath", asi que un replace() (que cambia route.query
+    // y por lo tanto route.fullPath) destruye y remonta este mismo
+    // componente al toque, cerrando el modal que recien se abrio arriba
+    // (bug real, confirmado en vivo 2026-10-12: el modal abria y se
+    // cerraba en el mismo tick, invisible para el usuario, sin crear
+    // cliente/contrato/instalacion). history.replaceState() cambia la URL
+    // visible sin tocar la ruta reactiva de Vue Router, asi que no dispara
+    // el remount.
+    window.history.replaceState(window.history.state, '', '/clientes');
   }
 });
 
