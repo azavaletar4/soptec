@@ -2333,6 +2333,73 @@ producción. Resumen:
   duplicadas y el archivo de firma huérfano en Storage, o dejarlas; (3)
   autorización para desplegar esta corrección.
 
+## 13ag. Cierre de Alta — corrección DESPLEGADA; Fase 158/zona-ONT reprogramadas aparte (2026-10-13)
+
+Despliegue autorizado del fix de 13af. **VM confirmada en `7c52535`.**
+
+- **Secuenciación de commits**: `3af9986` (fix original) estaba commiteado
+  LOCALMENTE encima de `4c8b47e`/`bb15922` (sincronización zona-ONT y
+  Fase 158, ninguno autorizado para desplegar todavía). Para desplegar
+  SOLO el fix sin arrastrar esos 2, se creó la rama de respaldo
+  `backup-fase3-olt-fase158-pendiente` (preserva los 3 commits intactos,
+  nada se perdió) y se aplicó el fix por separado (cherry-pick) encima
+  de `origin/main` (`85fc4ef`), dando el commit `7c52535` realmente
+  publicado y desplegado. `4c8b47e`/`bb15922` quedan pendientes de
+  reaplicar en una sesión futura cuando se autorice esa fase.
+- **Consecuencia inevitable**: `85fc4ef` (reorganización visual del
+  detalle OLT, Fase 3 — push ya autorizado antes, despliegue no) quedó
+  desplegado también, al ser el padre directo del fix — no había forma
+  de desplegar el fix sin él. No incluye Fase 158 ni la sincronización
+  zona-ONT (esos 2 siguen sin desplegar, solo en la rama de respaldo).
+- **Punto 1 (código en conflicto)**: **no se pudo identificar el valor
+  exacto** por vías de solo lectura disponibles. `postgres_logs` solo
+  registra `duplicate key value violates unique constraint
+  "idx_service_contracts_client_code_unique"` (sin el DETAIL con el
+  valor); la consulta real usa el parámetro vinculado de PostgREST
+  (`$1`/`$2`), no inlineado en el log. `edge_logs` confirma 2 intentos
+  reales (`PATCH .../service_contracts?id=eq.40d7958f-...` → `409` a las
+  16:32:34 y 16:34:36 UTC) pero solo registra URL/método/status, no el
+  cuerpo JSON. **No se adivinó ni se inventó ningún código** — el único
+  camino real es que el técnico vuelva a leer el cintillo/código físico
+  e ingrese uno que no choque; el sistema seguirá rechazándolo con el
+  mensaje claro nuevo si vuelve a coincidir con otro contrato.
+- **Puntos 2-4 verificados por revisión de código** (commit `7c52535`):
+  el `UPDATE` de `client_code` es literalmente la primera operación de
+  `performClosureSubmitInner`, antes de GPS/fotos/firma/cierre. La
+  restricción UNIQUE (`idx_service_contracts_client_code_unique`,
+  Fase 39) no se tocó — sigue siendo la única autoridad real; el código
+  nuevo solo traduce el error 23505 ya lanzado por Postgres a un mensaje
+  claro, nunca lo evita ni lo reemplaza. El guard en memoria
+  (`createJobClosureGuard`) protege contra 2 cierres del MISMO proceso
+  de la app (botón + auto-sync de la cola offline) — **no** contra 2
+  dispositivos distintos a la vez, para eso la restricción UNIQUE sigue
+  siendo la protección definitiva, tal como se pidió confirmar.
+- **Punto 3 (duplicados en reintento)**: cubierto por pruebas aisladas
+  de la lógica pura (`photosAlreadyUploaded`/`equipmentTypesAlreadyUploaded`/
+  `createJobClosureGuard`, 9 casos) — no hay un harness de componentes
+  Vue/Pinia en este proyecto para una prueba de integración real contra
+  Supabase; la verificación de la orquestación completa es por revisión
+  de código, no por ejecución automatizada.
+- **Pruebas en la rama real de despliegue**: `npm run test:fetch-timeout`
+  → **52/52** (43 ya existentes en `85fc4ef` + 9 nuevos). `vue-tsc`
+  limpio.
+- **Respaldo**: tag `rollback-20261013165758` → `b485f07` (estado previo
+  de la VM), creado antes del `git pull`.
+- **Verificado post-deploy**: 5 contenedores `Up`, backend arrancó
+  limpio con todos los schedulers, frontend (`/login`) responde 200.
+
+**No autorizado ni ejecutado** (confirmado): no se borraron fotos/firma
+duplicadas, no se cambió el `client_code` de Violeta García Silva, no
+se tocó inventario/contratos/equipos reales, no se desplegó Fase 158 ni
+la sincronización zona-ONT.
+
+**Pendiente para cerrar el Alta de Violeta García Silva**: que el
+técnico/administrador ingrese un código de cliente que no choque (no
+hay forma de saber cuál es el que chocó, ver arriba) y reintente
+"Completar instalación" desde la App de Campo — con la corrección ya
+desplegada, ese reintento ya no debería duplicar la foto de equipo ni
+la firma.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
