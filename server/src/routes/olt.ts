@@ -13,7 +13,7 @@ import {
   LOW_SIGNAL_THRESHOLD_DBM,
   type CachedUnconfiguredOnt,
 } from '../services/oltSyncService';
-import { oltEvents, type OntChangedEvent, type SummaryChangedEvent } from '../services/oltEvents';
+import { oltEvents, type OntChangedEvent, type SummaryChangedEvent, type OltAlertEvent } from '../services/oltEvents';
 import {
   testConnectionCommands,
   listOntsCommands,
@@ -336,9 +336,17 @@ oltRoutes.get('/:id/events', requireRole(...STAFF_READ), async (c) => {
       if (payload.oltDeviceId !== deviceId) return;
       void stream.writeSSE({ event: 'summaryChanged', data: JSON.stringify(payload) });
     };
+    // Fase 3 comercial OLT: alerta proactiva (ver oltAlerts.ts/oltEvents.ts)
+    // — mismo stream, ya protegido por STAFF_READ arriba; ningun rol fuera
+    // de esa lista puede abrir esta conexion ni recibir esto.
+    const onOltAlert = (payload: OltAlertEvent) => {
+      if (payload.oltDeviceId !== deviceId) return;
+      void stream.writeSSE({ event: 'oltAlert', data: JSON.stringify(payload) });
+    };
 
     oltEvents.on('ontChanged', onOntChanged);
     oltEvents.on('summaryChanged', onSummaryChanged);
+    oltEvents.on('oltAlert', onOltAlert);
 
     try {
       // Mantiene la conexion viva (algunos proxies la cierran por
@@ -350,6 +358,7 @@ oltRoutes.get('/:id/events', requireRole(...STAFF_READ), async (c) => {
     } finally {
       oltEvents.off('ontChanged', onOntChanged);
       oltEvents.off('summaryChanged', onSummaryChanged);
+      oltEvents.off('oltAlert', onOltAlert);
     }
   });
 });

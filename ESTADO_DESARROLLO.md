@@ -2093,6 +2093,85 @@ tabla; (3) cuando quieras seguir con Fase 3, decidir el canal de
 alertas proactivas (único hueco funcional real que queda) como
 siguiente mejora aislada.
 
+## 13aa. Fase 3 OLT — alertas proactivas v1 (en memoria, exclusivas del panel) — IMPLEMENTADO, sin desplegar (2026-10-13)
+
+Primera versión de alertas proactivas pedida como siguiente paso de Fase
+3. Reutiliza 100% infraestructura existente: `olt_sync_cache`/`olt_onts`
+(ya persistidos por el scheduler), el propio `oltSyncScheduler.ts` (sin
+scheduler nuevo) y el canal SSE `oltEvents`/`GET /:id/events` ya tendido
+para `ontChanged`/`summaryChanged`. **Sin tabla ni columna nueva.**
+
+- **Archivos nuevos**:
+  - `server/src/services/oltAlerts.ts` — lógica pura de detección:
+    `detectStatusAlert` (transición online↔offline, nunca si
+    `admin_state='disable'`) y `detectSignalAlert` (cruce del umbral de
+    RX, nunca sin lectura previa ni sin lectura este ciclo).
+  - `server/src/services/__tests__/oltAlerts.test.ts` — 11 casos con
+    datos simulados: caída, recuperación, repetición de ciclos (no
+    duplica), primer ciclo sin referencia, ONU deshabilitada
+    administrativamente, potencia baja, recuperación de señal, error de
+    lectura (nunca se confunde con caída), sin cambio real.
+- **Archivos editados**:
+  - `oltSyncService.ts` — llama la detección dentro de `performFullSync`
+    usando `row` (lo YA persistido) como "antes" vs. lo recién leído
+    como "después"; emite por `oltEvents.emitOltAlert()` solo tras
+    confirmar que el bulk update se persistió.
+  - `oltEvents.ts` — nuevo evento `OltAlertEvent`/`emitOltAlert`.
+  - `routes/olt.ts` — `GET /:id/events` reenvía `oltAlert` por el mismo
+    SSE ya protegido por `requireRole(...STAFF_READ)` (SUPERADMIN/ADMIN/
+    TECNICO_RED/SOPORTE) — ningún rol fuera de esa lista puede recibir
+    alertas, sin código de autorización nuevo.
+  - `src/stores/olt.ts` — nuevo estado `alerts` (tope 20, en memoria del
+    navegador, se vacía en cada `connectOltEvents`) + `dismissAlert`.
+  - `src/views/olt/OltDetailView.vue` — banner de alertas descartables
+    arriba del panel.
+- **Pruebas**: `npm run test:provisioning` → **69/69 ok** (58 previos +
+  11 nuevos). `vue-tsc -p tsconfig.app.json` y
+  `tsc -p tsconfig.server.json` sin errores nuevos (los 2 errores de
+  `oltProvisioningService.ts` ya existían antes de esta sesión, no
+  tocado, confirmado con `git stash`).
+- **No probado**: verificación visual del banner en navegador (mismo
+  límite que 13z — sin usuario de prueba real); tampoco contra la OLT
+  real (nada de esto se desplegó ni se ejecutó contra equipos reales).
+
+### Por qué NO hace falta un "snapshot en memoria" para la detección
+
+El "antes" de cada comparación es el valor que YA estaba persistido en
+`olt_onts` (sobrevive un reinicio del backend) — no uno guardado aparte
+en memoria. Por diseño, una transición real solo se reporta una vez:
+tras persistirse, el siguiente ciclo compara contra el valor ya
+actualizado y no hay cambio que reportar. El timeout/error de un puerto
+puntual nunca se confunde con "se cayó" porque esa fila simplemente no
+recibe una lectura nueva ese ciclo (lectura `undefined`, no `offline`).
+
+### Limitaciones reales de esta v1 (documentadas, no resueltas)
+
+1. **Alcance exclusivo del panel, sin persistencia**: si nadie tiene el
+   panel de esa OLT abierto en el momento exacto del evento SSE, la
+   alerta se pierde — no hay cola ni historial que la reenvíe después.
+   Un refresco de página también vacía la lista ya mostrada.
+2. **Reinicio del backend a mitad de una caída ya en curso**: no genera
+   una alerta falsa (el estado "antes" en BD ya era `offline`, sin
+   cambio), pero tampoco "recupera" la notificación de la caída
+   original si nadie la vio antes del reinicio.
+3. **Intervalo real de detección**: atado al scheduler ya existente —
+   hasta `OLT_SYNC_INTERVAL_MINUTES` (20 min por defecto) para
+   online/offline; para señal, además depende de
+   `OLT_SYNC_SIGNAL_EVERY_N_RUNS` (si es >1, la lectura de RX se saltea
+   algunos ciclos — la alerta de señal puede tardar varios ciclos en
+   aparecer). No es tiempo real, es "tan rápido como el próximo sync".
+4. **No hay canal externo** (a propósito, pedido explícito): solo
+   in-app/SSE, nada de email/SMS/WhatsApp.
+5. Un `full sync` manual ("Actualizar ahora") también puede disparar
+   estas alertas si el usuario que lo ejecuta no es el mismo que las
+   ve — es el mismo SSE compartido por OLT, no por usuario que lo
+   disparó.
+
+**Siguiente paso**: tu autorización para el commit local (sin push).
+Luego, si se quiere ir más allá de esta v1, evaluar si vale la pena
+persistir un historial corto de alertas (implicaría una tabla/columna
+nueva, fuera del alcance de hoy) antes de considerar un canal externo.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

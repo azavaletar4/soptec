@@ -229,9 +229,26 @@ export interface DisabledOntsResult {
   checkedAt: string;
 }
 
+/**
+ * Fase 3 comercial OLT: alerta proactiva recibida por SSE (ver
+ * oltAlerts.ts/oltEvents.ts en el backend). Puramente en memoria del
+ * navegador — se pierde al recargar la pagina o reconectar, no hay
+ * historial ni endpoint para recuperarlas retroactivamente.
+ */
+export interface OltAlert {
+  id: string;
+  ontDbId: string;
+  kind: 'offline' | 'recovered' | 'lowSignal' | 'signalRecovered';
+  message: string;
+  at: string;
+}
+
+const MAX_ALERTS = 20;
+
 export const useOltStore = defineStore('olt', () => {
   const devices = ref<OltDevice[]>([]);
   const onts = ref<OltOnt[]>([]);
+  const alerts = ref<OltAlert[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
@@ -474,6 +491,7 @@ export const useOltStore = defineStore('olt', () => {
    */
   async function connectOltEvents(deviceId: string, onSummaryChanged?: () => void) {
     disconnectOltEvents();
+    alerts.value = []; // cada visita al panel arranca sin historial (ver OltAlert)
     const controller = new AbortController();
     eventsAbortController = controller;
 
@@ -523,6 +541,13 @@ export const useOltStore = defineStore('olt', () => {
             }
           } else if (eventName === 'summaryChanged') {
             onSummaryChanged?.();
+          } else if (eventName === 'oltAlert') {
+            try {
+              const alert = JSON.parse(payload) as Omit<OltAlert, 'id'>;
+              alerts.value = [{ ...alert, id: `${alert.ontDbId}-${alert.at}-${alert.kind}` }, ...alerts.value].slice(0, MAX_ALERTS);
+            } catch {
+              // ignorar payloads malformados
+            }
           }
 
           sepIndex = buffer.indexOf('\n\n');
@@ -538,6 +563,10 @@ export const useOltStore = defineStore('olt', () => {
   function disconnectOltEvents() {
     eventsAbortController?.abort();
     eventsAbortController = null;
+  }
+
+  function dismissAlert(id: string) {
+    alerts.value = alerts.value.filter((a) => a.id !== id);
   }
 
   async function assignTr069(deviceId: string, ontDbId: string, acsUrl: string, veip = 1) {
@@ -625,6 +654,8 @@ export const useOltStore = defineStore('olt', () => {
   return {
     devices,
     onts,
+    alerts,
+    dismissAlert,
     loading,
     error,
     fetchDevices,

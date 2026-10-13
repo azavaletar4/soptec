@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { OltAlertKind } from './oltAlerts';
 
 // Emisor de eventos en memoria para el tiempo real de la seccion OLT
 // (server/src/routes/olt.ts: endpoint SSE /:id/events). Se usa un
@@ -21,6 +22,23 @@ export interface SummaryChangedEvent {
   oltDeviceId: string;
 }
 
+/**
+ * Fase 3 comercial OLT: alerta proactiva (caida/recuperacion online-offline,
+ * cruce de umbral de senal) detectada en oltSyncService.ts (ver
+ * oltAlerts.ts para la logica pura de deteccion). Solo en memoria, exclusivo
+ * del panel vivo (SSE) — no se persiste en ninguna tabla nueva. Si no hay
+ * nadie escuchando este SSE en el momento exacto del evento (nadie con el
+ * panel de esa OLT abierto, o el backend se reinicio), la alerta se pierde:
+ * no hay cola ni historial que la vuelva a entregar despues.
+ */
+export interface OltAlertEvent {
+  oltDeviceId: string;
+  ontDbId: string;
+  kind: OltAlertKind;
+  message: string;
+  at: string;
+}
+
 class OltEventBus extends EventEmitter {
   emitOntChanged(payload: OntChangedEvent) {
     this.emit('ontChanged', payload);
@@ -28,6 +46,10 @@ class OltEventBus extends EventEmitter {
 
   emitSummaryChanged(payload: SummaryChangedEvent) {
     this.emit('summaryChanged', payload);
+  }
+
+  emitOltAlert(payload: OltAlertEvent) {
+    this.emit('oltAlert', payload);
   }
 }
 

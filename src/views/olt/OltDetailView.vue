@@ -727,6 +727,25 @@ const gauges = computed(() => {
 
     <div v-if="!device" class="text-slate-500">OLT no encontrada.</div>
     <template v-else>
+      <!--
+        Fase 3 comercial OLT: alertas proactivas (caida/recuperacion online-
+        offline, cruce de umbral de senal), exclusivas de este panel y en
+        vivo (SSE) — solo lo que llego mientras esta pantalla estuvo
+        abierta, se vacia al recargar o reabrir. Ver src/stores/olt.ts
+        (OltAlert) y server/src/services/oltAlerts.ts.
+      -->
+      <div v-if="oltStore.alerts.length" class="mb-4 space-y-2">
+        <div
+          v-for="a in oltStore.alerts"
+          :key="a.id"
+          class="flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+          :class="a.kind === 'offline' || a.kind === 'lowSignal' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'"
+        >
+          <span>{{ a.message }}</span>
+          <button class="text-xs opacity-60 hover:opacity-100" @click="oltStore.dismissAlert(a.id)">✕</button>
+        </div>
+      </div>
+
       <div class="flex items-start justify-between gap-3 mb-6">
         <div>
           <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>

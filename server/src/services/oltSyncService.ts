@@ -1,7 +1,8 @@
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { runTelnetCommands } from '../telnet/client';
 import { withOltLock, type OltLockPriority } from './oltTelnetLock';
-import { oltEvents } from './oltEvents';
+import { oltEvents, type OltAlertEvent } from './oltEvents';
+import { detectStatusAlert, detectSignalAlert } from './oltAlerts';
 import { type OltDeviceRow, telnetTargetFor } from '../lib/oltDevice';
 import {
   listUnconfiguredOntsCommands,
@@ -189,6 +190,14 @@ async function performFullSync(
   const known = (knownRows ?? []) as KnownOnt[];
   const byPos = new Map(known.map((r) => [`${r.frame}/${r.slot}/${r.port}:${r.ont_id}`, r]));
   const updatesById = new Map<string, PendingUpdate>();
+  // Fase 3 comercial OLT: alertas proactivas, ver oltAlerts.ts — antes de
+  // cada "row" se sobreescriba abajo todavia representa lo YA persistido,
+  // asi que es el "before" correcto para detectar una transicion real.
+  const alerts: OltAlertEvent[] = [];
+  function pushAlert(row: KnownOnt, kind: ReturnType<typeof detectStatusAlert>, detail: string) {
+    if (!kind) return;
+    alerts.push({ oltDeviceId: device.id, ontDbId: row.id, kind, message: `ONT ${detail}`, at: now });
+  }
 
   let online = 0;
   let offline = 0;
@@ -213,6 +222,11 @@ async function performFullSync(
         changed = true;
       }
       if (changed) updatesById.set(row.id, update);
+      const statusAlert = detectStatusAlert(
+        { status: row.status, adminState: row.admin_state },
+        { status: newStatus, adminState: o.adminState },
+      );
+      pushAlert(row, statusAlert, `slot ${o.slot}/puerto ${o.port}/onu-id ${o.onuId} ${statusAlert === 'offline' ? 'se desconectó' : 'volvió a estar en línea'}`);
     }
   } else {
     // Respaldo: si el escaneo global falla (timeout, etc.), reportar lo ya
@@ -255,6 +269,8 @@ async function performFullSync(
       for (const row of portRows) {
         const rx = rxByOnu.get(row.ont_id);
         const tx = txByOnu.get(row.ont_id);
+        const signalAlert = detectSignalAlert(row.rx_power, rx, LOW_SIGNAL_THRESHOLD_DBM);
+        pushAlert(row, signalAlert, `slot ${ref.slot}/puerto ${ref.port}/onu-id ${row.ont_id} ${signalAlert === 'lowSignal' ? `señal óptica bajo el umbral (${rx} dBm)` : `señal óptica se normalizó (${rx} dBm)`}`);
         if (rx === undefined && tx === undefined) continue;
         if (rx === row.rx_power && tx === row.tx_power) continue;
 
@@ -282,6 +298,9 @@ async function performFullSync(
       for (const u of updates) {
         oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: u });
       }
+      // Solo tras confirmar que el cambio que la originó quedo persistido
+      // (si el bulk update fallo, no hay nada confirmado que alertar).
+      for (const a of alerts) oltEvents.emitOltAlert(a);
     }
   }
 
