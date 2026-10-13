@@ -2,7 +2,14 @@
 import { filterStalePendingOnus } from '@/lib/provisioningUi';
 import { computePonOccupancy } from '@/lib/oltCapacity';
 import { buildOfficialPonZoneCatalog, comparePonZone, type PonZoneMatch } from '@/lib/ponZoneMapping';
-import { buildPonNumberMap, evaluateOntZoneDiscrepancies, type OntZoneDiscrepancy } from '@/lib/ontZoneDiscrepancy';
+import {
+  buildPonNumberMap,
+  evaluateOntZoneDiscrepancies,
+  countPonPortIssues,
+  type OntZoneDiscrepancy,
+  type OntZoneCaseStatus,
+  type PonPortIssueCounts,
+} from '@/lib/ontZoneDiscrepancy';
 import OntZoneDiscrepancyModal from './OntZoneDiscrepancyModal.vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -330,16 +337,34 @@ const ontZoneDiscrepancies = computed<OntZoneDiscrepancy[]>(() =>
     ponZoneCatalog.value,
   ),
 );
-/** Cuantas ONTs de un puerto quedan en un estado que amerita revision administrativa (todo salvo 'match'). */
-function ponPortIssueCount(p: { slot: number; port: number }): number {
-  return ontZoneDiscrepancies.value.filter((r) => r.slot === p.slot && r.port === p.port && r.caseStatus !== 'match').length;
+function ontsOfPort(p: { slot: number; port: number }): OntZoneDiscrepancy[] {
+  return ontZoneDiscrepancies.value.filter((r) => r.slot === p.slot && r.port === p.port);
+}
+/**
+ * Correción puntual (13aq): contadores SEPARADOS — nunca mezclar
+ * "pendiente de vincular" (normal durante la migración SmartOLT) con una
+ * discrepancia de zona real, ver `countPonPortIssues`.
+ */
+function ponPortIssues(p: { slot: number; port: number }): PonPortIssueCounts {
+  return countPonPortIssues(ontsOfPort(p));
 }
 
 const discrepancyModalPort = ref<{ label: string; rows: OntZoneDiscrepancy[] } | null>(null);
-function openDiscrepancyModal(p: { slot: number; port: number; ponNumber: number }) {
+/** `filterStatus` opcional — "consultar el detalle de cada categoría" por separado, sin mezclar. */
+function openDiscrepancyModal(
+  p: { slot: number; port: number; ponNumber: number },
+  filterStatus?: OntZoneCaseStatus | 'ambiguous',
+) {
+  const all = ontsOfPort(p);
+  const rows =
+    !filterStatus
+      ? all
+      : filterStatus === 'ambiguous'
+        ? all.filter((r) => r.caseStatus === 'ambiguous_catalog' || r.caseStatus === 'no_official')
+        : all.filter((r) => r.caseStatus === filterStatus);
   discrepancyModalPort.value = {
     label: `PON ${String(p.ponNumber).padStart(2, '0')} (Slot ${p.slot} / Puerto ${p.port})`,
-    rows: ontZoneDiscrepancies.value.filter((r) => r.slot === p.slot && r.port === p.port),
+    rows,
   };
 }
 function handleViewOntFromDiscrepancy(ontDbId: string) {
@@ -932,14 +957,37 @@ const gauges = computed(() => {
             <ul v-if="expandedPonKey === `${p.slot}/${p.port}`" class="mt-1 text-[10px] text-slate-500 space-y-0.5">
               <li v-for="z in p.zoneBreakdown" :key="z.zoneId">{{ z.zoneName }} — {{ z.count }}</li>
             </ul>
+            <!-- Correción puntual (13aq): 3 contadores separados — nunca un
+                 solo "N con revisión pendiente" que mezcle ONTs sin vincular
+                 todavía (normal durante la migración SmartOLT) con una
+                 discrepancia de zona real. Cada uno abre el detalle SOLO de
+                 su categoría. -->
             <button
-              v-if="ponPortIssueCount(p) > 0"
+              v-if="ponPortIssues(p).discrepanciaReal > 0"
               class="text-[10px] text-red-600 hover:underline mt-1 block font-medium"
+              @click="openDiscrepancyModal(p, 'zone_mismatch')"
+            >
+              ⚠ {{ ponPortIssues(p).discrepanciaReal }} discrepancia{{ ponPortIssues(p).discrepanciaReal > 1 ? 's' : '' }} de zona →
+            </button>
+            <button
+              v-if="ponPortIssues(p).datosAmbiguos > 0"
+              class="text-[10px] text-red-600 hover:underline mt-1 block font-medium"
+              @click="openDiscrepancyModal(p, 'ambiguous')"
+            >
+              ❔ {{ ponPortIssues(p).datosAmbiguos }} dato{{ ponPortIssues(p).datosAmbiguos > 1 ? 's' : '' }} ambiguo{{ ponPortIssues(p).datosAmbiguos > 1 ? 's' : '' }} (catálogo) →
+            </button>
+            <button
+              v-if="ponPortIssues(p).pendienteVinculacion > 0"
+              class="text-[10px] text-slate-500 hover:underline mt-1 block"
+              @click="openDiscrepancyModal(p, 'unlinked')"
+            >
+              {{ ponPortIssues(p).pendienteVinculacion }} ONT{{ ponPortIssues(p).pendienteVinculacion > 1 ? 's' : '' }} pendiente{{ ponPortIssues(p).pendienteVinculacion > 1 ? 's' : '' }} de vincular (migración) →
+            </button>
+            <button
+              v-if="!ponPortIssues(p).discrepanciaReal && !ponPortIssues(p).datosAmbiguos && !ponPortIssues(p).pendienteVinculacion"
+              class="text-[10px] text-slate-400 hover:underline mt-1 block"
               @click="openDiscrepancyModal(p)"
             >
-              Ver {{ ponPortIssueCount(p) }} ONT{{ ponPortIssueCount(p) > 1 ? 's' : '' }} con revisión pendiente →
-            </button>
-            <button v-else class="text-[10px] text-slate-400 hover:underline mt-1 block" @click="openDiscrepancyModal(p)">
               Ver detalle de ONTs de este puerto
             </button>
           </div>

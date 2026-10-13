@@ -152,3 +152,42 @@ export function evaluateOntZoneDiscrepancies(
     return { ...base, caseStatus, officialZone, ontVsOfficial, contractVsOfficial, ambiguousCandidates: null };
   });
 }
+
+/**
+ * Corrección puntual (2026-10-13, ver ESTADO_DESARROLLO.md 13aq): mientras
+ * dura la migración desde SmartOLT (~400 ONTs sin cliente/contrato
+ * vinculado todavía, ver CLAUDE.md — Situación A), la inmensa mayoría de
+ * `evaluateOntZoneDiscrepancies` cae en `unlinked` — eso es ESPERADO, no
+ * una discrepancia de zona. Contar `unlinked` junto con `zone_mismatch`/
+ * `ambiguous_catalog`/`no_official` bajo un solo "N con revisión
+ * pendiente" generaba falsas alarmas masivas (confirmado en producción:
+ * casi todas las ONTs de un puerto marcadas como "problema" solo por
+ * faltar vincular). Esta función separa los 3 grupos reales:
+ *
+ * - `pendienteVinculacion`: sin client_id/contract_id verificable —
+ *   normal durante la migración, NUNCA se cuenta como discrepancia.
+ * - `discrepanciaReal`: ONT vinculada (cliente+contrato reales) cuya
+ *   zona no coincide con la oficial del PON — esto SÍ es un problema.
+ * - `datosAmbiguos`: catálogo con 2+ zonas para el mismo número de PON,
+ *   o PON sin ninguna zona oficial — requiere revisión del catálogo,
+ *   pero no es (todavía) una discrepancia confirmada sobre un cliente.
+ *
+ * `match` no se cuenta en ningún grupo — no amerita revisión.
+ */
+export interface PonPortIssueCounts {
+  pendienteVinculacion: number;
+  discrepanciaReal: number;
+  datosAmbiguos: number;
+}
+
+export function countPonPortIssues(rows: readonly OntZoneDiscrepancy[]): PonPortIssueCounts {
+  let pendienteVinculacion = 0;
+  let discrepanciaReal = 0;
+  let datosAmbiguos = 0;
+  for (const r of rows) {
+    if (r.caseStatus === 'unlinked') pendienteVinculacion++;
+    else if (r.caseStatus === 'zone_mismatch') discrepanciaReal++;
+    else if (r.caseStatus === 'ambiguous_catalog' || r.caseStatus === 'no_official') datosAmbiguos++;
+  }
+  return { pendienteVinculacion, discrepanciaReal, datosAmbiguos };
+}

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildOfficialPonZoneCatalog } from '../ponZoneMapping';
-import { buildPonNumberMap, evaluateOntZoneDiscrepancies, type OntZoneDiscrepancyOnt } from '../ontZoneDiscrepancy';
+import { buildPonNumberMap, evaluateOntZoneDiscrepancies, countPonPortIssues, type OntZoneDiscrepancyOnt } from '../ontZoneDiscrepancy';
 
 const catalog = buildOfficialPonZoneCatalog([
   { id: 'ao', name: 'PON 1 - AO' },
@@ -169,4 +169,63 @@ test('slot/puerto que no aparece en el mapa de PON (nunca sincronizado ese puert
   const [r] = evaluateOntZoneDiscrepancies([ont], ponMap, catalog);
   assert.equal(r.caseStatus, 'no_official');
   assert.equal(r.ponNumber, null);
+});
+
+// ---- countPonPortIssues (corregion puntual 2026-10-13, ver 13aq): migracion
+// SmartOLT (~400 ONTs sin vincular) nunca debe inflar "discrepancia real". ----
+
+test('countPonPortIssues: puerto con 1 sola ONT y todo coincide (match) -> los 3 contadores en cero', () => {
+  const ontOk = base({
+    client_id: 'cli-1',
+    contract_id: 'ctr-1',
+    zones: { id: 'ao', name: 'PON 1 - AO' },
+    clients: { id: 'cli-1', first_name: 'Cliente', last_name: 'Ok' },
+    service_contracts: { id: 'ctr-1', contract_number: 'C-1', client_code: 'CL-1', status: 'active', zones: { id: 'ao', name: 'PON 1 - AO' } },
+  });
+  const [r] = evaluateOntZoneDiscrepancies([ontOk], ponMap, catalog);
+  assert.deepEqual(countPonPortIssues([r]), { pendienteVinculacion: 0, discrepanciaReal: 0, datosAmbiguos: 0 });
+});
+
+test('countPonPortIssues: caso real de la migracion — 9 ONTs sin vincular (SmartOLT) + 1 vinculada correcta -> pendienteVinculacion=9, discrepanciaReal=0, NUNCA se cuentan como discrepancia', () => {
+  const sinVincular = Array.from({ length: 9 }, (_, i) =>
+    base({ id: `ont-sinvincular-${i}`, client_id: null, contract_id: null }),
+  );
+  const vinculadaOk = base({
+    id: 'ont-ok',
+    client_id: 'cli-ok',
+    contract_id: 'ctr-ok',
+    zones: { id: 'ao', name: 'PON 1 - AO' },
+    clients: { id: 'cli-ok', first_name: 'Cliente', last_name: 'Ok' },
+    service_contracts: { id: 'ctr-ok', contract_number: 'C-OK', client_code: 'CL-OK', status: 'active', zones: { id: 'ao', name: 'PON 1 - AO' } },
+  });
+  const rows = evaluateOntZoneDiscrepancies([...sinVincular, vinculadaOk], ponMap, catalog);
+  assert.deepEqual(countPonPortIssues(rows), { pendienteVinculacion: 9, discrepanciaReal: 0, datosAmbiguos: 0 });
+});
+
+test('countPonPortIssues: 1 ONT vinculada con zona real distinta de la oficial -> discrepanciaReal=1, separado de las sin vincular del mismo puerto', () => {
+  const sinVincular = base({ id: 'ont-sinvincular', client_id: null, contract_id: null });
+  const conMismatch = base({
+    id: 'ont-mismatch',
+    client_id: 'cli-mal',
+    contract_id: 'ctr-mal',
+    zones: { id: 'sm', name: 'PON 2 - SM' },
+    clients: { id: 'cli-mal', first_name: 'Cliente', last_name: 'Desalineado' },
+    service_contracts: { id: 'ctr-mal', contract_number: 'C-MAL', client_code: 'CL-MAL', status: 'active', zones: { id: 'sm', name: 'PON 2 - SM' } },
+  });
+  const rows = evaluateOntZoneDiscrepancies([sinVincular, conMismatch], ponMap, catalog);
+  assert.deepEqual(countPonPortIssues(rows), { pendienteVinculacion: 1, discrepanciaReal: 1, datosAmbiguos: 0 });
+});
+
+test('countPonPortIssues: catalogo ambiguo y PON sin zona oficial van juntos a "datosAmbiguos", nunca a discrepanciaReal', () => {
+  const dirtyCatalog = buildOfficialPonZoneCatalog([{ id: 'x', name: 'PON 7 - X' }, { id: 'y', name: 'PON 7 - Y' }]);
+  const dirtyMap = buildPonNumberMap([{ slot: 5, port: 1, ponNumber: 7 }]);
+  const ambiguo = base({ id: 'ont-ambiguo', slot: 5, port: 1, client_id: 'cli-8', contract_id: 'ctr-8' });
+  const sinOficial = base({ id: 'ont-sinoficial', slot: 9, port: 9, client_id: 'cli-9', contract_id: 'ctr-9' });
+  const rowsAmbiguo = evaluateOntZoneDiscrepancies([ambiguo], dirtyMap, dirtyCatalog);
+  const rowsSinOficial = evaluateOntZoneDiscrepancies([sinOficial], ponMap, catalog);
+  assert.deepEqual(countPonPortIssues([...rowsAmbiguo, ...rowsSinOficial]), { pendienteVinculacion: 0, discrepanciaReal: 0, datosAmbiguos: 2 });
+});
+
+test('countPonPortIssues: lista vacia -> los 3 contadores en cero', () => {
+  assert.deepEqual(countPonPortIssues([]), { pendienteVinculacion: 0, discrepanciaReal: 0, datosAmbiguos: 0 });
 });

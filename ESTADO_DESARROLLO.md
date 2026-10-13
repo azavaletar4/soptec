@@ -3622,6 +3622,92 @@ instalaciones). Sin otra migración. Sin traslados reales ejecutados.
 Sin push ni despliegue — **commit local únicamente**, pendiente de
 autorización.
 
+## 13aq. Fase 3 OLT — Fase B: corrección de falsas alarmas por migración SmartOLT (2026-10-13, IMPLEMENTADO, commit local sin push)
+
+Reportado desde capturas de producción (commit `8bd441b`, ya desplegado):
+el botón de "Ocupación por puerto PON" mostraba "N ONTs con revisión
+pendiente" contando TODAS las ONTs con `caseStatus !== 'match'` — como la
+migración desde SmartOLT deja ~400 ONTs sin `client_id`/`contract_id`
+todavía (Situación A, CLAUDE.md), casi todas esas ONTs caían en
+`unlinked` y se mostraban como si fueran 60 discrepancias de zona reales.
+Corrección puntual pedida: no repetir la Fase A/B, solo arreglar la
+**agregación y presentación** — la clasificación por ONT (`evaluateOntZoneDiscrepancies`,
+13al) ya era correcta, el problema era contar todo junto.
+
+### Corrección
+- **`src/lib/ontZoneDiscrepancy.ts`**: nueva función pura
+  `countPonPortIssues(rows)` — separa `OntZoneCaseStatus` en 3 grupos
+  reales en vez de un solo total:
+  - `pendienteVinculacion` (`unlinked`) — normal durante la migración,
+    **nunca** se cuenta como discrepancia.
+  - `discrepanciaReal` (`zone_mismatch`) — ONT vinculada con zona real
+    distinta de la oficial. Esto sí es un problema.
+  - `datosAmbiguos` (`ambiguous_catalog` + `no_official`) — catálogo
+    sucio o sin zona oficial para ese PON; requiere revisión del
+    catálogo, pero no es una discrepancia confirmada sobre un cliente.
+  `match` no se cuenta en ningún grupo.
+- **`src/views/olt/OltDetailView.vue`**: la tarjeta de cada puerto PON
+  reemplaza el único botón "N con revisión pendiente" por hasta 3
+  indicadores independientes, cada uno abre el modal de detalle
+  **filtrado a su propia categoría** (`openDiscrepancyModal(p,
+  filterStatus)`, nuevo parámetro opcional): "⚠ N discrepancia(s) de
+  zona" (rojo), "❔ N dato(s) ambiguo(s) (catálogo)" (rojo), "N ONT(s)
+  pendiente(s) de vincular (migración)" (gris, tono neutro — no es una
+  alarma). Si no hay ninguna de las 3, queda el link neutro "Ver detalle
+  de ONTs de este puerto" de siempre.
+- **`OntZoneDiscrepancyModal.vue`**: **sin cambios** — ya mostraba cada
+  fila con su propio badge/motivo y el acceso a cliente/contrato solo
+  cuando hay vínculo real; recibir `rows` ya pre-filtrados por categoría
+  alcanza, no hacía falta tocarlo (requisito explícito: conservarlo).
+
+### Fuente oficial de zonas PON — confirmado, sin cambios
+El catálogo de `zones` (nombre "PON N - CODE") sigue siendo la única
+fuente oficial — `ponZoneMapping.ts` (Fase A, 13ak) ya lo usa así, no se
+tocó. Slot/Puerto sigue siendo la identidad física real de la OLT, sin
+alterar.
+
+### Archivos modificados
+- `src/lib/ontZoneDiscrepancy.ts` (`countPonPortIssues` + `PonPortIssueCounts`, nuevas).
+- `src/lib/__tests__/ontZoneDiscrepancy.test.ts` (+5 casos).
+- `src/views/olt/OltDetailView.vue` (`ponPortIssues`, `openDiscrepancyModal` con filtro, template de 3 indicadores).
+
+### Pruebas
+- `countPonPortIssues` (5 casos nuevos): todo en `match` → los 3 en
+  cero; **caso real de la migración** — 9 ONTs sin vincular + 1
+  vinculada correcta → `pendienteVinculacion: 9, discrepanciaReal: 0`
+  (nunca se cuentan como discrepancia); 1 sin vincular + 1 vinculada con
+  zona real distinta → `pendienteVinculacion: 1, discrepanciaReal: 1`
+  (separados, no se mezclan); catálogo ambiguo + PON sin zona oficial →
+  ambos van a `datosAmbiguos`, nunca a `discrepanciaReal`; lista vacía →
+  los 3 en cero.
+- `npm run test:fetch-timeout` → **132/132** (127 previos + 5 nuevos).
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+- `git status` confirma el alcance: solo los 3 archivos de Fase B — sin
+  tocar `campo.ts`, `routines.ts`, rutas de `server/`, ni ningún archivo
+  de Fase 158/159.
+
+### Riesgos
+- Los contadores siguen siendo por puerto (no hay un total global en la
+  cabecera de la sección) — con ~20 puertos y ~400 ONTs sin vincular
+  repartidas, un administrador que quiera "el total de pendientes de
+  vincular en toda la OLT" todavía tiene que sumarlos puerto por puerto.
+  No se pidió ese total en este turno; evaluar si hace falta en una
+  futura revisión puntual.
+- `datosAmbiguos` sigue agrupando 2 causas distintas (catálogo
+  duplicado vs. sin zona oficial) bajo un mismo contador — suficiente
+  para esta corrección (ambas requieren la misma acción: revisar el
+  catálogo de Zonas), el modal de detalle ya distingue cuál es cuál con
+  su propio motivo.
+
+### Qué NO se tocó (confirmado)
+Sin reingeniería ni auditoría general — se reutilizó
+`evaluateOntZoneDiscrepancies`/`OntZoneDiscrepancy` de Fase B tal cual
+(13al), sin tocar su lógica de clasificación. Sin tocar Fase 158/159,
+Rutinas, App Campo, OLT, MikroTik, inventario ni contratos. Sin
+inferencia de vínculos por nombre. Sin actualizaciones automáticas de
+datos — sigue siendo 100% de solo lectura/presentación. Sin push ni
+despliegue — **commit local únicamente**, pendiente de autorización.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
