@@ -2207,6 +2207,93 @@ Fase 3 (13z/13aa). **VM confirmada en `b485f07`**.
 de Fase 2 (13y) y el canal de alertas más allá de esta v1 siguen
 abiertos, sin acción nueva pedida todavía.
 
+## 13ac. Fase 3 OLT — reorganización visual del detalle OLT + numeración PON y zona (2026-10-13, IMPLEMENTADO, sin desplegar)
+
+Rediseño únicamente de presentación de `OltDetailView.vue` (1343→~1400
+líneas) para eliminar duplicación y mostrar PON con numeración
+operativa + zona existente. **Ninguna acción de registrar/autorizar/
+desactivar/eliminar/importar/consultar señal cambió de comportamiento**
+— solo se reordenó dónde vive cada bloque y se agregó data derivada.
+
+### Hallazgo real verificado (Supabase producción, solo lectura) — IMPORTANTE
+
+Se confirmó con el usuario antes de construir nada: las 20 zonas ya
+tienen su número PON codificado en el nombre (`"PON 1 - AO"` →
+descripción "ANTENOR ORREGO", `"PON 2 - SM"` → "SANTA MARIA", etc.).
+**Pero el vínculo real puerto↔zona (via `olt_onts.zone_id`, ya
+existente) NO es 1 a 1**: ej. Slot 2/Puerto 1 tiene ONTs de "PON 1 - AO"
+Y "PON 2 - SM" mezcladas; "PON 4 - B6" aparece en los puertos 4, 5 y 12
+a la vez. Decisión del usuario: mostrar la **zona predominante** (más
+ONTs vinculadas en ese puerto) + aviso/desglose si hay más de una,
+**nunca** asumir que la zona predominante es "la" zona comercial del
+PON, y marcar "pendiente de vincular" cuando ningún ONT del puerto
+tiene zona. No se creó tabla ni columna nueva — se reutiliza
+`olt_onts.zone_id`/`zones` (ya traído por `GET /:id/onts`).
+
+### Numeración PON operativa
+
+Correlativa (PON 01, 02...) calculada SOLO sobre los puertos
+slot/puerto ya conocidos (los que tienen al menos una ONT sincronizada
+alguna vez) — hoy coincide exacto con el ejemplo pedido (Slot 2 tiene
+sus 16 puertos completos → PON 01-16; Slot 3 empieza en PON 17) porque
+así está la topología real hoy. **Limitación documentada**: si más
+adelante aparece la primera ONT de un puerto de un slot anterior que
+hoy no tiene ninguna, los números posteriores se corren — no es un ID
+fijo de la OLT, no hay forma de leer "puertos físicos totales por
+tarjeta" sin un comando Telnet nuevo contra el equipo real (fuera de
+alcance de hoy). El identificador físico (Slot/Puerto) nunca se oculta
+ni se altera — se muestra siempre junto al número PON.
+
+### Archivos modificados
+
+- `src/lib/oltCapacity.ts`: `computePonOccupancy()` ahora también
+  calcula `ponNumber`, `dominantZone`, `otherZonesCount` y
+  `zoneBreakdown` por puerto (puramente derivado de `onts` ya cargados,
+  misma firma de siempre, campos nuevos opcionales).
+- `src/lib/__tests__/oltCapacity.test.ts`: +5 casos (numeración
+  correlativa, zona predominante con empate, puerto sin zona vinculada,
+  mezcla con/sin zona). **43/43 ok** (`npm run test:fetch-timeout`).
+- `src/views/olt/OltDetailView.vue`: reordenado a 5 secciones (Resumen
+  general → Ocupación PON → Gestión de ONTs → Telemetría desplegable →
+  Alertas y sincronización), sin tocar ningún handler/llamada al
+  backend. Cambios de presentación:
+  - "Ocupación por puerto PON": ahora muestra `PON ##` + Slot/Puerto +
+    zona predominante (o "pendiente de vincular") + botón "+N zonas
+    más" con desglose expandible.
+  - "Gestión de ONTs": se unificó la tabla completa (antes siempre
+    visible, separada) como una 4ª pestaña "Todas", junto a las 3
+    pestañas existentes (Nuevas/Reconectar/Deshabilitadas) — elimina la
+    duplicación de ver el mismo listado en 2 lugares. Pestaña por
+    defecto: "Todas" (antes la tabla ya estaba siempre visible, así que
+    la visibilidad inicial no cambia).
+  - "Telemetría": pasó a `<details>` (plegada por defecto); mismos
+    datos/gauges, mismo botón "Actualizar".
+  - "Alertas y sincronización": sección nueva al final que agrupa el
+    banner de alertas (antes arriba de todo), "Consultar puerto GPON"
+    y "Importar ONTs desde la OLT" (antes sueltos entre medio).
+
+### Distinción de conceptos (requisito 6, ya así en los datos — no se mezcló nada)
+
+ONTs sincronizadas (`olt_onts`, Telnet) / clientes-contratos asociados
+(`olt_onts.client_id`/`contract_id`) / abonados por caja NAP
+(`fo_nap_puertos`, vía `infra_elementos.zone_id`, módulo de fibra —
+ver `ZonasView.vue`) **ya eran 3 fuentes y 3 conteos distintos** en el
+código existente; esta sesión no agregó ni mezcló ningún contador
+nuevo entre ellos.
+
+### Pruebas y validación
+
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+- `npm run test:fetch-timeout` → 43/43 (incluye los 5 casos nuevos).
+- **No verificado**: visual en navegador real (mismo límite de
+  sesiones anteriores — sin usuario de prueba). Tampoco se desplegó ni
+  se tocó la OLT/MikroTik/Supabase real (las consultas a Supabase de
+  esta sesión fueron 100% `select`, de solo lectura, para verificar
+  zonas y el vínculo zona↔puerto antes de construir la UI).
+
+**Siguiente paso**: autorización para commit local (sin push/deploy).
+Después, verificación visual real cuando alguien abra el panel.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

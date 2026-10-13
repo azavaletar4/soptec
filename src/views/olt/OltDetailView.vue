@@ -86,9 +86,10 @@ const STATUS_FILTER_LABEL: Record<OntStatusFilter, string> = {
 };
 
 const ontsTableEl = ref<HTMLElement | null>(null);
-/** Usado por las tarjetas del resumen: filtra la tabla de ONTs y hace scroll hasta ella. */
+/** Usado por las tarjetas del resumen: filtra la tabla de ONTs (pestaña "Todas") y hace scroll hasta ella. */
 function filterOntsBy(status: OntStatusFilter) {
   statusFilter.value = status;
+  activeOntTab.value = 'all';
   ontsTableEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -190,9 +191,12 @@ async function loadUnconfigured(opts: { live?: boolean } = {}) {
   }
 }
 
-// ---- Pestañas "Nuevas" / "Por reconectar" / "Deshabilitadas" (estilo SmartOLT) ----
-type OntTab = 'uncfg' | 'reconnect' | 'disabled';
-const activeOntTab = ref<OntTab>('uncfg');
+// ---- Pestañas "Todas" / "Nuevas" / "Por reconectar" / "Deshabilitadas" ----
+// Fase 3 comercial OLT: antes "Todas" vivia aparte como una tabla siempre
+// visible debajo de estas otras 3 — se consolido en una sola pestaña mas
+// para no mostrar el mismo listado (o un subconjunto) en 2 lugares a la vez.
+type OntTab = 'all' | 'uncfg' | 'reconnect' | 'disabled';
+const activeOntTab = ref<OntTab>('all');
 const ontTabsEl = ref<HTMLElement | null>(null);
 function goToDisabledTab() {
   activeOntTab.value = 'disabled';
@@ -275,6 +279,12 @@ const portSelection = ref<'all' | 'manual' | string>('all');
  * llamadas nuevas al backend/OLT.
  */
 const ponOccupancy = computed(() => computePonOccupancy(oltStore.onts.filter((o) => o.olt_device_id === deviceId.value)));
+
+/** Que tarjeta de "Ocupación por puerto PON" tiene el desglose de zonas abierto (una a la vez, "slot/port"). */
+const expandedPonKey = ref<string | null>(null);
+function toggleZoneBreakdown(key: string) {
+  expandedPonKey.value = expandedPonKey.value === key ? null : key;
+}
 
 function handlePortSync() {
   if (portSelection.value !== 'manual' && portSelection.value !== 'all') {
@@ -727,25 +737,6 @@ const gauges = computed(() => {
 
     <div v-if="!device" class="text-slate-500">OLT no encontrada.</div>
     <template v-else>
-      <!--
-        Fase 3 comercial OLT: alertas proactivas (caida/recuperacion online-
-        offline, cruce de umbral de senal), exclusivas de este panel y en
-        vivo (SSE) — solo lo que llego mientras esta pantalla estuvo
-        abierta, se vacia al recargar o reabrir. Ver src/stores/olt.ts
-        (OltAlert) y server/src/services/oltAlerts.ts.
-      -->
-      <div v-if="oltStore.alerts.length" class="mb-4 space-y-2">
-        <div
-          v-for="a in oltStore.alerts"
-          :key="a.id"
-          class="flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
-          :class="a.kind === 'offline' || a.kind === 'lowSignal' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'"
-        >
-          <span>{{ a.message }}</span>
-          <button class="text-xs opacity-60 hover:opacity-100" @click="oltStore.dismissAlert(a.id)">✕</button>
-        </div>
-      </div>
-
       <div class="flex items-start justify-between gap-3 mb-6">
         <div>
           <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
@@ -760,7 +751,8 @@ const gauges = computed(() => {
         </div>
       </div>
 
-      <!-- Resumen estilo SmartOLT -->
+      <!-- 1) Resumen general -->
+      <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Resumen general</h2>
       <div class="grid gap-4 mb-2" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
         <div class="rounded-xl p-5 flex items-start justify-between" style="background:#2f6fed">
           <div>
@@ -829,16 +821,245 @@ const gauges = computed(() => {
         carga al instante. Los cambios de estado se reflejan solos en la tabla en tiempo real.
       </p>
 
-      <!-- Telemetria: cluster de velocimetros estilo deportivo -->
-      <div class="surface p-5 mb-6 relative overflow-hidden">
+      <!-- 2) Ocupacion por puerto PON: numero operativo + nombre de zona predominante -->
+      <div v-if="ponOccupancy.length" class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-6">
+        <h2 class="text-sm font-semibold mb-1">Ocupación por puerto PON</h2>
+        <p class="text-xs text-slate-500 mb-3">
+          "PON ##" es un número operativo correlativo (no un identificador de la OLT); Slot/Puerto es
+          el identificador físico real de la ZTE, sin alterar. La zona es la predominante según las
+          ONTs ya vinculadas — no necesariamente "la" zona comercial de ese PON si el puerto mezcla
+          más de una (ver desglose).
+        </p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div v-for="p in ponOccupancy" :key="`${p.slot}/${p.port}`" class="rounded-lg bg-white border border-slate-200 p-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-semibold text-slate-700">PON {{ String(p.ponNumber).padStart(2, '0') }}</span>
+              <span class="text-[10px] text-slate-400 whitespace-nowrap">Slot {{ p.slot }} · Puerto {{ p.port }}</span>
+            </div>
+            <div class="text-sm font-semibold mt-1">{{ p.count }}/{{ p.max }} ONTs</div>
+            <div class="h-1.5 rounded-full bg-slate-200 overflow-hidden mt-1 mb-2">
+              <div class="h-full bg-sky-500" :style="{ width: `${p.pct}%` }"></div>
+            </div>
+            <div v-if="p.dominantZone" class="text-xs text-slate-600">
+              {{ p.dominantZone.zoneName }} <span class="text-slate-400">({{ p.dominantZone.count }})</span>
+            </div>
+            <div v-else class="text-xs text-amber-700">Sin zona vinculada — pendiente de vincular</div>
+            <button
+              v-if="p.otherZonesCount > 0"
+              class="text-[10px] text-sky-600 hover:underline mt-1"
+              @click="toggleZoneBreakdown(`${p.slot}/${p.port}`)"
+            >
+              {{ expandedPonKey === `${p.slot}/${p.port}` ? 'Ocultar desglose' : `+${p.otherZonesCount} zona${p.otherZonesCount > 1 ? 's' : ''} más` }}
+            </button>
+            <ul v-if="expandedPonKey === `${p.slot}/${p.port}`" class="mt-1 text-[10px] text-slate-500 space-y-0.5">
+              <li v-for="z in p.zoneBreakdown" :key="z.zoneId">{{ z.zoneName }} — {{ z.count }}</li>
+            </ul>
+          </div>
+        </div>
+        <p class="text-xs text-slate-500 mt-3">
+          Basado en lo ya sincronizado aquí (olt_onts), no en un escaneo nuevo — puede no reflejar una
+          ONT cableada en la OLT real que todavía no se importó/sincronizó. La numeración PON es
+          correlativa sobre los puertos ya conocidos: si más adelante aparece la primera ONT de un
+          puerto nuevo en un slot anterior, los números posteriores se corren (no es un ID fijo de la
+          OLT, ver nota en src/lib/oltCapacity.ts).
+        </p>
+      </div>
+
+      <!-- 3) Gestion de ONTs: una sola seccion con pestañas (antes la tabla completa vivía
+           aparte, duplicando lo que ya mostraban las 3 pestañas de abajo). -->
+      <div ref="ontsTableEl" class="surface p-5 mb-6">
+        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Gestión de ONTs</h2>
+        <div ref="ontTabsEl" class="flex gap-2 border-b border-slate-200 mb-4 flex-wrap">
+          <button
+            class="px-4 py-2 text-sm font-medium rounded-t-lg"
+            :class="activeOntTab === 'all' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+            @click="activeOntTab = 'all'"
+          >
+            Todas ({{ oltStore.onts.length }})
+          </button>
+          <button
+            class="px-4 py-2 text-sm font-medium rounded-t-lg"
+            :class="activeOntTab === 'uncfg' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+            @click="activeOntTab = 'uncfg'"
+          >
+            Nuevas por Autorizar ({{ newUnconfiguredOnts.length }})
+          </button>
+          <button
+            class="px-4 py-2 text-sm font-medium rounded-t-lg"
+            :class="activeOntTab === 'reconnect' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+            @click="activeOntTab = 'reconnect'"
+          >
+            Desconfiguradas / Por Reconectar ({{ reconnectOnts.length }})
+          </button>
+          <button
+            class="px-4 py-2 text-sm font-medium rounded-t-lg"
+            :class="activeOntTab === 'disabled' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+            @click="activeOntTab = 'disabled'"
+          >
+            Deshabilitadas / Cortadas ({{ disabledOnts.length }})
+          </button>
+        </div>
+
+        <template v-if="activeOntTab === 'all'">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div v-if="statusFilter !== 'all'" class="flex items-center gap-2 text-xs">
+              <span class="badge bg-sky-500/15 text-sky-700">Filtro: {{ STATUS_FILTER_LABEL[statusFilter] }} ({{ filteredOnts.length }})</span>
+              <button class="text-slate-600 hover:text-slate-900" @click="statusFilter = 'all'">Quitar filtro</button>
+            </div>
+          </div>
+          <input
+            v-model="ontSearch"
+            placeholder="Buscar por serial, cliente o shelf/slot/port..."
+            class="field-input mb-3"
+          />
+          <!-- max-h + overflow-y-auto: con cientos de ONTs la tabla podia ser mucho
+               mas alta que la pantalla, y la barra de scroll HORIZONTAL de
+               table-shell (que vive al pie de ese contenedor) quedaba miles de
+               pixeles mas abajo, practicamente inalcanzable. Con la altura
+               limitada, las dos barras de scroll quedan siempre a la vista aca
+               mismo. El encabezado queda fijo arriba mientras se baja. -->
+          <div class="table-shell max-h-[70dvh] overflow-y-auto">
+            <!-- En celular se ocultan las columnas secundarias (quedan Serial/Cliente/
+                 Estado/Señal/TR-069/Acciones) — antes las 11 columnas forzaban scroll
+                 horizontal incluso para ver "Acciones". El detalle completo sigue
+                 disponible al tocar la fila (openOntDetail). -->
+            <table class="w-full text-sm min-w-[480px] md:min-w-[760px]">
+              <thead class="bg-slate-100 text-slate-600 text-xs uppercase sticky top-0 z-10">
+                <tr>
+                  <!-- Antes decia "Shelf/Slot/Port/ID": ese titulo largo obligaba a la
+                       columna a ser mas ancha que el dato real ("1/2/1:1", corto) —
+                       un titulo corto + whitespace-nowrap deja que la columna se
+                       achique al tamaño del dato en vez del titulo. -->
+                  <th class="text-left px-2 py-3 hidden md:table-cell whitespace-nowrap shadow-[0_1px_0_0_var(--color-slate-200)]" title="Shelf/Slot/Port:ID de la ONU">Posición</th>
+                  <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Serial</th>
+                  <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Cliente</th>
+                  <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Zona</th>
+                  <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Estado</th>
+                  <th class="text-left px-3 py-3 whitespace-nowrap shadow-[0_1px_0_0_var(--color-slate-200)]">Rx/Tx (dBm)</th>
+                  <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">VLAN</th>
+                  <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Tipo</th>
+                  <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Alta</th>
+                  <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">TR-069</th>
+                  <th class="text-right px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Acciones</th>
+                  <!-- Columna solo-icono: en tactil no hay ":hover" que sugiera que la
+                       fila es clickeable (abre el detalle), asi que el ">" cumple ese
+                       rol visualmente en vez de depender del cursor. -->
+                  <th class="w-8 px-2 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]"><span class="sr-only">Abrir detalle</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!filteredOnts.length">
+                  <td colspan="12" class="px-4 py-6 text-center text-slate-500">
+                    {{ ontSearch || statusFilter !== 'all' ? 'Sin resultados para ese filtro/busqueda.' : 'Sin ONTs. Sincroniza un puerto o registra una nueva.' }}
+                  </td>
+                </tr>
+                <tr
+                  v-for="ont in filteredOnts"
+                  :key="ont.id"
+                  class="border-t border-slate-200 cursor-pointer hover:bg-slate-50"
+                  @click="openOntDetail(ont)"
+                >
+                  <td class="px-2 py-3 font-mono text-xs hidden md:table-cell whitespace-nowrap">{{ ont.frame }}/{{ ont.slot }}/{{ ont.port }}:{{ ont.ont_id }}</td>
+                  <td class="px-3 py-3 font-mono text-xs">{{ ont.serial }}</td>
+                  <td class="px-3 py-3 text-slate-600">
+                    <template v-if="ont.clients">{{ ont.clients.first_name }} {{ ont.clients.last_name }}</template>
+                    <template v-else-if="ont.description">
+                      {{ ont.description }}
+                      <span class="block text-[10px] text-slate-400">de la OLT, sin vincular</span>
+                    </template>
+                    <template v-else>—</template>
+                  </td>
+                  <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">
+                    <span v-if="ont.zones">{{ ont.zones.name }}</span>
+                    <span v-else-if="ont.splitter">{{ ont.splitter }}<span v-if="ont.splitter_port"> / {{ ont.splitter_port }}</span></span>
+                    <span v-else class="text-slate-400">—</span>
+                  </td>
+                  <td class="px-3 py-3">
+                    <span class="badge" :class="STATUS_CLASS[ont.status]">{{ STATUS_LABEL[ont.status] ?? ont.status }}</span>
+                  </td>
+                  <td class="px-3 py-3 text-slate-600 text-xs whitespace-nowrap">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
+                  <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">{{ ont.vlan ?? '—' }}</td>
+                  <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">{{ ont.onu_type ?? '—' }}</td>
+                  <td class="px-3 py-3 text-slate-500 text-xs hidden md:table-cell whitespace-nowrap">{{ new Date(ont.created_at).toLocaleDateString('es-PE') }}</td>
+                  <td class="px-3 py-3">
+                    <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-700">Activo</span>
+                    <span v-else class="text-slate-500 text-xs">—</span>
+                  </td>
+                  <!-- "Señal"/"Zona"/"TR-069" se sacaron de la fila: son EXACTAMENTE lo
+                       mismo que ya ofrece el detalle (clic en la fila abre
+                       OntDetailModal, que tiene "Consultar señal"/"Editar zona"/
+                       "Gestionar TR-069") — tenerlos duplicados aca era lo que hacia
+                       esta columna tan ancha que la fila se desbordaba hacia la
+                       derecha sin forma practica de llegar a "Eliminar" en una tabla
+                       de cientos de filas (la barra de scroll horizontal queda al
+                       final de TODA la tabla). Solo quedan las 2 acciones que el
+                       modal de detalle no cubre. -->
+                  <td class="px-3 py-3 text-right space-x-2 whitespace-nowrap text-xs" @click.stop>
+                    <button
+                      class="text-slate-600 hover:text-slate-900 disabled:opacity-40"
+                      :disabled="oltWriteBusy && togglingId !== ont.id"
+                      @click="handleToggle(ont)"
+                    >
+                      {{ togglingId === ont.id ? 'Aplicando...' : ont.admin_state === 'enable' ? 'Desactivar' : 'Activar' }}
+                    </button>
+                    <button
+                      class="text-red-500/80 hover:text-red-600 disabled:opacity-40"
+                      :disabled="oltWriteBusy && deletingId !== ont.id"
+                      @click="handleDelete(ont)"
+                    >
+                      {{ deletingId === ont.id ? 'Eliminando...' : 'Eliminar' }}
+                    </button>
+                  </td>
+                  <td class="px-2 py-3 text-slate-300 text-center" aria-hidden="true">›</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+        <UnconfiguredOntsTab
+          v-else-if="activeOntTab === 'uncfg'"
+          :onts="newUnconfiguredOnts"
+          :loading="unconfiguredLoading"
+          :error="unconfiguredError"
+          :checked-at="unconfiguredCheckedAt"
+          :live="unconfiguredLive"
+          @refresh="loadUnconfigured()"
+          @refresh-live="loadUnconfigured({ live: true })"
+          @authorize="openAuthorize($event)"
+        />
+        <ReconnectOntsTab
+          v-else-if="activeOntTab === 'reconnect'"
+          :onts="reconnectOnts"
+          :loading="unconfiguredLoading"
+          :error="unconfiguredError"
+          :checked-at="unconfiguredCheckedAt"
+          :live="unconfiguredLive"
+          @refresh="loadUnconfigured()"
+          @refresh-live="loadUnconfigured({ live: true })"
+          @reauthorize="openAuthorize($event)"
+        />
+        <DisabledOntsTab
+          v-else
+          :items="disabledOnts"
+          :loading="disabledLoading"
+          :error="disabledError"
+          :checked-at="disabledCheckedAt"
+          :enabling-id="enablingDisabledId"
+          @refresh="loadDisabled"
+          @enable-service="handleEnableService"
+        />
+      </div>
+
+      <!-- 4) Telemetria: en seccion desplegable (cerrada por defecto, misma data/gauges de siempre) -->
+      <details class="surface p-5 mb-6 relative overflow-hidden">
+        <summary class="text-sm font-semibold flex items-center gap-2 cursor-pointer list-none">🏁 Telemetría</summary>
         <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-500 via-emerald-500 to-amber-500"></div>
 
-        <div class="flex items-center justify-between mb-5">
-          <div class="text-sm font-semibold flex items-center gap-2">🏁 Telemetría</div>
-          <div class="text-xs text-slate-500">
+        <div class="flex items-center justify-end mt-4 mb-1">
+          <span class="text-xs text-slate-500">
             {{ healthLoading ? 'Consultando...' : '' }}
             <button v-if="!healthLoading" class="text-sky-600 hover:underline" @click="loadHealth">Actualizar</button>
-          </div>
+          </span>
         </div>
 
         <p v-if="healthError" class="text-xs text-red-600 mb-4">{{ healthError }}</p>
@@ -979,253 +1200,90 @@ const gauges = computed(() => {
         </template>
 
         <p v-else class="text-sm text-slate-500">Consultando telemetría...</p>
-      </div>
+      </details>
 
-      <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-6">
-        <h2 class="text-sm font-semibold mb-3">Consultar puerto GPON</h2>
-        <div class="flex flex-wrap items-end gap-3">
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Puerto PON</label>
-            <select v-model="portSelection" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
-              <option value="all">TODOS los puertos</option>
-              <option v-for="p in knownPorts" :key="`${p.slot}/${p.port}`" :value="`${p.slot}/${p.port}`">
-                Slot {{ p.slot }} · Puerto {{ p.port }} ({{ p.count }})
-              </option>
-              <option value="manual">Otro puerto...</option>
-            </select>
-          </div>
-          <template v-if="portSelection === 'manual'">
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Slot</label>
-              <input v-model.number="slot" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Puerto</label>
-              <input v-model.number="port" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
-            </div>
-          </template>
-          <button v-if="portSelection === 'all'" :disabled="oltWriteBusy || fullSyncing" class="btn-secondary" @click="handleTriggerFullSync">
-            {{ fullSyncing ? 'Escaneando...' : 'Escanear todos los puertos' }}
-          </button>
-          <button v-else :disabled="oltWriteBusy" class="btn-secondary" @click="handlePortSync">
-            {{ syncing ? 'Sincronizando...' : 'Sincronizar este puerto' }}
-          </button>
-          <button v-if="canAuthorizeOnt" :disabled="oltWriteBusy" class="btn-primary" @click="openAuthorize()">
-            + Registrar ONT
-          </button>
-        </div>
-        <p v-if="portSelection === 'all' && fullSyncMessage" class="text-xs text-slate-600 mt-3">{{ fullSyncMessage }}</p>
-        <p v-if="syncMessage" class="text-xs text-slate-600 mt-3">{{ syncMessage }}</p>
-        <p class="text-xs text-slate-500 mt-3">
-          Registrar / activar / desactivar / eliminar ya validados contra tu OLT real (ver reporte de la Fase 4).
-          Solo la lectura de señal óptica sigue sin probar. "TODOS" escanea en segundo plano (no bloquea la
-          pantalla) — el listado de puertos se arma con los que ya tienen alguna ONT registrada aquí; un puerto
-          recién cableado sin ninguna todavía usa "Otro puerto...".
-        </p>
-      </div>
+      <!-- 5) Alertas y herramientas de sincronizacion: seccion diferenciada (antes el
+           banner de alertas vivia arriba de todo y las herramientas quedaban sueltas
+           entre la ocupacion PON y las pestañas de ONTs). -->
+      <div class="surface p-5 mb-6">
+        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Alertas y sincronización</h2>
 
-      <div v-if="ponOccupancy.length" class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-6">
-        <h2 class="text-sm font-semibold mb-3">Ocupación por puerto PON</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          <div v-for="p in ponOccupancy" :key="`${p.slot}/${p.port}`" class="rounded-lg bg-white border border-slate-200 p-3">
-            <div class="text-xs text-slate-500 mb-1">Slot {{ p.slot }} · Puerto {{ p.port }}</div>
-            <div class="text-sm font-semibold">{{ p.count }}/{{ p.max }}</div>
-            <div class="h-1.5 rounded-full bg-slate-200 overflow-hidden mt-1">
-              <div class="h-full bg-sky-500" :style="{ width: `${p.pct}%` }"></div>
-            </div>
+        <!--
+          Fase 3 comercial OLT: alertas proactivas (caida/recuperacion online-
+          offline, cruce de umbral de senal), exclusivas de este panel y en
+          vivo (SSE) — solo lo que llego mientras esta pantalla estuvo
+          abierta, se vacia al recargar o reabrir. Ver src/stores/olt.ts
+          (OltAlert) y server/src/services/oltAlerts.ts.
+        -->
+        <div v-if="oltStore.alerts.length" class="mb-4 space-y-2">
+          <div
+            v-for="a in oltStore.alerts"
+            :key="a.id"
+            class="flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+            :class="a.kind === 'offline' || a.kind === 'lowSignal' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'"
+          >
+            <span>{{ a.message }}</span>
+            <button class="text-xs opacity-60 hover:opacity-100" @click="oltStore.dismissAlert(a.id)">✕</button>
           </div>
         </div>
-        <p class="text-xs text-slate-500 mt-3">
-          Basado en lo ya sincronizado aquí (olt_onts), no en un escaneo nuevo — puede no reflejar una ONT
-          cableada en la OLT real que todavía no se importó/sincronizó.
-        </p>
-      </div>
+        <p v-else class="text-xs text-slate-500 mb-4">Sin alertas activas en esta sesión.</p>
 
-      <div ref="ontTabsEl" class="flex gap-2 border-b border-slate-200 mb-4">
-        <button
-          class="px-4 py-2 text-sm font-medium rounded-t-lg"
-          :class="activeOntTab === 'uncfg' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
-          @click="activeOntTab = 'uncfg'"
-        >
-          Nuevas por Autorizar ({{ newUnconfiguredOnts.length }})
-        </button>
-        <button
-          class="px-4 py-2 text-sm font-medium rounded-t-lg"
-          :class="activeOntTab === 'reconnect' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
-          @click="activeOntTab = 'reconnect'"
-        >
-          Desconfiguradas / Por Reconectar ({{ reconnectOnts.length }})
-        </button>
-        <button
-          class="px-4 py-2 text-sm font-medium rounded-t-lg"
-          :class="activeOntTab === 'disabled' ? 'bg-slate-100 text-slate-900 border border-b-0 border-slate-200' : 'text-slate-500 hover:text-slate-700'"
-          @click="activeOntTab = 'disabled'"
-        >
-          Deshabilitadas / Cortadas ({{ disabledOnts.length }})
-        </button>
-      </div>
-
-      <UnconfiguredOntsTab
-        v-if="activeOntTab === 'uncfg'"
-        :onts="newUnconfiguredOnts"
-        :loading="unconfiguredLoading"
-        :error="unconfiguredError"
-        :checked-at="unconfiguredCheckedAt"
-        :live="unconfiguredLive"
-        @refresh="loadUnconfigured()"
-        @refresh-live="loadUnconfigured({ live: true })"
-        @authorize="openAuthorize($event)"
-      />
-      <ReconnectOntsTab
-        v-else-if="activeOntTab === 'reconnect'"
-        :onts="reconnectOnts"
-        :loading="unconfiguredLoading"
-        :error="unconfiguredError"
-        :checked-at="unconfiguredCheckedAt"
-        :live="unconfiguredLive"
-        @refresh="loadUnconfigured()"
-        @refresh-live="loadUnconfigured({ live: true })"
-        @reauthorize="openAuthorize($event)"
-      />
-      <DisabledOntsTab
-        v-else
-        :items="disabledOnts"
-        :loading="disabledLoading"
-        :error="disabledError"
-        :checked-at="disabledCheckedAt"
-        :enabling-id="enablingDisabledId"
-        @refresh="loadDisabled"
-        @enable-service="handleEnableService"
-      />
-
-      <div class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4 mb-6">
-        <h2 class="text-sm font-semibold mb-1">¿Ves menos ONTs de las que tienes, o sin nombre/señal?</h2>
-        <p class="text-xs text-slate-600 mb-3">
-          Si esta OLT ya tenia ONTs configuradas desde antes de usar SmartRayco (ej. desde SmartOLT), no
-          apareceran aqui hasta importarlas. Trae serial, tipo, nombre (de la OLT), plan, VLAN y señal
-          Rx/Tx de todas. Esto solo lee la OLT (sin cambiar nada) y puede tardar varios minutos con
-          cientos de ONTs — se puede repetir cuando quieras para refrescar todo.
-        </p>
-        <button :disabled="oltWriteBusy" class="btn-secondary" @click="handleImportExisting">
-          {{ importing ? 'Importando...' : 'Importar / actualizar ONTs desde la OLT' }}
-        </button>
-        <p v-if="importMessage" class="text-xs text-slate-600 mt-3">{{ importMessage }}</p>
-      </div>
-
-      <div ref="ontsTableEl" class="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <h2 class="text-lg font-semibold">ONTs registradas</h2>
-        <div v-if="statusFilter !== 'all'" class="flex items-center gap-2 text-xs">
-          <span class="badge bg-sky-500/15 text-sky-700">Filtro: {{ STATUS_FILTER_LABEL[statusFilter] }} ({{ filteredOnts.length }})</span>
-          <button class="text-slate-600 hover:text-slate-900" @click="statusFilter = 'all'">Quitar filtro</button>
+        <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-4">
+          <h3 class="text-sm font-semibold mb-3">Consultar puerto GPON</h3>
+          <div class="flex flex-wrap items-end gap-3">
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Puerto PON</label>
+              <select v-model="portSelection" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm">
+                <option value="all">TODOS los puertos</option>
+                <option v-for="p in knownPorts" :key="`${p.slot}/${p.port}`" :value="`${p.slot}/${p.port}`">
+                  Slot {{ p.slot }} · Puerto {{ p.port }} ({{ p.count }})
+                </option>
+                <option value="manual">Otro puerto...</option>
+              </select>
+            </div>
+            <template v-if="portSelection === 'manual'">
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Slot</label>
+                <input v-model.number="slot" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Puerto</label>
+                <input v-model.number="port" type="number" min="1" class="w-24 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm" />
+              </div>
+            </template>
+            <button v-if="portSelection === 'all'" :disabled="oltWriteBusy || fullSyncing" class="btn-secondary" @click="handleTriggerFullSync">
+              {{ fullSyncing ? 'Escaneando...' : 'Escanear todos los puertos' }}
+            </button>
+            <button v-else :disabled="oltWriteBusy" class="btn-secondary" @click="handlePortSync">
+              {{ syncing ? 'Sincronizando...' : 'Sincronizar este puerto' }}
+            </button>
+            <button v-if="canAuthorizeOnt" :disabled="oltWriteBusy" class="btn-primary" @click="openAuthorize()">
+              + Registrar ONT
+            </button>
+          </div>
+          <p v-if="portSelection === 'all' && fullSyncMessage" class="text-xs text-slate-600 mt-3">{{ fullSyncMessage }}</p>
+          <p v-if="syncMessage" class="text-xs text-slate-600 mt-3">{{ syncMessage }}</p>
+          <p class="text-xs text-slate-500 mt-3">
+            Registrar / activar / desactivar / eliminar ya validados contra tu OLT real (ver reporte de la Fase 4).
+            Solo la lectura de señal óptica sigue sin probar. "TODOS" escanea en segundo plano (no bloquea la
+            pantalla) — el listado de puertos se arma con los que ya tienen alguna ONT registrada aquí; un puerto
+            recién cableado sin ninguna todavía usa "Otro puerto...".
+          </p>
         </div>
-      </div>
-      <input
-        v-model="ontSearch"
-        placeholder="Buscar por serial, cliente o shelf/slot/port..."
-        class="field-input mb-3"
-      />
-      <!-- max-h + overflow-y-auto: con cientos de ONTs la tabla podia ser mucho
-           mas alta que la pantalla, y la barra de scroll HORIZONTAL de
-           table-shell (que vive al pie de ese contenedor) quedaba miles de
-           pixeles mas abajo, practicamente inalcanzable. Con la altura
-           limitada, las dos barras de scroll quedan siempre a la vista aca
-           mismo. El encabezado queda fijo arriba mientras se baja. -->
-      <div class="table-shell max-h-[70dvh] overflow-y-auto">
-        <!-- En celular se ocultan las columnas secundarias (quedan Serial/Cliente/
-             Estado/Señal/TR-069/Acciones) — antes las 11 columnas forzaban scroll
-             horizontal incluso para ver "Acciones". El detalle completo sigue
-             disponible al tocar la fila (openOntDetail). -->
-        <table class="w-full text-sm min-w-[480px] md:min-w-[760px]">
-          <thead class="bg-slate-100 text-slate-600 text-xs uppercase sticky top-0 z-10">
-            <tr>
-              <!-- Antes decia "Shelf/Slot/Port/ID": ese titulo largo obligaba a la
-                   columna a ser mas ancha que el dato real ("1/2/1:1", corto) —
-                   un titulo corto + whitespace-nowrap deja que la columna se
-                   achique al tamaño del dato en vez del titulo. -->
-              <th class="text-left px-2 py-3 hidden md:table-cell whitespace-nowrap shadow-[0_1px_0_0_var(--color-slate-200)]" title="Shelf/Slot/Port:ID de la ONU">Posición</th>
-              <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Serial</th>
-              <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Cliente</th>
-              <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Zona</th>
-              <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Estado</th>
-              <th class="text-left px-3 py-3 whitespace-nowrap shadow-[0_1px_0_0_var(--color-slate-200)]">Rx/Tx (dBm)</th>
-              <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">VLAN</th>
-              <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Tipo</th>
-              <th class="text-left px-3 py-3 hidden md:table-cell shadow-[0_1px_0_0_var(--color-slate-200)]">Alta</th>
-              <th class="text-left px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">TR-069</th>
-              <th class="text-right px-3 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]">Acciones</th>
-              <!-- Columna solo-icono: en tactil no hay ":hover" que sugiera que la
-                   fila es clickeable (abre el detalle), asi que el ">" cumple ese
-                   rol visualmente en vez de depender del cursor. -->
-              <th class="w-8 px-2 py-3 shadow-[0_1px_0_0_var(--color-slate-200)]"><span class="sr-only">Abrir detalle</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!filteredOnts.length">
-              <td colspan="12" class="px-4 py-6 text-center text-slate-500">
-                {{ ontSearch || statusFilter !== 'all' ? 'Sin resultados para ese filtro/busqueda.' : 'Sin ONTs. Sincroniza un puerto o registra una nueva.' }}
-              </td>
-            </tr>
-            <tr
-              v-for="ont in filteredOnts"
-              :key="ont.id"
-              class="border-t border-slate-200 cursor-pointer hover:bg-slate-50"
-              @click="openOntDetail(ont)"
-            >
-              <td class="px-2 py-3 font-mono text-xs hidden md:table-cell whitespace-nowrap">{{ ont.frame }}/{{ ont.slot }}/{{ ont.port }}:{{ ont.ont_id }}</td>
-              <td class="px-3 py-3 font-mono text-xs">{{ ont.serial }}</td>
-              <td class="px-3 py-3 text-slate-600">
-                <template v-if="ont.clients">{{ ont.clients.first_name }} {{ ont.clients.last_name }}</template>
-                <template v-else-if="ont.description">
-                  {{ ont.description }}
-                  <span class="block text-[10px] text-slate-400">de la OLT, sin vincular</span>
-                </template>
-                <template v-else>—</template>
-              </td>
-              <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">
-                <span v-if="ont.zones">{{ ont.zones.name }}</span>
-                <span v-else-if="ont.splitter">{{ ont.splitter }}<span v-if="ont.splitter_port"> / {{ ont.splitter_port }}</span></span>
-                <span v-else class="text-slate-400">—</span>
-              </td>
-              <td class="px-3 py-3">
-                <span class="badge" :class="STATUS_CLASS[ont.status]">{{ STATUS_LABEL[ont.status] ?? ont.status }}</span>
-              </td>
-              <td class="px-3 py-3 text-slate-600 text-xs whitespace-nowrap">{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }}</td>
-              <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">{{ ont.vlan ?? '—' }}</td>
-              <td class="px-3 py-3 text-slate-600 text-xs hidden md:table-cell">{{ ont.onu_type ?? '—' }}</td>
-              <td class="px-3 py-3 text-slate-500 text-xs hidden md:table-cell whitespace-nowrap">{{ new Date(ont.created_at).toLocaleDateString('es-PE') }}</td>
-              <td class="px-3 py-3">
-                <span v-if="ont.tr069_enabled" class="badge bg-emerald-500/15 text-emerald-700">Activo</span>
-                <span v-else class="text-slate-500 text-xs">—</span>
-              </td>
-              <!-- "Señal"/"Zona"/"TR-069" se sacaron de la fila: son EXACTAMENTE lo
-                   mismo que ya ofrece el detalle (clic en la fila abre
-                   OntDetailModal, que tiene "Consultar señal"/"Editar zona"/
-                   "Gestionar TR-069") — tenerlos duplicados aca era lo que hacia
-                   esta columna tan ancha que la fila se desbordaba hacia la
-                   derecha sin forma practica de llegar a "Eliminar" en una tabla
-                   de cientos de filas (la barra de scroll horizontal queda al
-                   final de TODA la tabla). Solo quedan las 2 acciones que el
-                   modal de detalle no cubre. -->
-              <td class="px-3 py-3 text-right space-x-2 whitespace-nowrap text-xs" @click.stop>
-                <button
-                  class="text-slate-600 hover:text-slate-900 disabled:opacity-40"
-                  :disabled="oltWriteBusy && togglingId !== ont.id"
-                  @click="handleToggle(ont)"
-                >
-                  {{ togglingId === ont.id ? 'Aplicando...' : ont.admin_state === 'enable' ? 'Desactivar' : 'Activar' }}
-                </button>
-                <button
-                  class="text-red-500/80 hover:text-red-600 disabled:opacity-40"
-                  :disabled="oltWriteBusy && deletingId !== ont.id"
-                  @click="handleDelete(ont)"
-                >
-                  {{ deletingId === ont.id ? 'Eliminando...' : 'Eliminar' }}
-                </button>
-              </td>
-              <td class="px-2 py-3 text-slate-300 text-center" aria-hidden="true">›</td>
-            </tr>
-          </tbody>
-        </table>
+
+        <div class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4">
+          <h3 class="text-sm font-semibold mb-1">¿Ves menos ONTs de las que tienes, o sin nombre/señal?</h3>
+          <p class="text-xs text-slate-600 mb-3">
+            Si esta OLT ya tenia ONTs configuradas desde antes de usar SmartRayco (ej. desde SmartOLT), no
+            apareceran aqui hasta importarlas. Trae serial, tipo, nombre (de la OLT), plan, VLAN y señal
+            Rx/Tx de todas. Esto solo lee la OLT (sin cambiar nada) y puede tardar varios minutos con
+            cientos de ONTs — se puede repetir cuando quieras para refrescar todo.
+          </p>
+          <button :disabled="oltWriteBusy" class="btn-secondary" @click="handleImportExisting">
+            {{ importing ? 'Importando...' : 'Importar / actualizar ONTs desde la OLT' }}
+          </button>
+          <p v-if="importMessage" class="text-xs text-slate-600 mt-3">{{ importMessage }}</p>
+        </div>
       </div>
     </template>
 
