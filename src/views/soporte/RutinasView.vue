@@ -60,6 +60,12 @@ const SUBTIPOS: Record<RoutineTipo, { value: string; label: string }[]> = {
     { value: 'tv_box', label: 'Instalación de TV Box' },
     { value: 'mesh', label: 'Instalación de Repetidor Mesh' },
     { value: 'inspeccion', label: 'Inspección' },
+    // Fase 3 OLT — Fase C (ver ESTADO_DESARROLLO.md 13an): subtipo nuevo
+    // dentro del mismo grupo "Servicio a Cliente" ya existente, sin crear
+    // ningun modulo/tabla aparte. El contrato a trasladar y el flujo de
+    // cierre en App Campo quedan PENDIENTES de autorizar una migracion
+    // minima (routines.contract_id, que hoy no existe) — ver 13an.
+    { value: 'traslado_servicio', label: 'Traslado de servicio' },
   ],
   logistica: [
     { value: 'recojo', label: 'Recojo de encomienda' },

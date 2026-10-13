@@ -3207,6 +3207,116 @@ zona al cerrar) antes de autorizar push/deploy; luego decidir si se
 amplía a Rutinas (requiere UI nueva) y/o a Altas (requiere autorización
 explícita, hoy fuera de alcance).
 
+## 13an. Fase 3 OLT — Fase C (continuación): "Traslado de servicio" en Rutinas — DETENIDO, falta autorizar migración mínima (2026-10-13)
+
+Continuación de 13am, a pedido explícito del usuario: completar el flujo
+"Traslado de servicio" de punta a punta (creación de la rutina → cierre en
+App Campo), reutilizando el subtipo/catálogo de Rutinas ya existente
+(Fase 129) en vez de crear un módulo nuevo.
+
+### Verificación dirigida (antes de escribir nada más)
+Confirmado por SQL de solo lectura contra Supabase
+(`information_schema.columns`), no asumido: la tabla `routines` **no
+tiene ninguna columna que identifique un contrato/servicio específico**
+(no hay `contract_id`). Sí existen y son reutilizables sin ningún cambio
+de esquema: `zone_id`, `nap_elemento_id`, `direccion_destino` (ya usados
+como "destino" en rutinas de visita comercial, Fase 129 — misma idea para
+el destino de un traslado) y `client_id`. `work_order_closures.ont_serial`
+también ya existe y nunca se usa para rutinas hoy — sirve tal cual para
+que el técnico registre el serial nuevo si marca "ONT reemplazada", sin
+columna nueva.
+
+El único dato que un traslado necesita y que **no existe en ningún lado
+de `routines`** es el contrato específico a trasladar — imprescindible
+(requisito 2 del usuario) porque un cliente puede tener más de un
+servicio (Fase 37) y nunca se debe elegir "el" contrato por `client_id`
+solo (regla permanente 10 de CLAUDE.md, agregada en 13am).
+
+### Decisión: DETENER la implementación de escritura, presentar la modificación mínima
+
+Por instrucción explícita del usuario ("si la estructura actual de
+Rutinas no permite guardar estos datos... detener la implementación de
+escrituras y presentar primero la modificación mínima necesaria") — no se
+implementó el selector de contrato, los campos nuevos de App Campo ni la
+lógica de cierre, porque no tienen dónde persistir el contrato sin esa
+columna (sería código a medio terminar, sin un destino real en la BD).
+
+**Migración mínima propuesta** (escrita en el repo, **NO aplicada en
+Supabase todavía** — requiere pedido explícito del usuario en un turno,
+regla 16 de CLAUDE.md):
+`supabase/migrations/20261013170000_fase159_routines_contract_id.sql`
+
+```sql
+alter table public.routines
+  add column if not exists contract_id uuid references public.service_contracts (id) on delete set null;
+create index if not exists idx_routines_contract on public.routines (contract_id) where contract_id is not null;
+```
+
+Columna nullable, mismo patrón FK ya usado para esta misma necesidad en
+`olt_onts`/`inventory_units`/`descuentos_compensacion` (Fase 37) — no
+afecta ninguna rutina ni subtipo existente. Las políticas RLS de
+`routines` son por fila (no por columna), así que no necesitan cambios:
+`routines_update_staff` ya permite que el técnico asignado edite
+cualquier columna de su propia rutina no completada.
+
+### Lo que SÍ se implementó ya (sin riesgo, sin cambio de esquema)
+- **`src/views/soporte/RutinasView.vue`**: nuevo subtipo
+  `traslado_servicio` ("Traslado de servicio") dentro del grupo ya
+  existente `servicio_cliente` (junto a `tv_box`/`mesh`/`inspeccion`) —
+  cumple el requisito 1 ("incorporar en los tipos/subtipos existentes,
+  sin crear un módulo nuevo") sin tocar la tabla. Visible en el selector
+  de Subtipo del modal de creación/edición ya existente.
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+
+### Lo que queda pendiente de la columna (diseñado, no implementado)
+Una vez autorizada y aplicada la migración:
+1. **`src/types/domain.ts`**: `Routine.contract_id: string | null` +
+   embed `service_contracts` en `ROUTINE_SELECT` (routines.ts) para traer
+   contrato/zona/dirección actuales — mismo patrón que el embed de Fase B
+   en `olt_onts`.
+2. **`RutinasView.vue`**: selector de contrato (no solo cliente) cuando
+   `subtipo === 'traslado_servicio'` — listar los `service_contracts`
+   activos del cliente elegido, obligatorio si tiene más de uno (cumple
+   requisito 2). `zone_id`/`nap_elemento_id`/`direccion_destino` del
+   formulario pasan a representar el DESTINO del traslado (reutilizando
+   los mismos campos que ya usa una visita comercial, sin duplicarlos).
+3. **App Campo (`CampoTrabajoDetailView.vue`), solo para esta rutina**:
+   sección "Traslado de servicio" que muestra en solo lectura la
+   dirección/zona/NAP/puerto/ONT ACTUALES (consultados en vivo por
+   `contract_id`, mismo cruce que `ontZoneDiscrepancy.ts` de la Fase B —
+   reutilizar, no duplicar) junto al formulario YA existente de
+   zona/NAP de cierre (reutilizando `closureForm.zoneId`/`napElementoId`,
+   sin pedir el dato dos veces) + radio "Conservar ONT" / "ONT
+   reemplazada" (si reemplazada, reusa el campo `ontSerial` que
+   `ClosureInput`/`work_order_closures` ya tienen, sin columna nueva).
+4. **`src/stores/campo.ts`**: extender `resolveClosureTargetZoneId`
+   (Fase C) para que, cuando `jobType === 'routine'` y la rutina es un
+   traslado, la sincronización de Fase 158 use `routine.contract_id` en
+   vez de `input.contractId` generico (hoy las rutinas nunca traen
+   `contractId`, ver `fromRoutine` en campo.ts) — **sin modificar
+   vínculos si el técnico marcó "ONT reemplazada"**: en ese caso se
+   omite la llamada a `assignContractToNapAndSyncOntZone` y se deja un
+   aviso explícito para revisión administrativa (cumple requisito 6: no
+   asumir que es el mismo equipo, no aprovisionar, no tocar la OLT).
+5. Pruebas nuevas: selección de contrato obligatoria con 2+ servicios,
+   cierre con "Conservar ONT" (sincroniza) vs "ONT reemplazada" (no
+   sincroniza, solo avisa), reintento idempotente, verificación de que
+   rutinas normales/averías/altas no cambian en nada (mismo criterio que
+   13am).
+
+### Riesgos si se continuara sin la migración
+Guardar el contrato en un campo de texto libre existente
+(`description`/`closure_notes`) para evitar la migración fue considerado
+y descartado: rompería la regla "no inventar relaciones" (sería
+re-parsear texto para encontrar un UUID) y el cruce con Fase 158
+necesita un `contract_id` real y confiable, no una convención informal.
+
+**Estado real: Fase C sigue INCOMPLETA de punta a punta** — el camino ya
+automatizado (ticket `reconnection_relocation`, 13am) funciona; el camino
+"Rutina de traslado de servicio" pedido en este turno está diseñado pero
+bloqueado en el primer paso de escritura (falta la columna). No se
+declara terminado, según lo pedido explícitamente por el usuario.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

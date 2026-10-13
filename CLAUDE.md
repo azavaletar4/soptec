@@ -153,6 +153,14 @@ completo.
     paralela nueva. Ante una discrepancia entre fuentes, se informa (nunca
     se calla ni se adivina) y se deja para revisión humana — regla 8.
 
+**Pendiente de autorización (2026-10-13, ver `ESTADO_DESARROLLO.md` 13an)**:
+el flujo "Traslado de servicio" en Rutinas quedó DETENIDO porque
+`routines` no tiene `contract_id` (imprescindible: un cliente puede tener
+más de un servicio, regla 10) — migración mínima ya escrita en
+`supabase/migrations/20261013170000_fase159_routines_contract_id.sql`,
+**no aplicada todavía**. No continuar esa UI/lógica de cierre sin aplicar
+primero esa columna (o una decisión distinta del usuario).
+
 ## Registro de errores de campo
 
 Todo bug reportado desde campo (técnicos/administradores usando el sistema
