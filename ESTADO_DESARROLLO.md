@@ -2172,6 +2172,41 @@ Luego, si se quiere ir más allá de esta v1, evaluar si vale la pena
 persistir un historial corto de alertas (implicaría una tabla/columna
 nueva, fuera del alcance de hoy) antes de considerar un canal externo.
 
+## 13ab. Fase 3 OLT — ocupación PON + alertas v1 DESPLEGADAS (2026-10-13)
+
+Despliegue controlado autorizado por el usuario de los 2 commits de
+Fase 3 (13z/13aa). **VM confirmada en `b485f07`**.
+
+- **Respaldo**: tag `rollback-20261013151328` → `a5c67c4` (commit previo
+  en la VM), creado y verificado antes del `git pull`.
+- **Despliegue**: `bash deploy/update.sh` — build y recreación de
+  `backend`/`frontend` sin errores. `caddy`/`genieacs`/`mongo` no se
+  tocaron (sin cambios).
+- **Verificado, solo lectura, sin tocar OLT/MikroTik/Supabase**:
+  - Los 5 contenedores `Up` (backend/frontend recreados, estables
+    >1 min sin reinicios).
+  - Backend arrancó limpio con **todos** los schedulers activos,
+    incluido `olt-sync-scheduler` (el que ahora detecta alertas).
+  - Un ciclo real de `olt-sync-scheduler` ya corrió tras el despliegue
+    (`online=645 offline=69 sin-autorizar=12 senal-baja=1
+    actualizadas=1`) **sin excepciones** en el código nuevo de alertas.
+  - `GET /api/olt-devices` y `GET /api/olt-devices/:id/events` (el SSE
+    de alertas) responden **401 sin token** — el guard de autenticación
+    sigue intacto, nadie no autorizado puede recibir alertas.
+  - Frontend (`/login`) responde 200 vía Caddy.
+- **No verificado** (mismo límite de las últimas 2 sesiones): la vista
+  real del panel (tabla "Ocupación por puerto PON" y el banner de
+  alertas) — no hay usuario de prueba documentado para iniciar sesión y
+  no se va a adivinar/crear credenciales. Pendiente de que un
+  admin/técnico real abra el panel OLT y confirme visualmente.
+- **No se provocaron desconexiones de ONU** ni se tocó OLT/MikroTik/
+  PPPoE/Supabase para esta verificación — todo fue lectura de logs y
+  respuestas HTTP de auth.
+
+**Pendientes**: verificación visual real (arriba); las 2 certificaciones
+de Fase 2 (13y) y el canal de alertas más allá de esta v1 siguen
+abiertos, sin acción nueva pedida todavía.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
