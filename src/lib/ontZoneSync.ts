@@ -20,6 +20,23 @@ export function canSyncOltZone(role: string | null | undefined): boolean {
   return (OLT_ZONE_SYNC_ROLES as readonly string[]).includes(role ?? '');
 }
 
+/**
+ * Revisión puntual (2026-10-13, Fase 159, punto 2): decide si un cierre
+ * puede usar la vía TRANSACCIONAL de Fase 158 (NAP + zona de la ONT en la
+ * OLT) — nunca cuando `ontReplaced` es true, sin importar el rol ni el
+ * tipo de trabajo. Extraída a función pura para que la garantía de "ONT
+ * reemplazada jamás dispara una sincronización automática contra la OLT"
+ * (requisito explícito: "no automatizar cambios físicos en OLT") sea
+ * verificable con una prueba, no solo una condición inline en campo.ts.
+ */
+export function shouldUseTransactionalNapSync(input: {
+  jobType: string;
+  ontReplaced: boolean;
+  role: string | null | undefined;
+}): boolean {
+  return input.jobType !== 'installation' && !input.ontReplaced && canSyncOltZone(input.role);
+}
+
 /** Forma del 3er valor que devuelve assign_contract_nap_sync_ont_zone (ver reportOltZoneSync en ClientServiceDetailView.vue). */
 export interface OntZoneRpcResult {
   ontZoneSynced: boolean;

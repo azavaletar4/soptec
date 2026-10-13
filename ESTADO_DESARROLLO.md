@@ -3503,6 +3503,125 @@ confirmar destino → cerrar) en un entorno de prueba antes de pedir
 autorización de push/deploy — recién ahí se puede declarar Fase C
 terminada de punta a punta, tal como exigió el usuario.
 
+## 13ap. Fase 3 OLT — Fase C: revisión puntual de 3 riesgos antes de push/deploy (2026-10-13, IMPLEMENTADO, commit local sin push)
+
+Revisión puntual pedida por el usuario sobre el commit `ea58293` (Fase
+159), antes de autorizar push/deploy — 3 puntos exactos, sin auditoría
+general.
+
+### 1. Historial: "anterior" desactualizado en un reintento
+**Causa real confirmada** (no asumida): `activeContract` se carga una
+sola vez al abrir la pantalla y nunca se refresca durante la sesión —
+dentro de la MISMA sesión, un reintento ya era seguro. El riesgo real
+era un reintento vía una **página nueva** (técnico cierra y reabre la
+rutina) después de un fallo parcial donde el primer intento ya alcanzó
+a escribir la zona/NAP nueva en el contrato: ahí `activeContract`
+reflejaría esa zona YA actualizada como si fuera "la actual", y una nota
+nueva diría "sin cambio" — pisando (por `upsert`, no `append`) la nota
+correcta del primer intento.
+
+**Corrección**: `resolveTrasladoAnteriorSnapshot` (nueva, pura,
+`routineTraslado.ts`) — el estado "anterior" (dirección, zona **y NAP**,
+el pedido mencionaba ambas) se congela la primera vez que se abre la
+pantalla para esa rutina y se persiste con el mismo mecanismo de
+borradores ya usado para `closureForm` (`formDrafts.ts`, IndexedDB,
+sobrevive a cerrar la app). Cualquier apertura posterior — misma sesión
+o una nueva — reutiliza ese snapshot congelado, nunca lo recalcula. Se
+borra recién cuando el cierre termina con éxito
+(`clearDraft(trasladoSnapshotKey)`, junto al borrador normal).
+"No duplicar notas de cierre" ya estaba garantizado (la nota se
+`upsert`ea, nunca se concatena) — se agregó una prueba explícita que lo
+confirma.
+
+### 2. ONT reemplazada: que quede claro que NO vincula ni aprovisiona
+**Verificado**: ningún código de este flujo llama a una función que
+escriba en la OLT real o en MikroTik — solo `fibra.assignContractToNap`/
+`assignContractToNapAndSyncOntZone` (RPCs de Supabase sobre
+`fo_nap_puertos`/`service_contracts`/`olt_onts.zone_id`) y
+`contractsStore.updateContract` (Supabase). La garantía de "nunca
+sincroniza automáticamente si la ONT fue reemplazada" se extrajo a una
+función pura y TESTEADA: `shouldUseTransactionalNapSync`
+(`ontZoneSync.ts`) — devuelve `false` siempre que `ontReplaced` es
+`true`, sin importar rol ni tipo de trabajo (antes era una condición
+inline en `campo.ts`, ahora es verificable con pruebas).
+
+**UI reforzada**: el aviso bajo el campo de serial nuevo ahora es
+explícito y en rojo: "Registrar este serial aquí NO vincula la ONT
+nueva ni la aprovisiona en la OLT... No se realiza ninguna escritura
+automática en la OLT ni en MikroTik." (antes era una nota ámbar más
+genérica).
+
+### 3. Contratos múltiples: la sincronización nunca toca otro servicio
+**Ya estaba garantizado** a nivel de datos — `assign_contract_nap_sync_ont_zone`
+actúa por `p_contract_id` exacto (probado en `ontZoneNapSync.sql.test.ts`,
+caso "cliente con 2 servicios"), `resolveCurrentOntForContract` filtra
+por `contract_id` exacto, `contractsStore.updateContract` escribe con
+`.eq('id', id)`. Lo que faltaba era una **guarda defensiva en la
+pantalla**: `loadClientInfo` (ya existente, compartida con tickets/
+instalaciones) tiene *fallbacks* genéricos ("el contrato activo", "el
+primero") para cuando un trabajo no trae un `contractId` puntual — un
+traslado SIEMPRE lo trae, así que si esos fallbacks llegaran a activarse
+(el contrato exacto no apareció en la consulta), `activeContract`
+mostraría y *sincronizaría* un servicio distinto al que dice la rutina.
+
+**Corrección**: `trasladoContractMismatch` (computado nuevo) detecta esa
+discrepancia (`activeContract.id !== trabajo.contractId`) y: oculta toda
+la sección de confirmación/estado actual, muestra un aviso rojo
+explícito, y bloquea el cierre con un `closeError` claro — nunca
+sincroniza "a ciegas". No se tocó `loadClientInfo` en sí (lo comparten
+tickets/instalaciones, fuera de alcance de esta revisión puntual).
+
+### Archivos modificados
+- `src/lib/routineTraslado.ts` (`TrasladoAnteriorSnapshot`,
+  `resolveTrasladoAnteriorSnapshot`; `buildTrasladoHistorialNote`/
+  `TrasladoHistorialInput` ampliados con NAP anterior/nueva).
+- `src/lib/ontZoneSync.ts` (`shouldUseTransactionalNapSync`, nueva,
+  pura).
+- `src/stores/campo.ts` (usa `shouldUseTransactionalNapSync` en vez de
+  la condición inline).
+- `src/views/campo/CampoTrabajoDetailView.vue`
+  (`trasladoAnteriorSnapshot`/`ensureTrasladoAnteriorSnapshot`,
+  `trasladoContractMismatch`, nota reforzada de "ONT reemplazada",
+  banner de discrepancia de contrato, limpieza del snapshot al cerrar
+  con éxito).
+- `src/lib/__tests__/routineTraslado.test.ts` (+6 casos: snapshot
+  primera vez/reintento/valores null, multi-servicio explícito, no
+  duplica la nota).
+- `src/lib/__tests__/ontZoneSync.test.ts` (+4 casos:
+  `shouldUseTransactionalNapSync` — reemplazada siempre `false`,
+  conservada+rol válido `true`, instalación `false`, rol sin permiso
+  `false`).
+
+### Pruebas
+- `npm run test:fetch-timeout` → **127/127** (118 previos + 9 nuevos
+  netos — 2 pruebas de `buildTrasladoHistorialNote` se reescribieron
+  para incluir NAP, no se duplicaron).
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+- Casos específicos cubiertos (pedido explícito del usuario, "agregar
+  pruebas específicas... reutilizando lógica y pruebas existentes"):
+  reintento con snapshot ya guardado (ignora el estado ya mutado),
+  snapshot con valores `null` se respeta igual, nota idéntica en 2
+  llamadas con el mismo input (no duplica), `ontReplaced` bloquea la vía
+  transaccional en cualquier combinación de rol/tipo de trabajo, cliente
+  con 2 servicios resuelve cada ONT solo por su propio `contract_id`.
+
+### Riesgos pendientes (sin cambios respecto a 13ao, reconfirmados)
+- No probado todavía con un traslado real de punta a punta (sigue sin
+  autorizarse en este turno).
+- Sin tabla de auditoría estructurada — el historial sigue viviendo como
+  texto en `closure_notes`.
+- `trasladoContractMismatch` es una guarda defensiva para un caso que
+  **no debería ocurrir nunca** en la práctica (no se reprodujo, no se
+  forzó) — queda ahí por si acaso, no como corrección de un bug
+  observado.
+
+### Qué NO se tocó (confirmado)
+Sin escrituras a OLT/MikroTik/PPPoE (verificado explícitamente para el
+punto 2). Sin cambios en `loadClientInfo` (compartida con tickets/
+instalaciones). Sin otra migración. Sin traslados reales ejecutados.
+Sin push ni despliegue — **commit local únicamente**, pendiente de
+autorización.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

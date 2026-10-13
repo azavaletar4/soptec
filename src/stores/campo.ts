@@ -17,9 +17,9 @@ import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { compressImage } from '@/lib/imageCompression';
 import {
-  canSyncOltZone,
   describeOntZoneSyncOutcome,
   resolveClosureTargetZoneId,
+  shouldUseTransactionalNapSync,
   type OntZoneRpcResult,
 } from '@/lib/ontZoneSync';
 import {
@@ -685,7 +685,7 @@ export const useCampoStore = defineStore('campo', () => {
     let ontReplacedSkipped = false;
     if (input.napElementoId && input.contractId && input.clientId) {
       const capacity = napElemento?.puertos_total ?? NAP_CLIENT_LIMIT;
-      if (input.jobType !== 'installation' && !input.ontReplaced && canSyncOltZone(auth.role)) {
+      if (shouldUseTransactionalNapSync({ jobType: input.jobType, ontReplaced: input.ontReplaced, role: auth.role })) {
         const { ontZone } = await fibra.assignContractToNapAndSyncOntZone(input.napElementoId, input.contractId, input.clientId);
         ontZoneSyncOutcome = ontZone;
       } else {

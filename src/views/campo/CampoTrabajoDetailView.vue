@@ -28,7 +28,13 @@ import { MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotiv
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
 import { countOcupadosReales } from '@/lib/napOccupancy';
-import { isTrasladoServicioRoutine, resolveCurrentOntForContract, buildTrasladoHistorialNote } from '@/lib/routineTraslado';
+import {
+  isTrasladoServicioRoutine,
+  resolveCurrentOntForContract,
+  buildTrasladoHistorialNote,
+  resolveTrasladoAnteriorSnapshot,
+  type TrasladoAnteriorSnapshot,
+} from '@/lib/routineTraslado';
 import {
   NAP_CLIENT_LIMIT,
   type Client,
@@ -335,6 +341,9 @@ onMounted(async () => {
       // y confirmar el NUEVO en el mismo formulario de cierre.
       await Promise.all([catalogs.fetchZones(), infraStore.fetchElementos(), fibra.fetchTodosNapPuertos()]);
       void loadCurrentOntsForTraslado();
+      // activeContract ya quedo resuelto por loadClientInfo (arriba) — recien
+      // aca se congela el snapshot "anterior" (punto 1, revision puntual).
+      await ensureTrasladoAnteriorSnapshot();
     }
     await Promise.all([loadAssignees(), loadInstallEquipos()]);
   }
@@ -1140,6 +1149,40 @@ async function loadCurrentOntsForTraslado() {
 const currentOntResolution = computed(() =>
   activeContract.value ? resolveCurrentOntForContract(currentOnts.value, activeContract.value.id) : { status: 'none' as const },
 );
+
+// Revisión puntual (2026-10-13, punto 3): loadClientInfo (arriba) tiene
+// fallbacks genéricos ("el contrato activo", "el primero") pensados para
+// cuando un trabajo no trae un contractId puntual — un traslado SIEMPRE
+// lo trae (Fase 159). Si por lo que sea `activeContract` terminó siendo
+// OTRO contrato del mismo cliente (ej. el exacto no llegó en la consulta),
+// esto lo detecta para bloquear el cierre en vez de sincronizar el
+// servicio equivocado — nunca se asume que "el contrato activo" alcanza.
+const trasladoContractMismatch = computed(
+  () => isTrasladoRoutine.value && !!trabajo.value?.contractId && activeContract.value?.id !== trabajo.value.contractId,
+);
+
+// ---- Fase 159 — Traslado de servicio, revisión puntual (punto 1): el
+// estado "anterior" (dirección/zona) se congela UNA sola vez, la primera
+// vez que se abre esta pantalla para esta rutina, y sobrevive a
+// reintentos (misma sesión o una página nueva) vía el mismo mecanismo de
+// borradores que closureForm — así un intento previo que ya alcanzó a
+// escribir la zona nueva (pero falló después) nunca hace que el segundo
+// intento recalcule "anterior" desde un contrato que ya cambió. Ver
+// resolveTrasladoAnteriorSnapshot (routineTraslado.ts).
+const trasladoSnapshotKey = `traslado_anterior_${jobId}`;
+const trasladoAnteriorSnapshot = ref<TrasladoAnteriorSnapshot | null>(null);
+async function ensureTrasladoAnteriorSnapshot() {
+  if (!isTrasladoRoutine.value) return;
+  const existing = await loadDraft<TrasladoAnteriorSnapshot>(trasladoSnapshotKey);
+  const current: TrasladoAnteriorSnapshot = {
+    direccionAnterior: activeContract.value?.installation_address ?? null,
+    zonaAnteriorNombre: activeContract.value?.zones?.name ?? null,
+    napAnteriorNombre: currentNapInfo.value?.napName ?? null,
+  };
+  const resolved = resolveTrasladoAnteriorSnapshot(existing, current);
+  trasladoAnteriorSnapshot.value = resolved;
+  if (!existing) await saveDraft(trasladoSnapshotKey, resolved);
+}
 function onInstallZoneChange() {
   if (closureForm.value.napElementoId && !installNapOptions.value.some((n) => n.id === closureForm.value.napElementoId)) {
     closureForm.value.napElementoId = '';
@@ -1456,6 +1499,18 @@ async function handleCloseSubmit() {
     return;
   }
 
+  // Revision puntual (punto 3): si el contrato que se muestra en pantalla
+  // (activeContract) no es EXACTAMENTE el contract_id de esta rutina, no
+  // se cierra — sincronizar aca afectaria al contrato equivocado (otro
+  // servicio del mismo cliente). No deberia pasar nunca en la practica
+  // (loadClientInfo ya busca por ese id primero), pero se bloquea en vez
+  // de asumir que el fallback alcanza.
+  if (trasladoContractMismatch.value) {
+    closeError.value =
+      'No se pudo confirmar el contrato exacto de este traslado — no cierres todavía. Recarga la página o avisa a un administrador.';
+    return;
+  }
+
   // Fase 159 — Traslado de servicio: la zona y la caja NAP NUEVAS son
   // obligatorias (es el dato que justifica la rutina); si marco "ONT
   // reemplazada" ademas pide el serial nuevo, para que quede en el
@@ -1519,12 +1574,17 @@ async function handleCloseSubmit() {
     // -> nueva, ONT conservada/reemplazada) antepuesta a las notas propias
     // del técnico — reusa closure_notes, ya existente en routines y en
     // work_order_closures, sin ninguna tabla/columna de auditoría nueva.
+    // El "anterior" viene del snapshot CONGELADO (ensureTrasladoAnteriorSnapshot,
+    // punto 1 de la revision puntual) — nunca de activeContract directo, que un
+    // intento previo de este mismo cierre ya pudo haber modificado.
     const trasladoNota = isTrasladoRoutine.value
       ? buildTrasladoHistorialNote({
-          direccionAnterior: activeContract.value?.installation_address ?? null,
-          zonaAnteriorNombre: activeContract.value?.zones?.name ?? null,
+          direccionAnterior: trasladoAnteriorSnapshot.value?.direccionAnterior ?? null,
+          zonaAnteriorNombre: trasladoAnteriorSnapshot.value?.zonaAnteriorNombre ?? null,
+          napAnteriorNombre: trasladoAnteriorSnapshot.value?.napAnteriorNombre ?? null,
           direccionNueva: closureForm.value.direccionNueva.trim() || null,
           zonaNuevaNombre: catalogs.zones.find((z) => z.id === closureForm.value.zoneId)?.name ?? null,
+          napNuevaNombre: napElementosAll.value.find((n) => n.id === closureForm.value.napElementoId)?.name ?? null,
           ontAction: closureForm.value.ontAction,
           ontSerialNuevo: closureForm.value.ontSerialNuevo.trim() || null,
         })
@@ -1566,6 +1626,11 @@ async function handleCloseSubmit() {
     // firma/notas hasta que haya señal y sincronice (Fase 116).
     if (!result.queued) {
       await clearDraft(draftKey);
+      // El snapshot "anterior" del traslado (punto 1) ya cumplio su proposito
+      // una vez que el cierre llego de verdad a Supabase — se borra para que
+      // una FUTURA rutina de traslado de este mismo job (no deberia pasar,
+      // pero por las dudas) nunca herede un snapshot ajeno.
+      if (isTrasladoRoutine.value) await clearDraft(trasladoSnapshotKey);
       // Si quedo un aviso de zona/NAP pendiente de revision (Fase C), se le
       // da mas tiempo al tecnico para leerlo antes de salir de la pantalla.
       setTimeout(() => router.push('/campo'), closeOntZoneWarning.value ? 5000 : 1200);
@@ -2359,7 +2424,11 @@ async function handleCloseSubmit() {
           <!-- Fase 159 — Traslado de servicio: estado actual (solo lectura) + confirmacion del destino nuevo. -->
           <template v-if="isTrasladoRoutine">
             <p class="text-xs font-medium text-slate-600 mb-1">Traslado de servicio</p>
-            <div class="mb-3 text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 space-y-0.5">
+            <p v-if="trasladoContractMismatch" class="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2 mb-2">
+              ⚠ No se pudo confirmar el contrato exacto de este traslado — no se muestra información ni se puede cerrar
+              todavía. Recarga la página; si persiste, avisa a un administrador antes de continuar.
+            </p>
+            <div v-else class="mb-3 text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 space-y-0.5">
               <p class="text-slate-500 font-medium mb-1">Estado actual</p>
               <p>Dirección: <span class="text-slate-700">{{ activeContract?.installation_address || 'sin dirección registrada' }}</span></p>
               <p>Zona: <span class="text-slate-700">{{ activeContract?.zones?.name || 'sin zona registrada' }}</span></p>
@@ -2381,56 +2450,59 @@ async function handleCloseSubmit() {
               </p>
             </div>
 
-            <p class="text-xs font-medium text-slate-600 mb-1">
-              Destino nuevo<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
-            </p>
-            <div class="mb-2">
-              <label class="block text-xs text-slate-600 mb-1">Dirección nueva (opcional)</label>
-              <input v-model="closureForm.direccionNueva" placeholder="Ej. Jr. Los Pinos 123" class="field-input text-sm" />
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-1">
-              <div>
-                <label class="block text-xs text-slate-600 mb-1">Zona / Sector nueva</label>
-                <select v-model="closureForm.zoneId" required class="field-input text-sm" @change="onInstallZoneChange">
-                  <option value="" disabled>Selecciona...</option>
-                  <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
-                </select>
+            <template v-if="!trasladoContractMismatch">
+              <p class="text-xs font-medium text-slate-600 mb-1">
+                Destino nuevo<span class="text-red-500"> * <span class="text-slate-400 font-normal">(obligatorio)</span></span>
+              </p>
+              <div class="mb-2">
+                <label class="block text-xs text-slate-600 mb-1">Dirección nueva (opcional)</label>
+                <input v-model="closureForm.direccionNueva" placeholder="Ej. Jr. Los Pinos 123" class="field-input text-sm" />
               </div>
-              <div>
-                <label class="block text-xs text-slate-600 mb-1">Caja NAP nueva</label>
-                <select v-model="closureForm.napElementoId" required class="field-input text-sm" :disabled="!closureForm.zoneId">
-                  <option value="" disabled>{{ closureForm.zoneId ? 'Selecciona...' : 'Elige primero una zona' }}</option>
-                  <option v-for="n in installNapOptions" :key="n.id" :value="n.id">
-                    {{ n.name }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity && n.id !== closureForm.napElementoId ? ' (LLENA)' : '' }}
-                  </option>
-                </select>
-                <p class="text-[11px] text-slate-500 mt-1">El puerto se asigna automáticamente al primero libre de esa caja (igual que en una Alta).</p>
-                <p v-if="closureForm.zoneId && !installNapOptions.length" class="text-[11px] text-amber-700 mt-1">
-                  Esa zona no tiene cajas NAP registradas — pide a un administrador que cree una en el Mapa de Red.
-                </p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-1">
+                <div>
+                  <label class="block text-xs text-slate-600 mb-1">Zona / Sector nueva</label>
+                  <select v-model="closureForm.zoneId" required class="field-input text-sm" @change="onInstallZoneChange">
+                    <option value="" disabled>Selecciona...</option>
+                    <option v-for="z in catalogs.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs text-slate-600 mb-1">Caja NAP nueva</label>
+                  <select v-model="closureForm.napElementoId" required class="field-input text-sm" :disabled="!closureForm.zoneId">
+                    <option value="" disabled>{{ closureForm.zoneId ? 'Selecciona...' : 'Elige primero una zona' }}</option>
+                    <option v-for="n in installNapOptions" :key="n.id" :value="n.id">
+                      {{ n.name }} — {{ n.used }}/{{ n.capacity }}{{ n.used >= n.capacity && n.id !== closureForm.napElementoId ? ' (LLENA)' : '' }}
+                    </option>
+                  </select>
+                  <p class="text-[11px] text-slate-500 mt-1">El puerto se asigna automáticamente al primero libre de esa caja (igual que en una Alta).</p>
+                  <p v-if="closureForm.zoneId && !installNapOptions.length" class="text-[11px] text-amber-700 mt-1">
+                    Esa zona no tiene cajas NAP registradas — pide a un administrador que cree una en el Mapa de Red.
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div class="mb-3 mt-2">
-              <p class="text-xs text-slate-600 mb-1">ONT</p>
-              <div class="flex gap-3 text-sm">
-                <label class="flex items-center gap-1.5">
-                  <input v-model="closureForm.ontAction" type="radio" value="keep" />
-                  Conservar ONT
-                </label>
-                <label class="flex items-center gap-1.5">
-                  <input v-model="closureForm.ontAction" type="radio" value="replaced" />
-                  ONT reemplazada
-                </label>
+              <div class="mb-3 mt-2">
+                <p class="text-xs text-slate-600 mb-1">ONT</p>
+                <div class="flex gap-3 text-sm">
+                  <label class="flex items-center gap-1.5">
+                    <input v-model="closureForm.ontAction" type="radio" value="keep" />
+                    Conservar ONT
+                  </label>
+                  <label class="flex items-center gap-1.5">
+                    <input v-model="closureForm.ontAction" type="radio" value="replaced" />
+                    ONT reemplazada
+                  </label>
+                </div>
+                <div v-if="closureForm.ontAction === 'replaced'" class="mt-2">
+                  <input v-model="closureForm.ontSerialNuevo" placeholder="Serial de la ONT nueva" class="field-input text-sm font-mono" />
+                  <p class="text-[11px] font-medium text-red-600 mt-1">
+                    ⚠ Registrar este serial aquí NO vincula la ONT nueva ni la aprovisiona en la OLT — es solo un dato para
+                    el registro. El equipo real sigue SIN cambios hasta que un administrador lo registre manualmente desde
+                    el panel OLT (o el import existente). No se realiza ninguna escritura automática en la OLT ni en MikroTik.
+                  </p>
+                </div>
               </div>
-              <div v-if="closureForm.ontAction === 'replaced'" class="mt-2">
-                <input v-model="closureForm.ontSerialNuevo" placeholder="Serial de la ONT nueva" class="field-input text-sm font-mono" />
-                <p class="text-[11px] text-amber-700 mt-1">
-                  Esto solo queda registrado para revisión — no vincula ni aprovisiona nada en la OLT automáticamente. Un
-                  administrador debe actualizar el equipo desde el panel OLT.
-                </p>
-              </div>
-            </div>
+            </template>
           </template>
           </div>
 

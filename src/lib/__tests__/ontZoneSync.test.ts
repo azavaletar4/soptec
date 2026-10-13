@@ -6,6 +6,7 @@ import {
   canSyncOltZone,
   describeOntZoneSyncOutcome,
   resolveClosureTargetZoneId,
+  shouldUseTransactionalNapSync,
 } from '../ontZoneSync';
 
 test('sin ONT vinculada por contract_id: skipped_none, nunca se elige una por client_id', () => {
@@ -215,4 +216,27 @@ test('resolveClosureTargetZoneId: ni zona explicita ni NAP elegido (avería norm
 test('resolveClosureTargetZoneId: reintento — mismo input, mismo resultado (idempotente por construccion, es una funcion pura)', () => {
   const input = { explicitZoneId: null, napElementoId: 'nap-1', napZoneId: 'zona-del-nap' };
   assert.equal(resolveClosureTargetZoneId(input), resolveClosureTargetZoneId(input));
+});
+
+// ---- Fase 159 (revision puntual, punto 2): shouldUseTransactionalNapSync
+// nunca debe habilitar la sincronizacion automatica contra la OLT cuando
+// la ONT fue marcada como reemplazada, sin importar el rol ni el tipo de
+// trabajo — "no automatizar cambios fisicos en OLT". ----
+
+test('shouldUseTransactionalNapSync: ONT reemplazada -> false SIEMPRE, aunque el rol sea valido y no sea una instalacion', () => {
+  assert.equal(shouldUseTransactionalNapSync({ jobType: 'routine', ontReplaced: true, role: 'TECNICO_RED' }), false);
+  assert.equal(shouldUseTransactionalNapSync({ jobType: 'ticket', ontReplaced: true, role: 'SUPERADMIN' }), false);
+});
+
+test('shouldUseTransactionalNapSync: ONT conservada + rol valido + no es instalacion -> true', () => {
+  assert.equal(shouldUseTransactionalNapSync({ jobType: 'routine', ontReplaced: false, role: 'TECNICO_RED' }), true);
+});
+
+test('shouldUseTransactionalNapSync: instalacion -> false aunque la ONT se haya conservado y el rol sea valido (Altas quedan fuera a proposito, 13am)', () => {
+  assert.equal(shouldUseTransactionalNapSync({ jobType: 'installation', ontReplaced: false, role: 'SUPERADMIN' }), false);
+});
+
+test('shouldUseTransactionalNapSync: rol sin permiso -> false', () => {
+  assert.equal(shouldUseTransactionalNapSync({ jobType: 'routine', ontReplaced: false, role: 'SOPORTE' }), false);
+  assert.equal(shouldUseTransactionalNapSync({ jobType: 'routine', ontReplaced: false, role: null }), false);
 });

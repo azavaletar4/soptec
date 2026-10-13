@@ -154,15 +154,19 @@ completo.
     se calla ni se adivina) y se deja para revisión humana — regla 8.
 
 **"Traslado de servicio" en Rutinas (2026-10-13, ver `ESTADO_DESARROLLO.md`
-13an/13ao)**: `routines.contract_id` (Fase 159) ya está aplicada en
+13an-13ap)**: `routines.contract_id` (Fase 159) ya está aplicada en
 Supabase producción — `routines` ahora identifica el contrato/servicio
 EXACTO que se traslada (nunca por `client_id` solo). El selector de
 contrato (`RutinasView.vue`), la sección de traslado en App Campo
 (`CampoTrabajoDetailView.vue`) y el cierre vía Fase 158
 (`campo.ts`/`ontZoneSync.ts`) están implementados y probados con pruebas
-unitarias (`routineTraslado.ts`), pero **todavía no se probaron con un
-traslado real de punta a punta** ni se desplegaron — no declarar esta
-funcionalidad "terminada" ante el usuario sin esa verificación real.
+unitarias (`routineTraslado.ts`). El historial "anterior→nuevo" se
+congela con el mismo mecanismo de borradores que `closureForm`
+(`resolveTrasladoAnteriorSnapshot`) — **nunca recalcularlo desde
+`activeContract` directo**, un reintento podría ya tener el contrato
+mutado. **Todavía no se probó con un traslado real de punta a punta** ni
+se desplegó — no declarar esta funcionalidad "terminada" ante el usuario
+sin esa verificación real.
 
 ## Registro de errores de campo
 
