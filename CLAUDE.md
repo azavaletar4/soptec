@@ -77,6 +77,59 @@ de calidad.
 
 Elige el nivel según el riesgo real del cambio, no automáticamente el más alto.
 
+## Migración OLT — vínculo cliente/contrato/ONT (permanente)
+
+SmartRayco está migrando gradualmente la administración desde SmartOLT y
+registros anteriores — faltan ~400 abonados por registrar (2026-10-13).
+Mientras dure esa migración, **toda sesión debe consultar esto antes de
+tocar flujos de OLT, clientes o aprovisionamiento** — ver el caso real
+documentado en `ESTADO_DESARROLLO.md` (Violeta García Silva / Clara
+Caballero Valderrama / Mayco Paredes Rodríguez) para el precedente
+completo.
+
+**Tres situaciones posibles, permanentes mientras dure la migración:**
+
+- **A — ONT online sin cliente/contrato en SmartRayco**: el abonado puede
+  ser real y estar navegando normalmente; su info administrativa
+  simplemente no se migró todavía. **Nunca asumir** que es una ONT
+  abandonada, duplicada o disponible para eliminar.
+- **B — Cliente y contrato registrados, pero sin ONT vinculada**: el
+  abonado existe en SmartRayco, falta relacionar su ONT física. No
+  implica necesariamente que esté sin servicio — verificar serial,
+  posición, contrato y PPPoE antes de vincular.
+- **C — Cliente, contrato y ONT correctamente vinculados**: igual hay que
+  distinguir el estado real de la OLT del último `last_synced_at` de
+  SmartRayco — no son lo mismo.
+
+**Reglas permanentes:**
+
+1. La OLT real es la referencia para serial, posición y estado físico
+   — siempre que la consulta sea actual y verificable (no asumir desde
+   una lectura vieja).
+2. Supabase es la referencia para clientes, contratos y sus relaciones
+   administrativas.
+3. Nunca eliminar ni desautorizar una ONT solo porque aparece sin
+   cliente vinculado (Situación A) — eliminar su fila en `olt_onts`
+   también manda `no onu` a la OLT real y corta el servicio.
+4. No duplicar clientes, contratos, usuarios PPPoE ni equipos durante
+   la migración — buscar primero si ya existe (por nombre, documento,
+   serial) antes de crear algo nuevo.
+5. No reprovisionar una ONT que ya navega solo para completar
+   información administrativa — vincular `client_id`/`contract_id` es
+   una escritura de metadatos en Supabase, nunca requiere volver a
+   autorizar/registrar en la OLT.
+6. No sobrescribir nombres o descripciones administrativas sin
+   comprobar su procedencia — un `description` puede venir de la OLT
+   (texto libre, no confiable) o de una edición administrativa real.
+7. Mantener intactos los servicios existentes durante toda la
+   migración — cualquier corrección se valida de solo lectura primero.
+8. Si hay discrepancia entre lo que dice la OLT y lo que dice
+   Supabase, **detener la operación y pedir verificación** — no
+   adivinar cuál de las dos fuentes tiene razón.
+9. Solo usamos 3 roles operativos reales: **SUPERADMIN, ADMIN y
+   TECNICO_RED** — SOPORTE/FACTURACION no se usan; no desarrollar
+   funcionalidades nuevas para ellos ni tocar sus políticas existentes.
+
 ## Registro de errores de campo
 
 Todo bug reportado desde campo (técnicos/administradores usando el sistema

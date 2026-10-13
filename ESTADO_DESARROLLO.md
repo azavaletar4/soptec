@@ -2545,6 +2545,50 @@ aplicar la migración `fase158` en Supabase, (2) desplegar el frontend
 junto con ella, y (3) el despliegue ya pendiente de `85fc4ef`/commit de
 13ad. Nada de esto se ejecuta sin que lo pidas en el mismo turno.
 
+## 13ah. Reconciliación Clara y Mayco — diagnóstico, sin escrituras todavía (2026-10-13)
+
+Continuación directa de 13ag (ver ahí la causa raíz completa y el patrón
+ya validado con Violeta — no se repite aquí). Reglas permanentes de esta
+migración: ver sección nueva en `CLAUDE.md` ("Migración OLT —
+vínculo cliente/contrato/ONT").
+
+**Clara Caballero Valderrama — ya resuelto, nada que hacer.** Fue dada de
+alta manualmente (`CTR-2026-00347`, `client_code 001429`, zona Revolución
+— coincide con su posición real 1/2/13:33). Verificado: su fila
+`olt_onts` (`037413b0...`) **ya tiene `client_id`/`contract_id`
+vinculados correctamente** — alguien lo hizo entre la sesión anterior y
+esta. Sin duplicados, sin conflictos. Pendiente opcional (no urgente): su
+`olt_onts.zone_id` sigue en `null` (su contrato sí tiene zona) — no
+bloquea nada.
+
+**Mayco Paredes Rodríguez — Situación B, listo para vincular.** Cliente
+real activo, contrato único y activo (`CTR-2026-00071`, zona Barrio 6,
+`client_code 001350`, `pppoe_username MAYCO_PAREDES_B6`). Su ONT real
+(`08e05bd9...`, serial `ZTEGDC5C139E`, posición 1/2/4:19, zona Barrio 6
+— coincide) sigue con `client_id`/`contract_id` en `null`. Sin
+duplicados (ninguna otra fila de `olt_onts` apunta a su cliente/contrato,
+ninguna otra fila tiene su serial). Sin `olt_provisioning_operations`
+(su ONT es de importación legacy, nunca pasó por el flujo Fase 2 — no
+hay operación que reconciliar, solo falta el vínculo).
+
+**Corrección propuesta para Mayco (sin ejecutar, igual patrón que
+Violeta — transacción con `FOR UPDATE` + validación de posición/serial/
+estado previo antes de escribir):**
+
+```sql
+UPDATE public.olt_onts
+SET client_id = 'fa6384d8-1de5-48fd-b253-247366e90284',
+    contract_id = '12874463-fe52-4436-91a7-e33d64098d53'
+WHERE id = '08e05bd9-beb9-46a4-9928-f189d74820fa';
+```
+
+(`description` ya dice "Mayco Paredes Rodriguez" correctamente — no hace
+falta tocarla.)
+
+**Pendiente**: autorización explícita para ejecutar esta única escritura
+(solo Mayco — Clara no requiere nada). No se tocó la OLT ni MikroTik en
+esta sesión, todo fue `SELECT`.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
