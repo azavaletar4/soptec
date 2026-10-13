@@ -65,11 +65,13 @@ mencionado/pedido, sin código).
   `singleActiveJob.sql.test.ts`, `workOrderPhotoApproval.sql.test.ts`). Ver
   todos los scripts con `npm pkg get scripts`.
 
-## 2. Estado real de producción (verificado hoy, sin volver a desplegar)
+## 2. Estado real de producción (verificado 2026-10-13, sin volver a desplegar)
 
-- **Commit desplegado en la VM**: `463720b` ("Fase 143: separar
-  equipos/materiales y corregir Kit base de Alta"). `git status` en la VM
-  limpio (sin cambios locales pendientes).
+- **Commit desplegado en la VM**: `a5c67c4` ("Fase 157: simplificación
+  mínima del control NAP en Zonas"), verificado por SSH. Local y remoto
+  (`origin/main`) están en `1779fa8` (commit de documentación posterior,
+  no toca código). `git status` en la VM limpio (solo `.last_rollback_tag`
+  sin trackear, artefacto del script de deploy).
 - **Build/servicios**: los 5 contenedores (`backend`, `frontend`, `caddy`,
   `genieacs`, `mongo`) están `Up`/`healthy`. Backend reinició limpio con
   todos sus schedulers activos (`tr069-scheduler`, `debt-hold-scheduler`,
