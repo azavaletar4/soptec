@@ -121,6 +121,10 @@ completo.
 6. No sobrescribir nombres o descripciones administrativas sin
    comprobar su procedencia — un `description` puede venir de la OLT
    (texto libre, no confiable) o de una edición administrativa real.
+   **Ya implementado**: "Importar ONTs desde la OLT" deja de pisar
+   `description` en cuanto una ONT queda vinculada a un cliente (ver
+   `oltImportDescriptionGuard.ts` y 13ai en `ESTADO_DESARROLLO.md`) —
+   si se toca ese import, mantener esa protección.
 7. Mantener intactos los servicios existentes durante toda la
    migración — cualquier corrección se valida de solo lectura primero.
 8. Si hay discrepancia entre lo que dice la OLT y lo que dice

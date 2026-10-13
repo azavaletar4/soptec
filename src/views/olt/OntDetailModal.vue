@@ -222,7 +222,7 @@ async function toggleConfig() {
           <button class="btn-secondary" :disabled="signalLoading" @click="refreshSignal">
             {{ signalLoading ? 'Consultando...' : 'Consultar señal' }}
           </button>
-          <button class="btn-secondary" @click="emit('editZone', ont)">Editar zona</button>
+          <button class="btn-secondary" @click="emit('editZone', ont)">Editar información</button>
           <button class="btn-secondary" @click="toggleConfig">
             {{ configOpen ? 'Ocultar running-config' : 'Ver running-config' }}
           </button>

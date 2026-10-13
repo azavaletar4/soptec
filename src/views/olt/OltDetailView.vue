@@ -987,7 +987,7 @@ const gauges = computed(() => {
                   </td>
                   <!-- "Señal"/"Zona"/"TR-069" se sacaron de la fila: son EXACTAMENTE lo
                        mismo que ya ofrece el detalle (clic en la fila abre
-                       OntDetailModal, que tiene "Consultar señal"/"Editar zona"/
+                       OntDetailModal, que tiene "Consultar señal"/"Editar información"/
                        "Gestionar TR-069") — tenerlos duplicados aca era lo que hacia
                        esta columna tan ancha que la fila se desbordaba hacia la
                        derecha sin forma practica de llegar a "Eliminar" en una tabla

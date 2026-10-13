@@ -42,6 +42,7 @@ import {
   parseProfileNames,
 } from '../ssh/zteParsers';
 import { createSupabaseProvisioningStore } from '../services/oltProvisioningStore';
+import { positionKey, splitByLinkStatus } from '../services/oltImportDescriptionGuard';
 import {
   type ProvisionHandlerDeps,
   type ProvisionRequestBody,
@@ -643,8 +644,14 @@ oltRoutes.get('/onts/status', requireRole(...STAFF_READ), async (c) => {
  *      probo (2026-09-22) y el equipo real se cuelga sin dar el prompt al
  *      encadenar "onu-tx" justo despues de "onu-rx" en la misma sesion.
  *   4. Upsert en bloque. Nunca pisa client_id (esa vinculacion es decision
- *      de esta app, no de la OLT) — todo lo demas se sincroniza desde la
- *      OLT en cada import, que es la fuente de verdad de su propia config.
+ *      de esta app, no de la OLT) — el resto (tipo/VLAN/perfiles/senal/
+ *      estado) se sincroniza desde la OLT en cada import, que es su fuente
+ *      de verdad, con UNA excepcion: "description" NO se pisa en una ONT
+ *      ya vinculada a un cliente (client_id no nulo) — una vez administrada
+ *      desde el panel ("Editar informacion"), ese nombre deja de seguir al
+ *      texto crudo de la OLT (ver ESTADO_DESARROLLO.md, incidentes
+ *      Violeta/Clara/Mayco). Una ONT SIN vincular si sigue tomando el
+ *      nombre de la OLT en cada import, como siempre.
  *
  * Todo el paso 1-3 corre dentro de UN SOLO turno de withOltLock (el sync en
  * background espera a que termine antes de tomar su turno).
@@ -699,39 +706,65 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
 
   const { globalOnts, fullConfig, ports, rxByPort, txByPort, failedPorts } = scanResult;
   const now = new Date().toISOString();
-  const rows = globalOnts
+
+  // Posiciones ya vinculadas a un cliente — su "description" ya es un dato
+  // administrado por esta app (ver oltImportDescriptionGuard.ts), no un
+  // texto crudo de la OLT; el import no debe volver a pisarlo.
+  const { data: linkedRows } = await supabaseAdmin
+    .from('olt_onts')
+    .select('frame, slot, port, ont_id')
+    .eq('olt_device_id', device.id)
+    .not('client_id', 'is', null);
+  const linkedPositions = new Set((linkedRows ?? []).map((r) => positionKey(r.frame, r.slot, r.port, r.ont_id)));
+
+  const candidates = globalOnts
     .map((o) => {
       const key = `${o.frame}/${o.slot}/${o.port}`;
       const b = fullConfig.get(`${key}:${o.onuId}`);
       if (!b || !b.serial) return null;
       return {
-        olt_device_id: device.id,
         frame: o.frame,
         slot: o.slot,
         port: o.port,
-        ont_id: o.onuId,
-        serial: b.serial,
-        onu_type: b.onuType,
-        description: b.name,
-        tcont_profile: b.tcontProfile,
-        traffic_profile: b.trafficProfile,
-        vlan: b.vlan,
-        status: o.runState === 'working' ? 'online' : 'offline',
-        rx_power: rxByPort.get(key)?.get(o.onuId) ?? null,
-        tx_power: txByPort.get(key)?.get(o.onuId) ?? null,
-        last_synced_at: now,
+        ontId: o.onuId,
+        base: {
+          olt_device_id: device.id,
+          frame: o.frame,
+          slot: o.slot,
+          port: o.port,
+          ont_id: o.onuId,
+          serial: b.serial,
+          onu_type: b.onuType,
+          tcont_profile: b.tcontProfile,
+          traffic_profile: b.trafficProfile,
+          vlan: b.vlan,
+          status: o.runState === 'working' ? 'online' : 'offline',
+          rx_power: rxByPort.get(key)?.get(o.onuId) ?? null,
+          tx_power: txByPort.get(key)?.get(o.onuId) ?? null,
+          last_synced_at: now,
+        },
+        name: b.name,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
-  if (rows.length) {
+  const { linked, unlinked } = splitByLinkStatus(candidates, linkedPositions);
+  // Una posicion "linked" por definicion ya existe en olt_onts (vino de esa
+  // misma tabla arriba) — nunca es un alta nueva, asi que omitir
+  // "description" aca siempre cae en la rama UPDATE del upsert (deja la
+  // columna intacta), nunca en un INSERT que la dejaria en null.
+  const rowsWithoutDescription = linked.map((c) => c.base);
+  const rowsWithDescription = unlinked.map((c) => ({ ...c.base, description: c.name }));
+
+  for (const rows of [rowsWithDescription, rowsWithoutDescription]) {
+    if (!rows.length) continue;
     const { error } = await supabaseAdmin
       .from('olt_onts')
       .upsert(rows, { onConflict: 'olt_device_id,frame,slot,port,ont_id' });
     if (error) return c.json({ error: error.message }, 400);
   }
 
-  return c.json({ ok: true, scanned: globalOnts.length, imported: rows.length, ports: ports.size, failedPorts });
+  return c.json({ ok: true, scanned: globalOnts.length, imported: candidates.length, ports: ports.size, failedPorts });
 });
 
 oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) => {

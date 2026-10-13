@@ -2589,6 +2589,86 @@ falta tocarla.)
 (solo Mayco — Clara no requiere nada). No se tocó la OLT ni MikroTik en
 esta sesión, todo fue `SELECT`.
 
+## 13ai. Edición administrativa de ONTs — "Editar información" + protección del import (2026-10-13, IMPLEMENTADO, sin desplegar)
+
+Continuación de 13ag/13ah. Diagnóstico confirmado (sesión anterior): el
+formulario de edición administrativa **ya existía casi completo**
+(`OntZoneEditModal.vue` / `PUT /:id/onts/:ontDbId/meta`,
+`ONT_META_FIELDS` = zona/splitter/splitter_port/nombre/dirección/
+contacto/lat/long/cliente/contrato, rol `ONT_WRITE` = SUPERADMIN/ADMIN/
+TECNICO_RED) — no hacía falta reconstruirlo. Dos ajustes puntuales:
+
+### 1. Botón renombrado
+`OntDetailModal.vue`: "Editar zona" → **"Editar información"** (el
+formulario ya cubre más que zona). Solo el texto visible — el evento
+interno (`editZone`) y el resto del flujo quedan iguales a propósito,
+para no tocar más de lo pedido.
+
+### 2. Protección del import (gap real encontrado en 13-anterior)
+`POST /:id/onts/import-existing` pisaba `description` en CADA corrida,
+incluso en ONTs ya vinculadas a un cliente — confirmado en código antes
+de tocar nada. Corregido: una vez que `olt_onts.client_id` no es nulo,
+el import deja esa columna intacta (el resto — serial/tipo/VLAN/
+perfiles/señal/estado — se sigue sincronizando siempre desde la OLT,
+que es su fuente de verdad). Una ONT sin vincular (Situación A) sigue
+tomando el nombre de la OLT en cada import, sin cambios — la mayoría de
+las ~400 pendientes de migrar están en ese caso y necesitan seguir así
+hasta que alguien las vincule.
+
+**Decisión de diseño**: la señal usada es `client_id IS NOT NULL`
+(reutilizado, no un dato nuevo) — no se creó ninguna columna para
+marcar "editado a mano". Justificación: no era imprescindible (regla
+del proyecto) — el momento en que una ONT pasa a estar administrada por
+esta app coincide exactamente con el momento en que se vincula a un
+cliente real (ver 13ah: Violeta/Mayco).
+
+### 3. Aclaración en el formulario
+`OntZoneEditModal.vue`: nota de una línea bajo Splitter/Puerto del
+splitter aclarando que es texto libre heredado de la OLT/SmartOLT, no
+la asignación NAP real del contrato (esa sigue gestionándose desde la
+ficha del cliente, Fase 2/158 — sin tocar nada de eso aquí).
+
+### Archivos modificados
+- `server/src/routes/olt.ts` (`import-existing`: separa el upsert en 2
+  lotes según vínculo, usando el helper nuevo).
+- `server/src/services/oltImportDescriptionGuard.ts` (nuevo, puro):
+  `positionKey()` + `splitByLinkStatus()`.
+- `server/src/services/__tests__/oltImportDescriptionGuard.test.ts`
+  (nuevo): 6 casos (sin vincular, vinculada, lote mixto real
+  Violeta/Clara/Mayco, no confunde por serial/nombre solo posición,
+  lista vacía).
+- `src/views/olt/OntDetailModal.vue` (botón renombrado).
+- `src/views/olt/OltDetailView.vue` (comentario actualizado, sin
+  cambio de código).
+- `src/views/olt/OntZoneEditModal.vue` (nota aclaratoria splitter/NAP).
+
+### Pruebas
+`npm run test:provisioning` → **75/75** (69 previos + 6 nuevos).
+`npx tsc -p tsconfig.server.json --noEmit` → solo los 2 errores
+preexistentes de `oltProvisioningService.ts` (no tocado, ya
+confirmados ajenos en sesiones anteriores). `npx vue-tsc -p
+tsconfig.app.json --noEmit` → sin errores.
+
+### No se tocó (confirmado)
+Serial/posición/ONU-ID/VLAN/perfiles/aprovisionamiento — el endpoint de
+metadatos (`ONT_META_FIELDS`) nunca los incluyó, sin cambios aquí
+tampoco. Sin comandos de escritura a OLT/MikroTik. Sin cambio de
+vínculo cliente/contrato desde este formulario (eso sigue siendo
+decisión aparte, vía Fase 2/158). Sin migraciones — la protección usa
+una columna ya existente (`client_id`). Sincronización de
+estado/señal/equipos sin alterar.
+
+### Riesgos
+- La protección es posicional (`frame/slot/port/ont_id`), no por
+  serial — si una ONT física se reemplaza en la MISMA posición de una
+  fila ya vinculada, el import seguirá sin tocar `description` aunque
+  el equipo haya cambiado (comportamiento ya existente para
+  tipo/VLAN/perfiles también se actualiza igual, pero el nombre
+  quedaría del cliente anterior hasta que alguien lo corrija a mano).
+  Caso raro, no bloqueante, documentado para la próxima sesión.
+
+**Siguiente paso**: autorización para commit local (sin push/deploy).
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

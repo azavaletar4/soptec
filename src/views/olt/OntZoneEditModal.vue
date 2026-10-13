@@ -114,6 +114,10 @@ async function handleSave() {
               <input v-model="form.splitter_port" class="field-input" />
             </div>
           </div>
+          <p class="text-[11px] text-slate-400 -mt-2">
+            Texto libre (heredado de la OLT/SmartOLT) — no es la asignación NAP real del contrato,
+            que se gestiona desde la ficha del cliente.
+          </p>
 
           <div>
             <label class="field-label">Nombre</label>
