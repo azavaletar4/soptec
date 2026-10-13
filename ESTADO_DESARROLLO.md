@@ -1983,6 +1983,116 @@ Supabase). Requiere únicamente **desplegar frontend**.
     ni MikroTik — ningún formulario se guardó durante la
     verificación.
 
+## 13y. Certificación Fase 2 OLT (`fase136*`) — JWT por rol, MikroTik antes/después, modelos ONT — ESTADO ACTUALIZADO (2026-10-13)
+
+Continuación del cierre de certificación de Fase 2 comercial OLT, sin
+tocar equipos/clientes reales. Resultado de esta sesión:
+
+- **JWT por rol — CERRADO a nivel de guard de roles**: se agregó un test
+  (`server/src/services/__tests__/oltProvisioningRoutes.test.ts`, caso
+  "HTTP: read-only endpoints enforce the broader readRole guard...")
+  que cubre los endpoints `GET /onts/operations/:opId` y
+  `GET /onts/provisioning-operation` con los 6 roles (incluye
+  `TECNICO_RED`/`SOPORTE`, que `readRole` admite y `provisionRole` no —
+  antes sin cobertura). `npm run test:provisioning`: 58/58 ok. No se
+  modificó código funcional (no se encontró defecto; el guard ya
+  funcionaba, solo faltaba la prueba).
+  - **Sigue pendiente, requiere autorización**: la verificación
+    criptográfica real del JWT contra el JWKS de Supabase
+    (`requireAuth`) no tiene prueba aislada — necesita usuarios de
+    prueba reales por rol, que **no existen hoy** en el proyecto y no
+    se crearon (no autorizado). `requireAuth` es genérico y ya corre a
+    diario en producción en todas las rutas, por lo que el riesgo
+    residual es bajo, no nulo.
+- **Comparación MikroTik antes/después — queda documentada como
+  PENDIENTE**, condicionada a una instalación de prueba controlada
+  (contrato/ONU de prueba, autorización explícita antes de ejecutar).
+  La preservación de atributos (perfil, `disabled`, no sobrescritura)
+  sigue cubierta solo por simulación (`provisioningMikrotik.test.ts`),
+  sin captura real independiente de un MikroTik real.
+- **Modelos ONT certificados con hardware real**: únicamente el perfil
+  OMCI `GPT-2741GNAC` (seriales `HWTCABD21CB4`, `HWTCE5AFB8B6`, prueba
+  de Fase 2 del 2026-10-10). El código no distingue modelos — `onuType`
+  es un string opaco que se pasa tal cual a la OLT — por lo que
+  cualquier otro perfil queda **pendiente de validación orgánica**: se
+  certifica la primera vez que un técnico lo use en una instalación
+  real normal (no se fuerza una prueba dedicada). Los 4 escritores NAP
+  (`assign_contract_nap`, `assign_provisioning_nap`,
+  `free_nap_puerto_on_contract_delete`/`client_delete`) ya están
+  cubiertos por `napAssignment.sql.test.ts`/`napPhantomPorts.sql.test.ts`
+  — sin cambios aquí.
+
+**Siguiente paso seguro**: ninguno de los dos pendientes (JWT con
+usuario de prueba real, comparación MikroTik real) se puede cerrar sin
+intervención del usuario. No hay tarea de código pendiente. Fase 2 se
+puede considerar **operacionalmente cerrada** con estos dos límites
+documentados y aceptados; no iniciar Fase 3 sin indicación.
+
+## 13z. Fase 3 comercial OLT — independencia progresiva de SmartOLT (INICIADA, 2026-10-13)
+
+SmartOLT **sigue en uso**, no se desconectó nada. Primera sesión de Fase 3:
+revisión de la integración OLT existente (sin repetir la auditoría de
+Fase 2) + matriz de independencia + primera mejora pequeña implementada
+y probada de forma aislada (sin tocar OLT/MikroTik/Supabase real).
+
+### Matriz de independencia respecto a SmartOLT
+
+| Función | Estado en SmartRayco | Dependencia de SmartOLT | Riesgo | Acción necesaria |
+|---|---|---|---|---|
+| Detección/registro de ONU | Completo (Telnet real, Fase 1/4), probado con 676 ONTs reales | Ninguna | Bajo | Ninguna |
+| Aprovisionamiento (contrato+NAP+GEM/VLAN) | Completo (Fase 2/`fase136*`), probado con ONTs reales navegando | Ninguna | Bajo (quedan 2 certificaciones pendientes, ver 13y) | Ninguna nueva |
+| Potencia óptica (RX/TX) | Completo, lectura bulk por puerto + por ONT | Ninguna | Bajo | Ninguna |
+| PON (ocupación por puerto) | Existía solo puerto-por-puerto (al registrar); **hoy se agregó vista agregada** (ver abajo) | Ninguna | Bajo | Hecha esta sesión |
+| Clientes/contrato ↔ ONU | Completo (Fase 2) | Ninguna | Bajo | Ninguna |
+| Diagnóstico por ONT | Completo (Fase 97, running-config, señal) | Ninguna | Bajo | Ninguna |
+| Salud de chasis (uptime/temp/CPU) | Completo, vía caché del sync (Fase 40) | Ninguna | Bajo | Ninguna |
+| **Alertas proactivas** (offline/señal baja sin que un admin entre a mirar) | **No existe** — hoy solo se ve pasivamente al abrir el detalle de esa OLT y filtrar | **Uso operativo** de SmartOLT para esto, no técnica (los datos ya están en `olt_sync_cache`/`olt_onts`) | Medio — es la brecha funcional real más visible | Diseñar notificación (push/email/lo que ya use el resto del sistema), en una etapa propia — no se tocó esta sesión |
+| Migración histórica SmartOLT→SmartRayco | Scripts de solo-lectura/backfill ya existen (`audit-smartolt.ts`, `backfill-smartolt.ts`), uso puntual ya hecho | N/A (herramienta de migración, no dependencia activa) | Bajo | Ninguna |
+
+**Conclusión de la matriz**: no hay dependencia **técnica** real pendiente — todo lo que SmartOLT hace hoy, SmartRayco ya puede hacerlo también. Lo único que falta para independencia **operativa** completa son alertas proactivas (brecha de uso, no de capacidad) y las 2 certificaciones ya documentadas en 13y (JWT con usuario de prueba real, comparación MikroTik real).
+
+### Priorización (según lo pedido: detección, registro, aprovisionamiento, potencia, PON, clientes, alertas, diagnóstico)
+
+1. ~~PON — ocupación agregada~~ → hecho esta sesión (abajo).
+2. Alertas proactivas → siguiente candidato, requiere decidir canal (fuera del alcance de "mejora pequeña aislada").
+3. Resto de la lista: ya completo, sin acción.
+
+### Primera mejora implementada: ocupación por puerto PON (vista agregada)
+
+Antes, la ocupación de un puerto PON (cuántos de los 128 onu-id posibles
+están en uso) solo se veía abriendo "Registrar ONT" para ESE puerto
+puntual. Se agregó una tabla de ocupación de TODOS los puertos
+conocidos de la OLT, visible de un vistazo en el detalle de la OLT.
+
+- **Archivos**:
+  - `src/lib/oltCapacity.ts` (nuevo) — `PON_PORT_MAX_ONUS` (antes
+    duplicado en `AuthorizeOnuModal.vue`, ahora fuente única) +
+    `computePonOccupancy()`, función pura.
+  - `src/lib/__tests__/oltCapacity.test.ts` (nuevo) — 4 casos
+    (agrupación, orden, límite/100%, lista vacía).
+  - `src/views/olt/AuthorizeOnuModal.vue` — importa la constante en vez
+    de redeclararla (sin cambio de comportamiento).
+  - `src/views/olt/OltDetailView.vue` — nueva tabla "Ocupación por
+    puerto PON", derivada 100% de `oltStore.onts` ya cargado (cero
+    llamadas nuevas al backend, cero contacto con la OLT/MikroTik real).
+- **Pruebas**: `npm run test:fetch-timeout` → 39/39 ok (incluye los 4
+  casos nuevos). `npx vue-tsc -p tsconfig.app.json --noEmit` → sin
+  errores.
+- **No probado**: verificación visual en navegador — intentada en esta
+  sesión y descartada: no hay usuario de prueba documentado para iniciar
+  sesión en el panel y no se van a adivinar/crear credenciales sin
+  autorización. Pendiente de que alguien con sesión real abra el panel
+  OLT y confirme que la tabla se ve bien con datos reales.
+- **Commits/despliegue**: commit local autorizado por el usuario (sin
+  push/deploy) — ver commit en el historial de git.
+
+**Siguiente paso concreto**: (1) tu autorización para commit (sin
+push/deploy todavía) de este cambio; (2) que alguien abra el panel OLT
+en el entorno real una vez desplegado y confirme visualmente la nueva
+tabla; (3) cuando quieras seguir con Fase 3, decidir el canal de
+alertas proactivas (único hueco funcional real que queda) como
+siguiente mejora aislada.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

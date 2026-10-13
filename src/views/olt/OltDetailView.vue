@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { filterStalePendingOnus } from '@/lib/provisioningUi';
+import { computePonOccupancy } from '@/lib/oltCapacity';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -265,6 +266,15 @@ const knownPorts = computed<PonPortOption[]>(() => {
 // 'manual' = puerto recien cableado, aun sin ninguna ONT en olt_onts;
 // cualquier otro valor es "slot/port" de un puerto ya conocido.
 const portSelection = ref<'all' | 'manual' | string>('all');
+
+/**
+ * Fase 3 comercial OLT: ocupacion por puerto PON a simple vista (cuantos
+ * onu-id libres quedan en cada puerto ya conocido) sin abrir "Registrar
+ * ONT" por cada uno — hoy esa ocupacion solo se veia puerto por puerto
+ * dentro de ese modal. Puramente derivado de oltStore.onts ya cargado, sin
+ * llamadas nuevas al backend/OLT.
+ */
+const ponOccupancy = computed(() => computePonOccupancy(oltStore.onts.filter((o) => o.olt_device_id === deviceId.value)));
 
 function handlePortSync() {
   if (portSelection.value !== 'manual' && portSelection.value !== 'all') {
@@ -992,6 +1002,23 @@ const gauges = computed(() => {
           Solo la lectura de señal óptica sigue sin probar. "TODOS" escanea en segundo plano (no bloquea la
           pantalla) — el listado de puertos se arma con los que ya tienen alguna ONT registrada aquí; un puerto
           recién cableado sin ninguna todavía usa "Otro puerto...".
+        </p>
+      </div>
+
+      <div v-if="ponOccupancy.length" class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-6">
+        <h2 class="text-sm font-semibold mb-3">Ocupación por puerto PON</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div v-for="p in ponOccupancy" :key="`${p.slot}/${p.port}`" class="rounded-lg bg-white border border-slate-200 p-3">
+            <div class="text-xs text-slate-500 mb-1">Slot {{ p.slot }} · Puerto {{ p.port }}</div>
+            <div class="text-sm font-semibold">{{ p.count }}/{{ p.max }}</div>
+            <div class="h-1.5 rounded-full bg-slate-200 overflow-hidden mt-1">
+              <div class="h-full bg-sky-500" :style="{ width: `${p.pct}%` }"></div>
+            </div>
+          </div>
+        </div>
+        <p class="text-xs text-slate-500 mt-3">
+          Basado en lo ya sincronizado aquí (olt_onts), no en un escaneo nuevo — puede no reflejar una ONT
+          cableada en la OLT real que todavía no se importó/sincronizó.
         </p>
       </div>
 

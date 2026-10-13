@@ -103,6 +103,20 @@ test('HTTP: authentication and provisioning role guard both URLs', async () => {
     } finally { await f.close(); }
   }
 });
+test('HTTP: read-only endpoints enforce the broader readRole guard (SUPERADMIN/ADMIN/TECNICO_RED/SOPORTE), not just provisionRole', async () => {
+  // Covers the GET endpoints (consulta de operacion) that provisionRole's write-only
+  // coverage above never exercises — readRole admits two roles provisionRole rejects.
+  for (const role of [null, 'ADMIN', 'TECNICO_RED', 'SOPORTE', 'FACTURACION', 'CLIENTE'] as const) {
+    const f = await fixture(role);
+    try {
+      const op = await f.fake.store.insertOperation({ idempotency_key: 'read-check', olt_device_id: f.deviceId, serial: input().serial,
+        frame: 1, slot: 2, port: 2, client_id: null, contract_id: null, requested: { onuType: input().onuType, vlan: input().vlan } });
+      const expected = role === null ? 401 : ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'].includes(role) ? 200 : 403;
+      assert.equal((await f.app.request(`/${f.deviceId}/onts/operations/${op.data!.id}`)).status, expected);
+      assert.equal((await f.app.request(`/${f.deviceId}/onts/provisioning-operation?key=read-check`)).status, expected);
+    } finally { await f.close(); }
+  }
+});
 test('HTTP: recovery preserves requested WAN/reference targets and never persists the retry password', async () => {
   const f = await fixture();
   try {

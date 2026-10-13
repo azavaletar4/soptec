@@ -9,6 +9,7 @@ import { useMikrotikStore } from '@/stores/mikrotik';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { NAP_CLIENT_LIMIT, type ServiceContract } from '@/types/domain';
+import { PON_PORT_MAX_ONUS } from '@/lib/oltCapacity';
 import { getErrorMessage } from '@/lib/errors';
 import { createProvisioningKey, classifyProvisioningResult, validateProvisioningWan } from '@/lib/provisioningUi';
 import { countOcupadosReales } from '@/lib/napOccupancy';
@@ -41,10 +42,8 @@ const port = ref(props.prefill?.port ?? 1);
 const serial = ref(props.prefill?.serial ?? '');
 const qrOpen = ref(false);
 
-// Limite de hardware GPON tipico en tarjetas ZTE (onu-id 1-128 por puerto
-// PON) — puramente informativo, nunca bloquea el registro (la OLT real es la
-// que decide si acepta o no el onu-id).
-const PON_PORT_MAX_ONUS = 128;
+// PON_PORT_MAX_ONUS (src/lib/oltCapacity.ts): puramente informativo, nunca
+// bloquea el registro (la OLT real es la que decide si acepta o no el onu-id).
 const ponUsed = computed(
   () => oltStore.onts.filter((o) => o.olt_device_id === props.deviceId && o.frame === shelf.value && o.slot === slot.value && o.port === port.value).length,
 );
