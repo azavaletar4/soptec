@@ -2,6 +2,8 @@
 import { filterStalePendingOnus } from '@/lib/provisioningUi';
 import { computePonOccupancy } from '@/lib/oltCapacity';
 import { buildOfficialPonZoneCatalog, comparePonZone, type PonZoneMatch } from '@/lib/ponZoneMapping';
+import { buildPonNumberMap, evaluateOntZoneDiscrepancies, type OntZoneDiscrepancy } from '@/lib/ontZoneDiscrepancy';
+import OntZoneDiscrepancyModal from './OntZoneDiscrepancyModal.vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -310,6 +312,40 @@ function ponZoneAmbiguousCount(p: PonOccupancyPort): number | null {
 const expandedPonKey = ref<string | null>(null);
 function toggleZoneBreakdown(key: string) {
   expandedPonKey.value = expandedPonKey.value === key ? null : key;
+}
+
+/**
+ * Fase 3 comercial OLT — Fase B (ver src/lib/ontZoneDiscrepancy.ts,
+ * ESTADO_DESARROLLO.md 13al): baja la comparación de la Fase A del nivel
+ * de puerto (dominantZone agregada) al nivel de CADA ONT individual,
+ * cruzando con su cliente/contrato real — para no generar falsos
+ * positivos cuando un puerto mezcla ONTs de varias zonas (traslados,
+ * herencia SmartOLT) y para identificar exactamente qué cliente/contrato
+ * está afectado. Solo compara — nunca escribe ni vincula nada.
+ */
+const ontZoneDiscrepancies = computed<OntZoneDiscrepancy[]>(() =>
+  evaluateOntZoneDiscrepancies(
+    oltStore.onts.filter((o) => o.olt_device_id === deviceId.value),
+    buildPonNumberMap(ponOccupancy.value),
+    ponZoneCatalog.value,
+  ),
+);
+/** Cuantas ONTs de un puerto quedan en un estado que amerita revision administrativa (todo salvo 'match'). */
+function ponPortIssueCount(p: { slot: number; port: number }): number {
+  return ontZoneDiscrepancies.value.filter((r) => r.slot === p.slot && r.port === p.port && r.caseStatus !== 'match').length;
+}
+
+const discrepancyModalPort = ref<{ label: string; rows: OntZoneDiscrepancy[] } | null>(null);
+function openDiscrepancyModal(p: { slot: number; port: number; ponNumber: number }) {
+  discrepancyModalPort.value = {
+    label: `PON ${String(p.ponNumber).padStart(2, '0')} (Slot ${p.slot} / Puerto ${p.port})`,
+    rows: ontZoneDiscrepancies.value.filter((r) => r.slot === p.slot && r.port === p.port),
+  };
+}
+function handleViewOntFromDiscrepancy(ontDbId: string) {
+  const ont = oltStore.onts.find((o) => o.id === ontDbId);
+  discrepancyModalPort.value = null;
+  if (ont) openOntDetail(ont);
 }
 
 function handlePortSync() {
@@ -896,6 +932,16 @@ const gauges = computed(() => {
             <ul v-if="expandedPonKey === `${p.slot}/${p.port}`" class="mt-1 text-[10px] text-slate-500 space-y-0.5">
               <li v-for="z in p.zoneBreakdown" :key="z.zoneId">{{ z.zoneName }} — {{ z.count }}</li>
             </ul>
+            <button
+              v-if="ponPortIssueCount(p) > 0"
+              class="text-[10px] text-red-600 hover:underline mt-1 block font-medium"
+              @click="openDiscrepancyModal(p)"
+            >
+              Ver {{ ponPortIssueCount(p) }} ONT{{ ponPortIssueCount(p) > 1 ? 's' : '' }} con revisión pendiente →
+            </button>
+            <button v-else class="text-[10px] text-slate-400 hover:underline mt-1 block" @click="openDiscrepancyModal(p)">
+              Ver detalle de ONTs de este puerto
+            </button>
           </div>
         </div>
         <p class="text-xs text-slate-500 mt-3">
@@ -1438,6 +1484,14 @@ const gauges = computed(() => {
       :device-id="deviceId"
       @close="zoneEditOntId = null"
       @saved="zoneEditOntId = null"
+    />
+
+    <OntZoneDiscrepancyModal
+      v-if="discrepancyModalPort"
+      :port-label="discrepancyModalPort.label"
+      :rows="discrepancyModalPort.rows"
+      @close="discrepancyModalPort = null"
+      @view-ont="handleViewOntFromDiscrepancy"
     />
   </AppLayout>
 </template>

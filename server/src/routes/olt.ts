@@ -558,7 +558,10 @@ oltRoutes.get('/:id/onts/disabled', requireRole(...STAFF_READ), async (c) => {
 oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
+    .select(
+      '*, clients(id, first_name, last_name, phone, address), zones(id, name), ' +
+        'service_contracts(id, contract_number, client_code, status, zones(id, name))',
+    )
     .eq('olt_device_id', c.req.param('id'))
     .order('slot')
     .order('port')

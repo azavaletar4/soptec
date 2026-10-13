@@ -51,6 +51,14 @@ export interface OltOnt {
   longitude: number | null;
   clients?: { id: string; first_name: string; last_name: string; phone: string | null; address: string | null } | null;
   zones?: { id: string; name: string } | null;
+  /** Contrato vinculado (service_contracts), con su propia zona de instalacion (Fase 38) — fuente comercial real para Fase B de automatizacion PON-zona (ver src/lib/ontZoneDiscrepancy.ts). */
+  service_contracts?: {
+    id: string;
+    contract_number: string | null;
+    client_code: string | null;
+    status: string;
+    zones?: { id: string; name: string } | null;
+  } | null;
   plans?: {
     id: string;
     name: string;

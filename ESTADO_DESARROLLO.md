@@ -2882,6 +2882,128 @@ existentes — `comparePonZone` nunca escribe. Sin migraciones. Sin
 tocar inventario/facturación. Sin push ni despliegue — **commit local
 únicamente**, pendiente de autorización para push/deploy.
 
+## 13al. Fase 3 OLT — Fase B: discrepancia PON–zona a nivel de ONT individual (2026-10-13, IMPLEMENTADO, commit local sin push)
+
+Continuación directa de 13ak (Fase A). Pedido explícito del usuario:
+identificar, ONT por ONT (no a nivel de puerto agregado), cuáles están
+en una zona distinta de la oficial de su PON, mostrando cliente y
+contrato reales cuando existan — sin tocar nada, sin tabla nueva.
+
+### Por qué hacía falta además de la Fase A
+`comparePonZone` (Fase A) compara la zona OFICIAL del PON contra la
+zona **predominante** del puerto (`dominantZone`, agregada sobre todas
+las ONTs de ese puerto) — útil como alerta de puerto, pero no dice cuál
+cliente específico está mal, y puede generar una lectura equivocada en
+un puerto que mezcla zonas por traslados/herencia SmartOLT (un ONT que
+sí coincide queda "contaminado" visualmente por el mismatch del
+puerto). Fase B evalúa cada ONT por su propio vínculo real.
+
+### Fuente de verdad (ampliada respecto a 13ak)
+Se confirmó que el contrato (`service_contracts`) tiene su **propia**
+`zone_id` (Fase 38, independiente de `clients.zone_id` que quedó como
+dato heredado) — esa es la zona comercial real de la instalación, más
+autoritativa que `olt_onts.zone_id` (editable, Fase A). Por eso cada
+ONT se compara contra **dos** zonas observadas por separado: la de la
+propia ONT y la del contrato vinculado — sin fusionarlas, para que el
+administrador vea exactamente dónde está el desalineamiento.
+
+### Implementación (pura, sin escritura, sin cambios de esquema salvo el `select`)
+- **`server/src/routes/olt.ts`** (`GET /:id/onts`): el `select` ya
+  embebía `clients`/`zones`; se agregó
+  `service_contracts(id, contract_number, client_code, status, zones(id, name))`
+  — mismo patrón de embed ya usado en el resto del archivo, ninguna
+  consulta nueva (PostgREST resuelve el `contract_id` ya existente).
+- **`src/stores/olt.ts`**: `OltOnt.service_contracts?` agregado al
+  tipo, mismas columnas.
+- **`src/lib/ontZoneDiscrepancy.ts`** (nuevo, puro): reutiliza el
+  catálogo oficial PON→zona de `ponZoneMapping.ts`
+  (`buildOfficialPonZoneCatalog`); `evaluateOntZoneDiscrepancies`
+  clasifica cada ONT en `match` / `zone_mismatch` / `unlinked` /
+  `no_official` / `ambiguous_catalog`, comparando zona de la ONT y zona
+  del contrato por separado contra la oficial. **Nunca llena
+  cliente/contrato si `client_id`/`contract_id` no están AMBOS
+  presentes** (regla explícita del pedido: no asumir vínculo desde el
+  nombre de la OLT) — ni siquiera si `description` sugiere un nombre.
+- **`src/views/olt/OntZoneDiscrepancyModal.vue`** (nuevo): tabla de
+  solo lectura por puerto — estado, cliente (con link a
+  `/clientes/:id/servicios/:contractId`, ruta ya existente), código de
+  cliente/contrato, serial, slot/puerto/ONU-ID, zona oficial, zona de
+  la ONT, zona del contrato, motivo en texto, y botón "Ver ONT" que
+  reutiliza el `OntDetailModal` ya existente (ningún detalle nuevo).
+- **`src/views/olt/OltDetailView.vue`**: en cada tarjeta de "Ocupación
+  por puerto PON" (Fase A), nuevo botón — "Ver N ONTs con revisión
+  pendiente" (rojo, si `ponPortIssueCount > 0`) o "Ver detalle de ONTs
+  de este puerto" (gris, si todo coincide) — abre el modal filtrado a
+  ese puerto.
+
+### Archivos modificados
+- `server/src/routes/olt.ts` (embed de `service_contracts` en
+  `GET /:id/onts`).
+- `src/stores/olt.ts` (tipo `OltOnt.service_contracts`).
+- `src/lib/ontZoneDiscrepancy.ts` (nuevo).
+- `src/lib/__tests__/ontZoneDiscrepancy.test.ts` (nuevo, 10 casos).
+- `src/views/olt/OntZoneDiscrepancyModal.vue` (nuevo).
+- `src/views/olt/OltDetailView.vue` (computed `ontZoneDiscrepancies`,
+  `ponPortIssueCount`, `openDiscrepancyModal`,
+  `handleViewOntFromDiscrepancy`, botón en la tarjeta de puerto, modal
+  montado al final).
+
+### Pruebas
+- `ontZoneDiscrepancy.test.ts` (10 casos nuevos): vinculada con todo
+  coincidiendo (`match`, con cliente/contrato visibles); vinculada con
+  zona de ONT Y de contrato distintas de la oficial (`zone_mismatch`,
+  caso real tipo "puerto con varias zonas"); **mismo puerto con 2 ONTs,
+  una correcta y otra no** — confirma que no hay falso positivo a nivel
+  de puerto; sin `client_id` (Situación A) → `unlinked`, cliente/
+  contrato siempre `null`; `contract_id` presente pero `client_id` null
+  (dato inconsistente) → sigue `unlinked`, nunca expone medio vínculo;
+  **contrato con múltiples servicios** → cada ONT evalúa su propio
+  `contract_id`/zona sin mezclarse con el otro servicio del mismo
+  cliente; **traslado en curso** → zona de la ONT vieja vs. zona del
+  contrato ya actualizada, `zone_mismatch` mostrando ambas sin
+  resolver; `no_official`; `ambiguous_catalog` con prioridad sobre
+  cualquier otra clasificación; puerto nunca sincronizado → `no_official`
+  sin explotar.
+- `npm run test:fetch-timeout` → **94/94** (84 previos + 10 nuevos).
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+- `npx tsc -p tsconfig.server.json --noEmit` → solo los 2 errores
+  preexistentes de `oltProvisioningService.ts` (confirmado con `git
+  stash`/`git stash pop` en esta misma sesión — no tocado, ajenos).
+- Resto de la matriz pedida — **ya cubierta, no duplicada**: ONT
+  trasladada/serial reemplazado por `oltImportDescriptionGuard.test.ts`
+  (13aj); sincronización NAP↔zona↔contrato por `ontZoneSync.test.ts` y
+  Fase 158 (`ontZoneNapSync.sql.test.ts`).
+
+### Riesgos y casos que requieren confirmación humana (nunca auto-resueltos)
+- **`zone_mismatch`**: puede deberse a un traslado real cuyo cierre en
+  App Campo todavía no sincronizó `olt_onts.zone_id` (ver Fase C,
+  13ak) — el modal muestra ambas zonas sin asumir cuál es la correcta.
+- **`unlinked`**: ONT de Situación A o con vínculo parcial
+  (contract_id sin client_id, dato inconsistente que no debería
+  ocurrir con el flujo actual de Fase 2/37 pero se maneja igual sin
+  romper) — requiere que un administrador complete el vínculo desde el
+  flujo ya existente, no desde este modal (solo lectura).
+- **`ambiguous_catalog`**: idéntico a Fase A, bloquea cualquier
+  comparación confiable para ese número de PON hasta corregir el
+  nombre de una de las zonas duplicadas en el catálogo.
+- El embed `service_contracts` en `GET /:id/onts` agrega una tabla más
+  al `select` existente — con ~700+ ONTs ya en producción, vigilar que
+  el tiempo de respuesta del listado no se degrade perceptiblemente
+  (no se midió formalmente en esta sesión; es un `select` adicional de
+  PostgREST, no una subconsulta N+1 — riesgo bajo, pero no confirmado
+  con datos reales de producción).
+
+### Qué NO se tocó (confirmado)
+Mismas garantías que 13ak: sin escrituras a OLT/MikroTik/equipos
+reales, sin cambios en Supabase salvo la consulta de lectura ampliada,
+sin migraciones, sin modificar zonas/contratos/vínculos existentes, sin
+inventario/facturación, sin push ni despliegue — **commit local
+únicamente**.
+
+**Siguiente paso ya anunciado por el usuario**: Fase C — sincronización
+automática de traslados desde App Campo mediante la lógica
+transaccional existente de Fase 158 (`assign_contract_nap_sync_ont_zone`).
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
