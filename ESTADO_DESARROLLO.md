@@ -18,9 +18,12 @@ de cajas NAP (13u, confirmado por el administrador: los 4 clientes de
 NAP - 01 son reales), de prevenir puertos NAP fantasma a futuro con 2
 triggers `BEFORE DELETE` (13v), del hotfix de la incidencia crítica de
 cierre de Rutinas/Altas (13w, ver aviso arriba) y de simplificar el
-control NAP en Zonas contando servicios en vez de puertos (13x) —
-**todas aplicadas/desplegadas**. **VM de producción en commit
-`a5c67c4`**, migraciones de Fase 151 y Fase 150 aplicadas en Supabase
+control NAP en Zonas contando servicios en vez de puertos (13x), de la
+edición administrativa de ONTs y su protección del import (13ai/13aj,
+desplegadas en `6b8e6a1`) y de la Fase A de automatización PON-zona
+(13ak, **commit local, sin push todavía**) —
+las anteriores a 13ak **aplicadas/desplegadas**. **VM de producción en
+commit `6b8e6a1`**, migraciones de Fase 151 y Fase 150 aplicadas en Supabase
 (13r/13s/13t/13u no requirieron migración; 13v —
 `20261012191318_fase156_...` — y 13w —
 `20261012192807_fase150b_fix_track_job_work_session_enum` — sí, ambas
@@ -2589,7 +2592,7 @@ falta tocarla.)
 (solo Mayco — Clara no requiere nada). No se tocó la OLT ni MikroTik en
 esta sesión, todo fue `SELECT`.
 
-## 13ai. Edición administrativa de ONTs — "Editar información" + protección del import (2026-10-13, IMPLEMENTADO, sin desplegar)
+## 13ai. Edición administrativa de ONTs — "Editar información" + protección del import (2026-10-13, DESPLEGADO — commit `6b8e6a1`)
 
 Continuación de 13ag/13ah. Diagnóstico confirmado (sesión anterior): el
 formulario de edición administrativa **ya existía casi completo**
@@ -2669,7 +2672,7 @@ estado/señal/equipos sin alterar.
 
 **Siguiente paso**: autorización para commit local (sin push/deploy).
 
-## 13aj. Corrección de riesgo en 13ai — ONT reemplazada/trasladada ya no hereda identidad ajena (2026-10-13, IMPLEMENTADO, sin desplegar)
+## 13aj. Corrección de riesgo en 13ai — ONT reemplazada/trasladada ya no hereda identidad ajena (2026-10-13, DESPLEGADO — commit `6b8e6a1`)
 
 Riesgo señalado por el usuario sobre 13ai, confirmado real en código antes
 de tocar nada: la protección de `description` solo miraba la **posición**
@@ -2740,6 +2743,144 @@ errores.
 **Siguiente objetivo ya anunciado por el usuario (NO implementado
 todavía)**: automatizar la relación PON–zona–contrato–App Campo–Gestión
 de ONTs.
+
+## 13ak. Fase 3 OLT — Automatización PON–zona–contrato–App Campo: Fase A (2026-10-13, IMPLEMENTADO, commit local sin push)
+
+Objetivo del pedido: integrar los módulos ya existentes (PON↔zona,
+Altas/Rutinas de traslado, contratos/NAP, import de ONTs — 13ac/13ad/
+13ai/13aj) sin duplicar tablas/relaciones/lógica, determinando primero
+la fuente de verdad por tipo de dato, e implementando **solo** la Fase A:
+relación automática y VERIFICABLE (no de escritura) entre puerto PON
+físico y zona comercial. Fases B/C/D quedan diseñadas, no implementadas
+(pedido explícito del usuario).
+
+### Fuente de verdad por tipo de dato (determinado, no inventado)
+- **OLT**: serial, slot/puerto, ONU-ID, estado, señal — ya es la fuente
+  en `olt_onts`/`fullRunningConfigCommand` (sin cambios).
+- **SmartRayco**: equivalencia PON↔zona, cliente, contrato, NAP — vive
+  en 2 lugares que **no siempre coinciden**: el nombre de `zones` (p.
+  ej. "PON 4 - B6", convención humana) y `olt_onts.zone_id` por ONT
+  (editable desde "Editar información", 13ai). El nombre de zona es la
+  convención OFICIAL del equipo; `zone_id` por ONT es observación, no
+  autoridad — puede quedar desactualizado sin que nadie lo note
+  (confirmado con datos reales en 13ac/13ad: un mismo puerto con ONTs
+  de 2-3 zonas distintas vinculadas).
+- **App Campo**: confirmación de instalación/traslado y evidencias —
+  sin cambios, no tocado en esta fase.
+
+### Implementación (pura, sin escritura, sin cambios de esquema)
+- **`src/lib/ponZoneMapping.ts`** (nuevo): `parsePonNumberFromZoneName`
+  (extrae el número de "PON N - CODE" del nombre de zona, tolerante al
+  espaciado real e inconsistente del catálogo — "PON 12  - B4", "PON 20
+  -CB"), `buildOfficialPonZoneCatalog` (zona oficial por número de PON,
+  detecta números duplicados en el propio catálogo sin elegir al azar),
+  `comparePonZone` (zona oficial vs. zona observada —`dominantZone` de
+  `computePonOccupancy`, ya existente — nunca decide cuál tiene razón,
+  solo clasifica: `match` / `mismatch` / `no_official` / `no_observed` /
+  `ambiguous_catalog`).
+- **`src/views/olt/OltDetailView.vue`**: la tarjeta "Ocupación por
+  puerto PON" (ya existente) ahora muestra, bajo la zona predominante,
+  un aviso ⚠ cuando `comparePonZone` da `mismatch` (nombre de la zona
+  oficial del catálogo) o `ambiguous_catalog` (cantidad de zonas en
+  conflicto), y una nota neutra para `no_official`. Solo lectura — no
+  se agregó ningún botón de "corregir" ni escritura.
+
+Cero migraciones, cero columnas nuevas, cero escrituras a OLT/MikroTik/
+Supabase. `zones`/`olt_onts` no se tocan.
+
+### Archivos modificados
+- `src/lib/ponZoneMapping.ts` (nuevo).
+- `src/lib/__tests__/ponZoneMapping.test.ts` (nuevo, 14 casos).
+- `src/views/olt/OltDetailView.vue` (import + `ponZoneCatalog` +
+  `ponZoneStatus`/`ponZoneMismatchOfficialName`/`ponZoneAmbiguousCount`
+  + aviso en la plantilla de "Ocupación por puerto PON").
+
+### Pruebas
+- `ponZoneMapping.test.ts` (14 casos nuevos): espaciado real del
+  catálogo, ignora nombres no conformes, detecta número de PON
+  duplicado en el catálogo, y los 5 resultados de `comparePonZone`
+  incl. el caso real confirmado en producción (Barrio 6 = PON 4,
+  Violeta/Mayco) y un mismatch con datos reales (slot2/puerto1 = PON 1
+  con ONTs de "PON 2 - SM" predominando).
+- `npm run test:fetch-timeout` → **84/84** (70 previos + 14 nuevos).
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+- Resto de la matriz pedida por el usuario — **ya cubierta por pruebas
+  existentes, no duplicada**:
+  - ONTs sin contrato / con vínculo correcto / contratos
+    multi-servicio → `ontZoneSync.test.ts`, Fase 158
+    (`ontZoneNapSync.sql.test.ts`), `jobClosureIdempotency.test.ts`.
+  - ONT trasladada / serial reemplazado → casos REEMPLAZO/TRASLADO de
+    `oltImportDescriptionGuard.test.ts` (13aj).
+
+### Riesgos y casos que requieren confirmación humana (nunca auto-resueltos)
+- **`mismatch`**: el puerto tiene ONTs vinculadas a una zona distinta
+  de la oficial del catálogo para ese número de PON. No se puede saber
+  desde `comparePonZone` solo (nivel de puerto) cuál cliente/contrato
+  específico está mal — para eso haría falta cruzar por ONT individual,
+  no por puerto agregado (ver Fase B). Acción recomendada: un
+  administrador revisa las ONTs de ese puerto en la tabla de gestión y
+  decide si corregir la zona de las ONTs o el nombre de la zona en el
+  catálogo.
+- **`ambiguous_catalog`**: 2+ zonas declaran el mismo número de PON en
+  su nombre — dato sucio del propio catálogo `zones`, no de `olt_onts`.
+  Bloquea cualquier comparación confiable para ese número hasta que se
+  corrija el nombre de una de las zonas.
+- **`no_official`**: el número de PON no tiene ninguna zona en el
+  catálogo — puede ser un puerto nuevo sin zona asignada aún, o una
+  zona con nombre que no sigue la convención "PON N - ...".
+- Las ~400 ONTs de Situación A (heredadas de SmartOLT, sin cliente/
+  contrato vinculado) no tienen `dominantZone` individual — siguen
+  fuera del alcance de esta fase hasta que se vinculen (13ai).
+
+### Plan de Fases B/C/D (DISEÑO, no implementado — autorización aparte)
+
+**Fase B — discrepancia a nivel de ONT individual, no solo de puerto.**
+Hoy `comparePonZone` compara por puerto agregado (`dominantZone`). Fase
+B bajaría la comparación a cada `olt_onts` vinculada (tiene
+`client_id`/`contract_id`): para cada ONT, calcular su PON físico real
+(slot/puerto → `computePonOccupancy`) y comparar contra la zona oficial
+de ese PON y contra la zona del contrato/cliente en Supabase. Permite
+cumplir el requisito 6 completo (cliente y contrato afectados, serial
+de ONT, PON físico, zona esperada, zona registrada, motivo). Sigue
+siendo de SOLO LECTURA — una vista o alerta nueva, reutilizando
+`olt_onts`/`contracts`/`clients` ya existentes, sin tabla nueva.
+
+**Fase C — cierre de Altas/Rutinas de traslado actualiza PON↔zona sin
+doble registro.** Hoy Fase 158 (`assign_contract_nap_sync_ont_zone`) ya
+sincroniza `olt_onts.zone_id` cuando se reasigna NAP desde el
+contrato — esa transacción es el patrón a extender, no a duplicar. Fase
+C extendería esa misma función (o una hermana que la reutilice) para
+que, al cerrar una Rutina de traslado desde App Campo (`campo.ts`), si
+el traslado implica un NAP/zona nuevo, se dispare la misma
+sincronización transaccional en vez de requerir que un admin la
+replique a mano después. Requiere decidir: ¿el cierre de la rutina en
+campo.ts llama directamente a la función SQL existente (reuso directo,
+preferido) o publica un evento que un trigger existente ya consume?
+Diseño preferido: llamada directa reusando `assign_contract_nap_sync_ont_zone`
+con el `ont_id` ya conocido por la rutina — evita inventar un mecanismo
+nuevo de sincronización.
+
+**Fase D — alerta proactiva de discrepancias (no banner pasivo).** Una
+vez Fase B exista, un job de solo lectura (similar al ya existente para
+alertas OLT) podría listar periódicamente todos los `mismatch`/
+`ambiguous_catalog`/casos de Situación A con señal online y mostrarlos
+en un panel de "Discrepancias PON-zona-contrato" para revisión
+administrativa — nunca auto-corrige. Reutilizaría la infraestructura de
+alertas ya existente en el panel OLT (sección "Alertas y
+sincronización" de `OltDetailView.vue`) en vez de crear una pantalla
+aparte.
+
+Ninguna de B/C/D se implementa en esta sesión — quedan documentadas
+para pedir autorización por separado, cada una con su propio nivel de
+riesgo (B es solo lectura/bajo riesgo; C toca escritura transaccional
+real y necesita las mismas salvaguardas que Fase 158; D depende de B).
+
+### Qué NO se tocó (confirmado)
+Sin escrituras a OLT/MikroTik/equipos reales. Sin cambios masivos en
+Supabase. Sin cambios automáticos de zonas/contratos/vínculos
+existentes — `comparePonZone` nunca escribe. Sin migraciones. Sin
+tocar inventario/facturación. Sin push ni despliegue — **commit local
+únicamente**, pendiente de autorización para push/deploy.
 
 ## 13. Próximo paso recomendado
 

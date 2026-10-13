@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { filterStalePendingOnus } from '@/lib/provisioningUi';
 import { computePonOccupancy } from '@/lib/oltCapacity';
+import { buildOfficialPonZoneCatalog, comparePonZone, type PonZoneMatch } from '@/lib/ponZoneMapping';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -279,6 +280,31 @@ const portSelection = ref<'all' | 'manual' | string>('all');
  * llamadas nuevas al backend/OLT.
  */
 const ponOccupancy = computed(() => computePonOccupancy(oltStore.onts.filter((o) => o.olt_device_id === deviceId.value)));
+
+/**
+ * Fase 3 comercial OLT — Fase A (PON↔zona, ver src/lib/ponZoneMapping.ts):
+ * cada zona ya declara su número de PON en el propio nombre del catálogo
+ * ("PON 4 - B6") — esa es la zona OFICIAL de ese PON, independiente de
+ * cuál sea la zona predominante observada entre las ONTs ya vinculadas
+ * (`dominantZone`, de computePonOccupancy). Solo compara y muestra —
+ * nunca reasigna ni escribe nada.
+ */
+const ponZoneCatalog = computed(() => buildOfficialPonZoneCatalog(catalogsStore.zones));
+type PonOccupancyPort = { ponNumber: number; dominantZone: { zoneId: string; zoneName: string } | null };
+function ponZoneStatus(p: PonOccupancyPort): PonZoneMatch {
+  const observed = p.dominantZone ? { id: p.dominantZone.zoneId, name: p.dominantZone.zoneName } : null;
+  return comparePonZone(p.ponNumber, observed, ponZoneCatalog.value);
+}
+/** Nombre de la zona oficial del catálogo cuando hay mismatch (null en cualquier otro caso) — evita castear tipos en el template. */
+function ponZoneMismatchOfficialName(p: PonOccupancyPort): string | null {
+  const r = ponZoneStatus(p);
+  return r.status === 'mismatch' ? r.officialZone.name : null;
+}
+/** Cantidad de zonas que reclaman el mismo número de PON en el catálogo (null si no es ambiguo). */
+function ponZoneAmbiguousCount(p: PonOccupancyPort): number | null {
+  const r = ponZoneStatus(p);
+  return r.status === 'ambiguous_catalog' ? r.candidates.length : null;
+}
 
 /** Que tarjeta de "Ocupación por puerto PON" tiene el desglose de zonas abierto (una a la vez, "slot/port"). */
 const expandedPonKey = ref<string | null>(null);
@@ -850,6 +876,16 @@ const gauges = computed(() => {
               {{ p.dominantZone.zoneName }} <span class="text-slate-400">({{ p.dominantZone.count }})</span>
             </div>
             <div v-else class="text-xs text-amber-700">Sin zona vinculada — pendiente de vincular</div>
+            <div v-if="ponZoneMismatchOfficialName(p)" class="text-[10px] text-red-600 mt-0.5">
+              ⚠ zona oficial del catálogo: "{{ ponZoneMismatchOfficialName(p) }}" — revisar vínculo
+            </div>
+            <div v-else-if="ponZoneAmbiguousCount(p)" class="text-[10px] text-red-600 mt-0.5">
+              ⚠ el catálogo tiene {{ ponZoneAmbiguousCount(p) }} zonas para PON
+              {{ String(p.ponNumber).padStart(2, '0') }} — revisar nombres de zona
+            </div>
+            <div v-else-if="ponZoneStatus(p).status === 'no_official'" class="text-[10px] text-slate-400 mt-0.5">
+              Sin zona "PON {{ p.ponNumber }}" en el catálogo
+            </div>
             <button
               v-if="p.otherZonesCount > 0"
               class="text-[10px] text-sky-600 hover:underline mt-1"
