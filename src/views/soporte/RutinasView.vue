@@ -8,6 +8,7 @@ import { useRoutinesStore } from '@/stores/routines';
 import { useClientsStore } from '@/stores/clients';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useInfraElementosStore } from '@/stores/infraElementos';
+import { useContractsStore } from '@/stores/contracts';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
@@ -16,7 +17,8 @@ import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
 import { findScheduleConflict, conflictConfirmMessage } from '@/lib/scheduleConflict';
-import type { Routine, RoutineStatus, RoutineTipo, TicketPriority } from '@/types/domain';
+import { TRASLADO_SERVICIO_SUBTIPO } from '@/lib/routineTraslado';
+import type { Routine, RoutineStatus, RoutineTipo, ServiceContract, TicketPriority } from '@/types/domain';
 
 // Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de orden
 // junto a Tickets (averias) e Instalaciones (altas). Reusa job_assignees
@@ -30,6 +32,7 @@ const routinesStore = useRoutinesStore();
 const clientsStore = useClientsStore();
 const catalogsStore = useCatalogsStore();
 const infraStore = useInfraElementosStore();
+const contractsStore = useContractsStore();
 const jobAssigneesStore = useJobAssigneesStore();
 const auth = useAuthStore();
 const toast = useToast();
@@ -184,6 +187,11 @@ const emptyForm = () => ({
   // regla automatica como Tickets, el admin decide cuanto vale cada rutina.
   points: '' as number | '',
   client_id: '',
+  // Fase 159 — contrato/servicio EXACTO que se traslada (solo subtipo
+  // 'traslado_servicio'); la zona/NAP/direccion NUEVAS se confirman recien
+  // al cerrar en App Campo (mismo criterio que un traslado de ticket,
+  // 13am) — aca solo se fija CUAL servicio es.
+  contract_id: '',
   zone_id: '',
   nap_elemento_id: '',
   direccion_destino: '',
@@ -212,11 +220,41 @@ const filteredClients = computed(() => {
   return list.filter((c) => `${c.first_name} ${c.last_name} ${c.document_number}`.toLowerCase().includes(q)).slice(0, 30);
 });
 
+// Fase 159 — servicios del cliente elegido, solo para el subtipo "Traslado
+// de servicio": un cliente con mas de un servicio (Fase 37) tiene que
+// elegir EXACTAMENTE cual se traslada, nunca se asume "el primero".
+const contractsForTraslado = ref<ServiceContract[]>([]);
+const loadingContractsForTraslado = ref(false);
+async function loadContractsForTraslado() {
+  contractsForTraslado.value = [];
+  if (form.value.subtipo !== TRASLADO_SERVICIO_SUBTIPO || !form.value.client_id) return;
+  loadingContractsForTraslado.value = true;
+  try {
+    contractsForTraslado.value = await contractsStore.fetchContractsByClient(form.value.client_id);
+  } catch {
+    contractsForTraslado.value = [];
+  } finally {
+    loadingContractsForTraslado.value = false;
+  }
+}
+// Disparados por el usuario (select @change) — nunca por la asignacion
+// programatica de openEdit/openCreate, que ya deja contract_id correcto y
+// solo necesita RECARGAR la lista (ver mas abajo), no resetearlo.
+function onSubtipoChange() {
+  form.value.contract_id = '';
+  void loadContractsForTraslado();
+}
+function onClientSelectionChange() {
+  form.value.contract_id = '';
+  void loadContractsForTraslado();
+}
+
 function openCreate() {
   editingRoutine.value = null;
   form.value = emptyForm();
   targetKind.value = 'none';
   clientFilter.value = '';
+  contractsForTraslado.value = [];
   formError.value = null;
   showModal.value = true;
 }
@@ -231,6 +269,7 @@ function openEdit(r: Routine) {
     priority: r.priority,
     points: r.points ?? '',
     client_id: r.client_id ?? '',
+    contract_id: r.contract_id ?? '',
     zone_id: r.zone_id ?? '',
     nap_elemento_id: r.nap_elemento_id ?? '',
     direccion_destino: r.direccion_destino ?? '',
@@ -246,6 +285,11 @@ function openEdit(r: Routine) {
   clientFilter.value = '';
   formError.value = null;
   showModal.value = true;
+  // contract_id ya quedo correcto arriba (el de la rutina real) — esto solo
+  // trae la lista de servicios del cliente para que el <select> lo muestre
+  // seleccionado, sin resetearlo (a diferencia de onSubtipoChange/
+  // onClientSelectionChange, pensados para un cambio hecho por el usuario).
+  void loadContractsForTraslado();
 }
 
 async function handleSubmit() {
@@ -265,6 +309,12 @@ async function handleSubmit() {
   // turno sin tecnico es valido (queda reservado), un tecnico sin turno no.
   if (form.value.schedule_tech_id && !form.value.schedule_turno) {
     formError.value = 'Asignaste un técnico — selecciona también el turno / hora estimada.';
+    return;
+  }
+  // Fase 159 — requisito 2: una rutina de traslado SIEMPRE debe identificar
+  // el contrato/servicio exacto, nunca queda implicito por client_id solo.
+  if (targetKind.value === 'client' && form.value.subtipo === TRASLADO_SERVICIO_SUBTIPO && !form.value.contract_id) {
+    formError.value = 'Selecciona el contrato/servicio exacto que se va a trasladar.';
     return;
   }
   const turno =
@@ -306,6 +356,8 @@ async function handleSubmit() {
     priority: form.value.priority,
     points: form.value.points === '' ? null : Number(form.value.points),
     client_id: targetKind.value === 'client' ? form.value.client_id || null : null,
+    contract_id:
+      targetKind.value === 'client' && form.value.subtipo === TRASLADO_SERVICIO_SUBTIPO ? form.value.contract_id || null : null,
     zone_id: targetKind.value === 'zone' ? form.value.zone_id || null : null,
     nap_elemento_id: targetKind.value === 'nap' ? form.value.nap_elemento_id || null : null,
     direccion_destino: targetKind.value === 'direccion' ? form.value.direccion_destino.trim() || null : null,
@@ -504,7 +556,7 @@ function formatDate(value: string | null) {
             </div>
             <div>
               <label class="block text-xs text-slate-600 mb-1">Subtipo</label>
-              <select v-model="form.subtipo" class="field-input">
+              <select v-model="form.subtipo" class="field-input" @change="onSubtipoChange">
                 <option v-for="s in SUBTIPOS[form.tipo_rutina]" :key="s.value" :value="s.value">{{ s.label }}</option>
               </select>
             </div>
@@ -562,9 +614,29 @@ function formatDate(value: string | null) {
               placeholder="Buscar cliente por nombre o documento..."
               class="field-input mb-2"
             />
-            <select v-if="targetKind === 'client'" v-model="form.client_id" class="field-input" size="5">
+            <select
+              v-if="targetKind === 'client'"
+              v-model="form.client_id"
+              class="field-input"
+              size="5"
+              @change="onClientSelectionChange"
+            >
               <option v-for="c in filteredClients" :key="c.id" :value="c.id">{{ c.first_name }} {{ c.last_name }} — {{ c.document_number }}</option>
             </select>
+
+            <!-- Fase 159 — Traslado de servicio: cual contrato EXACTO se traslada (obligatorio, un cliente puede tener mas de un servicio). La zona/NAP/direccion NUEVAS no se piden aca: se confirman al cerrar en App Campo. -->
+            <div v-if="targetKind === 'client' && form.subtipo === TRASLADO_SERVICIO_SUBTIPO && form.client_id" class="mt-2 pt-2 border-t border-slate-100">
+              <label class="block text-xs text-slate-600 mb-1">Contrato/servicio a trasladar *</label>
+              <select v-model="form.contract_id" class="field-input" required>
+                <option value="" disabled>{{ loadingContractsForTraslado ? 'Cargando servicios...' : 'Selecciona el servicio...' }}</option>
+                <option v-for="c in contractsForTraslado" :key="c.id" :value="c.id">
+                  {{ c.contract_number || c.id.slice(0, 8) }} — {{ c.zones?.name || 'Sin zona' }} ({{ c.installation_address || 'sin dirección' }})
+                </option>
+              </select>
+              <p v-if="!loadingContractsForTraslado && !contractsForTraslado.length" class="text-[11px] text-amber-700 mt-1">
+                Este cliente no tiene servicios registrados — no se puede crear el traslado todavía.
+              </p>
+            </div>
 
             <select v-if="targetKind === 'zone'" v-model="form.zone_id" class="field-input">
               <option value="">Selecciona la zona...</option>

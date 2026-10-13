@@ -15,8 +15,11 @@
 -- olt_onts/inventory_units/descuentos_compensacion (Fase 37,
 -- 20260930040000_fase37_servicios_independientes.sql).
 --
--- NO APLICADA TODAVIA — requiere autorizacion explicita del usuario antes
--- de correr contra Supabase de produccion (CLAUDE.md, regla 16).
+-- APLICADA en Supabase produccion 2026-10-13 (autorizacion explicita del
+-- usuario) — version registrada 20261013203239. Verificado post-aplicacion:
+-- columna nullable, FK -> service_contracts(id) ON DELETE SET NULL, indice
+-- parcial creado, las 27 rutinas existentes quedaron intactas (0 con
+-- contract_id, igual que antes).
 
 alter table public.routines
   add column if not exists contract_id uuid references public.service_contracts (id) on delete set null;

@@ -3207,7 +3207,7 @@ zona al cerrar) antes de autorizar push/deploy; luego decidir si se
 amplía a Rutinas (requiere UI nueva) y/o a Altas (requiere autorización
 explícita, hoy fuera de alcance).
 
-## 13an. Fase 3 OLT — Fase C (continuación): "Traslado de servicio" en Rutinas — DETENIDO, falta autorizar migración mínima (2026-10-13)
+## 13an. Fase 3 OLT — Fase C (continuación): "Traslado de servicio" en Rutinas — DETENIDO, falta autorizar migración mínima (2026-10-13, ver 13ao — migración ya autorizada y aplicada)
 
 Continuación de 13am, a pedido explícito del usuario: completar el flujo
 "Traslado de servicio" de punta a punta (creación de la rutina → cierre en
@@ -3316,6 +3316,192 @@ automatizado (ticket `reconnection_relocation`, 13am) funciona; el camino
 "Rutina de traslado de servicio" pedido en este turno está diseñado pero
 bloqueado en el primer paso de escritura (falta la columna). No se
 declara terminado, según lo pedido explícitamente por el usuario.
+
+## 13ao. Fase 3 OLT — Fase C: migración Fase 159 aplicada + flujo "Traslado de servicio" completado localmente (2026-10-13, IMPLEMENTADO, commit local sin push)
+
+Continuación de 13an, autorizado explícitamente por el usuario: aplicar
+**solo** la migración Fase 159 en Supabase producción, verificar, y
+continuar localmente con el selector de contrato y el formulario de
+traslado en App Campo.
+
+### Migración aplicada y verificada
+1. **Verificación previa** (SQL de solo lectura): `contract_id` NO
+   existía en `routines`; `list_migrations` confirmó que `fase159` no
+   estaba en la lista (última aplicada: `fase158`).
+2. **Respaldo/rollback**: tabla de 27 filas — cambio aditivo (columna
+   nullable, sin default); rollback trivial si hiciera falta:
+   `alter table public.routines drop column if exists contract_id;`
+   (arrastra la FK y el índice).
+3. **Aplicada** con `apply_migration` — versión registrada:
+   `20261013203239`. Archivo local renombrado a
+   `supabase/migrations/20261013203239_fase159_routines_contract_id.sql`
+   para que el repo quede igual a lo realmente aplicado.
+4. **Validación posterior** (todos los puntos pedidos, confirmados por
+   SQL de solo lectura):
+   - `contract_id` existe, `uuid`, `is_nullable = YES`. ✅
+   - FK `routines_contract_id_fkey` → `service_contracts(id) ON DELETE
+     SET NULL`. ✅
+   - Índice `idx_routines_contract` (parcial, `WHERE contract_id IS NOT
+     NULL`) existe. ✅
+   - Las 27 rutinas existentes siguen intactas (`count(*) = 27`,
+     `count(contract_id) = 0` — ninguna la usa todavía, como se
+     esperaba). ✅
+   - Creación/cierre de rutinas normales: código no tocado para esos
+     casos (ver "Qué NO se tocó" más abajo) — sin cambio de
+     comportamiento. ✅
+5. **Solo esa migración** — no se aplicó ninguna otra pendiente.
+
+### Implementación local (sin push/deploy, sin traslados reales ejecutados)
+
+**1. Catálogo de Rutinas** (ya hecho en 13an, sin cambios): subtipo
+`traslado_servicio` dentro de `tipo_rutina = 'servicio_cliente'`.
+
+**2. Selección de contrato obligatoria** (`src/views/soporte/RutinasView.vue`):
+al elegir cliente + subtipo "Traslado de servicio", se cargan sus
+`service_contracts` (`contractsStore.fetchContractsByClient`, ya
+existente) y se exige elegir uno exacto antes de guardar — nunca se
+asume "el primero" ni se eligen por `client_id` solo. La zona/NAP/
+dirección **nuevas** NO se piden aquí — se confirman al cerrar en App
+Campo (mismo criterio que un traslado de ticket, 13am), evitando pedir
+el mismo dato dos veces.
+
+**3-4. App Campo, solo para esta rutina** (`CampoTrabajoDetailView.vue`,
+`isTrasladoRoutine` computado — nunca se infiere por título/descripción,
+solo por `tipo_rutina`+`subtipo` exactos vía
+`isTrasladoServicioRoutine`):
+- **Estado actual, solo lectura**: dirección/zona vía `activeContract`
+  (mecanismo YA existente que resuelve el contrato correcto por
+  `trabajo.contractId`, sin código nuevo — solo se corrigió
+  `fromRoutine` en `campo.ts` para que `contractId = r.contract_id` en
+  vez de `null` fijo); caja NAP/puerto vía `findContractNapId` (ya
+  existente) + `fibra.napPuertosPorElemento`; ONT vía
+  `resolveCurrentOntForContract` (nuevo, puro, mismo criterio de "nunca
+  elegir al azar" que `resolveOntForZoneSync`) sobre
+  `oltStore.fetchOntsByClient` (ya existente).
+- **Confirmar destino nuevo**: reutiliza los selects de Zona/Caja NAP
+  que ya existían para instalaciones (`catalogs.zones`,
+  `installNapOptions`, `onInstallZoneChange`) — ningún componente
+  nuevo. El puerto se asigna automáticamente al primero libre de la
+  caja elegida, igual que en toda Alta (nunca se elige manualmente, es
+  consistente con el resto del sistema). Dirección nueva: campo de
+  texto libre opcional, reutiliza `service_contracts.installation_address`.
+- **"Conservar ONT" / "ONT reemplazada"**: radio nuevo; si "reemplazada",
+  pide el serial nuevo (reutiliza `ClosureInput.ontSerial`/
+  `work_order_closures.ont_serial`, columnas ya existentes — **cero
+  columnas nuevas** para esto). Nunca vincula ni aprovisiona nada en la
+  OLT — solo queda registrado para revisión administrativa.
+
+**5. Cierre reutiliza Fase 158** (`src/stores/campo.ts`): como ya
+corrige `fromRoutine`, el `contractId` que llega a
+`performClosureSubmitInner` ya es el `contract_id` exacto de la rutina
+— la lógica de Fase C existente (13am) se activa SOLA, sin
+"sabor especial" por `jobType === 'routine'`. Único agregado real:
+`input.ontReplaced` — si es `true`, **se omite** la llamada a
+`assignContractToNapAndSyncOntZone` (se usa la versión que solo asigna
+NAP) y se devuelve un aviso explícito (`ontZoneWarning`) en vez de
+intentar sincronizar la zona de una ONT que puede ya no ser la misma —
+cumple el requisito 6 ("no asumir que es el mismo equipo... no
+aprovisionar, no tocar la OLT") sin añadir ninguna lógica de
+reasignación real. El puerto NAP SÍ se reasigna igual en ambos casos
+(hecho físico independiente de cuál ONT hay del otro lado).
+
+**7. Historial, sin tabla nueva**: `buildTrasladoHistorialNote` (puro,
+`src/lib/routineTraslado.ts`) construye una línea de texto ("Traslado de
+servicio: dirección anterior (zona anterior) → dirección nueva (zona
+nueva). ONT conservada/reemplazada.") que se antepone a las notas del
+técnico y queda en `closure_notes` (tanto en `routines` como en
+`work_order_closures`, columnas ya existentes) — decisión consciente de
+NO crear una tabla de auditoría aparte (ver riesgos).
+
+### Archivos modificados
+- `supabase/migrations/20261013203239_fase159_routines_contract_id.sql`
+  (aplicada; renombrada desde el nombre propuesto en 13an).
+- `src/types/domain.ts` (`Routine.contract_id` + embed
+  `service_contracts`).
+- `src/stores/routines.ts` (`ROUTINE_SELECT` con el embed).
+- `src/views/soporte/RutinasView.vue` (selector de contrato +
+  validación).
+- `src/lib/routineTraslado.ts` (nuevo, puro):
+  `isTrasladoServicioRoutine`, `resolveCurrentOntForContract`,
+  `buildTrasladoHistorialNote`.
+- `src/lib/__tests__/routineTraslado.test.ts` (nuevo, 12 casos).
+- `src/stores/campo.ts` (`fromRoutine` corregido; `ClosureInput.ontReplaced`/
+  `installationAddress`; gating de la vía Fase 158; combinación de la
+  escritura zona+dirección en un solo `updateContract`).
+- `src/lib/offlineQueue.ts` (`QueuedClosure.ontReplaced`/
+  `installationAddress`, mismo patrón que el resto de campos).
+- `src/views/campo/CampoTrabajoDetailView.vue` (`isTrasladoRoutine`,
+  carga de ONTs/infra para el traslado, sección de template completa,
+  validaciones, nota de historial, payload de cierre).
+
+### Pruebas
+- `routineTraslado.test.ts` (12 casos nuevos): `isTrasladoServicioRoutine`
+  (combinación exacta tipo+subtipo, nunca por subtipo solo);
+  `resolveCurrentOntForContract` (ninguna/una/ambigua — nunca elige al
+  azar); `buildTrasladoHistorialNote` (conservada, reemplazada con/sin
+  serial, sin datos previos registrados).
+- `npm run test:fetch-timeout` → **118/118** (106 previos + 12 nuevos).
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+- Resto de la matriz pedida — **cubierta por diseño + pruebas ya
+  existentes, citada sin duplicar**:
+  - **Fallo parcial/transaccional, permisos, concurrencia, zona ya
+    coincide**: `server/tests/ontZoneNapSync.sql.test.ts` /
+    `napAssignment.sql.test.ts` (13am) — la vía que usa el cierre de
+    traslado es EXACTAMENTE la misma función SQL, sin variante nueva.
+  - **Reintento/idempotencia del cierre (fotos/firma/no duplicar
+    movimientos)**: `jobClosureIdempotency.test.ts` (ya existente, sin
+    cambios en esa parte del flujo).
+- **No probado todavía de punta a punta con datos reales** (explícitamente
+  no autorizado en este turno: "no ejecutar todavía traslados reales"):
+  crear una rutina de traslado real, abrirla en App Campo en un
+  dispositivo/navegador real, y cerrarla — queda como siguiente paso
+  antes de autorizar push/deploy. **No se declara el flujo "funcionando
+  de punta a punta" sin esa verificación real**, tal como pidió el
+  usuario explícitamente.
+
+### Riesgos (documentados, no bloqueantes)
+- **Nota de historial con dato "anterior" potencialmente desactualizado
+  en un reintento dentro de la misma sesión**: `activeContract` se carga
+  una sola vez al abrir la pantalla; si un primer intento de cierre ya
+  actualizó la zona del contrato pero falló en un paso posterior, un
+  reintento SIN recargar la página seguiría mostrando la zona vieja como
+  "anterior" en la nota (cosmético — no afecta qué zona queda
+  finalmente guardada, que sigue siendo correcta e idempotente). Se
+  documenta en vez de resolverse ahora (requeriría refrescar el
+  contrato en cada intento, complejidad no justificada para este caso
+  límite).
+- **"ONT reemplazada" nunca vincula el nuevo serial a ningún lado** — a
+  propósito (requisito 6). El `ont_serial` queda únicamente en
+  `work_order_closures`/`closure_notes` como registro; el re-vínculo
+  real (actualizar `olt_onts` con el serial correcto) sigue siendo un
+  paso manual de un administrador vía el panel OLT o el import
+  existente — no se automatizó ni se planea automatizar sin una fase
+  aparte con su propia validación.
+- **Sin tabla de auditoría de traslados** — la única "memoria" del
+  traslado es la nota de texto en `closure_notes` y el propio cambio de
+  `zone_id`/`installation_address` del contrato. Si en el futuro se
+  necesita reportar "cuántos traslados hubo este mes" de forma
+  estructurada, esto no lo permite directamente (habría que buscar por
+  texto) — evaluar una tabla dedicada en una fase futura si se vuelve
+  una necesidad real, no se justificaba crearla solo para esto ahora.
+- **Rutinas que no son traslado**: cero cambios de comportamiento
+  (verificado línea por línea — todas las ramas nuevas están
+  condicionadas por `isTrasladoRoutine`/`jobType==='ticket'`/
+  `jobType==='installation'`, los mismos gates que ya existían).
+
+### Qué NO se tocó (confirmado)
+Sin escrituras a OLT/MikroTik/PPPoE. Sin aprovisionamiento. Sin
+modificar vínculos `contract_id`→`olt_onts` automáticamente ante "ONT
+reemplazada". Sin traslados reales ejecutados contra producción (solo
+pruebas unitarias con datos sintéticos). Sin otra migración aplicada
+además de Fase 159. Sin afectar rutinas/averías/altas normales. Sin
+push ni despliegue — **commit local únicamente**.
+
+**Siguiente paso recomendado**: probar el flujo completo con una rutina
+de traslado real (crear → asignar a un técnico → abrir en App Campo →
+confirmar destino → cerrar) en un entorno de prueba antes de pedir
+autorización de push/deploy — recién ahí se puede declarar Fase C
+terminada de punta a punta, tal como exigió el usuario.
 
 ## 13. Próximo paso recomendado
 

@@ -48,6 +48,10 @@ export interface QueuedClosure {
   napElementoId: string | null;
   /** Zona/Sector de la Planta Externa, obligatoria al completar una instalación — se guarda en el contrato. */
   zoneId: string | null;
+  /** Fase 159 — Rutina de traslado: "ONT reemplazada" (omite la sincronizacion automatica de zona de la ONT en la OLT). false en el resto de cierres. */
+  ontReplaced: boolean;
+  /** Fase 159 — Rutina de traslado: direccion NUEVA confirmada (reusa service_contracts.installation_address). Null en el resto de cierres. */
+  installationAddress: string | null;
   /** Código de cliente / cintillo Drop (reusa service_contracts.client_code, Fase 39) — obligatorio al completar una instalación, opcional en tickets. */
   clientCode: string | null;
   lastError?: string;

@@ -342,6 +342,8 @@ export interface Routine {
   zone_id: string | null;
   nap_elemento_id: string | null;
   client_id: string | null;
+  /** Fase 159 — contrato/servicio EXACTO que se traslada (subtipo = 'traslado_servicio'); null en el resto de rutinas. Un cliente puede tener mas de un servicio (Fase 37), nunca se elige por client_id solo. */
+  contract_id: string | null;
   /** Fase 129 — destino en texto libre cuando no hay cliente/zona/NAP puntual (ej. "Agencia de Transportes Flores"). */
   direccion_destino: string | null;
   /** Fase 129 — equipos a llevar de stock cuando la rutina es una visita comercial (ver RoutineAdicionales). */
@@ -366,6 +368,12 @@ export interface Routine {
   zones?: Pick<Zone, 'id' | 'name'> | null;
   nap_elemento?: Pick<InfraElemento, 'id' | 'name'> | null;
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+  /** Fase 159 — contrato trasladado, con su zona/direccion ACTUALES (antes del cierre). */
+  service_contracts?:
+    | (Pick<ServiceContract, 'id' | 'contract_number' | 'client_code' | 'zone_id' | 'installation_address' | 'status'> & {
+        zones?: Pick<Zone, 'id' | 'name'> | null;
+      })
+    | null;
 }
 
 export interface InventoryCategory {

@@ -155,7 +155,12 @@ function fromRoutine(r: Routine): TrabajoItem {
     latitude: r.clients?.latitude ?? null,
     longitude: r.clients?.longitude ?? null,
     fecha: r.scheduled_date ?? r.created_at,
-    contractId: null,
+    // Fase 159 — null en casi toda rutina (sigue sin ser un dato puntual,
+    // Fase 101); el subtipo "Traslado de servicio" (Fase 3 OLT, Fase C,
+    // ver ESTADO_DESARROLLO.md 13an/13ao) es la unica excepcion real y SI
+    // lo trae — necesario para que performClosureSubmitInner sepa a que
+    // contract_id exacto sincronizar zona/NAP/ONT al cerrar.
+    contractId: r.contract_id ?? null,
     raw: r,
   };
 }
@@ -212,6 +217,10 @@ export interface ClosureInput {
   napElementoId: string | null;
   /** Zona/Sector de la Planta Externa, obligatoria al completar una instalación — se guarda en contracts.zone_id. */
   zoneId: string | null;
+  /** Fase 159 — Rutina de traslado: el tecnico marco "ONT reemplazada" (equipo fisico distinto). Si es true, se omite la sincronizacion automatica de zona de la ONT en la OLT (Fase 158) aunque haya napElementoId — nunca se asume que el vinculo contract_id->olt_onts sigue siendo el equipo correcto sin que un administrador lo revise. false en el resto de cierres (tickets/instalaciones no la usan). */
+  ontReplaced: boolean;
+  /** Fase 159 — Rutina de traslado: direccion NUEVA confirmada por el tecnico (reusa service_contracts.installation_address, columna ya existente). Null = no se toca (resto de cierres). */
+  installationAddress: string | null;
   /** Fase 139 — codigo de cliente / cintillo Drop, reusa contracts.client_code (Fase 39). Obligatorio al completar una instalacion, opcional en tickets/reconexiones. Null/vacio = no tocar (evita sobrescribir con blanco). */
   clientCode: string | null;
 }
@@ -638,8 +647,14 @@ export const useCampoStore = defineStore('campo', () => {
       napElementoId: input.napElementoId,
       napZoneId: napElemento?.zone_id ?? null,
     });
-    if (effectiveZoneId && input.contractId) {
-      await contractsStore.updateContract(input.contractId, { zone_id: effectiveZoneId });
+    // Fase 159 — Traslado de servicio: la direccion nueva viaja junto con la
+    // zona en la MISMA escritura al contrato (reusa installation_address,
+    // columna ya existente) — no es una escritura aparte.
+    const contractPatch: { zone_id?: string; installation_address?: string } = {};
+    if (effectiveZoneId) contractPatch.zone_id = effectiveZoneId;
+    if (input.installationAddress) contractPatch.installation_address = input.installationAddress;
+    if (Object.keys(contractPatch).length && input.contractId) {
+      await contractsStore.updateContract(input.contractId, contractPatch);
     }
 
     // Codigo de cliente / cintillo Drop: movido al principio de la funcion
@@ -658,17 +673,29 @@ export const useCampoStore = defineStore('campo', () => {
     // despues (gap real confirmado, ver 13am). Si el rol no alcanza o es
     // una instalacion, sigue el camino de siempre (igual que antes de esta
     // fase, sin ningun cambio de comportamiento).
+    // Fase 159 — Rutina de traslado: "ONT reemplazada" (input.ontReplaced)
+    // nunca debe disparar la sincronizacion automatica de zona de la ONT en
+    // la OLT — el vinculo contract_id->olt_onts quedaria apuntando a un
+    // equipo que ya no es el mismo hasta que un administrador lo revise y
+    // relacione el nuevo serial (aprovisionamiento aparte, fuera de alcance
+    // aqui: "no ejecutar aprovisionamiento ni cambios en la OLT"). El
+    // puerto NAP SI se reasigna igual (es un hecho fisico real,
+    // independiente de cual ONT haya en el otro extremo).
     let ontZoneSyncOutcome: OntZoneRpcResult | null = null;
+    let ontReplacedSkipped = false;
     if (input.napElementoId && input.contractId && input.clientId) {
       const capacity = napElemento?.puertos_total ?? NAP_CLIENT_LIMIT;
-      if (input.jobType !== 'installation' && canSyncOltZone(auth.role)) {
+      if (input.jobType !== 'installation' && !input.ontReplaced && canSyncOltZone(auth.role)) {
         const { ontZone } = await fibra.assignContractToNapAndSyncOntZone(input.napElementoId, input.contractId, input.clientId);
         ontZoneSyncOutcome = ontZone;
       } else {
         await fibra.assignContractToNap(input.napElementoId, input.contractId, input.clientId, capacity);
+        if (input.ontReplaced) ontReplacedSkipped = true;
       }
     }
-    const ontZoneWarning = describeOntZoneSyncOutcome(ontZoneSyncOutcome);
+    const ontZoneWarning = ontReplacedSkipped
+      ? 'ONT marcada como reemplazada — la zona de la ONT en la OLT NO se sincronizó automáticamente; un administrador debe actualizar el vínculo (serial) desde el panel OLT.'
+      : describeOntZoneSyncOutcome(ontZoneSyncOutcome);
 
     if (input.jobType === 'installation') {
       await installationsStore.updateStatus(input.jobId, 'completed');
@@ -739,6 +766,8 @@ export const useCampoStore = defineStore('campo', () => {
       potenciaDbm: item.potenciaDbm,
       napElementoId: item.napElementoId,
       zoneId: item.zoneId,
+      ontReplaced: item.ontReplaced,
+      installationAddress: item.installationAddress,
       clientCode: item.clientCode,
     });
     if (ontZoneWarning) {
@@ -770,6 +799,8 @@ export const useCampoStore = defineStore('campo', () => {
         potenciaDbm: input.potenciaDbm,
         napElementoId: input.napElementoId,
         zoneId: input.zoneId,
+        ontReplaced: input.ontReplaced,
+        installationAddress: input.installationAddress,
         clientCode: input.clientCode,
       });
       await refreshQueuedCount();
@@ -802,6 +833,8 @@ export const useCampoStore = defineStore('campo', () => {
           potenciaDbm: input.potenciaDbm,
           napElementoId: input.napElementoId,
           zoneId: input.zoneId,
+          ontReplaced: input.ontReplaced,
+          installationAddress: input.installationAddress,
           clientCode: input.clientCode,
         });
         await refreshQueuedCount();
