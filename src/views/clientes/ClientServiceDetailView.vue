@@ -23,7 +23,7 @@ import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPh
 import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
-import { syncOltZoneForContract } from '@/lib/ontZoneSync';
+import { syncOltZoneForContract, OLT_ZONE_SYNC_ROLES } from '@/lib/ontZoneSync';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { resolveOntPlanName } from '@/lib/ontPlanDisplay';
 import { countOcupadosReales } from '@/lib/napOccupancy';
@@ -324,9 +324,10 @@ async function handleCreateZone() {
 // Fase 158: los 3 roles operativos reales de SmartRayco (ver aclaración
 // del usuario) tienen la via transaccional NAP+zona-de-ONT; SOPORTE/
 // FACTURACION (si llegaran a usar esta pantalla) siguen exactamente como
-// antes — no se les desarrolla ni amplia nada nuevo aca.
-const OLT_ZONE_SYNC_ROLES = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'];
-const canSyncOltZone = computed(() => OLT_ZONE_SYNC_ROLES.includes(auth.role ?? ''));
+// antes — no se les desarrolla ni amplia nada nuevo aca. Lista centralizada
+// en ontZoneSync.ts (Fase C, ver ESTADO_DESARROLLO.md 13am) — campo.ts usa
+// la misma, nunca 2 copias que puedan desincronizarse.
+const canSyncOltZone = computed(() => (OLT_ZONE_SYNC_ROLES as readonly string[]).includes(auth.role ?? ''));
 
 /** Traduce el resultado de la via transaccional (Fase 158) a log/alerta — nunca se calla un caso ambiguo. */
 function reportOltZoneSync(c: ServiceContract, ontZone: { ontZoneSynced: boolean; ontZoneSkipReason: string | null }) {

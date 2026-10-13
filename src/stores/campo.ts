@@ -17,6 +17,12 @@ import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { compressImage } from '@/lib/imageCompression';
 import {
+  canSyncOltZone,
+  describeOntZoneSyncOutcome,
+  resolveClosureTargetZoneId,
+  type OntZoneRpcResult,
+} from '@/lib/ontZoneSync';
+import {
   isUniqueViolation,
   photosAlreadyUploaded,
   equipmentTypesAlreadyUploaded,
@@ -435,18 +441,18 @@ export const useCampoStore = defineStore('campo', () => {
 
   // ---- Cierre de trabajo (fotos + firma + GPS + serial ONT), con cola
   // offline como respaldo cuando no hay señal en el sitio del cliente. ----
-  async function performClosureSubmit(input: ClosureInput) {
+  async function performClosureSubmit(input: ClosureInput): Promise<{ ontZoneWarning: string | null }> {
     if (!closureGuard.tryEnter(input.jobType, input.jobId)) {
       throw new Error('Ya hay un cierre en curso para este trabajo — espera a que termine antes de reintentar.');
     }
     try {
-      await performClosureSubmitInner(input);
+      return await performClosureSubmitInner(input);
     } finally {
       closureGuard.exit(input.jobType, input.jobId);
     }
   }
 
-  async function performClosureSubmitInner(input: ClosureInput) {
+  async function performClosureSubmitInner(input: ClosureInput): Promise<{ ontZoneWarning: string | null }> {
     // Codigo de cliente / cintillo Drop (Fase 139) — PRIMERO, antes de subir
     // cualquier foto/firma: si el codigo ya pertenece a OTRO contrato (UNIQUE
     // real en service_contracts.client_code, Fase 39 — nunca se toca), que
@@ -611,26 +617,58 @@ export const useCampoStore = defineStore('campo', () => {
     );
     if (closureErr) throw closureErr;
 
-    // Zona/Sector de Planta Externa, obligatoria al completar una instalacion
-    // (ver CampoTrabajoDetailView) — queda en el contrato, igual que ya hacia
-    // InstalacionDetailView.vue desde el Panel Web.
-    if (input.zoneId && input.contractId) {
-      await contractsStore.updateContract(input.contractId, { zone_id: input.zoneId });
+    // Zona/Sector de Planta Externa: obligatoria al completar una instalacion
+    // (input.zoneId siempre viene de closureForm en ese caso) — queda en el
+    // contrato, igual que ya hacia InstalacionDetailView.vue desde el Panel
+    // Web. Un traslado/recableado cerrado como TICKET (categoria
+    // reconnection_relocation) no tiene selector de zona propio en el
+    // formulario de cierre, pero SI puede elegir una caja NAP distinta — esa
+    // caja ya tiene su propia zona (infra_elementos.zone_id, misma fuente
+    // que usa ZonasView), asi que se usa esa como la zona "confirmada" en
+    // vez de pedirle el mismo dato 2 veces al tecnico (Fase 3 OLT, Fase C —
+    // ver ESTADO_DESARROLLO.md 13am). Si no hay ni zona explicita ni caja
+    // NAP elegida (averia normal, sin recableado), no se toca nada.
+    let napElemento: { id: string; zone_id?: string | null; puertos_total?: number | null } | undefined;
+    if (input.napElementoId) {
+      if (!infraStore.elementos.length) await infraStore.fetchElementos();
+      napElemento = infraStore.elementos.find((e) => e.id === input.napElementoId);
+    }
+    const effectiveZoneId = resolveClosureTargetZoneId({
+      explicitZoneId: input.zoneId,
+      napElementoId: input.napElementoId,
+      napZoneId: napElemento?.zone_id ?? null,
+    });
+    if (effectiveZoneId && input.contractId) {
+      await contractsStore.updateContract(input.contractId, { zone_id: effectiveZoneId });
     }
 
     // Codigo de cliente / cintillo Drop: movido al principio de la funcion
     // (ver mas arriba) — se valida/aplica ANTES de subir evidencia.
 
     // Cambio de puerto NAP (Fase 95, solo si la averia exigio recablear) u
-    // obligatoria al completar una instalacion: mismo assignContractToNap —
-    // libera el puerto anterior del contrato (si tenia) y ocupa uno en la
-    // caja elegida.
+    // obligatoria al completar una instalacion — libera el puerto anterior
+    // del contrato (si tenia) y ocupa uno en la caja elegida. Fase C: en
+    // tickets/rutinas (nunca en Altas, que siguen exactamente igual que
+    // antes — Fase 2 ya esta cerrada y probada, fuera de alcance aqui) y
+    // solo para los 3 roles que la propia funcion SQL exige, se reusa la via
+    // TRANSACCIONAL de Fase 158 (NAP + zona de la ONT vinculada por
+    // contract_id, en una sola transaccion) en vez de la version que solo
+    // asigna NAP — asi un traslado cerrado en campo ya no deja la zona de
+    // la ONT en la OLT desactualizada hasta que alguien la corrija a mano
+    // despues (gap real confirmado, ver 13am). Si el rol no alcanza o es
+    // una instalacion, sigue el camino de siempre (igual que antes de esta
+    // fase, sin ningun cambio de comportamiento).
+    let ontZoneSyncOutcome: OntZoneRpcResult | null = null;
     if (input.napElementoId && input.contractId && input.clientId) {
-      if (!infraStore.elementos.length) await infraStore.fetchElementos();
-      const elemento = infraStore.elementos.find((e) => e.id === input.napElementoId);
-      const capacity = elemento?.puertos_total ?? NAP_CLIENT_LIMIT;
-      await fibra.assignContractToNap(input.napElementoId, input.contractId, input.clientId, capacity);
+      const capacity = napElemento?.puertos_total ?? NAP_CLIENT_LIMIT;
+      if (input.jobType !== 'installation' && canSyncOltZone(auth.role)) {
+        const { ontZone } = await fibra.assignContractToNapAndSyncOntZone(input.napElementoId, input.contractId, input.clientId);
+        ontZoneSyncOutcome = ontZone;
+      } else {
+        await fibra.assignContractToNap(input.napElementoId, input.contractId, input.clientId, capacity);
+      }
     }
+    const ontZoneWarning = describeOntZoneSyncOutcome(ontZoneSyncOutcome);
 
     if (input.jobType === 'installation') {
       await installationsStore.updateStatus(input.jobId, 'completed');
@@ -666,10 +704,17 @@ export const useCampoStore = defineStore('campo', () => {
         ...autoSchedule,
       });
     }
+
+    return { ontZoneWarning };
   }
 
   async function submitFromQueued(item: QueuedClosure) {
-    await performClosureSubmit({
+    // Reintento en segundo plano (sin tecnico mirando la pantalla en ese
+    // momento) — un aviso de zona/NAP ambiguo aqui solo se deja en consola
+    // para no perderlo, igual que el resto de avisos best-effort de este
+    // store; el cierre interactivo (submitClosure, abajo) si lo devuelve
+    // para mostrarlo en pantalla.
+    const { ontZoneWarning } = await performClosureSubmit({
       jobType: item.jobType,
       jobId: item.jobId,
       clientId: item.clientId,
@@ -696,9 +741,13 @@ export const useCampoStore = defineStore('campo', () => {
       zoneId: item.zoneId,
       clientCode: item.clientCode,
     });
+    if (ontZoneWarning) {
+      // eslint-disable-next-line no-console
+      console.warn(`[zona-ont] cierre en cola (${item.jobType}/${item.jobId}): ${ontZoneWarning}`);
+    }
   }
 
-  async function submitClosure(input: ClosureInput): Promise<{ queued: boolean }> {
+  async function submitClosure(input: ClosureInput): Promise<{ queued: boolean; ontZoneWarning?: string | null }> {
     if (!isOnline()) {
       await enqueueClosure({
         jobType: input.jobType,
@@ -728,8 +777,8 @@ export const useCampoStore = defineStore('campo', () => {
     }
 
     try {
-      await performClosureSubmit(input);
-      return { queued: false };
+      const { ontZoneWarning } = await performClosureSubmit(input);
+      return { queued: false, ontZoneWarning };
     } catch (e) {
       if (isNetworkError(e)) {
         await enqueueClosure({

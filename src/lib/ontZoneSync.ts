@@ -7,6 +7,63 @@
  * mas de un servicio/ONT), siempre por contract_id exacto.
  */
 
+/**
+ * Fase 3 comercial OLT — Fase C (automatizacion de traslados desde App
+ * Campo, ver ESTADO_DESARROLLO.md 13am): mismos 3 roles que ya exige la
+ * propia funcion SQL `assign_contract_nap_sync_ont_zone` (Fase 158) —
+ * centralizado aqui para que ClientServiceDetailView.vue (panel web) y
+ * campo.ts (App Campo) usen EXACTAMENTE la misma lista, nunca 2 copias
+ * que puedan desincronizarse.
+ */
+export const OLT_ZONE_SYNC_ROLES = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
+export function canSyncOltZone(role: string | null | undefined): boolean {
+  return (OLT_ZONE_SYNC_ROLES as readonly string[]).includes(role ?? '');
+}
+
+/** Forma del 3er valor que devuelve assign_contract_nap_sync_ont_zone (ver reportOltZoneSync en ClientServiceDetailView.vue). */
+export interface OntZoneRpcResult {
+  ontZoneSynced: boolean;
+  ontZoneSkipReason: string | null;
+}
+
+/**
+ * Traduce el resultado crudo de la via transaccional (Fase 158) a un
+ * mensaje para mostrarle a quien cerro el trabajo (tecnico o admin) —
+ * null significa "nada que avisar": ya sincronizado, o el contrato
+ * todavia no tiene ninguna ONT vinculada (caso normal antes de una
+ * Alta, no es un error). `ambiguo:N` SI se avisa siempre — es un dato
+ * real que necesita revision manual, nunca se calla.
+ */
+export function describeOntZoneSyncOutcome(result: OntZoneRpcResult | null): string | null {
+  if (!result || result.ontZoneSynced) return null;
+  if (!result.ontZoneSkipReason || result.ontZoneSkipReason === 'sin_ont_vinculada') return null;
+  if (result.ontZoneSkipReason.startsWith('ambiguo:')) {
+    const count = result.ontZoneSkipReason.split(':')[1] ?? '2+';
+    return `Este contrato tiene ${count} ONTs vinculadas en la OLT — no se actualizó ninguna zona automáticamente. Pide a un administrador que lo revise en el panel OLT.`;
+  }
+  return `No se pudo confirmar la zona de la ONT en la OLT (${result.ontZoneSkipReason}) — pide a un administrador que lo revise.`;
+}
+
+/**
+ * Zona "confirmada" a aplicar al cerrar un trabajo de campo: la que el
+ * tecnico eligio explicitamente (instalaciones, siempre la pide) o, si
+ * no hay una explicita pero SI eligio una caja NAP (traslados/
+ * recableados de un ticket, que no tienen selector de zona propio), la
+ * zona de ESA caja — nunca se le pide el mismo dato 2 veces (y pedirlo
+ * 2 veces podria hacer que se contradigan entre si, el motivo real de
+ * los `mismatch` de la Fase B). Sin zona explicita y sin NAP -> null,
+ * no hay nada confirmado que sincronizar.
+ */
+export function resolveClosureTargetZoneId(input: {
+  explicitZoneId: string | null;
+  napElementoId: string | null;
+  napZoneId: string | null;
+}): string | null {
+  if (input.explicitZoneId) return input.explicitZoneId;
+  if (input.napElementoId && input.napZoneId) return input.napZoneId;
+  return null;
+}
+
 export type OntZoneSyncResolution =
   | { status: 'update'; ontId: string }
   | { status: 'unchanged'; ontId: string }

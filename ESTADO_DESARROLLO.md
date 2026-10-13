@@ -3004,6 +3004,209 @@ inventario/facturación, sin push ni despliegue — **commit local
 automática de traslados desde App Campo mediante la lógica
 transaccional existente de Fase 158 (`assign_contract_nap_sync_ont_zone`).
 
+## 13am. Fase 3 OLT — Fase C: automatización de traslados desde App Campo (2026-10-13, IMPLEMENTADO, commit local sin push)
+
+Continuación de 13ak/13al. Objetivo: que al cerrar un traslado desde App
+Campo, SmartRayco reutilice los datos ya confirmados por el técnico para
+mantener coherentes contrato/zona/NAP/ONT, sin que un administrador tenga
+que reingresarlos a mano en otro módulo después.
+
+### PASO 1 — Verificación dirigida (hecha antes de escribir código)
+
+**¿Fase 158 está realmente aplicada en producción?** Confirmado por SQL de
+solo lectura contra Supabase (`information_schema.routines` +
+`pg_get_functiondef`), no asumido por la existencia del archivo en Git:
+`assign_contract_nap_sync_ont_zone` y `assign_provisioning_nap` existen y
+están desplegadas tal cual en el repo. El VM de producción sigue en
+`6b8e6a1` (sin cambios desde 13al) — Fase A/B siguen en commit local, sin
+desplegar.
+
+**Hallazgo clave (gap real, no asumido):** "Rutina por traslado" no existe
+como tal en el esquema — `RoutineCategory` no tiene ningún valor de
+traslado, y la plantilla de cierre de App Campo
+(`CampoTrabajoDetailView.vue`) **nunca envía `zoneId` ni `napElementoId`
+para `jobType === 'routine'`** (siempre `null`, confirmado en código). El
+traslado real de un servicio hoy se cierra como **ticket** de categoría
+`reconnection_relocation` ("Reconexión / Traslado"), cuyo formulario de
+cierre SÍ permite elegir una caja NAP distinta (`napElementoId`, opcional,
+"si recableaste") pero **nunca pide una zona nueva** (`zoneId` solo se
+envía para instalaciones). Por eso, hasta ahora, un traslado cerrado en
+campo actualizaba el puerto NAP pero dejaba tanto `service_contracts.zone_id`
+como `olt_onts.zone_id` desactualizados — exactamente el gap descrito por
+el usuario.
+
+**Dato suficiente para automatizar de forma segura, sin pedir nada nuevo al
+técnico:** cada caja NAP ya tiene su propia `zone_id` (`infra_elementos`,
+misma fuente que usa ZonasView/el selector de Altas). Cuando el técnico
+elige una caja NAP distinta al cerrar un traslado, esa elección física YA
+es la confirmación de la zona real — pedirle que además elija una zona en
+un segundo campo sería duplicar el mismo dato dos veces (y, si se
+contradicen entre sí, generaría exactamente el tipo de `mismatch` que
+detecta la Fase B). Por eso la solución mínima deriva la zona de la caja
+NAP elegida en vez de agregar un selector de zona nuevo al formulario de
+ticket — no hacía falta ninguna validación/confirmación adicional en la UI.
+
+### PASO 2 — Implementación mínima
+
+- **`src/lib/ontZoneSync.ts`** (puro, ampliado): `OLT_ZONE_SYNC_ROLES` +
+  `canSyncOltZone(role)` (antes vivía duplicado como constante local en
+  `ClientServiceDetailView.vue`, ahora centralizado — ese archivo solo
+  importa); `resolveClosureTargetZoneId({explicitZoneId, napElementoId,
+  napZoneId})` (zona explícita gana siempre —instalaciones—; si no hay,
+  usa la zona de la caja NAP elegida —tickets/traslados—; sin ninguna de
+  las 2, `null`, no inventa nada); `describeOntZoneSyncOutcome(result)`
+  traduce el resultado crudo de la RPC de Fase 158 a un mensaje para
+  humanos (`null` = nada que avisar; "ambiguo:N" y cualquier motivo no
+  reconocido SÍ se avisan siempre, nunca se callan).
+- **`src/stores/campo.ts`** (`performClosureSubmitInner`): la zona a
+  aplicar ahora es `resolveClosureTargetZoneId(...)` en vez de solo
+  `input.zoneId` — sin cambio de comportamiento para instalaciones
+  (siempre traen `zoneId` explícito). Para el bloque de NAP: si
+  `jobType !== 'installation'` (deliberado — Altas quedan intactas, ver
+  "Qué NO se tocó") y el rol de quien cierra es uno de los 3 permitidos
+  (`canSyncOltZone`), usa `fibra.assignContractToNapAndSyncOntZone`
+  (Fase 158, transaccional, por `contract_id` exacto — nunca por
+  `client_id` solo) en vez de `fibra.assignContractToNap` (la versión
+  que solo asigna NAP); si el rol no alcanza, sigue el camino de
+  siempre, sin cambios. El resultado (`ontZoneSynced`/`ontZoneSkipReason`)
+  se traduce con `describeOntZoneSyncOutcome` y se devuelve como
+  `ontZoneWarning` hasta `submitClosure` — `submitFromQueued` (reintentos
+  en segundo plano, sin técnico mirando la pantalla) solo lo deja en
+  `console.warn`, igual que el resto de avisos best-effort ya existentes
+  en este store.
+- **`src/views/clientes/ClientServiceDetailView.vue`**: importa
+  `OLT_ZONE_SYNC_ROLES` compartida en vez de su copia local — mismo
+  comportamiento, una sola fuente.
+- **`src/views/campo/CampoTrabajoDetailView.vue`**: nuevo
+  `closeOntZoneWarning`, mostrado como aviso ámbar junto al resultado del
+  cierre; si hay aviso, la redirección automática a `/campo` espera 5s en
+  vez de 1.2s para que el técnico llegue a leerlo.
+
+### Por qué esto ya cumple los requisitos de integridad pedidos
+- **`contract_id` exacto, nunca `client_id` solo**: `assign_contract_nap_sync_ont_zone`
+  busca la ONT por `contract_id` (confirmado leyendo su definición real en
+  Supabase, ver PASO 1) — un cliente con 2 servicios nunca mezcla sus ONTs.
+- **Dobles asignaciones de NAP**: `assign_provisioning_nap` ya bloquea con
+  `FOR UPDATE` la fila del puerto antes de ocuparlo y libera el puerto
+  anterior del mismo contrato dentro de la misma transacción — sin cambios
+  aquí, se reutiliza tal cual.
+- **Idempotencia ante reintentos**: la RPC no reescribe si la zona ya
+  coincide (`IS DISTINCT FROM`) y `assign_provisioning_nap` devuelve el
+  mismo puerto si ya estaba ocupado por ese mismo contrato — un reintento
+  del cierre completo (patrón ya existente, `jobClosureIdempotency.ts`)
+  no duplica ni corrompe nada.
+- **ONT reemplazada o que cambió de PON — nunca se asume**: esta fase
+  JAMÁS lee ni escribe serial/posición/PON físico — solo actúa sobre la
+  ONT que *ya* tiene ese `contract_id` en `olt_onts` (vínculo que establece
+  el flujo de aprovisionamiento/import existente, con sus propias
+  validaciones — Fase 2/13aj). Si el contrato tiene 0 o 2+ ONTs
+  vinculadas, la RPC devuelve `sin_ont_vinculada`/`ambiguo:N` y **no toca
+  ninguna** — nunca adivina cuál es "la" ONT nueva.
+- **Discrepancias informadas, no asumidas**: `describeOntZoneSyncOutcome`
+  nunca se calla un caso `ambiguo` — queda en el mensaje devuelto al
+  técnico (`ontZoneWarning`) y en consola para los reintentos en segundo
+  plano.
+- **No se marca como sincronizado si algo obligatorio falla**: si la RPC
+  (o la versión sin Fase 158) lanza una excepción real (NAP llena,
+  contrato/cliente no coinciden, rol sin permiso), la excepción sigue
+  propagándose igual que antes de esta fase — el ticket/rutina **no** se
+  marca `resolved`/`completed` (ese paso ocurre después, en el mismo
+  `performClosureSubmitInner`). Comportamiento sin cambios, solo se
+  reutiliza.
+
+### Archivos modificados
+- `src/lib/ontZoneSync.ts` (`OLT_ZONE_SYNC_ROLES`, `canSyncOltZone`,
+  `describeOntZoneSyncOutcome`, `resolveClosureTargetZoneId`).
+- `src/lib/__tests__/ontZoneSync.test.ts` (12 casos nuevos).
+- `src/stores/campo.ts` (`performClosureSubmitInner`/
+  `performClosureSubmit`/`submitClosure`/`submitFromQueued`).
+- `src/views/clientes/ClientServiceDetailView.vue` (reusa la constante
+  compartida, sin cambio de comportamiento).
+- `src/views/campo/CampoTrabajoDetailView.vue` (`closeOntZoneWarning`).
+
+### Pruebas
+- `ontZoneSync.test.ts` (12 casos nuevos): `canSyncOltZone` para los 3
+  roles + roles no permitidos + null/undefined; `describeOntZoneSyncOutcome`
+  para sincronizado/`sin_ont_vinculada`/`null`/`ambiguo:N`/motivo
+  desconocido; `resolveClosureTargetZoneId` para **zona explícita gana**
+  (Alta), **traslado sin selector de zona propio → deriva de la caja NAP**,
+  **traslado DENTRO de la misma zona** (caso explícitamente pedido:
+  devuelve la misma zona, nunca `null`), **caja NAP sin zona propia →
+  `null`, nunca inventa una**, **avería normal sin recableado → `null`**,
+  y **reintento → mismo resultado** (idempotente por ser función pura).
+- `npm run test:fetch-timeout` → **106/106** (94 previos + 12 nuevos).
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+- `npx tsc -p tsconfig.server.json --noEmit` → solo los 2 errores
+  preexistentes de `oltProvisioningService.ts` (confirmado otra vez con
+  `git stash`/`git stash pop` en 13ak — ningún archivo de `server/` se
+  tocó en esta fase, backend sin cambios).
+- Resto de la matriz pedida — **ya cubierta por pruebas existentes al
+  nivel correcto (RPC real de Postgres, no lógica de UI), citada sin
+  duplicar**:
+  - **Traslado a otra zona, múltiples servicios, fallo parcial
+    (transaccional)**: `server/tests/ontZoneNapSync.sql.test.ts` — casos
+    "caso feliz", "cliente con 2 servicios", "TRANSACCIONAL: si falla la
+    actualización de la ONT, la reserva NAP también se revierte".
+  - **Reemplazo de ONT / ambigüedad**: mismo archivo, caso "ambiguo: 2
+    ONTs con el mismo contract_id — ninguna se toca" — es la protección
+    real contra actuar sobre la ONT equivocada; a nivel de import/
+    posición física, además cubierto por `oltImportDescriptionGuard.test.ts`
+    (13aj, REEMPLAZO/TRASLADO).
+  - **Permisos (SUPERADMIN/ADMIN/TECNICO_RED sí, SOPORTE/FACTURACION/
+    anónimo no)**: mismo archivo, caso "permisos".
+  - **Reintento/idempotencia de la reserva NAP**: `src/lib/__tests__/napAssignment.test.ts`
+    ("successful and repeated requests rely on the transaction and
+    return its port") + `jobClosureIdempotency.test.ts` (idempotencia del
+    cierre completo, fotos/firma).
+  - **Concurrencia**: `server/tests/napAssignment.sql.test.ts`, caso real
+    con 2 conexiones Postgres simultáneas, "two connections compete for
+    last slot: loser preserves its old assignment" — misma función
+    (`assign_provisioning_nap`) que envuelve Fase 158, sin cambios.
+
+### Riesgos y limitaciones (documentadas, no bloqueantes)
+- **Las "Rutinas" (jobType `routine`) no se benefician todavía** — la UI
+  de cierre de una rutina nunca envía `zoneId`/`napElementoId` hoy
+  (confirmado en código, no es un supuesto). El código de `campo.ts` ya
+  está preparado para ese caso (no distingue por `jobType` salvo excluir
+  explícitamente `installation`), pero es código inerte hasta que la
+  pantalla de cierre de Rutinas agregue un selector de caja NAP — **no se
+  tocó esa UI en esta fase** (no estaba roto, sería ampliar alcance sin
+  pedido explícito). El traslado real automatizable HOY es el ticket de
+  categoría `reconnection_relocation`.
+- **Altas (instalaciones) deliberadamente NO usan la vía Fase 158
+  todavía** — restricción explícita del usuario ("no afectar altas").
+  Técnicamente sería seguro extenderlo (Altas siempre traen `zoneId`
+  explícito y ya validado, Fase 2 está cerrada y probada) pero se dejó
+  fuera de alcance a propósito; evaluar en una fase futura si el usuario
+  lo autoriza.
+- **El aviso de discrepancia (`ontZoneWarning`) solo llega al técnico que
+  cierra interactivamente** — un reintento en segundo plano
+  (`submitFromQueued`, cierre offline que sincroniza después) solo lo
+  deja en `console.warn`, nadie en campo lo ve en ese momento. Igual que
+  el resto de avisos best-effort de este store (ningún cambio de
+  política, mismo criterio ya aceptado).
+- Un caso `ambiguo:N` o cualquier motivo no reconocido sigue necesitando
+  revisión manual de un administrador en el panel OLT — por diseño
+  (regla 8 de la migración OLT, CLAUDE.md: ante discrepancia, detener y
+  pedir verificación, nunca adivinar).
+
+### Qué NO se tocó (confirmado)
+Sin escrituras a OLT/MikroTik/PPPoE. Sin borrar información anterior ni
+perder trazabilidad (los puertos NAP liberados quedan como fila `estado=
+'libre'`, nunca se eliminan — mismo comportamiento ya existente). Sin
+afectar averías normales (ningún cambio de comportamiento cuando no se
+elige una caja NAP nueva, que es la inmensa mayoría de los tickets). Sin
+afectar Altas (excluidas a propósito del nuevo camino, ver riesgos). Sin
+inventar relaciones por nombre de cliente ni por posición física — todo
+pasa por `contract_id`/`client_id` reales. Sin migraciones (ninguna tabla
+ni columna nueva). Sin push, sin despliegue — **commit local únicamente**.
+
+**Siguiente paso recomendado**: validar en campo con un traslado real de
+categoría `reconnection_relocation` (técnico elige una caja NAP en otra
+zona al cerrar) antes de autorizar push/deploy; luego decidir si se
+amplía a Rutinas (requiere UI nueva) y/o a Altas (requiere autorización
+explícita, hoy fuera de alcance).
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

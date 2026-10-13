@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveOntForZoneSync, syncOltZoneForContract } from '../ontZoneSync';
+import {
+  resolveOntForZoneSync,
+  syncOltZoneForContract,
+  canSyncOltZone,
+  describeOntZoneSyncOutcome,
+  resolveClosureTargetZoneId,
+} from '../ontZoneSync';
 
 test('sin ONT vinculada por contract_id: skipped_none, nunca se elige una por client_id', () => {
   const onts = [{ id: 'ont-1', contract_id: 'otro-contrato', zone_id: 'z1' }];
@@ -141,4 +147,72 @@ test('orquestacion: regresion — un segundo llamado tras un ok previo vuelve a 
   assert.deepEqual(first, { status: 'ok' });
   const second = await syncOltZoneForContract(deps, { contractId: 'contrato-1', clientId: 'cliente-1', targetZoneId: 'z2' });
   assert.deepEqual(second, { status: 'unchanged' });
+});
+
+// ---- Fase C (App Campo): canSyncOltZone / describeOntZoneSyncOutcome / resolveClosureTargetZoneId ----
+
+test('canSyncOltZone: solo SUPERADMIN/ADMIN/TECNICO_RED, igual que la funcion SQL de Fase 158', () => {
+  assert.equal(canSyncOltZone('SUPERADMIN'), true);
+  assert.equal(canSyncOltZone('ADMIN'), true);
+  assert.equal(canSyncOltZone('TECNICO_RED'), true);
+  assert.equal(canSyncOltZone('SOPORTE'), false);
+  assert.equal(canSyncOltZone('FACTURACION'), false);
+  assert.equal(canSyncOltZone(null), false);
+  assert.equal(canSyncOltZone(undefined), false);
+});
+
+test('describeOntZoneSyncOutcome: sincronizado -> null (nada que avisar)', () => {
+  assert.equal(describeOntZoneSyncOutcome({ ontZoneSynced: true, ontZoneSkipReason: null }), null);
+});
+
+test('describeOntZoneSyncOutcome: sin_ont_vinculada -> null (caso normal antes de una Alta, no es un error)', () => {
+  assert.equal(describeOntZoneSyncOutcome({ ontZoneSynced: false, ontZoneSkipReason: 'sin_ont_vinculada' }), null);
+});
+
+test('describeOntZoneSyncOutcome: resultado null (no se llego a llamar la via transaccional) -> null', () => {
+  assert.equal(describeOntZoneSyncOutcome(null), null);
+});
+
+test('describeOntZoneSyncOutcome: ambiguo -> mensaje claro con la cantidad, nunca se calla', () => {
+  const msg = describeOntZoneSyncOutcome({ ontZoneSynced: false, ontZoneSkipReason: 'ambiguo:2' });
+  assert.match(msg ?? '', /2 ONTs vinculadas/);
+});
+
+test('describeOntZoneSyncOutcome: motivo desconocido -> mensaje generico, tampoco se calla', () => {
+  const msg = describeOntZoneSyncOutcome({ ontZoneSynced: false, ontZoneSkipReason: 'algo_nuevo' });
+  assert.match(msg ?? '', /algo_nuevo/);
+});
+
+test('resolveClosureTargetZoneId: zona explicita (Alta) siempre gana, aunque tambien haya NAP con otra zona', () => {
+  assert.equal(
+    resolveClosureTargetZoneId({ explicitZoneId: 'zona-explicita', napElementoId: 'nap-1', napZoneId: 'zona-del-nap' }),
+    'zona-explicita',
+  );
+});
+
+test('resolveClosureTargetZoneId: traslado de ticket SIN selector de zona propio -> se deriva de la caja NAP elegida', () => {
+  assert.equal(
+    resolveClosureTargetZoneId({ explicitZoneId: null, napElementoId: 'nap-1', napZoneId: 'zona-del-nap' }),
+    'zona-del-nap',
+  );
+});
+
+test('resolveClosureTargetZoneId: traslado DENTRO de la misma zona (NAP nueva, misma zona que ya tenia) -> devuelve esa misma zona, nunca null', () => {
+  assert.equal(
+    resolveClosureTargetZoneId({ explicitZoneId: null, napElementoId: 'nap-2', napZoneId: 'zona-actual' }),
+    'zona-actual',
+  );
+});
+
+test('resolveClosureTargetZoneId: caja NAP sin zona propia asignada -> null, nunca inventa una', () => {
+  assert.equal(resolveClosureTargetZoneId({ explicitZoneId: null, napElementoId: 'nap-sin-zona', napZoneId: null }), null);
+});
+
+test('resolveClosureTargetZoneId: ni zona explicita ni NAP elegido (avería normal, sin recableado) -> null, no toca nada', () => {
+  assert.equal(resolveClosureTargetZoneId({ explicitZoneId: null, napElementoId: null, napZoneId: null }), null);
+});
+
+test('resolveClosureTargetZoneId: reintento — mismo input, mismo resultado (idempotente por construccion, es una funcion pura)', () => {
+  const input = { explicitZoneId: null, napElementoId: 'nap-1', napZoneId: 'zona-del-nap' };
+  assert.equal(resolveClosureTargetZoneId(input), resolveClosureTargetZoneId(input));
 });

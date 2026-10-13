@@ -138,6 +138,20 @@ completo.
 9. Solo usamos 3 roles operativos reales: **SUPERADMIN, ADMIN y
    TECNICO_RED** — SOPORTE/FACTURACION no se usan; no desarrollar
    funcionalidades nuevas para ellos ni tocar sus políticas existentes.
+10. **Ingresar un dato una sola vez, reutilizarlo en todos los módulos**
+    — nunca pedir el mismo dato dos veces en formularios distintos si ya
+    existe una fuente confiable (ver Fase 3 OLT, PON↔zona↔contrato↔App
+    Campo, `ESTADO_DESARROLLO.md` 13ak-13am): `zones.name` codifica el
+    número de PON oficial (`src/lib/ponZoneMapping.ts`); cada ONT se
+    compara contra su cliente/contrato real por `contract_id`, nunca por
+    nombre/posición (`src/lib/ontZoneDiscrepancy.ts`); al cerrar un
+    traslado desde App Campo, la zona se deriva de la caja NAP que el
+    técnico ya eligió en vez de pedírsela de nuevo, y la sincronización
+    de NAP+zona de la ONT reutiliza SIEMPRE la transacción de Fase 158
+    (`assign_contract_nap_sync_ont_zone`, ver `src/lib/ontZoneSync.ts`
+    `canSyncOltZone`/`resolveClosureTargetZoneId`) — nunca una escritura
+    paralela nueva. Ante una discrepancia entre fuentes, se informa (nunca
+    se calla ni se adivina) y se deja para revisión humana — regla 8.
 
 ## Registro de errores de campo
 

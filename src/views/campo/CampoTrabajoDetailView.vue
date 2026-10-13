@@ -1206,6 +1206,8 @@ const gettingLocation = ref(false);
 const closing = ref(false);
 const closeError = ref<string | null>(null);
 const closeResult = ref<'ok' | 'queued' | null>(null);
+/** Fase 3 OLT — Fase C: aviso no bloqueante cuando el traslado se cerro bien pero la zona de la ONT en la OLT quedo pendiente de revision manual (ver describeOntZoneSyncOutcome). */
+const closeOntZoneWarning = ref<string | null>(null);
 
 function useCurrentLocation() {
   if (!navigator.geolocation) {
@@ -1431,6 +1433,7 @@ async function handleCloseSubmit() {
   closing.value = true;
   closeError.value = null;
   closeResult.value = null;
+  closeOntZoneWarning.value = null;
   try {
     const censoYActa = jobType === 'ticket' ? CENSO_CATEGORIES.map((c) => c.value) : [];
     const categories =
@@ -1472,12 +1475,15 @@ async function handleCloseSubmit() {
       clientCode: jobType === 'ticket' || jobType === 'installation' ? closureForm.value.clientCode.trim() || null : null,
     });
     closeResult.value = result.queued ? 'queued' : 'ok';
+    closeOntZoneWarning.value = result.ontZoneWarning ?? null;
     // El borrador solo se borra cuando el cierre de verdad llego a Supabase —
     // si quedo en la cola offline sigue siendo el unico respaldo de fotos/
     // firma/notas hasta que haya señal y sincronice (Fase 116).
     if (!result.queued) {
       await clearDraft(draftKey);
-      setTimeout(() => router.push('/campo'), 1200);
+      // Si quedo un aviso de zona/NAP pendiente de revision (Fase C), se le
+      // da mas tiempo al tecnico para leerlo antes de salir de la pantalla.
+      setTimeout(() => router.push('/campo'), closeOntZoneWarning.value ? 5000 : 1200);
     }
   } catch (e) {
     closeError.value = getErrorMessage(e, 'Error al cerrar el trabajo');
@@ -2365,6 +2371,7 @@ async function handleCloseSubmit() {
             Sin señal: el cierre quedó guardado en el dispositivo y se sincronizará automáticamente.
           </p>
           <p v-if="closeResult === 'ok'" class="text-sm text-green-600 mt-3">Trabajo cerrado correctamente.</p>
+          <p v-if="closeOntZoneWarning" class="text-sm text-amber-700 mt-2">⚠ {{ closeOntZoneWarning }}</p>
 
           <button v-show="showStep(5)" type="button" :disabled="closing || installZoneNapMissing" class="btn-primary w-full text-sm mt-3" @click="handleCloseSubmit">
             {{
