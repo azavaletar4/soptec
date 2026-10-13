@@ -2470,6 +2470,81 @@ Rutinas, reprovisionamiento, Telnet ni configuración física de la OLT
 El commit `85fc4ef` (reorganización visual) ya está en `origin/main`
 desde esta sesión; sigue sin desplegarse.
 
+## 13ae. Fase 158 — NAP + zona de ONT transaccional, acotado a 3 roles reales (2026-10-13, PREPARADO, SQL sin aplicar, sin desplegar)
+
+Aclaración del usuario: SmartRayco solo usa 3 roles operativos —
+**SUPERADMIN, ADMIN, TÉCNICO** (nombre técnico exacto en código:
+**`TECNICO_RED`**, confirmado en `server/src/types.ts`/`src/types/domain.ts`).
+SOPORTE/FACTURACION no se usan — no se les desarrolla nada nuevo ni se
+tocan sus políticas existentes. Esta fase reemplaza el enfoque best-effort
+de 13ad por uno transaccional real para esos 3 roles.
+
+### Qué se preparó (nada aplicado todavía)
+
+- **Migración** `supabase/migrations/20261013160000_fase158_assign_contract_nap_sync_ont_zone.sql`:
+  función nueva `assign_contract_nap_sync_ont_zone(p_nap_id, p_contract_id, p_client_id)`
+  — reusa `assign_provisioning_nap` (Fase 2, sin tocar) para la NAP, y en
+  la MISMA transacción sincroniza `olt_onts.zone_id` de la ONT vinculada
+  por `contract_id` (lee la zona de `service_contracts.zone_id`, ya
+  guardado antes por el frontend — no es un parámetro nuevo). Si
+  cualquiera de las 2 partes falla, **ambas se revierten**. Restringida
+  en el propio SQL a `SUPERADMIN`/`ADMIN`/`TECNICO_RED` — **no modifica
+  `assign_contract_nap`** (la función vieja, que SOPORTE/FACTURACION
+  sigue usando exactamente igual, sin sincronizar zona).
+- **Rollback** `supabase/rollback/fase158_rollback.sql`: solo
+  `drop function` (la fase únicamente agregó, no modificó nada
+  existente).
+- **Frontend**: `src/lib/napAssignment.ts` (+`reserveContractNapSyncOntZone`),
+  `src/stores/foFibra.ts` (+`assignContractToNapAndSyncOntZone`),
+  `src/views/clientes/ClientServiceDetailView.vue` (`syncNap` ahora
+  decide por rol: los 3 roles permitidos usan la vía transaccional
+  nueva; cualquier otro rol —si llegara a usar esta pantalla— sigue
+  llamando `assignContractToNap`/`unassignContract` exactamente como
+  antes de 13ad, sin ningún cambio).
+- `src/lib/ontZoneSync.ts`/`syncOltZone()` (de 13ad) **se conserva**,
+  pero ahora solo se usa para el caso sin NAP de por medio (quitar la
+  caja NAP) — ahí no hay nada que combinar transaccionalmente, sigue
+  siendo best-effort, y también acotado a los 3 roles.
+
+### Pruebas (todas con datos simulados, sin tocar Supabase real)
+
+- **`npm run test:ont-zone-nap-sql`** (nuevo, Postgres real en Docker
+  aislado, migración real cargada tal cual) → **9/9**: caso feliz,
+  sin ONT vinculada, cliente con 2 servicios (no toca la ONT del otro
+  contrato), ambiguo (2 ONTs), zona ya coincide, **rollback
+  transaccional real** (un trigger forzado en `olt_onts` revierte
+  también la reserva NAP ya aplicada en la misma función), permisos
+  (SUPERADMIN/ADMIN/TECNICO_RED sí, SOPORTE/FACTURACION/CLIENTE/
+  inactivo/anónimo no), y regresión (`assign_contract_nap` vieja sigue
+  intacta para SOPORTE).
+  - Encontrada y corregida en el camino: `min(uuid)` no existe en
+    Postgres (se cambió a `(array_agg(id))[1]`) — exactamente el tipo
+    de error que esta prueba aislada existe para atrapar antes de
+    aplicar nada.
+- `npm run test:fetch-timeout` → **62/62** (+4 casos de
+  `reserveContractNapSyncOntZone` en `napAssignment.test.ts`).
+- `npm run test:nap-sql` (regresión) → **10/10**, sin cambios.
+- `npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+
+### Riesgos / pendientes
+
+- La migración **no está aplicada** en Supabase ni en ninguna VM —
+  pendiente de autorización explícita.
+- Mientras no se aplique, `ClientServiceDetailView.vue` llamaría a una
+  función que no existe todavía — **no se puede desplegar el frontend
+  de esta fase antes de aplicar la migración** (orden obligatorio:
+  SQL primero, frontend después).
+- El guardado del contrato en sí (zona) sigue siendo un paso previo
+  separado (vía `updateContract`, Supabase PostgREST) — la
+  transaccionalidad nueva cubre NAP+zona-de-ONT, no el contrato mismo
+  (ampliarlo requeriría meter el guardado completo del contrato dentro
+  de la misma función, fuera de alcance de "corrección mínima").
+
+**Siguiente paso**: autorización explícita y por separado para (1)
+aplicar la migración `fase158` en Supabase, (2) desplegar el frontend
+junto con ella, y (3) el despliegue ya pendiente de `85fc4ef`/commit de
+13ad. Nada de esto se ejecuta sin que lo pidas en el mismo turno.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

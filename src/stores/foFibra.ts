@@ -1,4 +1,4 @@
-import { reserveContractNap } from '@/lib/napAssignment';
+import { reserveContractNap, reserveContractNapSyncOntZone, type NapAndOntZoneResult } from '@/lib/napAssignment';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
@@ -282,6 +282,26 @@ export const useFoFibraStore = defineStore('foFibra', () => {
   }
 
   /**
+   * Fase 158 — igual que assignContractToNap, pero en UNA sola transaccion
+   * tambien sincroniza olt_onts.zone_id de la ONT vinculada por contract_id
+   * (ver assign_contract_nap_sync_ont_zone). Restringida en el propio SQL a
+   * SUPERADMIN/ADMIN/TECNICO_RED — ClientServiceDetailView.vue decide cual
+   * de las 2 funciones llamar segun el rol, nunca esta.
+   */
+  async function assignContractToNapAndSyncOntZone(
+    infraElementoId: string, contractId: string, clientId: string,
+  ): Promise<{ port: FoNapPuerto; ontZone: NapAndOntZoneResult }> {
+    const result = await reserveContractNapSyncOntZone((name, args) => supabase.rpc(name, args), {
+      napId: infraElementoId, contractId, clientId,
+    });
+    try { await fetchTodosNapPuertos(); }
+    catch { throw new Error('La NAP se reservó, pero no se pudo actualizar el listado. Consulta antes de reintentar.'); }
+    const assigned = Object.values(napPuertosPorElemento.value).flat().find(port => port.id === result.napPortId);
+    if (!assigned) throw new Error('La reserva NAP fue confirmada; actualiza el listado para ver su puerto');
+    return { port: assigned, ontZone: result };
+  }
+
+  /**
    * Trazabilidad óptica: partiendo de un puerto de cliente en una caja NAP,
    * recorre fusión por fusión hacia atrás (aguas arriba) hasta llegar a una
    * OLT o hasta un tramo sin continuidad definida. Requiere cables y
@@ -359,6 +379,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     upsertNapPuerto,
     unassignContract,
     assignContractToNap,
+    assignContractToNapAndSyncOntZone,
     traceFromNapPuerto,
   };
 });

@@ -321,43 +321,74 @@ async function handleCreateZone() {
   }
 }
 
+// Fase 158: los 3 roles operativos reales de SmartRayco (ver aclaración
+// del usuario) tienen la via transaccional NAP+zona-de-ONT; SOPORTE/
+// FACTURACION (si llegaran a usar esta pantalla) siguen exactamente como
+// antes — no se les desarrolla ni amplia nada nuevo aca.
+const OLT_ZONE_SYNC_ROLES = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'];
+const canSyncOltZone = computed(() => OLT_ZONE_SYNC_ROLES.includes(auth.role ?? ''));
+
+/** Traduce el resultado de la via transaccional (Fase 158) a log/alerta — nunca se calla un caso ambiguo. */
+function reportOltZoneSync(c: ServiceContract, ontZone: { ontZoneSynced: boolean; ontZoneSkipReason: string | null }) {
+  if (ontZone.ontZoneSynced || !ontZone.ontZoneSkipReason) return;
+  if (ontZone.ontZoneSkipReason === 'sin_ont_vinculada') {
+    // eslint-disable-next-line no-console
+    console.info(`[zona-ont] contrato ${c.id}: sin ONT vinculada por contract_id todavia — no hay nada que sincronizar.`);
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn(`[zona-ont] contrato ${c.id}: ${ontZone.ontZoneSkipReason} — ambiguo, no se tocó ninguna ONT. Revisar manualmente.`);
+  }
+}
+
 // Se llama despues de guardar el contrato (ya tiene id real). Un fallo aca
 // no debe perder los demas datos ya guardados — solo se avisa.
 async function syncNap(c: ServiceContract) {
   try {
     if (napId.value) {
       const nap = napOptions.value.find((n) => n.id === napId.value);
-      await fibra.assignContractToNap(napId.value, c.id, c.client_id, nap?.capacity ?? NAP_CLIENT_LIMIT);
+      if (canSyncOltZone.value) {
+        // Fase 158: NAP + zona de la ONT en UNA sola transaccion — si cualquiera
+        // de las 2 partes falla, ambas se revierten (ver assign_contract_nap_sync_ont_zone).
+        const { ontZone } = await fibra.assignContractToNapAndSyncOntZone(napId.value, c.id, c.client_id);
+        reportOltZoneSync(c, ontZone);
+      } else {
+        await fibra.assignContractToNap(napId.value, c.id, c.client_id, nap?.capacity ?? NAP_CLIENT_LIMIT);
+      }
     } else {
       await fibra.unassignContract(c.id);
+      // Sin NAP de por medio no hay nada que combinar transaccionalmente —
+      // sigue siendo best-effort, pero solo para los 3 roles permitidos.
+      if (canSyncOltZone.value) await syncOltZone(c);
     }
   } catch (e) {
-    alert(getErrorMessage(e, 'El servicio se guardo, pero no se pudo asignar la caja NAP'));
+    alert(
+      getErrorMessage(
+        e,
+        canSyncOltZone.value
+          ? 'El servicio se guardo, pero no se pudo asignar la caja NAP ni sincronizar la zona de la ONT (se revirtió todo)'
+          : 'El servicio se guardo, pero no se pudo asignar la caja NAP',
+      ),
+    );
   }
-  // Independiente del resultado de arriba: la zona del contrato (c.zone_id)
-  // ya quedo guardada si llegamos aca, asi que vale la pena sincronizarla
-  // en la ONT aunque la caja NAP haya fallado.
-  await syncOltZone(c);
 }
 
 /**
  * Fase 3 comercial OLT — olt_onts.zone_id es un dato independiente del
  * contrato que nadie mantenia sincronizado (ver ESTADO_DESARROLLO.md
- * 13ac/13ad): un traslado de zona/NAP dejaba la zona de la ONT en la OLT
- * desactualizada para siempre, sin aviso. Esto la sincroniza, pero SOLO
- * para la ONT inequivocamente vinculada por contract_id (ver
+ * 13ac/13ad/13ae): un traslado de zona/NAP dejaba la zona de la ONT en la
+ * OLT desactualizada para siempre, sin aviso. Esto la sincroniza, pero
+ * SOLO para la ONT inequivocamente vinculada por contract_id (ver
  * syncOltZoneForContract/resolveOntForZoneSync en ontZoneSync.ts) — nunca
  * por client_id solo, un cliente puede tener mas de un servicio/ONT.
  *
- * Best-effort y NO transaccional con el guardado del contrato/NAP de
- * arriba: son 2 backends distintos (Supabase directo para contrato/NAP,
- * el backend Hono propio para olt_onts) sin una transaccion de BD comun
- * disponible hoy. Por eso se avisa explicito cuando este paso no se pudo
- * completar — nunca se presenta como "todo sincronizado" si quedo
- * parcial. (Si mas adelante se quiere una operacion realmente atomica, la
- * via seria plegar este update dentro de la misma funcion SQL
- * `assign_provisioning_nap` — mismo Postgres, pero requiere una migracion
- * nueva, fuera de alcance de esta correccion minima.)
+ * Usado SOLO cuando se quita la NAP (sin destino que reservar, nada que
+ * combinar transaccionalmente) — el caso con NAP usa la via transaccional
+ * de arriba (Fase 158, assign_contract_nap_sync_ont_zone). Best-effort y
+ * NO transaccional con el guardado del contrato de arriba: son 2 backends
+ * distintos (Supabase directo para el contrato, el backend Hono propio
+ * para olt_onts) sin una transaccion de BD comun disponible para este
+ * caso puntual. Por eso se avisa explicito cuando este paso no se pudo
+ * completar — nunca se presenta como "todo sincronizado" si quedo parcial.
  */
 async function syncOltZone(c: ServiceContract) {
   const result = await syncOltZoneForContract(
