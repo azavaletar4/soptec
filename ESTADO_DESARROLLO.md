@@ -2399,6 +2399,76 @@ hay forma de saber cuál es el que chocó, ver arriba) y reintente
 "Completar instalación" desde la App de Campo — con la corrección ya
 desplegada, ese reintento ya no debería duplicar la foto de equipo ni
 la firma.
+## 13ad. Fase 3 OLT — corrección mínima: sincronizar olt_onts.zone_id al cambiar zona/NAP del contrato (2026-10-13, IMPLEMENTADO, sin desplegar)
+
+Corrección puntual del gap confirmado en 13ac (contexto: traslados de
+servicio por Rutinas no existen como flujo estructurado — ver
+investigación previa; el único lugar real donde cambia zona/NAP es
+`ClientServiceDetailView.vue`, `syncNap()`).
+
+### Qué se corrigió
+
+Al guardar el contrato con zona/NAP distinta, `syncNap()` ahora también
+llama `syncOltZone(c)`, que sincroniza `olt_onts.zone_id` — **solo**
+para la ONT inequívocamente vinculada por `contract_id` (nunca por
+`client_id`, un cliente puede tener varios servicios/ONTs). Reglas:
+
+- 0 ONTs con ese `contract_id` → no toca nada, `console.info` (caso
+  normal: contrato aún sin instalar).
+- 2+ ONTs con ese `contract_id` (dato ambiguo) → no toca nada,
+  `console.warn` con el conteo, para revisión manual.
+- Zona ya coincide → no hace un `PUT` innecesario.
+- Falla la consulta o el `PUT` → **alerta explícita y distinta** de la
+  del guardado del contrato/NAP — nunca se presenta como "todo
+  sincronizado" si este paso quedó parcial.
+
+### No transaccional (documentado, no resuelto hoy)
+
+El guardado del contrato/NAP (Supabase directo) y la sincronización de
+`olt_onts.zone_id` (backend Hono propio) son 2 sistemas distintos sin
+una transacción de BD común disponible hoy — por diseño, nunca se
+revierte lo ya guardado si este último paso falla; se avisa aparte.
+**Alternativa transaccional real** (propuesta, no implementada):
+plegar este update dentro de la misma función SQL
+`assign_provisioning_nap` (mismo Postgres) — requeriría una migración
+nueva, fuera de alcance de esta corrección mínima.
+
+### Limitación de permisos conocida (no es un defecto nuevo)
+
+`PUT /:id/onts/:ontDbId/meta` exige `ONT_WRITE` (SUPERADMIN/ADMIN/
+TECNICO_RED) — pero `assign_contract_nap` permite además SOPORTE/
+FACTURACION. Un usuario SOPORTE/FACTURACION que cambie zona/NAP **va a
+ver siempre** la alerta de "no se pudo actualizar la zona en la ONT"
+(403), de forma consistente y esperada — no se amplió `ONT_WRITE`
+porque es una decisión de política ya existente (Fase 65: escritura en
+OLT solo para admin/red), no parte de esta corrección.
+
+### Archivos
+
+- `src/lib/ontZoneSync.ts` (nuevo): `resolveOntForZoneSync()` (decisión
+  pura) + `syncOltZoneForContract()` (orquestación con I/O inyectado,
+  mismo patrón que `reserveContractNap`/napAssignment.ts — nunca lanza,
+  todo fallo vuelve como parte del resultado).
+- `src/lib/__tests__/ontZoneSync.test.ts` (nuevo): 15 casos — decisión
+  pura (8: cambio de zona, multi-servicio, sin vínculo, ambiguo, zona
+  sin cambio, legado sin contract_id) + orquestación (7: caso feliz,
+  fallo de consulta, fallo de actualización/403, sin vínculo, ambiguo,
+  sin cambio, regresión de un segundo llamado).
+- `src/views/clientes/ClientServiceDetailView.vue`: `syncNap()` ahora
+  también llama `syncOltZone()` (nueva), que delega en el orquestador y
+  traduce cada resultado a log/alerta según corresponda.
+
+### Pruebas
+
+`npm run test:fetch-timeout` → **58/58** (43 previos + 15 nuevos).
+`npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores. No se tocó
+Rutinas, reprovisionamiento, Telnet ni configuración física de la OLT
+— solo metadato (`zone_id`) en `olt_onts`, vía el endpoint ya existente
+`PUT /:id/onts/:ontDbId/meta`.
+
+**Siguiente paso**: autorización para commit local (sin push/deploy).
+El commit `85fc4ef` (reorganización visual) ya está en `origin/main`
+desde esta sesión; sigue sin desplegarse.
 
 ## 13. Próximo paso recomendado
 

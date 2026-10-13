@@ -23,6 +23,7 @@ import { useClientPhotosStore, type ClientPhotoWithUrl } from '@/stores/clientPh
 import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
+import { syncOltZoneForContract } from '@/lib/ontZoneSync';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { resolveOntPlanName } from '@/lib/ontPlanDisplay';
 import { countOcupadosReales } from '@/lib/napOccupancy';
@@ -332,6 +333,51 @@ async function syncNap(c: ServiceContract) {
     }
   } catch (e) {
     alert(getErrorMessage(e, 'El servicio se guardo, pero no se pudo asignar la caja NAP'));
+  }
+  // Independiente del resultado de arriba: la zona del contrato (c.zone_id)
+  // ya quedo guardada si llegamos aca, asi que vale la pena sincronizarla
+  // en la ONT aunque la caja NAP haya fallado.
+  await syncOltZone(c);
+}
+
+/**
+ * Fase 3 comercial OLT — olt_onts.zone_id es un dato independiente del
+ * contrato que nadie mantenia sincronizado (ver ESTADO_DESARROLLO.md
+ * 13ac/13ad): un traslado de zona/NAP dejaba la zona de la ONT en la OLT
+ * desactualizada para siempre, sin aviso. Esto la sincroniza, pero SOLO
+ * para la ONT inequivocamente vinculada por contract_id (ver
+ * syncOltZoneForContract/resolveOntForZoneSync en ontZoneSync.ts) — nunca
+ * por client_id solo, un cliente puede tener mas de un servicio/ONT.
+ *
+ * Best-effort y NO transaccional con el guardado del contrato/NAP de
+ * arriba: son 2 backends distintos (Supabase directo para contrato/NAP,
+ * el backend Hono propio para olt_onts) sin una transaccion de BD comun
+ * disponible hoy. Por eso se avisa explicito cuando este paso no se pudo
+ * completar — nunca se presenta como "todo sincronizado" si quedo
+ * parcial. (Si mas adelante se quiere una operacion realmente atomica, la
+ * via seria plegar este update dentro de la misma funcion SQL
+ * `assign_provisioning_nap` — mismo Postgres, pero requiere una migracion
+ * nueva, fuera de alcance de esta correccion minima.)
+ */
+async function syncOltZone(c: ServiceContract) {
+  const result = await syncOltZoneForContract(
+    { fetchOntsByClient: (clientId) => oltStore.fetchOntsByClient(clientId), updateOntMeta: oltStore.updateOntMeta },
+    { contractId: c.id, clientId: c.client_id, targetZoneId: c.zone_id ?? null },
+  );
+  if (result.status === 'skipped_none') {
+    // eslint-disable-next-line no-console
+    console.info(`[zona-ont] contrato ${c.id}: sin ONT vinculada por contract_id todavia — no hay nada que sincronizar.`);
+  } else if (result.status === 'skipped_ambiguous') {
+    // eslint-disable-next-line no-console
+    console.warn(`[zona-ont] contrato ${c.id}: ${result.detail} ONTs vinculadas por contract_id — ambiguo, no se tocó ninguna. Revisar manualmente.`);
+  } else if (result.status === 'failed_fetch') {
+    // result.detail ya es el mensaje de error extraido (ver syncOltZoneForContract) — no un `unknown`
+    // de catch, por eso se concatena directo en vez de pasar por getErrorMessage.
+    alert(`El servicio se guardo, pero no se pudo verificar si hay que actualizar la zona de su ONT en la OLT: ${result.detail}`);
+  } else if (result.status === 'failed_update') {
+    alert(
+      `El servicio se guardo, pero no se pudo actualizar la zona en la ONT de la OLT — corrígela manualmente desde el panel OLT ("Editar zona"): ${result.detail}`,
+    );
   }
 }
 
