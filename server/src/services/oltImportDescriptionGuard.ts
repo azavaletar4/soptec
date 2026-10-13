@@ -6,13 +6,17 @@
  * desde el panel ("Editar información"). Sin esta guardia, cada import
  * volvía a pisar ese nombre con el texto crudo de la OLT.
  *
- * Regla: una vez que la ONT ya está vinculada a un cliente (`client_id` no
- * nulo), su `description` es un dato administrado por esta app — el
- * import deja de tocarlo. Una ONT sin vincular todavía sigue tomando el
- * nombre de la OLT en cada import, como siempre (Situación A de la
- * migración, ver CLAUDE.md — la mayoría de las ~400 ONT pendientes están
- * en este caso, y necesitan seguir reflejando lo que diga la OLT hasta que
- * alguien las vincule).
+ * Riesgo encontrado en la primera versión (solo miraba la posición, nunca
+ * el serial): si una ONT vinculada se REEMPLAZA físicamente (otro equipo
+ * en el mismo frame/slot/port/ont_id — cable reconectado, ONT nueva tras
+ * una falla, etc.), la fila seguía protegida por posición aunque el serial
+ * real ya fuera otro — dejaba el `client_id`/`description` del cliente
+ * VIEJO pegados a un equipo que ya no es suyo. Esta version compara
+ * también el serial: solo protege `description` cuando la posición Y el
+ * serial siguen siendo los mismos que ya estaban vinculados. Si cambia el
+ * serial en una posición ya vinculada, esa fila NO se toca en absoluto
+ * (ni description, ni los campos tecnicos) — se reporta como conflicto
+ * para revisión administrativa, nunca se resuelve sola.
  */
 
 export function positionKey(frame: number, slot: number, port: number, ontId: number): string {
@@ -24,22 +28,75 @@ export interface ImportCandidate {
   slot: number;
   port: number;
   ontId: number;
+  serial: string;
+}
+
+/** Lo que ya sabemos de una posición vinculada a un cliente, antes de este import. */
+export interface LinkedPosition {
+  frame: number;
+  slot: number;
+  port: number;
+  ontId: number;
+  serial: string;
+  clientId: string;
+}
+
+export interface ImportConflict {
+  position: string;
+  previousSerial: string;
+  previousClientId: string;
+  scannedSerial: string;
+  reason: string;
 }
 
 /**
- * Separa candidatos de import en dos grupos: los que YA están vinculados a
- * un cliente (no reciben `description` nueva) y los que no (siguen
- * tomándolo de la OLT). Puramente posicional — nunca decide por serial ni
- * por nombre, para no depender de datos que pueden cambiar entre corridas.
+ * Clasifica cada candidato del escaneo en 3 grupos:
+ *  - `fullRefresh`: posición sin vincular (Situación A) — se actualiza todo,
+ *    incluida `description`, igual que siempre.
+ *  - `keepDescription`: posición vinculada Y mismo serial — es la MISMA
+ *    ONT de siempre, se actualiza todo salvo `description` (dato
+ *    administrado desde el panel).
+ *  - `conflicts`: posición vinculada pero con OTRO serial — la identidad
+ *    física cambió; NO se toca client_id/contract_id/description/historial
+ *    ni ningún campo técnico de esa fila. Se reporta aparte, con los datos
+ *    necesarios para que un administrador lo revise manualmente.
+ *
+ * Comparación de serial case-insensitive (mismo criterio ya usado en
+ * oltProvisioningStore.ts/upsertOnt para detectar conflictos de posición).
  */
-export function splitByLinkStatus<T extends ImportCandidate>(
+export function classifyImportCandidates<T extends ImportCandidate>(
   candidates: readonly T[],
-  linkedPositions: ReadonlySet<string>,
-): { linked: T[]; unlinked: T[] } {
-  const linked: T[] = [];
-  const unlinked: T[] = [];
+  linkedPositions: readonly LinkedPosition[],
+): { fullRefresh: T[]; keepDescription: T[]; conflicts: ImportConflict[] } {
+  const linkedByPosition = new Map(
+    linkedPositions.map((p) => [positionKey(p.frame, p.slot, p.port, p.ontId), p]),
+  );
+
+  const fullRefresh: T[] = [];
+  const keepDescription: T[] = [];
+  const conflicts: ImportConflict[] = [];
+
   for (const c of candidates) {
-    (linkedPositions.has(positionKey(c.frame, c.slot, c.port, c.ontId)) ? linked : unlinked).push(c);
+    const key = positionKey(c.frame, c.slot, c.port, c.ontId);
+    const existing = linkedByPosition.get(key);
+    if (!existing) {
+      fullRefresh.push(c);
+      continue;
+    }
+    if (existing.serial.toUpperCase() === c.serial.toUpperCase()) {
+      keepDescription.push(c);
+      continue;
+    }
+    conflicts.push({
+      position: key,
+      previousSerial: existing.serial,
+      previousClientId: existing.clientId,
+      scannedSerial: c.serial,
+      reason:
+        `Posición ${key} ya está vinculada (serial registrado ${existing.serial}) pero la OLT ahora reporta ` +
+        `el serial ${c.serial} — posible ONT reemplazada o trasladada. No se modificó nada; requiere revisión manual.`,
+    });
   }
-  return { linked, unlinked };
+
+  return { fullRefresh, keepDescription, conflicts };
 }

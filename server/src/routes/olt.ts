@@ -42,7 +42,7 @@ import {
   parseProfileNames,
 } from '../ssh/zteParsers';
 import { createSupabaseProvisioningStore } from '../services/oltProvisioningStore';
-import { positionKey, splitByLinkStatus } from '../services/oltImportDescriptionGuard';
+import { classifyImportCandidates, type LinkedPosition } from '../services/oltImportDescriptionGuard';
 import {
   type ProvisionHandlerDeps,
   type ProvisionRequestBody,
@@ -709,13 +709,18 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
 
   // Posiciones ya vinculadas a un cliente — su "description" ya es un dato
   // administrado por esta app (ver oltImportDescriptionGuard.ts), no un
-  // texto crudo de la OLT; el import no debe volver a pisarlo.
+  // texto crudo de la OLT; el import no debe volver a pisarlo. Se trae
+  // tambien el serial YA registrado: si la OLT ahora reporta OTRO serial en
+  // esa misma posicion, la ONT fisica cambio (reemplazo/traslado) — esa
+  // fila no se toca en absoluto, se reporta como conflicto.
   const { data: linkedRows } = await supabaseAdmin
     .from('olt_onts')
-    .select('frame, slot, port, ont_id')
+    .select('frame, slot, port, ont_id, serial, client_id')
     .eq('olt_device_id', device.id)
     .not('client_id', 'is', null);
-  const linkedPositions = new Set((linkedRows ?? []).map((r) => positionKey(r.frame, r.slot, r.port, r.ont_id)));
+  const linkedPositions: LinkedPosition[] = (linkedRows ?? []).map((r) => ({
+    frame: r.frame, slot: r.slot, port: r.port, ontId: r.ont_id, serial: r.serial, clientId: r.client_id as string,
+  }));
 
   const candidates = globalOnts
     .map((o) => {
@@ -727,6 +732,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
         slot: o.slot,
         port: o.port,
         ontId: o.onuId,
+        serial: b.serial,
         base: {
           olt_device_id: device.id,
           frame: o.frame,
@@ -748,13 +754,14 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
-  const { linked, unlinked } = splitByLinkStatus(candidates, linkedPositions);
-  // Una posicion "linked" por definicion ya existe en olt_onts (vino de esa
-  // misma tabla arriba) — nunca es un alta nueva, asi que omitir
-  // "description" aca siempre cae en la rama UPDATE del upsert (deja la
-  // columna intacta), nunca en un INSERT que la dejaria en null.
-  const rowsWithoutDescription = linked.map((c) => c.base);
-  const rowsWithDescription = unlinked.map((c) => ({ ...c.base, description: c.name }));
+  const { fullRefresh, keepDescription, conflicts } = classifyImportCandidates(candidates, linkedPositions);
+  // Una posicion en "keepDescription" por definicion ya existe en olt_onts
+  // (vino de esa misma tabla arriba) — nunca es un alta nueva, asi que
+  // omitir "description" aca siempre cae en la rama UPDATE del upsert
+  // (deja la columna intacta), nunca en un INSERT que la dejaria en null.
+  // Los conflictos NO entran a ningun upsert — esa fila queda intacta.
+  const rowsWithoutDescription = keepDescription.map((c) => c.base);
+  const rowsWithDescription = fullRefresh.map((c) => ({ ...c.base, description: c.name }));
 
   for (const rows of [rowsWithDescription, rowsWithoutDescription]) {
     if (!rows.length) continue;
@@ -764,7 +771,19 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
     if (error) return c.json({ error: error.message }, 400);
   }
 
-  return c.json({ ok: true, scanned: globalOnts.length, imported: candidates.length, ports: ports.size, failedPorts });
+  if (conflicts.length) {
+    // eslint-disable-next-line no-console
+    console.warn(`[olt/import] ${conflicts.length} conflicto(s) de identidad (ONT reemplazada/trasladada), requieren revision manual:`, conflicts);
+  }
+
+  return c.json({
+    ok: true,
+    scanned: globalOnts.length,
+    imported: rowsWithDescription.length + rowsWithoutDescription.length,
+    ports: ports.size,
+    failedPorts,
+    conflicts,
+  });
 });
 
 oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) => {

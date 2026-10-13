@@ -2669,6 +2669,78 @@ estado/señal/equipos sin alterar.
 
 **Siguiente paso**: autorización para commit local (sin push/deploy).
 
+## 13aj. Corrección de riesgo en 13ai — ONT reemplazada/trasladada ya no hereda identidad ajena (2026-10-13, IMPLEMENTADO, sin desplegar)
+
+Riesgo señalado por el usuario sobre 13ai, confirmado real en código antes
+de tocar nada: la protección de `description` solo miraba la **posición**
+(`frame/slot/port/ont_id`), nunca el **serial** — si una ONT vinculada se
+reemplazaba físicamente (mismo slot/puerto/onu-id, otro equipo), el import
+seguía protegiendo esa fila por posición aunque el serial real ya fuera
+otro, dejando `client_id`/`contract_id`/`description` del cliente VIEJO
+pegados a un equipo que ya no es suyo.
+
+### Corrección
+`oltImportDescriptionGuard.ts`: `splitByLinkStatus` (2 vías, solo
+posición) → **`classifyImportCandidates`** (3 vías, posición **y**
+serial, comparación case-insensitive — mismo criterio que
+`upsertOnt`/`oltProvisioningStore.ts`):
+
+- **`fullRefresh`** — posición sin vincular (Situación A): todo se
+  actualiza como siempre, sin cambios.
+- **`keepDescription`** — posición vinculada **y mismo serial**: es la
+  misma ONT de siempre, se actualiza todo salvo `description`.
+- **`conflicts`** — posición vinculada pero **serial distinto**
+  (reemplazo/traslado): **esa fila no se toca en absoluto** (ni
+  `description`, ni los campos técnicos, ni `client_id`/`contract_id`) —
+  se excluye de ambos `upsert`, se registra en logs del backend
+  (`console.warn`) y se devuelve en la respuesta del endpoint
+  (`conflicts: [...]`) con posición, serial anterior, cliente anterior y
+  serial nuevo encontrado. El panel (`OltDetailView.vue`) ya lo muestra en
+  el mensaje de resultado del import, con aviso ⚠ explícito.
+
+### Archivos modificados
+- `server/src/services/oltImportDescriptionGuard.ts` (reescrito:
+  `classifyImportCandidates` reemplaza `splitByLinkStatus`).
+- `server/src/services/__tests__/oltImportDescriptionGuard.test.ts`
+  (reescrito, 12 casos: sin vincular, mismo serial, case-insensitive,
+  **reemplazo** [conflicto, nada se toca], **traslado** [posición vieja
+  no se visita, posición nueva sin vincular = refresco normal],
+  **reimportación idempotente** ×3 [sin vínculo, con vínculo, conflicto
+  que persiste sin auto-resolverse], caso mixto real Violeta/Clara/Mayco
+  + 1 reemplazo simulado, lista vacía).
+- `server/src/routes/olt.ts` (`import-existing`): usa la clasificación
+  de 3 vías, devuelve `conflicts` en la respuesta.
+- `src/stores/olt.ts` / `src/views/olt/OltDetailView.vue`: el resultado
+  del import ahora muestra los conflictos con posición/seriales, para
+  revisión administrativa clara (requisito explícito del usuario).
+
+### Pruebas
+`npm run test:provisioning` → **81/81** (75 previos + 6 netos nuevos —
+el archivo se reescribió completo, de 6 a 12 casos). `npx tsc -p
+tsconfig.server.json --noEmit` → solo los 2 errores preexistentes de
+`oltProvisioningService.ts` (ajenos, confirmado con `git stash` en
+sesiones anteriores). `npx vue-tsc -p tsconfig.app.json --noEmit` → sin
+errores.
+
+### Qué sigue sin resolver (documentado, no bloqueante)
+- Un conflicto reportado **nunca se autoresuelve** — queda así hasta
+  que un administrador lo revise y decida a mano (desvincular la fila
+  vieja, o confirmar que el `client_id` debe pasar al nuevo serial).
+  Es la decisión correcta por diseño (regla 3 de la migración:
+  "no sobrescribir ni borrar automáticamente ante discrepancias") — no
+  es un pendiente de código, es un paso humano necesario.
+- No se creó ninguna tabla/columna de "historial de reemplazos" — el
+  conflicto solo vive en la respuesta del import y en logs del backend
+  mientras no se resuelva; no hay un lugar persistente en Supabase para
+  consultarlo después sin volver a correr el import. Si esto se vuelve
+  un problema real (conflictos que nadie nota a tiempo), evaluarlo en
+  una sesión futura — no se justificaba una tabla nueva solo para esto
+  todavía.
+
+**Siguiente objetivo ya anunciado por el usuario (NO implementado
+todavía)**: automatizar la relación PON–zona–contrato–App Campo–Gestión
+de ONTs.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

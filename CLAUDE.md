@@ -122,9 +122,14 @@ completo.
    comprobar su procedencia — un `description` puede venir de la OLT
    (texto libre, no confiable) o de una edición administrativa real.
    **Ya implementado**: "Importar ONTs desde la OLT" deja de pisar
-   `description` en cuanto una ONT queda vinculada a un cliente (ver
-   `oltImportDescriptionGuard.ts` y 13ai en `ESTADO_DESARROLLO.md`) —
-   si se toca ese import, mantener esa protección.
+   `description` en cuanto una ONT queda vinculada a un cliente **y el
+   serial sigue siendo el mismo** — si el serial cambia en una posición
+   ya vinculada (ONT reemplazada/trasladada), esa fila no se toca en
+   absoluto y se reporta como conflicto para revisión manual, nunca se
+   resuelve sola (ver `oltImportDescriptionGuard.ts` y 13ai/13aj en
+   `ESTADO_DESARROLLO.md`) — si se toca ese import, mantener esa
+   protección de 3 vías (sin vincular / vinculada mismo serial /
+   conflicto), no volver a la versión que solo miraba la posición.
 7. Mantener intactos los servicios existentes durante toda la
    migración — cualquier corrección se valida de solo lectura primero.
 8. Si hay discrepancia entre lo que dice la OLT y lo que dice

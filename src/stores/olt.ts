@@ -318,10 +318,15 @@ export const useOltStore = defineStore('olt', () => {
   }
 
   function importExistingOnts(deviceId: string) {
-    return apiFetch<{ ok: boolean; scanned: number; imported: number; ports: number; failedPorts: string[] }>(
-      `/api/olt-devices/${deviceId}/onts/import-existing`,
-      { method: 'POST' },
-    );
+    return apiFetch<{
+      ok: boolean;
+      scanned: number;
+      imported: number;
+      ports: number;
+      failedPorts: string[];
+      /** Posiciones ya vinculadas a un cliente donde la OLT reporta un serial distinto (ONT reemplazada/trasladada) — no se tocaron, requieren revisión manual. */
+      conflicts: { position: string; previousSerial: string; previousClientId: string; scannedSerial: string; reason: string }[];
+    }>(`/api/olt-devices/${deviceId}/onts/import-existing`, { method: 'POST' });
   }
 
   async function syncOnts(deviceId: string, slot: number, port: number, shelf = 1) {

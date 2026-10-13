@@ -396,6 +396,12 @@ async function handleImportExisting() {
     const res = await oltStore.importExistingOnts(deviceId.value);
     importMessage.value = `Escaneadas ${res.scanned} ONTs en ${res.ports} puertos PON. Importadas/actualizadas: ${res.imported}.${
       res.failedPorts.length ? ` Fallaron ${res.failedPorts.length} puertos: ${res.failedPorts.join(', ')}.` : ''
+    }${
+      res.conflicts.length
+        ? ` ⚠ ${res.conflicts.length} posición(es) ya vinculada(s) a un cliente reportan OTRO serial en la OLT (posible ONT reemplazada/trasladada) — no se modificaron, revisar manualmente: ${res.conflicts
+            .map((c) => `${c.position} (antes ${c.previousSerial}, ahora ${c.scannedSerial})`)
+            .join('; ')}.`
+        : ''
     }`;
     await oltStore.fetchOnts(deviceId.value);
   } catch (e) {
