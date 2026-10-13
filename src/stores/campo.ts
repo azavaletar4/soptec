@@ -17,6 +17,12 @@ import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { compressImage } from '@/lib/imageCompression';
 import {
+  isUniqueViolation,
+  photosAlreadyUploaded,
+  equipmentTypesAlreadyUploaded,
+  createJobClosureGuard,
+} from '@/lib/jobClosureIdempotency';
+import {
   enqueueClosure,
   flushQueue,
   isOnline,
@@ -37,6 +43,10 @@ import {
 import type { ActiveJobRef } from '@/lib/singleActiveJob';
 
 const BUCKET = 'work-evidence';
+// Evita que el boton manual y el auto-sync de la cola offline (syncQueued)
+// cierren el MISMO trabajo a la vez — ver incidencia Violeta Garcia Silva,
+// 2026-10-13, jobClosureIdempotency.ts.
+const closureGuard = createJobClosureGuard();
 
 export type TrabajoEstadoUi = 'pendiente' | 'en_proceso' | 'completado';
 
@@ -426,6 +436,37 @@ export const useCampoStore = defineStore('campo', () => {
   // ---- Cierre de trabajo (fotos + firma + GPS + serial ONT), con cola
   // offline como respaldo cuando no hay señal en el sitio del cliente. ----
   async function performClosureSubmit(input: ClosureInput) {
+    if (!closureGuard.tryEnter(input.jobType, input.jobId)) {
+      throw new Error('Ya hay un cierre en curso para este trabajo — espera a que termine antes de reintentar.');
+    }
+    try {
+      await performClosureSubmitInner(input);
+    } finally {
+      closureGuard.exit(input.jobType, input.jobId);
+    }
+  }
+
+  async function performClosureSubmitInner(input: ClosureInput) {
+    // Codigo de cliente / cintillo Drop (Fase 139) — PRIMERO, antes de subir
+    // cualquier foto/firma: si el codigo ya pertenece a OTRO contrato (UNIQUE
+    // real en service_contracts.client_code, Fase 39 — nunca se toca), que
+    // falle AHORA, antes de dejar evidencia a medio guardar (incidencia
+    // Violeta Garcia Silva, 2026-10-13: antes este paso corria AL FINAL,
+    // asi que un cierre fallido igual dejaba fotos/firma ya subidas).
+    const trimmedClientCode = input.clientCode?.trim();
+    if (trimmedClientCode && input.contractId) {
+      try {
+        await contractsStore.updateContract(input.contractId, { client_code: trimmedClientCode });
+      } catch (e) {
+        if (isUniqueViolation(e, 'client_code')) {
+          throw new Error(
+            `El código de cliente "${trimmedClientCode}" ya está asignado a otro contrato — verifica el cintillo/código e ingresa uno distinto.`,
+          );
+        }
+        throw e;
+      }
+    }
+
     if (input.updateClientGps && input.clientId && input.latitude != null && input.longitude != null) {
       await clientsStore.updateClient(input.clientId, { latitude: input.latitude, longitude: input.longitude });
       if (input.contractId) {
@@ -444,7 +485,7 @@ export const useCampoStore = defineStore('campo', () => {
       .select('category, storage_path')
       .eq('job_type', input.jobType)
       .eq('job_id', input.jobId);
-    const alreadyUploaded = new Map((existingPhotos ?? []).map((p) => [p.category, p.storage_path as string]));
+    const alreadyUploaded = photosAlreadyUploaded(existingPhotos ?? []);
 
     // Foto de respaldo del motivo de cierre (Fase 49): la primera evidencia
     // subida, ya sea en este intento o en uno anterior si el cierre se esta
@@ -493,13 +534,21 @@ export const useCampoStore = defineStore('campo', () => {
     }
 
     // Fotos de serie de equipos (Fase 105) — galeria dinamica, no un slot
-    // unico: cada entrada es su propia fila, nunca pisa a otra. En una
-    // averia queda 'pending_approval' (igual que el resto del censo, un
-    // admin la revisa); en una instalacion se aplica directo (como ya hace
-    // el resto de fotos de instalacion).
+    // unico: cada entrada es su propia fila, nunca pisa a otra DENTRO del
+    // mismo intento (2 equipos del mismo tipo adjuntados a la vez siguen
+    // subiendo ambos). Pero un REINTENTO del cierre completo (ej. tras el
+    // error de client_code, incidencia Violeta Garcia Silva) volvia a subir
+    // las mismas fotos de equipo ya guardadas en el intento anterior — este
+    // snapshot (tomado UNA vez, antes del loop) evita repetir esas.
+    const { data: existingEquipmentPhotos } = input.jobType === 'installation' && input.contractId
+      ? await supabase.from('client_equipment_photos').select('equipment_type').eq('job_type', input.jobType).eq('job_id', input.jobId)
+      : { data: null };
+    const equipmentAlreadyUploaded = equipmentTypesAlreadyUploaded(existingEquipmentPhotos ?? []);
+
     for (const eq of input.equipmentPhotos) {
-      const compressedFile = await compressImage(eq.file);
       if (input.jobType === 'ticket') {
+        if (alreadyUploaded.has(`equipment_sticker__${eq.equipmentType}`)) continue;
+        const compressedFile = await compressImage(eq.file);
         const ext = compressedFile.name.includes('.') ? compressedFile.name.split('.').pop() : 'jpg';
         const path = `${input.jobType}/${input.jobId}/equipment-${eq.equipmentType}-${Date.now()}.${ext}`;
         const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, compressedFile, { upsert: false });
@@ -513,6 +562,8 @@ export const useCampoStore = defineStore('campo', () => {
         });
         if (rowErr) throw rowErr;
       } else if (input.jobType === 'installation' && input.clientId && input.contractId) {
+        if (equipmentAlreadyUploaded.has(eq.equipmentType)) continue;
+        const compressedFile = await compressImage(eq.file);
         await clientEquipmentPhotosStore.uploadDirect(
           input.clientId,
           input.contractId,
@@ -524,8 +575,19 @@ export const useCampoStore = defineStore('campo', () => {
       }
     }
 
-    let signaturePath: string | null = null;
-    if (input.signatureBlob) {
+    // Firma: si un intento anterior de ESTE cierre ya la subio (closure row
+    // ya existe con signature_path), se reusa en vez de subir un archivo
+    // nuevo en cada reintento — evita dejar firmas huerfanas en Storage
+    // (incidencia Violeta Garcia Silva: 2 archivos de firma para el mismo
+    // cierre, el primero sin ninguna fila que lo referencie ya).
+    const { data: existingClosure } = await supabase
+      .from('work_order_closures')
+      .select('signature_path')
+      .eq('job_type', input.jobType)
+      .eq('job_id', input.jobId)
+      .maybeSingle();
+    let signaturePath: string | null = existingClosure?.signature_path ?? null;
+    if (input.signatureBlob && !signaturePath) {
       signaturePath = `${input.jobType}/${input.jobId}/signature-${Date.now()}.png`;
       const { error: sigErr } = await supabase.storage
         .from(BUCKET)
@@ -556,15 +618,8 @@ export const useCampoStore = defineStore('campo', () => {
       await contractsStore.updateContract(input.contractId, { zone_id: input.zoneId });
     }
 
-    // Codigo de cliente / cintillo Drop (Fase 139) — reusa el mismo campo que
-    // ya edita ClientServiceDetailView.vue (contracts.client_code, Fase 39),
-    // nunca uno nuevo. Solo escribe si el tecnico de verdad dejo un valor: un
-    // ticket/reconexion puede llegar con este campo vacio (opcional) y no
-    // debe borrar un codigo ya existente en el contrato.
-    const trimmedClientCode = input.clientCode?.trim();
-    if (trimmedClientCode && input.contractId) {
-      await contractsStore.updateContract(input.contractId, { client_code: trimmedClientCode });
-    }
+    // Codigo de cliente / cintillo Drop: movido al principio de la funcion
+    // (ver mas arriba) — se valida/aplica ANTES de subir evidencia.
 
     // Cambio de puerto NAP (Fase 95, solo si la averia exigio recablear) u
     // obligatoria al completar una instalacion: mismo assignContractToNap —

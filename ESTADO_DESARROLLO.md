@@ -2294,6 +2294,45 @@ nuevo entre ellos.
 **Siguiente paso**: autorización para commit local (sin push/deploy).
 Después, verificación visual real cuando alguien abra el panel.
 
+## 13af. Incidencia real: cierre de Alta (App de Campo) no transaccional — causa raíz + corrección preparada, sin desplegar (2026-10-13)
+
+Ver `docs/ERRORES-CAMPO.md` (fila 2026-10-13) para el detalle completo —
+caso real: Alta de Violeta García Silva (`installations.id`
+`43e138bd-...a062`), confirmado por SQL de solo lectura contra
+producción. Resumen:
+
+- **Causa raíz**: `performClosureSubmit` (`src/stores/campo.ts`) hace
+  ~8 escrituras independientes sin transacción; el `UPDATE` de
+  `service_contracts.client_code` corría **al final**, así que un
+  choque con el UNIQUE (Fase 39, intacto) dejaba fotos/firma/cierre ya
+  guardados pero la instalación nunca se marcaba `completed`. Cada
+  reintento (el borrador local conserva las mismas fotos) repetía la
+  subida de la foto de equipo y la firma — las 5 fotos de categoría NO
+  se duplicaban porque ya tenían un fix de idempotencia anterior.
+- **Estado real de los datos afectados** (sin modificar, sin
+  autorización para tocarlos): instalación sigue `in_progress`,
+  `client_code` sigue `null`, 4 fotos "modem" en
+  `client_equipment_photos` (debería haber 1), 2 archivos de firma en
+  Storage (solo el más reciente referenciado). Materiales/equipos de
+  inventario (6 movimientos, 2 unidades serializadas) — **sin
+  duplicar**, se registran en un paso anterior y separado.
+- **Corrección preparada** (commit local, sin push/deploy): nuevo
+  `src/lib/jobClosureIdempotency.ts` (puro, testeado: detección de
+  violación UNIQUE, idempotencia de fotos/equipo, guardia
+  anti-concurrencia) + `campo.ts` reordenado (código de cliente
+  primero, falla rápido y claro) + idempotencia en fotos de equipo y
+  firma + guardia en memoria contra 2 cierres simultáneos del mismo
+  trabajo. **No se tocó la restricción UNIQUE, no se tocó Rutinas, no
+  se tocó OLT/MikroTik/Fase 158.**
+- **Pruebas**: `npm run test:fetch-timeout` → 52/52 (43 previos en esta
+  rama de despliegue + 9 casos nuevos). `vue-tsc` limpio.
+- **Pendiente de decisión del usuario** (no resuelto aquí, por
+  instrucción explícita de no modificar datos reales sin autorización):
+  (1) qué código de cliente correcto usar para destrabar la instalación
+  de Violeta García Silva; (2) si limpiar las 4 fotos "modem"
+  duplicadas y el archivo de firma huérfano en Storage, o dejarlas; (3)
+  autorización para desplegar esta corrección.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
