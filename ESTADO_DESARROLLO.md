@@ -4158,6 +4158,123 @@ migración** `olt_alert_log` en Supabase producción (nada de esto
 funciona sin la tabla real) y, una vez desplegado, su validación visual
 en el panel.
 
+**Actualización — DESPLEGADA (2026-10-14)**: el usuario autorizó
+explícitamente ("SMART RAYCO — FASE 4: DESPLIEGUE CONTROLADO") aplicar
+la migración `olt_alert_log` (versión real `20261014150451`, commit
+`56d0aaf`) en Supabase producción y desplegar los commits de Fase 4
+hasta `1a549e9`. Confirmado por `git status`: `main` está sincronizado
+con `origin/main`, sin commits pendientes de push. Fase 5 (13aw, abajo)
+parte de este estado ya desplegado.
+
+## 13aw. Fase 5 OLT — Centro de monitoreo visual (2026-10-14, IMPLEMENTADO localmente, commit local sin push/deploy)
+
+**Objetivo**: mejorar únicamente la visualización de "Alertas y
+sincronización" (misma tarjeta de Fase 3/13as/13at/13au) para que el
+personal administrativo identifique fácilmente qué clientes están sin
+conexión y consulte su historial — fase **visual y de solo lectura**,
+sin tablas/migraciones/endpoints/servicios nuevos, sin tocar la
+sincronización, sin ejecutar nada contra OLT/MikroTik/PPPoE.
+
+### Diagnóstico — por qué no hizo falta backend nuevo
+Todo lo pedido (conteos conectado/desconectado/sin vincular, lista de
+clientes desconectados, frescura de la sincronización) se puede derivar
+100% de datos YA cargados en este panel:
+- `oltStore.onts` (Fase B, con `clients`/`service_contracts.zones`
+  embebidos) — ya trae todo lo necesario para contar y listar.
+- `summary` (`GET /:id/summary`, ya existente desde Fase 40) — ya trae
+  `checkedAt`/`scanComplete` del último ciclo de `olt_sync_cache`.
+- `GET /:id/alert-log` (Fase 4, 13at/13au) — reusado tal cual (consulta
+  acotada `kind:'offline', limit:200`) para el "tiempo transcurrido
+  desde la detección", sin crear un endpoint nuevo.
+
+Punto crítico verificado en `oltSyncService.ts`: `olt_sync_cache.checked_at`
+se actualiza en **cada** intento de sync (éxito o no), mientras que
+`scan_complete` solo es `true` si ese ciclo realmente pudo leer la OLT.
+Por eso el aviso de frescura distingue 3 casos SIN mezclarlos nunca:
+sin ningún dato todavía, la OLT no respondió en el último intento
+(`scanComplete=false`), o pasó demasiado tiempo desde el último intento
+real (`stale`, >60 min) — ninguno de los tres se interpreta como
+"clientes desconectados".
+
+### Implementación
+- **`src/lib/oltConnectionStatus.ts`** (nuevo, puro, sin I/O):
+  - `computeConnectionStatusCounts`: mismo criterio de vínculo
+    verificado que Fase B (`client_id` Y `contract_id` Y
+    `service_contracts` resuelto — un vínculo a medias cuenta como "sin
+    vincular", nunca a medias). Devuelve `linkedOnline`/`linkedOffline`
+    /`linkedUnknown`/`unlinked`, siempre por separado.
+  - `listDisconnectedLinkedClients`: solo ONTs vinculadas Y `offline`
+    (nunca una sin vincular, nunca online/unknown), con nombre,
+    contrato, zona y posición física, ordenado por nombre.
+  - `filterDisconnectedClients`: filtro por zona (id exacto) y búsqueda
+    de texto por nombre — sobre la lista ya resuelta, sin consulta
+    nueva.
+  - `evaluateSyncFreshness(summary, nowMs, staleAfterMinutes=60)`:
+    "última sincronización válida" + los 3 avisos descritos arriba,
+    nunca inventa una fecha si no hay ninguna todavía.
+- **`src/views/olt/OltDetailView.vue`**: la tarjeta "Alertas y
+  sincronización" ahora tiene 2 pestañas:
+  - **Estado actual** (nueva): aviso de frescura, línea de última
+    sincronización (relativo + hora exacta en Perú), 4 tarjetas de
+    conteo, y la lista filtrable de "Clientes sin conexión" (nombre con
+    enlace directo a `/clientes/:id/servicios/:contractId`, badge "Sin
+    conexión", contrato/zona, "Detectado hace X · hora Perú" **solo si**
+    existe un evento `offline` verificable en el historial, y un botón
+    "Ver ONT" que reusa `openOntFromAlert` ya existente).
+  - **Historial de alertas** (Fase 4): exactamente el mismo
+    comportamiento de antes (filtros, paginación, tiempo relativo,
+    enlaces) — el único cambio fue envolver su `<div>` raíz en
+    `v-show="alertsTab === 'historial'"`, sin tocar nada interno.
+  - Las "Notificaciones en vivo (esta sesión)" (Fase 3) quedaron dentro
+    de la pestaña "Estado actual" (es la alerta más inmediata/en vivo,
+    tiene más sentido ahí que en el historial).
+  - "Consultar puerto GPON" e "Importar ONTs desde la OLT"
+    (herramientas de escritura real contra la OLT) quedan **fuera de
+    ambas pestañas**, siempre visibles — fuera de alcance de esta fase.
+- **`src/lib/__tests__/oltConnectionStatus.test.ts`** (nuevo, 17 casos).
+
+### Pruebas
+`npm run test:fetch-timeout` → **172/172** (155 previos + 17 nuevos),
+cubriendo exactamente la matriz pedida: conectado, desconectado,
+desconocido (nunca cuenta como desconectado), sin vincular (incluso si
+está offline, siempre separado), vínculo parcial (sigue siendo "sin
+vincular"), cliente con múltiples servicios (cada ONT/contrato cuenta
+por separado), sincronización reciente/completa, OLT sin responder en
+el último intento, datos desactualizados por tiempo (`stale`), y sin
+ningún dato todavía ("No disponible", nunca una fecha inventada).
+`npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores. Las pestañas
+y el comportamiento de Fase 4 se verificaron por lectura de código
+(balance de `<div>`, que "Consultar puerto GPON"/"Importar ONTs" quedan
+fuera de ambos `v-show`) — sin servidor de desarrollo levantado en esta
+corrida (ver limitación abajo).
+
+### Limitaciones documentadas (pedido explícito: "No disponible" en vez de inventar)
+- "Tiempo transcurrido desde la detección" solo aparece si existe un
+  evento `offline` para esa ONT dentro de la consulta `limit:200` más
+  reciente del historial — si no hay ninguno (ONT nunca registrada en
+  `olt_alert_log`, o su único evento quedó fuera de esas 200 filas), no
+  se muestra ninguna fecha, nunca se infiere una.
+- La hora de "detección" (igual que en Fase 3/13as) es cuándo el
+  sistema lo notó, no necesariamente el instante exacto de la caída
+  real — misma limitación ya documentada, no nueva de esta fase.
+- Esta corrida no incluyó una verificación visual en navegador (sin
+  servidor de desarrollo levantado) — recomendado antes de pedir
+  despliegue: abrir el panel de una OLT real, cambiar de pestaña,
+  probar el filtro de zona y la búsqueda por nombre.
+
+### Riesgos
+Ninguno nuevo de escritura (fase 100% de lectura). El único riesgo es
+de presentación: si `oltStore.onts` todavía no terminó de cargar al
+montar la vista, los conteos/lista parten en cero un instante (mismo
+comportamiento que el resto del panel, no es nuevo de esta fase).
+
+### ¿Lista Fase 5 para pedir autorización de despliegue?
+**Sí, a nivel de código** — implementación local completa, pruebas en
+verde, `vue-tsc` limpio. Pendiente: verificación visual en navegador
+(ver limitación arriba) y, como siempre, la autorización explícita del
+usuario para hacer push/deploy — esta fase no requiere ninguna
+migración (no toca la base de datos).
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

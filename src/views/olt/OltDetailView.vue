@@ -16,9 +16,16 @@ import {
   buildOltAlertView,
   buildOltAlertLogEntryView,
   formatRelativeTime,
+  formatPeruDateTime,
   type OltAlertView,
   type OltAlertLogEntryView,
 } from '@/lib/oltAlertPresentation';
+import {
+  computeConnectionStatusCounts,
+  listDisconnectedLinkedClients,
+  filterDisconnectedClients,
+  evaluateSyncFreshness,
+} from '@/lib/oltConnectionStatus';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -375,6 +382,47 @@ function relativeTime(iso: string): string {
 }
 
 /**
+ * Fase 5 OLT — Centro de monitoreo visual (ver ESTADO_DESARROLLO.md 13aw).
+ * Pestañas dentro de la misma tarjeta "Alertas y sincronización": "Estado
+ * actual" (nueva) e "Historial de alertas" (Fase 4, sin cambios). Todo lo
+ * de abajo es agregación pura sobre `oltStore.onts`/`summary` YA cargados
+ * en este panel — ningún endpoint/tabla/servicio nuevo.
+ */
+const alertsTab = ref<'estado' | 'historial'>('estado');
+const connectionCounts = computed(() =>
+  computeConnectionStatusCounts(oltStore.onts.filter((o) => o.olt_device_id === deviceId.value)),
+);
+const disconnectedFilters = ref({ zoneId: '', search: '' });
+const filteredDisconnectedClients = computed(() =>
+  filterDisconnectedClients(
+    listDisconnectedLinkedClients(oltStore.onts.filter((o) => o.olt_device_id === deviceId.value)),
+    disconnectedFilters.value,
+  ),
+);
+const syncFreshness = computed(() => evaluateSyncFreshness(summary.value, Date.now(), 60));
+
+/**
+ * "Tiempo transcurrido desde la detección" — solo si existe un evento
+ * 'offline' verificable en el historial (Fase 4); si no hay ninguno para
+ * esa ONT, no se muestra nada (nunca se inventa una hora).
+ */
+const disconnectDetectedAt = ref<Map<string, string>>(new Map());
+async function loadDisconnectDetectionTimes() {
+  try {
+    const res = await oltStore.fetchAlertLog(deviceId.value, { kind: 'offline', limit: 200 });
+    const map = new Map<string, string>();
+    for (const item of res.items) {
+      if (!item.oltOntId || map.has(item.oltOntId)) continue;
+      map.set(item.oltOntId, item.at);
+    }
+    disconnectDetectedAt.value = map;
+  } catch {
+    // Solo-lectura/best-effort: si falla, simplemente no se muestra el
+    // tiempo transcurrido para esas ONTs — nunca se bloquea el panel.
+  }
+}
+
+/**
  * Fase 4 OLT — historial de desconexiones/reconexiones (13at/13au, ver
  * GET /:id/alert-log). Sección dentro de la misma tarjeta "Alertas y
  * sincronización" (no un módulo aparte) — colapsada por defecto, es
@@ -556,6 +604,7 @@ onMounted(async () => {
     catalogsStore.fetchZones(),
     loadUnconfigured(),
     loadDisabled(),
+    loadDisconnectDetectionTimes(),
   ]);
 
   // Tiempo real: cuando el sync en background (o una accion manual desde
@@ -1479,6 +1528,115 @@ const gauges = computed(() => {
       <div class="surface p-5 mb-6">
         <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Alertas y sincronización</h2>
 
+        <!-- Fase 5 OLT — Centro de monitoreo visual (13aw): 2 pestañas
+             dentro de esta misma tarjeta, "Consultar puerto GPON"/"Importar
+             ONTs" (herramientas de sincronización manual, sin tocar) quedan
+             FUERA de las pestañas, debajo de ambas, sin cambios. -->
+        <div class="flex gap-1 border-b border-slate-200 mb-4">
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm font-medium border-b-2 -mb-px"
+            :class="alertsTab === 'estado' ? 'border-sky-600 text-sky-700' : 'border-transparent text-slate-500 hover:text-slate-700'"
+            @click="alertsTab = 'estado'"
+          >
+            Estado actual
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm font-medium border-b-2 -mb-px"
+            :class="alertsTab === 'historial' ? 'border-sky-600 text-sky-700' : 'border-transparent text-slate-500 hover:text-slate-700'"
+            @click="alertsTab = 'historial'"
+          >
+            Historial de alertas
+          </button>
+        </div>
+
+        <div v-show="alertsTab === 'estado'">
+          <!-- Aviso de frescura de los datos (requisito explícito): nunca se
+               interpreta un fallo de sincronización como desconexión de
+               clientes — si el último intento no completó el escaneo, o ya
+               pasó demasiado tiempo, se avisa aparte, SIN mezclarlo con los
+               conteos (que siguen siendo del último escaneo que sí se
+               completó). -->
+          <div
+            v-if="!syncFreshness.scanComplete || syncFreshness.stale || !syncFreshness.checkedAtIso"
+            class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 mb-3"
+          >
+            <span v-if="!syncFreshness.checkedAtIso">⚠ Todavía no hay ninguna sincronización registrada para esta OLT.</span>
+            <span v-else-if="!syncFreshness.scanComplete">
+              ⚠ La OLT no respondió por completo en el último intento ({{ relativeTime(syncFreshness.checkedAtIso) }}) — esta
+              información puede estar desactualizada.
+            </span>
+            <span v-else-if="syncFreshness.stale">
+              ⚠ La última sincronización fue hace más de una hora ({{ relativeTime(syncFreshness.checkedAtIso) }}) — esta
+              información podría no reflejar el estado actual.
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mb-3">
+            Última sincronización:
+            <strong>{{ syncFreshness.checkedAtIso ? `${relativeTime(syncFreshness.checkedAtIso)} · ${formatPeruDateTime(syncFreshness.checkedAtIso)} (Perú)` : 'No disponible' }}</strong>
+          </p>
+
+          <!-- Conteos — solo datos ya cargados (oltStore.onts, Fase B), nunca un vinculo inventado. -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+              <div class="text-xl font-bold text-red-700">{{ connectionCounts.linkedOffline }}</div>
+              <div class="text-[11px] text-red-700">Clientes sin conexión</div>
+            </div>
+            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <div class="text-xl font-bold text-emerald-700">{{ connectionCounts.linkedOnline }}</div>
+              <div class="text-[11px] text-emerald-700">Clientes conectados</div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2">
+              <div class="text-xl font-bold text-slate-600">{{ connectionCounts.unlinked }}</div>
+              <div class="text-[11px] text-slate-600">ONTs pendientes de vincular</div>
+            </div>
+            <div v-if="connectionCounts.linkedUnknown > 0" class="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2">
+              <div class="text-xl font-bold text-slate-500">{{ connectionCounts.linkedUnknown }}</div>
+              <div class="text-[11px] text-slate-500">Estado desconocido (sin verificar todavía)</div>
+            </div>
+          </div>
+
+          <!-- Lista de clientes desconectados: nombre, contrato, zona, acceso directo. -->
+          <div class="rounded-xl border border-slate-200 bg-white p-4 mb-4">
+            <h3 class="text-sm font-semibold mb-3">Clientes sin conexión</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <select v-model="disconnectedFilters.zoneId" class="field-input text-xs">
+                <option value="">Todas las zonas</option>
+                <option v-for="z in catalogsStore.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+              </select>
+              <input v-model="disconnectedFilters.search" type="text" placeholder="Buscar cliente por nombre..." class="field-input text-xs" />
+            </div>
+
+            <div v-if="filteredDisconnectedClients.length" class="space-y-2">
+              <div v-for="d in filteredDisconnectedClients" :key="d.ontDbId" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm">
+                <div class="flex items-start justify-between gap-3">
+                  <router-link :to="`/clientes/${d.client.id}/servicios/${d.contract.id}`" class="font-medium text-sky-700 hover:underline">
+                    👤 {{ d.client.name }}
+                  </router-link>
+                  <span class="text-[11px] font-semibold text-red-700 bg-red-100 rounded px-1.5 py-0.5 whitespace-nowrap">Sin conexión</span>
+                </div>
+                <p class="mt-1 text-xs text-slate-600">
+                  {{ d.contract.contractNumber || 'sin número' }}
+                  <span v-if="d.contract.clientCode" class="text-slate-400"> · código {{ d.contract.clientCode }}</span>
+                  <span v-if="d.zoneName"> · {{ d.zoneName }}</span>
+                </p>
+                <p v-if="disconnectDetectedAt.get(d.ontDbId)" class="mt-1 text-[11px] text-slate-500">
+                  Detectado {{ relativeTime(disconnectDetectedAt.get(d.ontDbId)!) }} · {{ formatPeruDateTime(disconnectDetectedAt.get(d.ontDbId)!) }} (Perú)
+                </p>
+                <p class="mt-1 text-[11px] text-slate-500">
+                  Slot {{ d.slot }}/Puerto {{ d.port }}/ONU {{ d.ontId }} · {{ d.serial }}
+                  <button class="ml-2 text-sky-600 hover:underline" @click="openOntFromAlert(d.ontDbId)">Ver ONT</button>
+                </p>
+              </div>
+            </div>
+            <p v-else class="text-xs text-slate-500">
+              {{ connectionCounts.linkedOffline === 0 ? 'Ningún cliente vinculado está sin conexión en este momento.' : 'Sin resultados para el filtro aplicado.' }}
+            </p>
+          </div>
+
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Notificaciones en vivo (esta sesión)</h3>
+
         <!--
           Fase 3 comercial OLT: alertas proactivas (caida/recuperacion online-
           offline, cruce de umbral de senal), exclusivas de este panel y en
@@ -1549,11 +1707,13 @@ const gauges = computed(() => {
           </div>
         </div>
         <p v-else class="text-xs text-slate-500 mb-4">Sin alertas activas en esta sesión.</p>
+        </div>
 
         <!-- Fase 4 OLT — Historial de alertas (13at/13au): misma tarjeta,
              sección aparte, colapsada por defecto (información secundaria
-             frente a las alertas en vivo). -->
-        <div class="rounded-xl border border-slate-200 bg-white p-4 mb-4">
+             frente a las alertas en vivo). Sin cambios de comportamiento —
+             solo ahora vive dentro de la pestaña "Historial de alertas". -->
+        <div v-show="alertsTab === 'historial'" class="rounded-xl border border-slate-200 bg-white p-4 mb-4">
           <button class="flex items-center justify-between w-full text-left" @click="toggleAlertLog">
             <h3 class="text-sm font-semibold">Historial de alertas</h3>
             <span class="text-xs text-sky-600">{{ showAlertLog ? 'Ocultar ▲' : 'Ver historial ▼' }}</span>

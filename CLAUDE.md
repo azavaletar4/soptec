@@ -54,12 +54,23 @@ no repetir su investigación): Fase B de discrepancias PON↔zona↔contrato
 alertas operativas de OLT (`src/lib/oltAlertPresentation.ts`,
 `ESTADO_DESARROLLO.md` 13as) y su historial (`GET /:id/alert-log`,
 sección "Historial de alertas" dentro de la misma tarjeta en
-`OltDetailView.vue`, 13at/13au — tabla `olt_alert_log` todavía **sin
-aplicar en producción**) — mismo criterio de vínculo verificable (en el
-historial, un *snapshot* al momento del evento, nunca el vínculo de
-hoy), hora real en horario de Perú con la distinción explícita entre
-"hora de detección" y hora real del evento, acceso directo a la ficha,
-datos técnicos como secundarios.
+`OltDetailView.vue`, 13at/13au — tabla `olt_alert_log` ya **aplicada y
+desplegada en producción**, migración `20261014150451`) — mismo
+criterio de vínculo verificable (en el historial, un *snapshot* al
+momento del evento, nunca el vínculo de hoy), hora real en horario de
+Perú con la distinción explícita entre "hora de detección" y hora real
+del evento, acceso directo a la ficha, datos técnicos como secundarios.
+
+Fase 5 (`src/lib/oltConnectionStatus.ts`, pestañas "Estado
+actual"/"Historial de alertas" en la misma tarjeta de
+`OltDetailView.vue`, `ESTADO_DESARROLLO.md` 13aw, IMPLEMENTADO
+localmente) es el ejemplo más reciente de esta regla aplicada **sin
+ningún backend nuevo**: todos los conteos/listas/avisos se derivan de
+datos ya cargados en el panel (`oltStore.onts`, `summary`, el propio
+`GET /:id/alert-log`) — útil como referencia de que mejorar la
+visualización para personal administrativo no siempre requiere
+tabla/endpoint/servicio nuevo, solo agregación pura y bien probada
+sobre lo que ya existe.
 
 ## Modo de desarrollo y validación eficiente
 
