@@ -15,6 +15,7 @@ import {
 } from '../services/oltSyncService';
 import { oltEvents, type OntChangedEvent, type SummaryChangedEvent, type OltAlertEvent } from '../services/oltEvents';
 import { computeRecoveryDurations } from '../services/oltAlertLog';
+import { resolveDisabledReason } from '../services/oltDisabledReason';
 import {
   testConnectionCommands,
   listOntsCommands,
@@ -640,11 +641,20 @@ oltRoutes.get('/:id/onts/unconfigured', requireRole(...STAFF_READ), async (c) =>
  * DOS motivos que en este sistema son mecanismos separados y no se unifican
  * (decision tomada explicitamente): (a) admin-state=disable real en la OLT
  * (desactivacion manual de soporte, via activate/deactivate o el sync en
- * background), y (b) el cliente vinculado esta en corte por mora
- * (service_contracts.debt_hold_status='suspended' — ver debtHoldService.ts,
- * que solo reduce el ancho de banda via changeOntProfileCommands, NUNCA
- * toca admin-state). El vinculo con el cliente es por client_id, misma
- * limitacion ya conocida y aceptada que usa debtHoldService.ts.
+ * background), y (b) el CONTRATO/SERVICIO exacto vinculado esta en corte
+ * por mora (service_contracts.debt_hold_status='suspended' — ver
+ * debtHoldService.ts, que solo reduce el ancho de banda via
+ * changeOntProfileCommands, NUNCA toca admin-state).
+ *
+ * Correccion 13ay (ver ESTADO_DESARROLLO.md y
+ * server/src/services/oltDisabledReason.ts): el cruce de mora es por
+ * `contract_id` EXACTO de cada ONT — nunca por `client_id`. Un cliente con
+ * 2+ contratos, donde solo UNO esta en mora, ya NO contagia 'billing' a los
+ * demas servicios de ese mismo cliente que estan al dia. Una ONT sin
+ * `contract_id` (sin vincular o vinculo parcial) nunca puede calificar
+ * como 'billing' — sin un contrato exacto y verificable, el motivo queda
+ * administrativo generico (`resolveDisabledReason` lo decide de forma
+ * pura, ver sus pruebas).
  *
  * 100% lectura de Supabase (cache ya poblada por el sync de fondo o por
  * activate/deactivate) — sin Telnet, sin withOltLock, instantaneo.
@@ -653,40 +663,22 @@ oltRoutes.get('/:id/onts/disabled', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
-  const { data: manualRows } = await supabaseAdmin
-    .from('olt_onts')
-    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
-    .eq('olt_device_id', device.id)
-    .eq('admin_state', 'disable');
-
   const { data: suspendedContracts } = await supabaseAdmin
     .from('service_contracts')
-    .select('client_id')
+    .select('id')
     .eq('debt_hold_status', 'suspended');
-  const suspendedClientIds = [...new Set((suspendedContracts ?? []).map((r) => r.client_id))];
+  const suspendedContractIds = new Set((suspendedContracts ?? []).map((r) => r.id as string));
 
-  let billingRows: NonNullable<typeof manualRows> = [];
-  if (suspendedClientIds.length) {
-    const { data } = await supabaseAdmin
-      .from('olt_onts')
-      .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
-      .eq('olt_device_id', device.id)
-      .in('client_id', suspendedClientIds);
-    billingRows = data ?? [];
+  const { data: onts } = await supabaseAdmin
+    .from('olt_onts')
+    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
+    .eq('olt_device_id', device.id);
+
+  const items: Record<string, unknown>[] = [];
+  for (const r of onts ?? []) {
+    const reason = resolveDisabledReason({ admin_state: r.admin_state, contract_id: r.contract_id }, suspendedContractIds);
+    if (reason) items.push({ ...r, reason });
   }
-
-  const byId = new Map<string, Record<string, unknown> & { id: string; reasons: string[] }>();
-  for (const r of manualRows ?? []) byId.set(r.id, { ...r, reasons: ['manual'] });
-  for (const r of billingRows) {
-    const existing = byId.get(r.id);
-    if (existing) existing.reasons.push('billing');
-    else byId.set(r.id, { ...r, reasons: ['billing'] });
-  }
-
-  const items = [...byId.values()].map(({ reasons, ...r }) => ({
-    ...r,
-    reason: reasons.includes('manual') && reasons.includes('billing') ? 'both' : reasons.includes('manual') ? 'manual' : 'billing',
-  }));
 
   return c.json({ items, checkedAt: new Date().toISOString() });
 });

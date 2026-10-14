@@ -86,6 +86,14 @@ propio sistema no lo corrobora. Por eso el motivo "por deuda/mora"
 `GET /:id/onts/disabled`/`suspensionReasonLabel` en
 `oltConnectionStatus.ts`) — nunca inferido del admin-state solo.
 
+**El cruce de mora es SIEMPRE por `contract_id` exacto, nunca por
+`client_id` (13ay)**: un cliente con 2+ contratos, donde solo uno está
+en mora, no debe "contagiar" ese motivo a sus demás servicios al día.
+Ver `server/src/services/oltDisabledReason.ts`
+(`resolveDisabledReason`, puro) — si se vuelve a tocar
+`GET /:id/onts/disabled`, mantener el cruce por `contract_id`, no
+retroceder a `client_id`.
+
 ## Modo de desarrollo y validación eficiente
 
 Objetivo: detectar, corregir y validar problemas sin auditorías completas en

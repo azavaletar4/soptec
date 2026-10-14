@@ -4396,6 +4396,82 @@ verde (186/186), `vue-tsc` limpio. Pendiente, como siempre, la
 autorización explícita del usuario para push/deploy — esta fase
 tampoco requiere ninguna migración.
 
+**Actualización — bloqueada antes de desplegar (2026-10-14)**: al
+pedir autorización de despliegue del commit `3069da1`, el usuario
+exigió verificar explícitamente que una deuda del cliente no se
+atribuyera automáticamente a todos sus contratos. Se confirmó que
+**no** estaba verificado a nivel de servicio exacto — ver 13ay, abajo,
+corrección aplicada antes de desplegar nada.
+
+## 13ay. Corrección: motivo de suspensión por `contract_id` exacto, nunca por `client_id` (2026-10-14, IMPLEMENTADO localmente, commit local sin push/deploy)
+
+### Causa corregida
+`GET /:id/onts/disabled` (endpoint preexistente, reutilizado sin
+cambios por 13ax) cruzaba `service_contracts.debt_hold_status=
+'suspended'` por `client_id`, no por `contract_id`. Si un cliente
+tenía 2+ contratos y solo uno estaba en mora, **todas** sus ONTs en
+este dispositivo recibían `reason: 'billing'`, incluyendo las de
+contratos al día — exactamente lo que el usuario pidió confirmar antes
+de autorizar el despliegue. Verificado con SQL de solo lectura que hoy
+no hay ningún cliente real en ese escenario (0 filas), pero el
+mecanismo no lo garantizaba — era un riesgo latente, no un hecho
+consumado.
+
+### Corrección
+- **`server/src/services/oltDisabledReason.ts`** (nuevo, puro, sin
+  I/O): `resolveDisabledReason(ont, suspendedContractIds)` decide el
+  motivo (`'manual'|'billing'|'both'|null`) mirando el `contract_id`
+  EXACTO de esa ONT contra el conjunto de contratos realmente
+  suspendidos — nunca el `client_id`. Sin `contract_id` (sin vincular
+  o vínculo parcial) nunca puede calificar como `'billing'` — motivo
+  genérico (`'manual'` si corresponde, o `null`).
+- **`server/src/routes/olt.ts`** (`GET /:id/onts/disabled`): en vez de
+  2 consultas filtradas por `client_id` y mezcladas a mano, ahora hace
+  1 consulta de todas las ONTs del dispositivo y aplica
+  `resolveDisabledReason` fila por fila — misma forma de respuesta
+  (`{items, checkedAt}`, cada item con `reason`), compatible con
+  `DisabledOntsTab.vue`/`oltStore.fetchDisabledOnts` y con la nueva
+  lista "Suspendidos" de Fase 5 (13ax), sin cambios en ninguno de los
+  dos consumidores.
+- **`server/src/services/__tests__/oltDisabledReason.test.ts`**
+  (nuevo, 9 casos): admin-disabled sin mora → `'manual'`; contrato
+  exacto en mora sin admin-disable → `'billing'`; ambos → `'both'`;
+  **cliente con 2 contratos, uno en mora y otro al día → cada uno con
+  su propio motivo, sin contagio**; ONT sin contrato (con o sin
+  admin-disable) → nunca `'billing'`; sin ningún contrato suspendido en
+  el sistema → `null`; contrato de la ONT que no coincide con ninguno
+  suspendido → `null`.
+
+### Pruebas
+`npm run test:provisioning` (incluye `server/src/services/__tests__/*`)
+→ **105/105** (96 previos + 9 nuevos). `npx tsc -p tsconfig.server.json
+--noEmit` → sin errores nuevos (2 errores preexistentes en
+`oltProvisioningService.ts`, no relacionados, confirmados iguales
+antes y después de este cambio con `git stash`). No se repitió
+`vue-tsc`/`test:fetch-timeout` — ningún archivo frontend cambió en
+esta corrección (regla de "modo de desarrollo eficiente").
+
+### Verificación del punto 5 (pantalla "ONUs deshabilitadas/cortadas" sigue funcionando)
+Misma forma de respuesta, mismo tipo `DisabledOnt.reason`, mismo
+`checkedAt` — `DisabledOntsTab.vue` no se modificó y no necesita
+cambios. El único efecto visible es que deja de mostrar `'billing'`
+para servicios de un cliente que NO están realmente en mora (la
+corrección en sí) — comportamiento estrictamente más correcto, nunca
+menos.
+
+### Limitación (documentada, no corregida — fuera de alcance explícito)
+Si en el futuro una ONT tiene `contract_id` pero ese contrato fue
+borrado/cambiado sin resincronizar `olt_onts.contract_id` (desync entre
+tablas), `resolveDisabledReason` simplemente no encontrará coincidencia
+y mostrará el motivo genérico — nunca inventa una relación. No se tocó
+`debtHoldService.ts` ni ningún cálculo de `debt_hold_status`.
+
+### ¿Lista para pedir autorización de despliegue (3069da1 + esta corrección)?
+**Sí, a nivel de código** — implementación local completa, pruebas en
+verde (186 frontend + 105 backend), sin errores nuevos de compilación.
+Pendiente la autorización explícita del usuario para push/deploy —
+tampoco requiere ninguna migración.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
