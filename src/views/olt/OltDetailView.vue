@@ -23,8 +23,10 @@ import {
 import {
   computeConnectionStatusCounts,
   listDisconnectedLinkedClients,
+  listSuspendedLinkedClients,
   filterDisconnectedClients,
   evaluateSyncFreshness,
+  suspensionReasonLabel,
 } from '@/lib/oltConnectionStatus';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -420,6 +422,47 @@ async function loadDisconnectDetectionTimes() {
     // Solo-lectura/best-effort: si falla, simplemente no se muestra el
     // tiempo transcurrido para esas ONTs — nunca se bloquea el panel.
   }
+}
+
+/**
+ * 13ax — "Suspendidos" (admin_state='disable'), separados de "Clientes sin
+ * conexión" (ver oltConnectionStatus.ts: `admin_state` manda SIEMPRE sobre
+ * `status`, nunca doble conteo entre esta lista y la de desconectados).
+ */
+const suspendedFilters = ref({ zoneId: '', search: '' });
+const filteredSuspendedClients = computed(() =>
+  filterDisconnectedClients(
+    listSuspendedLinkedClients(oltStore.onts.filter((o) => o.olt_device_id === deviceId.value)),
+    suspendedFilters.value,
+  ),
+);
+
+/**
+ * Motivo de la suspensión — reusa tal cual `disabledOnts` (ya cargado por
+ * `loadDisabled()`/`oltStore.fetchDisabledOnts` para "ONUs deshabilitadas /
+ * cortadas" más abajo en este mismo panel, SIN una llamada nueva) para
+ * saber si hay evidencia confiable de deuda (`reason` incluye 'billing',
+ * cruzado contra `service_contracts.debt_hold_status='suspended'`) — nunca
+ * se asume "por deuda" solo por `admin_state='disable'` (ver
+ * suspensionReasonLabel, caso real Danner Ávalos Ventura en 13ax).
+ */
+const suspensionReasonByOntId = computed(() => new Map(disabledOnts.value.map((it) => [it.id, it.reason])));
+function suspensionLabel(ontDbId: string): string {
+  return suspensionReasonLabel(suspensionReasonByOntId.value.get(ontDbId));
+}
+
+/**
+ * "Fecha/hora cuando exista" para un suspendido: `last_synced_at` de la
+ * propia ONT (ya cargado, Fase B) — se actualiza SOLO cuando el sync
+ * detecta un cambio real de status/admin_state para esa fila (ver
+ * oltSyncService.ts). No es un evento "se suspendió a las X" verificado
+ * (detectStatusAlert nunca registra alerta para una transición a
+ * admin-disabled — es una acción administrativa, no una caída), por eso
+ * se etiqueta como "último cambio registrado", nunca como "fecha de
+ * suspensión" exacta.
+ */
+function ontLastSyncedAt(ontDbId: string): string | null {
+  return oltStore.onts.find((o) => o.id === ontDbId)?.last_synced_at ?? null;
 }
 
 /**
@@ -1577,11 +1620,17 @@ const gauges = computed(() => {
             <strong>{{ syncFreshness.checkedAtIso ? `${relativeTime(syncFreshness.checkedAtIso)} · ${formatPeruDateTime(syncFreshness.checkedAtIso)} (Perú)` : 'No disponible' }}</strong>
           </p>
 
-          <!-- Conteos — solo datos ya cargados (oltStore.onts, Fase B), nunca un vinculo inventado. -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <!-- Conteos — solo datos ya cargados (oltStore.onts, Fase B), nunca un vinculo inventado.
+               Mutuamente excluyentes (13ax): admin_state='disable' SIEMPRE manda sobre status,
+               asi que "Suspendidos" nunca se mezcla con "Clientes sin conexión" ni "conectados". -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
             <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2">
               <div class="text-xl font-bold text-red-700">{{ connectionCounts.linkedOffline }}</div>
               <div class="text-[11px] text-red-700">Clientes sin conexión</div>
+            </div>
+            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <div class="text-xl font-bold text-amber-700">{{ connectionCounts.linkedSuspended }}</div>
+              <div class="text-[11px] text-amber-700">Suspendidos</div>
             </div>
             <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
               <div class="text-xl font-bold text-emerald-700">{{ connectionCounts.linkedOnline }}</div>
@@ -1595,6 +1644,47 @@ const gauges = computed(() => {
               <div class="text-xl font-bold text-slate-500">{{ connectionCounts.linkedUnknown }}</div>
               <div class="text-[11px] text-slate-500">Estado desconocido (sin verificar todavía)</div>
             </div>
+          </div>
+
+          <!-- Suspendidos administrativamente (admin_state='disable') — separados de "Sin conexión" (13ax).
+               Motivo "por deuda/mora" SOLO con evidencia confiable (debt_hold_status, via disabledOnts ya
+               cargado) — nunca inferido solo del admin-disabled (ver suspensionReasonLabel). -->
+          <div class="rounded-xl border border-slate-200 bg-white p-4 mb-4">
+            <h3 class="text-sm font-semibold mb-3">Suspendidos</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <select v-model="suspendedFilters.zoneId" class="field-input text-xs">
+                <option value="">Todas las zonas</option>
+                <option v-for="z in catalogsStore.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+              </select>
+              <input v-model="suspendedFilters.search" type="text" placeholder="Buscar cliente por nombre..." class="field-input text-xs" />
+            </div>
+
+            <div v-if="filteredSuspendedClients.length" class="space-y-2">
+              <div v-for="s in filteredSuspendedClients" :key="s.ontDbId" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                <div class="flex items-start justify-between gap-3">
+                  <router-link :to="`/clientes/${s.client.id}/servicios/${s.contract.id}`" class="font-medium text-sky-700 hover:underline">
+                    👤 {{ s.client.name }}
+                  </router-link>
+                  <span class="text-[11px] font-semibold text-amber-800 bg-amber-100 rounded px-1.5 py-0.5 whitespace-nowrap">{{ suspensionLabel(s.ontDbId) }}</span>
+                </div>
+                <p class="mt-1 text-xs text-slate-600">
+                  {{ s.contract.contractNumber || 'sin número' }}
+                  <span v-if="s.contract.clientCode" class="text-slate-400"> · código {{ s.contract.clientCode }}</span>
+                  <span v-if="s.zoneName"> · {{ s.zoneName }}</span>
+                </p>
+                <p v-if="ontLastSyncedAt(s.ontDbId)" class="mt-1 text-[11px] text-slate-500">
+                  Último cambio registrado {{ relativeTime(ontLastSyncedAt(s.ontDbId)!) }} · {{ formatPeruDateTime(ontLastSyncedAt(s.ontDbId)!) }} (Perú)
+                </p>
+                <p class="mt-1 text-[11px] text-slate-500">
+                  Slot {{ s.slot }}/Puerto {{ s.port }}/ONU {{ s.ontId }} · {{ s.serial }}
+                  <router-link :to="`/clientes/${s.client.id}`" class="ml-2 text-sky-600 hover:underline">Ver cliente</router-link>
+                  <button class="ml-2 text-sky-600 hover:underline" @click="openOntFromAlert(s.ontDbId)">Ver ONT</button>
+                </p>
+              </div>
+            </div>
+            <p v-else class="text-xs text-slate-500">
+              {{ connectionCounts.linkedSuspended === 0 ? 'Ningún cliente vinculado está suspendido en este momento.' : 'Sin resultados para el filtro aplicado.' }}
+            </p>
           </div>
 
           <!-- Lista de clientes desconectados: nombre, contrato, zona, acceso directo. -->

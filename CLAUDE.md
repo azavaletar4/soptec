@@ -63,14 +63,28 @@ del evento, acceso directo a la ficha, datos técnicos como secundarios.
 
 Fase 5 (`src/lib/oltConnectionStatus.ts`, pestañas "Estado
 actual"/"Historial de alertas" en la misma tarjeta de
-`OltDetailView.vue`, `ESTADO_DESARROLLO.md` 13aw, IMPLEMENTADO
-localmente) es el ejemplo más reciente de esta regla aplicada **sin
-ningún backend nuevo**: todos los conteos/listas/avisos se derivan de
-datos ya cargados en el panel (`oltStore.onts`, `summary`, el propio
+`OltDetailView.vue`, `ESTADO_DESARROLLO.md` 13aw, DESPLEGADA) es el
+ejemplo más reciente de esta regla aplicada **sin ningún backend
+nuevo**: todos los conteos/listas/avisos se derivan de datos ya
+cargados en el panel (`oltStore.onts`, `summary`, el propio
 `GET /:id/alert-log`) — útil como referencia de que mejorar la
 visualización para personal administrativo no siempre requiere
 tabla/endpoint/servicio nuevo, solo agregación pura y bien probada
 sobre lo que ya existe.
+
+**Admin-disabled ≠ desconectado, y admin-disabled ≠ deuda (13ax, ver
+`ESTADO_DESARROLLO.md`)**: una ONU con `admin_state='disable'` (mismo
+dato que SmartOLT reporta como "admin-disabled mode") NUNCA debe
+contarse ni mostrarse como "sin conexión" — `admin_state` manda
+SIEMPRE sobre `status`, incluso si `status` quedó en `'online'` de
+antes de suspenderse. Caso real confirmado (Danner Ávalos Ventura,
+CTR-2026-00356): admin-disabled con `debt_hold_status='none'` en su
+contrato — pese a que el operador afirmaba que era "por deuda", el
+propio sistema no lo corrobora. Por eso el motivo "por deuda/mora"
+**solo** se muestra si hay evidencia confiable
+(`service_contracts.debt_hold_status='suspended'`, ya cruzado por
+`GET /:id/onts/disabled`/`suspensionReasonLabel` en
+`oltConnectionStatus.ts`) — nunca inferido del admin-state solo.
 
 ## Modo de desarrollo y validación eficiente
 

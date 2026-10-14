@@ -4275,6 +4275,127 @@ verde, `vue-tsc` limpio. Pendiente: verificación visual en navegador
 usuario para hacer push/deploy — esta fase no requiere ninguna
 migración (no toca la base de datos).
 
+**Actualización — DESPLEGADA (2026-10-14)**: el usuario autorizó
+explícitamente ("SMART RAYCO — FASE 5: VALIDACIÓN Y DESPLIEGUE") el
+push y despliegue del commit `de1a3c0` tras confirmar que las ONTs con
+sincronización desactualizada/fallida nunca se muestran como "sin
+conexión" confirmada (ver `evaluateSyncFreshness` + el aviso ámbar) y
+que `oltSyncService.ts` nunca actualiza `status`/`last_synced_at` en un
+ciclo con `scanComplete=false`. Desplegado en la VM
+(`192.168.55.201`/`/opt/smartrayco`, `docker compose -f
+docker-compose.onprem.yml up -d --build`) con `git log -1` confirmando
+`de1a3c0`, backend y frontend reconstruidos y arriba, `panel.
+rayconetworks.com` y `/api/health` respondiendo 200. Rollback
+registrado (`PREV_COMMIT=56d0aaf`), sin necesidad de usarlo. Sin
+migración de por medio.
+
+**Hallazgo real post-despliegue, de uso en campo (mismo día)**: un
+cliente real (Danner Ávalos Ventura, CTR-2026-00356) suspendido por
+corte administrativo (`admin_state='disable'` real en la OLT, mismo
+dato que reporta SmartOLT como "admin-disabled mode") aparecía en
+"Clientes sin conexión" junto con caídas reales — esta pestaña nueva
+nunca miraba `admin_state`. Diagnosticado y corregido en 13ax, abajo.
+
+## 13ax. Fase 5 OLT — separar "Suspendidos" de "Clientes sin conexión" (2026-10-14, IMPLEMENTADO localmente, commit local sin push/deploy)
+
+### Causa raíz
+`src/lib/oltConnectionStatus.ts` (13aw) clasificaba solo por `status`,
+ignorando `admin_state`. Una ONU admin-disabled (suspendida/cortada)
+queda con `status='offline'` **y** `admin_state='disable'` a la vez —
+sin distinguir, se contaba y listaba igual que una caída real.
+
+Verificado contra Supabase producción (solo lectura, sin escritura):
+Danner Ávalos Ventura / CTR-2026-00356 / MSTC8CCE7991 (1/2/3:41) tenía
+`status='offline'`, `admin_state='disable'`, `debt_hold_status='none'`
+— es decir, suspendido administrativamente pero **sin evidencia de
+deuda** en el propio sistema de facturación, pese a que el operador
+afirmaba que fue por mora. A nivel de todo el dispositivo (sync activo,
+`scan_complete=true`): de las ONTs vinculadas offline, 3 eran caídas
+reales y **3 eran suspensiones administrativas** mezcladas en el mismo
+conteo — la mitad del número mostrado era incorrecto.
+
+### Campos/comandos ya disponibles (nada nuevo)
+- La OLT expone `admin-state` directamente en `show gpon onu state`
+  (columna 2) — misma fuente que SmartOLT. Parseado y **validado contra
+  el equipo real** en `server/src/ssh/zteParsers.ts` (`parseOntList`/
+  `parseGlobalOntState`).
+- Persistido cada ciclo exitoso en `olt_onts.admin_state`, con la misma
+  garantía de fiabilidad que `status` (`oltSyncService.ts`, gateado por
+  `scanComplete`) — ya cargado en el panel vía `OltOnt.admin_state`
+  (`src/stores/olt.ts`), sin fetch nuevo.
+- El motivo (deuda vs. manual) ya existe, separado correctamente:
+  `GET /:id/onts/disabled` cruza `admin_state='disable'` con
+  `service_contracts.debt_hold_status='suspended'` (nunca infiere
+  "deuda" del admin-state solo) y devuelve `reason:
+  'manual'|'billing'|'both'` — ya usado por `DisabledOntsTab.vue`/
+  `oltStore.fetchDisabledOnts`. Esta fase lo reutiliza tal cual, sin
+  tocar `debtHoldService.ts` ni ningún cálculo de facturación.
+
+### Implementación
+- **`src/lib/oltConnectionStatus.ts`**: `ConnectionStatusOnt` ahora
+  incluye `admin_state`. Nueva `classifyLinked(o)` interna —
+  `admin_state='disable'` manda SIEMPRE, antes de mirar `status`
+  (incluso sobre un `status` viejo de antes de suspenderse, o sobre
+  `'unknown'`). `ConnectionStatusCounts` gana `linkedSuspended`, restado
+  de `linkedOffline`/`linkedOnline`/`linkedUnknown` — cada ONT cae en
+  EXACTAMENTE un conteo, nunca dos. Nueva `listSuspendedLinkedClients`
+  (mismo patrón que `listDisconnectedLinkedClients`, nunca el mismo
+  listado) y nueva `suspensionReasonLabel(reason)` — "Suspendido — por
+  deuda / mora" SOLO si `reason` incluye `'billing'`, si no
+  "Suspendido administrativamente" genérico (nunca inventa "deuda" sin
+  evidencia — caso real de Danner).
+- **`src/views/olt/OltDetailView.vue`**: tarjeta "Suspendidos" (ámbar)
+  en el grid de conteos de "Estado actual", y sub-lista "Suspendidos"
+  (mismo patrón que "Clientes sin conexión": filtro de zona/búsqueda,
+  nombre con enlace a la ficha del servicio, "Ver cliente" y "Ver ONT"
+  — reusando `openOntFromAlert` ya existente). El motivo mostrado
+  reusa `disabledOnts` (ya cargado por `loadDisabled()`, SIN una
+  llamada nueva) vía un `computed` que indexa por `ont.id`. La fecha
+  mostrada es `last_synced_at` de la propia ONT, etiquetada
+  honestamente como "último cambio registrado" (no "fecha de
+  suspensión" exacta, porque `detectStatusAlert` nunca registra una
+  alerta para una transición a admin-disabled — es una acción
+  administrativa, no una caída que alertar).
+- **`src/lib/__tests__/oltConnectionStatus.test.ts`**: 14 casos nuevos
+  (31 en total) cubriendo exactamente la matriz pedida: suspensión con
+  `status='online'` antiguo, suspensión offline, reconexión
+  (`admin_state` vuelve a `'enable'`), `status` desconocido con
+  `admin_state='disable'`, ONT sin vincular con `admin_state='disable'`
+  (sigue "sin vincular", nunca "suspendida"), cliente con 2 contratos
+  (uno suspendido y otro no, sin mezclarse), y una prueba explícita de
+  que cada ONT cae en un solo conteo (suma = total, sin doble conteo).
+
+### Pruebas
+`npm run test:fetch-timeout` → **186/186** (172 previos + 14 nuevos).
+`npx vue-tsc -p tsconfig.app.json --noEmit` → sin errores.
+
+### Limitaciones (sin cambios, heredadas de la lógica ya existente que se reutiliza)
+- El cruce con facturación en `GET /:id/onts/disabled` es por
+  `client_id`, no por `contract_id` exacto — si un cliente tiene 2
+  contratos y solo uno está en mora, sus demás ONTs también saldrían
+  con motivo "por deuda/mora" aunque esa ONT en particular no sea la
+  del contrato suspendido. Limitación ya aceptada antes de esta fase
+  (`debtHoldService.ts`), no se resuelve aquí — "No cambios de
+  facturación" fue una restricción explícita de esta tarea.
+- "Último cambio registrado" (no hay un evento verificable de "se
+  suspendió a las X" en `olt_alert_log`, a propósito — admin-disabled
+  nunca genera una alerta ahí).
+- Los cientos de ONTs sin vincular por la migración no se tocaron —
+  siguen en `unlinked`, sin alterar su clasificación.
+
+### Riesgos
+Ninguno de escritura (100% lectura, sin tocar OLT/MikroTik/PPPoE/
+facturación/contratos). Riesgo de presentación: si `disabledOnts`
+todavía no cargó, el motivo se muestra genérico ("Suspendido
+administrativamente") hasta que la petición existente complete — nunca
+bloquea el panel ni inventa un motivo.
+
+### ¿Lista para pedir autorización de despliegue?
+**Sí, a nivel de código** — implementación local completa, pruebas en
+verde (186/186), `vue-tsc` limpio. Pendiente, como siempre, la
+autorización explícita del usuario para push/deploy — esta fase
+tampoco requiere ninguna migración.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

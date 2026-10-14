@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   computeConnectionStatusCounts,
   listDisconnectedLinkedClients,
+  listSuspendedLinkedClients,
   filterDisconnectedClients,
   evaluateSyncFreshness,
+  suspensionReasonLabel,
   type ConnectionStatusOnt,
 } from '../oltConnectionStatus';
 
@@ -17,6 +19,7 @@ function ont(overrides: Partial<ConnectionStatusOnt>): ConnectionStatusOnt {
     port: 1,
     ont_id: 1,
     status: 'online',
+    admin_state: 'enable',
     client_id: null,
     ...overrides,
   };
@@ -35,47 +38,115 @@ const linkedSample = (overrides: Partial<ConnectionStatusOnt> = {}) =>
 
 test('computeConnectionStatusCounts: cliente vinculado conectado -> linkedOnline', () => {
   const r = computeConnectionStatusCounts([linkedSample({ status: 'online' })]);
-  assert.deepEqual(r, { linkedOnline: 1, linkedOffline: 0, linkedUnknown: 0, unlinked: 0 });
+  assert.deepEqual(r, { linkedOnline: 1, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 0, unlinked: 0 });
 });
 
 test('computeConnectionStatusCounts: cliente vinculado desconectado -> linkedOffline', () => {
   const r = computeConnectionStatusCounts([linkedSample({ status: 'offline' })]);
-  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 1, linkedUnknown: 0, unlinked: 0 });
+  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 1, linkedUnknown: 0, linkedSuspended: 0, unlinked: 0 });
 });
 
 test('computeConnectionStatusCounts: cliente vinculado con estado desconocido -> linkedUnknown, NUNCA se cuenta como desconectado', () => {
   const r = computeConnectionStatusCounts([linkedSample({ status: 'unknown' })]);
-  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 1, unlinked: 0 });
+  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 1, linkedSuspended: 0, unlinked: 0 });
 });
 
 test('computeConnectionStatusCounts: ONT sin vincular (migracion SmartOLT) -> unlinked, SIEMPRE por separado aunque este offline', () => {
   const r = computeConnectionStatusCounts([ont({ client_id: null, status: 'offline' })]);
-  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, unlinked: 1 });
+  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 0, unlinked: 1 });
 });
 
 test('computeConnectionStatusCounts: vinculo PARCIAL (contract_id sin client_id) -> sigue siendo unlinked, nunca un vinculo a medias', () => {
   const r = computeConnectionStatusCounts([ont({ client_id: null, contract_id: 'ctr-1', status: 'online' })]);
-  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, unlinked: 1 });
+  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 0, unlinked: 1 });
 });
 
 test('computeConnectionStatusCounts: cliente con MULTIPLES servicios -> cada ONT/contrato cuenta por separado, sin mezclarse', () => {
   const servicioA = linkedSample({ id: 'ont-a', status: 'online', contract_id: 'ctr-a', service_contracts: { id: 'ctr-a', contract_number: 'C-A', client_code: 'CL-A', zones: null } });
   const servicioB = linkedSample({ id: 'ont-b', status: 'offline', contract_id: 'ctr-b', service_contracts: { id: 'ctr-b', contract_number: 'C-B', client_code: 'CL-B', zones: null } });
   const r = computeConnectionStatusCounts([servicioA, servicioB]);
-  assert.deepEqual(r, { linkedOnline: 1, linkedOffline: 1, linkedUnknown: 0, unlinked: 0 });
+  assert.deepEqual(r, { linkedOnline: 1, linkedOffline: 1, linkedUnknown: 0, linkedSuspended: 0, unlinked: 0 });
+});
+
+test('computeConnectionStatusCounts: MISMO cliente con 2 contratos, uno suspendido y otro conectado -> cada uno en SU bucket, sin asociaciones incorrectas', () => {
+  const servicioSuspendido = linkedSample({
+    id: 'ont-susp',
+    status: 'offline',
+    admin_state: 'disable',
+    contract_id: 'ctr-susp',
+    service_contracts: { id: 'ctr-susp', contract_number: 'C-SUSP', client_code: 'CL-X', zones: null },
+  });
+  const servicioOk = linkedSample({
+    id: 'ont-ok',
+    status: 'online',
+    admin_state: 'enable',
+    contract_id: 'ctr-ok',
+    service_contracts: { id: 'ctr-ok', contract_number: 'C-OK', client_code: 'CL-X', zones: null },
+  });
+  const r = computeConnectionStatusCounts([servicioSuspendido, servicioOk]);
+  assert.deepEqual(r, { linkedOnline: 1, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 1, unlinked: 0 });
+  // y cada lista trae SOLO su propio contrato, nunca el del otro servicio del mismo cliente.
+  assert.deepEqual(listSuspendedLinkedClients([servicioSuspendido, servicioOk]).map((e) => e.contract.id), ['ctr-susp']);
+  assert.deepEqual(listDisconnectedLinkedClients([servicioSuspendido, servicioOk]).map((e) => e.contract.id), []);
 });
 
 test('computeConnectionStatusCounts: lista vacia -> todo en cero', () => {
-  assert.deepEqual(computeConnectionStatusCounts([]), { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, unlinked: 0 });
+  assert.deepEqual(computeConnectionStatusCounts([]), { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 0, unlinked: 0 });
+});
+
+test('computeConnectionStatusCounts: cada ONT cae en EXACTAMENTE un conteo, nunca doble conteo', () => {
+  const onts = [
+    linkedSample({ id: 'a', status: 'online' }),
+    linkedSample({ id: 'b', status: 'offline' }),
+    linkedSample({ id: 'c', status: 'unknown' }),
+    linkedSample({ id: 'd', status: 'offline', admin_state: 'disable' }),
+    linkedSample({ id: 'e', status: 'online', admin_state: 'disable' }),
+    ont({ id: 'f', client_id: null, status: 'offline' }),
+  ];
+  const r = computeConnectionStatusCounts(onts);
+  const total = r.linkedOnline + r.linkedOffline + r.linkedUnknown + r.linkedSuspended + r.unlinked;
+  assert.equal(total, onts.length);
+  assert.deepEqual(r, { linkedOnline: 1, linkedOffline: 1, linkedUnknown: 1, linkedSuspended: 2, unlinked: 1 });
+});
+
+// ---- Suspension administrativa (admin_state='disable') tiene PRIORIDAD sobre status ----
+
+test('suspension con STATUS ONLINE ANTIGUO (quedo asi antes de deshabilitarse) -> sigue siendo suspendida, NUNCA conectada', () => {
+  const r = computeConnectionStatusCounts([linkedSample({ status: 'online', admin_state: 'disable' })]);
+  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 1, unlinked: 0 });
+});
+
+test('suspension OFFLINE (caso normal) -> suspendida, NUNCA "sin conexion"', () => {
+  const r = computeConnectionStatusCounts([linkedSample({ status: 'offline', admin_state: 'disable' })]);
+  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 1, unlinked: 0 });
+  assert.equal(listDisconnectedLinkedClients([linkedSample({ status: 'offline', admin_state: 'disable' })]).length, 0);
+});
+
+test('suspension con STATUS DESCONOCIDO -> sigue siendo suspendida (admin_state manda siempre, incluso sobre "unknown")', () => {
+  const r = computeConnectionStatusCounts([linkedSample({ status: 'unknown', admin_state: 'disable' })]);
+  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 1, unlinked: 0 });
+});
+
+test('RECONEXION: admin_state vuelve a enable y status online -> vuelve a contar como conectada, no suspendida', () => {
+  const r = computeConnectionStatusCounts([linkedSample({ status: 'online', admin_state: 'enable' })]);
+  assert.deepEqual(r, { linkedOnline: 1, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 0, unlinked: 0 });
+});
+
+test('ONT SIN VINCULAR con admin_state=disable -> sigue siendo "sin vincular", NUNCA aparece como suspendida (no altera la migracion)', () => {
+  const unlinkedDisabled = ont({ client_id: null, status: 'offline', admin_state: 'disable' });
+  const r = computeConnectionStatusCounts([unlinkedDisabled]);
+  assert.deepEqual(r, { linkedOnline: 0, linkedOffline: 0, linkedUnknown: 0, linkedSuspended: 0, unlinked: 1 });
+  assert.equal(listSuspendedLinkedClients([unlinkedDisabled]).length, 0);
 });
 
 // ---- listDisconnectedLinkedClients ----
 
-test('listDisconnectedLinkedClients: solo vinculados Y offline — nunca uno sin vincular, nunca uno online/unknown', () => {
+test('listDisconnectedLinkedClients: solo vinculados Y offline Y NO suspendidos — nunca uno sin vincular, nunca uno online/unknown/suspendido', () => {
   const onts = [
     linkedSample({ id: 'ont-off', status: 'offline' }),
     linkedSample({ id: 'ont-on', status: 'online' }),
     linkedSample({ id: 'ont-unk', status: 'unknown' }),
+    linkedSample({ id: 'ont-susp', status: 'offline', admin_state: 'disable' }),
     ont({ id: 'ont-sinvincular', client_id: null, status: 'offline' }),
   ];
   const list = listDisconnectedLinkedClients(onts);
@@ -99,7 +170,33 @@ test('listDisconnectedLinkedClients: ordena por nombre de cliente', () => {
   assert.deepEqual(list.map((e) => e.client.name), ['Andres Alfa', 'Zulema Zeta']);
 });
 
-// ---- filterDisconnectedClients ----
+// ---- listSuspendedLinkedClients ----
+
+test('listSuspendedLinkedClients: solo vinculados Y admin_state=disable — nunca uno sin vincular, nunca aparece tambien en listDisconnectedLinkedClients', () => {
+  const onts = [
+    linkedSample({ id: 'ont-susp-off', status: 'offline', admin_state: 'disable' }),
+    linkedSample({ id: 'ont-susp-on', status: 'online', admin_state: 'disable' }),
+    linkedSample({ id: 'ont-off', status: 'offline', admin_state: 'enable' }),
+    ont({ id: 'ont-sinvincular', client_id: null, status: 'offline', admin_state: 'disable' }),
+  ];
+  const suspended = listSuspendedLinkedClients(onts);
+  const disconnected = listDisconnectedLinkedClients(onts);
+  assert.deepEqual(suspended.map((e) => e.ontDbId).sort(), ['ont-susp-off', 'ont-susp-on']);
+  assert.deepEqual(disconnected.map((e) => e.ontDbId), ['ont-off']);
+  // ninguna ONT aparece en las 2 listas a la vez.
+  const overlap = suspended.filter((s) => disconnected.some((d) => d.ontDbId === s.ontDbId));
+  assert.equal(overlap.length, 0);
+});
+
+test('listSuspendedLinkedClients: incluye nombre, contrato, zona y posicion — mismos datos para "Ver cliente"/"Ver ONT"', () => {
+  const [entry] = listSuspendedLinkedClients([linkedSample({ status: 'offline', admin_state: 'disable' })]);
+  assert.equal(entry.client.name, 'Violeta Garcia Silva');
+  assert.equal(entry.contract.contractNumber, 'C-001');
+  assert.equal(entry.zoneName, 'PON 1 - AO');
+  assert.equal(entry.ontDbId, 'ont-1');
+});
+
+// ---- filterDisconnectedClients (reusado tal cual para suspendidos: misma forma de entrada) ----
 
 test('filterDisconnectedClients: filtra por zona exacta (id)', () => {
   const ao = linkedSample({ id: 'ont-ao', status: 'offline' });
@@ -121,6 +218,30 @@ test('filterDisconnectedClients: sin filtros -> devuelve todo tal cual', () => {
   assert.deepEqual(filterDisconnectedClients([entry], {}), [entry]);
 });
 
+test('filterDisconnectedClients: funciona igual sobre la lista de suspendidos (misma forma de entrada)', () => {
+  const [entry] = listSuspendedLinkedClients([linkedSample({ status: 'offline', admin_state: 'disable' })]);
+  assert.equal(filterDisconnectedClients([entry], { search: 'violeta' }).length, 1);
+});
+
+// ---- suspensionReasonLabel: "Por deuda/mora" SOLO con evidencia confiable (debt_hold_status via /:id/onts/disabled) ----
+
+test('suspensionReasonLabel: reason="billing" (debt_hold_status=suspended confirmado) -> por deuda/mora', () => {
+  assert.equal(suspensionReasonLabel('billing'), 'Suspendido — por deuda / mora');
+});
+
+test('suspensionReasonLabel: reason="both" (manual Y deuda) -> igual menciona la deuda, es evidencia real', () => {
+  assert.equal(suspensionReasonLabel('both'), 'Suspendido — por deuda / mora');
+});
+
+test('suspensionReasonLabel: reason="manual" (sin evidencia de deuda) -> generico, NUNCA inventa "por deuda"', () => {
+  assert.equal(suspensionReasonLabel('manual'), 'Suspendido administrativamente');
+});
+
+test('suspensionReasonLabel: reason desconocido/ausente (ej. caso real Danner: admin-disabled con debt_hold_status=none) -> generico', () => {
+  assert.equal(suspensionReasonLabel(undefined), 'Suspendido administrativamente');
+  assert.equal(suspensionReasonLabel(null), 'Suspendido administrativamente');
+});
+
 // ---- evaluateSyncFreshness ----
 
 test('evaluateSyncFreshness: sincronizacion reciente y completa -> ok, no stale', () => {
@@ -138,7 +259,7 @@ test('evaluateSyncFreshness: la OLT no respondio en el ultimo intento -> scanCom
   assert.equal(r.minutesAgo, 1);
 });
 
-test('evaluateSyncFreshness: hace demasiado tiempo desde la ultima sincronizacion -> stale', () => {
+test('evaluateSyncFreshness: hace demasiado tiempo desde la ultima sincronizacion -> stale, dato antiguo nunca se presenta como confirmacion actual', () => {
   const now = new Date('2026-10-14T15:00:00.000Z').getTime();
   const r = evaluateSyncFreshness({ checkedAt: '2026-10-14T13:00:00.000Z', scanComplete: true }, now, 60);
   assert.equal(r.stale, true);
