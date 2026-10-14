@@ -6,6 +6,7 @@ import {
   buildPonNumberMap,
   evaluateOntZoneDiscrepancies,
   countPonPortIssues,
+  ontsInZone,
   type OntZoneDiscrepancy,
   type OntZoneCaseStatus,
   type PonPortIssueCounts,
@@ -365,6 +366,24 @@ function openDiscrepancyModal(
   discrepancyModalPort.value = {
     label: `PON ${String(p.ponNumber).padStart(2, '0')} (Slot ${p.slot} / Puerto ${p.port})`,
     rows,
+  };
+}
+/**
+ * Ajuste puntual (13ar): cuántas ONTs de este puerto no tienen ninguna
+ * zona propia asignada — exactamente las que `computePonOccupancy` deja
+ * fuera de `zoneBreakdown` (ver oltCapacity.ts), por eso el total del
+ * puerto podía no coincidir con la suma del desglose. Mismo dato, nunca
+ * una resta: `ontsInZone(..., null)` filtra por la MISMA condición
+ * (`!ontZone`) que usa `computePonOccupancy` para omitirlas.
+ */
+function sinZonaCount(p: { slot: number; port: number }): number {
+  return ontsInZone(ontsOfPort(p), null).length;
+}
+/** Abre el detalle ya existente, pero filtrado por la zona PROPIA de la ONT (la misma que cuenta el desglose) — no por caseStatus ni por la zona oficial del PON. */
+function openPonZoneDetail(p: { slot: number; port: number; ponNumber: number }, zoneId: string | null, zoneLabel: string) {
+  discrepancyModalPort.value = {
+    label: `PON ${String(p.ponNumber).padStart(2, '0')} (Slot ${p.slot} / Puerto ${p.port}) — zona: ${zoneLabel}`,
+    rows: ontsInZone(ontsOfPort(p), zoneId),
   };
 }
 function handleViewOntFromDiscrepancy(ontDbId: string) {
@@ -933,9 +952,13 @@ const gauges = computed(() => {
             <div class="h-1.5 rounded-full bg-slate-200 overflow-hidden mt-1 mb-2">
               <div class="h-full bg-sky-500" :style="{ width: `${p.pct}%` }"></div>
             </div>
-            <div v-if="p.dominantZone" class="text-xs text-slate-600">
+            <button
+              v-if="p.dominantZone"
+              class="text-xs text-slate-600 hover:underline text-left"
+              @click="openPonZoneDetail(p, p.dominantZone.zoneId, p.dominantZone.zoneName)"
+            >
               {{ p.dominantZone.zoneName }} <span class="text-slate-400">({{ p.dominantZone.count }})</span>
-            </div>
+            </button>
             <div v-else class="text-xs text-amber-700">Sin zona vinculada — pendiente de vincular</div>
             <div v-if="ponZoneMismatchOfficialName(p)" class="text-[10px] text-red-600 mt-0.5">
               ⚠ zona oficial del catálogo: "{{ ponZoneMismatchOfficialName(p) }}" — revisar vínculo
@@ -955,8 +978,21 @@ const gauges = computed(() => {
               {{ expandedPonKey === `${p.slot}/${p.port}` ? 'Ocultar desglose' : `+${p.otherZonesCount} zona${p.otherZonesCount > 1 ? 's' : ''} más` }}
             </button>
             <ul v-if="expandedPonKey === `${p.slot}/${p.port}`" class="mt-1 text-[10px] text-slate-500 space-y-0.5">
-              <li v-for="z in p.zoneBreakdown" :key="z.zoneId">{{ z.zoneName }} — {{ z.count }}</li>
+              <!-- El desglose completo incluye la dominante (p.zoneBreakdown[0] === p.dominantZone) — se omite acá para no repetirla, ya es clicable arriba. -->
+              <li v-for="z in p.zoneBreakdown.slice(1)" :key="z.zoneId">
+                <button class="hover:underline text-left" @click="openPonZoneDetail(p, z.zoneId, z.zoneName)">{{ z.zoneName }} — {{ z.count }}</button>
+              </li>
             </ul>
+            <!-- Ajuste puntual (13ar): ONTs de este puerto sin ninguna zona
+                 propia asignada — quedaban fuera del desglose de arriba
+                 (computePonOccupancy solo suma ahí las que SÍ tienen zona),
+                 por eso el total del puerto podía no coincidir con la suma
+                 visible. Mismo criterio exacto que ese cálculo, no una resta. -->
+            <div v-if="sinZonaCount(p) > 0" class="mt-1 text-[10px] text-slate-500">
+              <button class="hover:underline text-left" @click="openPonZoneDetail(p, null, 'Sin zona identificada')">
+                Sin zona identificada ({{ sinZonaCount(p) }})
+              </button>
+            </div>
             <!-- Correción puntual (13aq): 3 contadores separados — nunca un
                  solo "N con revisión pendiente" que mezcle ONTs sin vincular
                  todavía (normal durante la migración SmartOLT) con una

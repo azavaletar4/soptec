@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildOfficialPonZoneCatalog } from '../ponZoneMapping';
-import { buildPonNumberMap, evaluateOntZoneDiscrepancies, countPonPortIssues, type OntZoneDiscrepancyOnt } from '../ontZoneDiscrepancy';
+import {
+  buildPonNumberMap,
+  evaluateOntZoneDiscrepancies,
+  countPonPortIssues,
+  ontsInZone,
+  type OntZoneDiscrepancyOnt,
+} from '../ontZoneDiscrepancy';
 
 const catalog = buildOfficialPonZoneCatalog([
   { id: 'ao', name: 'PON 1 - AO' },
@@ -228,4 +234,56 @@ test('countPonPortIssues: catalogo ambiguo y PON sin zona oficial van juntos a "
 
 test('countPonPortIssues: lista vacia -> los 3 contadores en cero', () => {
   assert.deepEqual(countPonPortIssues([]), { pendienteVinculacion: 0, discrepanciaReal: 0, datosAmbiguos: 0 });
+});
+
+// ---- ontsInZone (ajuste puntual 2026-10-13, 13ar): caso real reportado en
+// produccion — PON 01 (Slot 2/Puerto 1), 61 ONTs totales: 57 en "PON 1 - AO",
+// 2 en "PON 2 - SM", 2 sin ninguna zona propia asignada (quedaban "sin
+// explicar" en el desglose). La suma de las 3 categorias debe dar el total
+// exacto, sin inventar ni duplicar. ----
+
+test('ontsInZone: caso real 57 + 2 + 2 = 61 — cada zona (y "sin zona") resuelve exactamente su propio subconjunto, la suma da el total', () => {
+  const zonaAo = { id: 'ao', name: 'PON 1 - AO' };
+  const zonaSm = { id: 'sm', name: 'PON 2 - SM' };
+  const onts: OntZoneDiscrepancyOnt[] = [
+    ...Array.from({ length: 57 }, (_, i) => base({ id: `ao-${i}`, zones: zonaAo })),
+    ...Array.from({ length: 2 }, (_, i) => base({ id: `sm-${i}`, zones: zonaSm })),
+    ...Array.from({ length: 2 }, (_, i) => base({ id: `sinzona-${i}` })), // sin zones -> ontZone null
+  ];
+  const rows = evaluateOntZoneDiscrepancies(onts, ponMap, catalog);
+  assert.equal(rows.length, 61);
+
+  const enAo = ontsInZone(rows, 'ao');
+  const enSm = ontsInZone(rows, 'sm');
+  const sinZona = ontsInZone(rows, null);
+
+  assert.equal(enAo.length, 57);
+  assert.equal(enSm.length, 2);
+  assert.equal(sinZona.length, 2);
+  assert.equal(enAo.length + enSm.length + sinZona.length, 61); // suma = total real, sin duplicar ni inventar
+
+  // ninguna fila aparece en mas de una categoria (sin duplicar equipos).
+  const ids = [...enAo, ...enSm, ...sinZona].map((r) => r.ontDbId);
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+test('ontsInZone: zona sin ninguna ONT -> vacio, no inventa filas', () => {
+  const onts = [base({ id: 'o1', zones: { id: 'ao', name: 'PON 1 - AO' } })];
+  const rows = evaluateOntZoneDiscrepancies(onts, ponMap, catalog);
+  assert.deepEqual(ontsInZone(rows, 'sm'), []);
+});
+
+test('ontsInZone: todas sin zona -> ontsInZone(rows, null) devuelve todas, ninguna zona real tiene ninguna', () => {
+  const onts = [base({ id: 'o1' }), base({ id: 'o2' })];
+  const rows = evaluateOntZoneDiscrepancies(onts, ponMap, catalog);
+  assert.equal(ontsInZone(rows, null).length, 2);
+  assert.equal(ontsInZone(rows, 'ao').length, 0);
+});
+
+test('evaluateOntZoneDiscrepancies: description pasa tal cual (solo para mostrar en el modal), null si no viene', () => {
+  const conDescripcion = base({ id: 'o1', description: 'Juan Perez - Jr. Lima 123' });
+  const sinDescripcion = base({ id: 'o2' });
+  const [r1, r2] = evaluateOntZoneDiscrepancies([conDescripcion, sinDescripcion], ponMap, catalog);
+  assert.equal(r1.description, 'Juan Perez - Jr. Lima 123');
+  assert.equal(r2.description, null);
 });

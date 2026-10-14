@@ -3708,6 +3708,41 @@ inferencia de vínculos por nombre. Sin actualizaciones automáticas de
 datos — sigue siendo 100% de solo lectura/presentación. Sin push ni
 despliegue — **commit local únicamente**, pendiente de autorización.
 
+## 13ar. Fase 3 OLT — Fase B: desglose PON clicable + "Sin zona identificada" (2026-10-13, IMPLEMENTADO, commit local sin push)
+
+Caso real reportado (PON 01, Slot 2/Puerto 1): 61 total, desglose mostraba
+57 (PON 1 - AO) + 2 (PON 2 - SM) = 59, 2 ONTs sin ninguna fila que las
+explicara. Causa verificada: `computePonOccupancy` (oltCapacity.ts, sin
+tocar) solo suma a `zoneBreakdown` las ONTs con `zone_id` propio asignado
+— las sin zona cuentan en el total del puerto pero no en ninguna fila.
+
+- **`ontZoneDiscrepancy.ts`**: nueva `ontsInZone(rows, zoneId)` — filtra
+  por la zona PROPIA de la ONT (`ontZone`, la misma que cuenta el
+  desglose, no la "zona oficial" de Fase A) o por `null` ("sin zona"),
+  sin restar ni inventar cantidades. Se agregó `description` a
+  `OntZoneDiscrepancy`/`OntZoneDiscrepancyOnt` (pedido explícito, solo
+  para mostrar, nunca para inferir vínculos).
+- **`OltDetailView.vue`**: la zona dominante y cada fila del desglose
+  ahora son clicables (`openPonZoneDetail`) y abren el modal YA
+  existente filtrado a esa zona exacta; nueva línea "Sin zona
+  identificada (N)" cuando corresponde, con el mismo criterio exacto
+  que usa `computePonOccupancy` para excluirlas del desglose.
+- **`OntZoneDiscrepancyModal.vue`**: columna "Descripción" agregada
+  (única modificación al modal — se reutiliza tal cual, sin tocar su
+  lógica de badges/motivo/acceso a cliente).
+
+### Pruebas
+7 casos nuevos (incl. el caso real 57+2+2=61, suma exacta sin duplicar;
+"description" pasa tal cual). `npm run test:fetch-timeout` → **136/136**.
+`vue-tsc` → sin errores. Alcance: 4 archivos, todos de Fase B — sin
+tocar Fase 158/159, Rutinas, App Campo, MikroTik ni facturación.
+
+### Limitaciones
+- No se agregó un total global de "sin zona identificada" por OLT
+  (sigue siendo por puerto) — no se pidió.
+- Reusa `evaluateOntZoneDiscrepancies` ya cargado en memoria — sin
+  ninguna consulta adicional.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

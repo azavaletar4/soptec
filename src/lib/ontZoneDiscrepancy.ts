@@ -37,6 +37,8 @@ export interface OntZoneDiscrepancyOnt {
   client_id: string | null;
   /** Opcional en OltOnt (Fase 37, llega solo si el backend ya lo lee) — ausente se trata igual que null. */
   contract_id?: string | null;
+  /** Texto libre (puede venir de la OLT o de una edición administrativa, 13ai) — solo se MUESTRA, nunca se usa para inferir cliente/contrato. */
+  description?: string | null;
   /** Zona registrada en la propia ONT (olt_onts.zone_id) — editable desde "Editar información", puede desactualizarse. */
   zones?: ZoneLike | null;
   clients?: { id: string; first_name: string; last_name: string } | null;
@@ -62,6 +64,7 @@ export type OntZoneCaseStatus =
 export interface OntZoneDiscrepancy {
   ontDbId: string;
   serial: string;
+  description: string | null;
   slot: number;
   port: number;
   ontId: number;
@@ -117,6 +120,7 @@ export function evaluateOntZoneDiscrepancies(
     const base = {
       ontDbId: o.id,
       serial: o.serial,
+      description: o.description ?? null,
       slot: o.slot,
       port: o.port,
       ontId: o.ont_id,
@@ -190,4 +194,25 @@ export function countPonPortIssues(rows: readonly OntZoneDiscrepancy[]): PonPort
     else if (r.caseStatus === 'ambiguous_catalog' || r.caseStatus === 'no_official') datosAmbiguos++;
   }
   return { pendienteVinculacion, discrepanciaReal, datosAmbiguos };
+}
+
+/**
+ * Ajuste puntual (2026-10-13, ver ESTADO_DESARROLLO.md 13ar): el desglose
+ * de "Ocupación por puerto PON" (`computePonOccupancy`, Fase 3) solo suma
+ * al `zoneBreakdown` las ONTs que SÍ tienen una zona propia asignada
+ * (`olt_onts.zone_id`, ver oltCapacity.ts) — una ONT sin zona asignada
+ * queda fuera de ese desglose aunque sí cuenta en `p.count` (el total del
+ * puerto), lo que dejaba "ONTs sin explicar" (caso real reportado:
+ * 61 total, 57 + 2 en el desglose, 2 sin ninguna fila que las muestre).
+ *
+ * `ontsInZone` filtra las ONTs de Fase B (`OntZoneDiscrepancy.ontZone`,
+ * que es exactamente la misma zona propia que cuenta `zoneBreakdown` —
+ * no la "zona oficial" de Fase A) por esa zona exacta, o por "sin zona"
+ * (`zoneId === null`) — mismo criterio en ambos casos, sin inventar
+ * ninguna cantidad por resta: usado tanto para abrir el detalle de una
+ * fila del desglose como para contar cuántas quedan "sin zona
+ * identificada".
+ */
+export function ontsInZone(rows: readonly OntZoneDiscrepancy[], zoneId: string | null): OntZoneDiscrepancy[] {
+  return zoneId === null ? rows.filter((r) => !r.ontZone) : rows.filter((r) => r.ontZone?.id === zoneId);
 }

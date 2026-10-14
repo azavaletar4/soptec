@@ -79,6 +79,7 @@ function reason(r: OntZoneDiscrepancy): string {
               <th class="py-1.5 pr-2">Cliente</th>
               <th class="py-1.5 pr-2">Código / contrato</th>
               <th class="py-1.5 pr-2">Serial</th>
+              <th class="py-1.5 pr-2">Descripción</th>
               <th class="py-1.5 pr-2">Posición</th>
               <th class="py-1.5 pr-2">Zona oficial</th>
               <th class="py-1.5 pr-2">Zona de la ONT</th>
@@ -112,6 +113,7 @@ function reason(r: OntZoneDiscrepancy): string {
                 <span v-else class="text-slate-400">—</span>
               </td>
               <td class="py-1.5 pr-2 font-mono text-slate-700">{{ r.serial }}</td>
+              <td class="py-1.5 pr-2 text-slate-600 max-w-[10rem] truncate" :title="r.description ?? ''">{{ r.description || '—' }}</td>
               <td class="py-1.5 pr-2 text-slate-500 whitespace-nowrap">S{{ r.slot }}/P{{ r.port }} · ONU {{ r.ontId }}</td>
               <td class="py-1.5 pr-2">{{ r.officialZone?.name ?? '—' }}</td>
               <td class="py-1.5 pr-2" :class="r.ontVsOfficial === 'mismatch' ? 'text-red-600 font-medium' : ''">
