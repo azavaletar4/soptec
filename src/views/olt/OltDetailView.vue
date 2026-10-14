@@ -12,6 +12,7 @@ import {
   type PonPortIssueCounts,
 } from '@/lib/ontZoneDiscrepancy';
 import OntZoneDiscrepancyModal from './OntZoneDiscrepancyModal.vue';
+import { buildOltAlertView, type OltAlertView } from '@/lib/oltAlertPresentation';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -331,15 +332,36 @@ function toggleZoneBreakdown(key: string) {
  * herencia SmartOLT) y para identificar exactamente qué cliente/contrato
  * está afectado. Solo compara — nunca escribe ni vincula nada.
  */
+/** Numero de PON operativo por slot/puerto — compartido entre Fase B (discrepancias) y las alertas operativas (13as), un solo calculo. */
+const ponNumberMap = computed(() => buildPonNumberMap(ponOccupancy.value));
 const ontZoneDiscrepancies = computed<OntZoneDiscrepancy[]>(() =>
   evaluateOntZoneDiscrepancies(
     oltStore.onts.filter((o) => o.olt_device_id === deviceId.value),
-    buildPonNumberMap(ponOccupancy.value),
+    ponNumberMap.value,
     ponZoneCatalog.value,
   ),
 );
 function ontsOfPort(p: { slot: number; port: number }): OntZoneDiscrepancy[] {
   return ontZoneDiscrepancies.value.filter((r) => r.slot === p.slot && r.port === p.port);
+}
+
+/**
+ * Mejora de alertas OLT para uso administrativo (13as,
+ * src/lib/oltAlertPresentation.ts): resuelve cada alerta en vivo
+ * (oltStore.alerts, SSE) contra la ONT YA cargada en este panel — sin
+ * consulta nueva — para mostrar fecha/hora real (horario de Perú) y
+ * cliente/contrato solo cuando están verificados.
+ */
+const alertViews = computed<OltAlertView[]>(() =>
+  oltStore.alerts.map((a) => {
+    const ont = oltStore.onts.find((o) => o.id === a.ontDbId) ?? null;
+    const ponNumber = ont ? ponNumberMap.value.get(`${ont.slot}/${ont.port}`) ?? null : null;
+    return buildOltAlertView(a, ont, ponNumber);
+  }),
+);
+function openOntFromAlert(ontDbId: string) {
+  const ont = oltStore.onts.find((o) => o.id === ontDbId);
+  if (ont) openOntDetail(ont);
 }
 /**
  * Correción puntual (13aq): contadores SEPARADOS — nunca mezclar
@@ -1386,16 +1408,63 @@ const gauges = computed(() => {
           vivo (SSE) — solo lo que llego mientras esta pantalla estuvo
           abierta, se vacia al recargar o reabrir. Ver src/stores/olt.ts
           (OltAlert) y server/src/services/oltAlerts.ts.
+
+          Mejora para uso administrativo (13as, src/lib/oltAlertPresentation.ts):
+          cada alerta se resuelve contra la ONT ya cargada en este panel
+          (oltStore.onts, sin consulta nueva) para mostrar fecha/hora REAL
+          del evento en horario de Peru, y cliente/contrato SOLO si
+          client_id+contract_id de esa ONT estan verificados — nunca por
+          nombre/descripcion/posicion. La limitacion de fondo (sin historial
+          persistente mas alla de esta sesion de navegador) sigue igual,
+          documentada en 13as — fuera de alcance de este ajuste.
         -->
-        <div v-if="oltStore.alerts.length" class="mb-4 space-y-2">
+        <div v-if="alertViews.length" class="mb-4 space-y-2">
           <div
-            v-for="a in oltStore.alerts"
+            v-for="a in alertViews"
             :key="a.id"
-            class="flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
-            :class="a.kind === 'offline' || a.kind === 'lowSignal' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'"
+            class="rounded-lg border px-3 py-2 text-sm"
+            :class="a.severity === 'critical' ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'"
           >
-            <span>{{ a.message }}</span>
-            <button class="text-xs opacity-60 hover:opacity-100" @click="oltStore.dismissAlert(a.id)">✕</button>
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <span
+                  class="inline-block w-2 h-2 rounded-full"
+                  :class="a.severity === 'critical' ? 'bg-red-500' : 'bg-emerald-500'"
+                ></span>
+                <span class="font-semibold" :class="a.severity === 'critical' ? 'text-red-800' : 'text-emerald-800'">{{ a.kindLabel }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-500 whitespace-nowrap">{{ a.atFormatted }} (Perú)</span>
+                <button class="text-xs opacity-60 hover:opacity-100" @click="oltStore.dismissAlert(a.id)">✕</button>
+              </div>
+            </div>
+
+            <div class="mt-1 text-slate-800">
+              <router-link
+                v-if="a.client && a.contract"
+                :to="`/clientes/${a.client.id}/servicios/${a.contract.id}`"
+                class="font-medium text-sky-700 hover:underline"
+              >
+                👤 {{ a.client.name }}
+              </router-link>
+              <span v-else class="text-slate-500">⬜ Pendiente de vincular</span>
+              <span v-if="a.contract?.clientCode" class="text-slate-400"> · código {{ a.contract.clientCode }}</span>
+              <button
+                v-if="!a.client"
+                class="ml-2 text-xs text-sky-600 hover:underline"
+                @click="openOntFromAlert(a.ontDbId)"
+              >
+                Ver ONT
+              </button>
+            </div>
+
+            <!-- Datos tecnicos: informacion secundaria, no el foco principal. -->
+            <p class="mt-1 text-[11px] text-slate-500">
+              <span v-if="a.zoneName">{{ a.zoneName }} · </span>
+              <span v-if="a.ponNumber">PON {{ String(a.ponNumber).padStart(2, '0') }} · </span>
+              <span v-if="a.slot != null">Slot {{ a.slot }}/Puerto {{ a.port }}/ONU {{ a.ontId }} · </span>
+              <span v-if="a.serial">{{ a.serial }}</span>
+            </p>
           </div>
         </div>
         <p v-else class="text-xs text-slate-500 mb-4">Sin alertas activas en esta sesión.</p>

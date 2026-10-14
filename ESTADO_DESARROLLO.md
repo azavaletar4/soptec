@@ -3743,6 +3743,100 @@ tocar Fase 158/159, Rutinas, App Campo, MikroTik ni facturación.
 - Reusa `evaluateOntZoneDiscrepancies` ya cargado en memoria — sin
   ninguna consulta adicional.
 
+## 13as. Fase 3 OLT — alertas operativas para administración (2026-10-14, IMPLEMENTADO, commit local sin push)
+
+### Causa actual (verificada antes de tocar nada)
+La sección "Alertas y sincronización" (`OltDetailView.vue`) solo
+mostraba `OltAlert.message` — texto técnico tipo "ONT slot 2/puerto
+1/onu-id 5 se desconectó" — sin fecha/hora, cliente ni acceso a su
+ficha. Al revisar `server/src/services/oltSyncService.ts` se confirmó
+que **sí existe una fecha/hora real del evento** (`at: new
+Date().toISOString()`, capturada al inicio del ciclo de sync que
+detectó la transición — no la hora de renderizado del navegador): el
+dato ya estaba ahí, solo nunca se mostraba. Lo que sí es una limitación
+real (ver "Qué queda pendiente"): la alerta **solo vive en memoria del
+proceso backend + del navegador** — se pierde si nadie tiene el panel
+abierto en el momento exacto, o si el backend se reinicia entre medio
+(comentario explícito en `oltEvents.ts`, sin cambios).
+
+### Implementado
+- **`src/lib/oltAlertPresentation.ts`** (nuevo, puro): `formatPeruDateTime`
+  (`Intl.DateTimeFormat` con `timeZone: 'America/Lima'` explícito — no
+  depende de la zona horaria del dispositivo del técnico/admin);
+  `ALERT_KIND_LABEL`/`ALERT_KIND_SEVERITY` ("Internet desconectado" /
+  "Internet reconectado" / señal óptica, diferenciados por color);
+  `buildOltAlertView(alert, ont, ponNumber)` — resuelve cliente/contrato
+  con el MISMO criterio exacto que Fase B (`client_id` Y `contract_id`
+  Y contrato resuelto, nunca por nombre/descripción/posición), zona
+  preferida del contrato (más autoritativa, lección de Fase A/B) con
+  fallback a la zona propia de la ONT, y expone serial/descripción/
+  posición técnica como datos secundarios.
+- **`src/views/olt/OltDetailView.vue`**: `alertViews` (computado) resuelve
+  cada `oltStore.alerts` contra `oltStore.onts` YA cargado (sin consulta
+  nueva) + el mapa de números de PON ya existente (`ponNumberMap`,
+  extraído de donde ya se calculaba inline para Fase B — mismo cálculo,
+  ahora compartido). Tarjeta de alerta rediseñada: tipo de evento
+  diferenciado visualmente (punto rojo/verde), fecha/hora en horario de
+  Perú, nombre del cliente con link directo a
+  `/clientes/:id/servicios/:contractId` (reutilizando la misma ruta que
+  Fase B) o "⬜ Pendiente de vincular" + botón "Ver ONT" (reutiliza
+  `openOntDetail`, modal ya existente), código de cliente, y los datos
+  técnicos (zona, PON, slot/puerto/ONU, serial) como línea secundaria
+  pequeña.
+- **`src/stores/olt.ts`**: dedupe mínimo en el handler del SSE `oltAlert`
+  — si ya existe una alerta con el mismo `id` (`ontDbId+at+kind`,
+  milisegundo exacto) se ignora la nueva entrega, para que una
+  reconexión del SSE no duplique la tarjeta (requisito 7). No cambia
+  nada de la detección en el backend (sin tocar `oltSyncService.ts`).
+
+### Archivos modificados
+`src/lib/oltAlertPresentation.ts` (nuevo), `src/lib/__tests__/oltAlertPresentation.test.ts`
+(nuevo, 9 casos), `src/stores/olt.ts` (dedupe), `src/views/olt/OltDetailView.vue`
+(`ponNumberMap` compartido, `alertViews`, `openOntFromAlert`, template).
+
+### Pruebas
+9 casos nuevos: `formatPeruDateTime` (ISO real → hora de Perú correcta,
+ISO inválido → "Fecha no disponible", nunca inventa); `buildOltAlertView`
+— vinculada (zona del contrato gana), sin vincular (con `description`
+con nombre real, NUNCA lo usa para inferir cliente), vínculo parcial
+inconsistente (`contract_id` sin `client_id` → sigue sin vincular),
+**cliente con múltiples servicios** (usa el contrato de ESA ont exacta),
+ONT no encontrada en el panel (no revienta), zona ausente en ambas
+fuentes (null, no inventa), reconexión vs. desconexión, señal
+baja/recuperada (etiquetas y severidad propias, no se confunden con
+conexión). `npm run test:fetch-timeout` → **145/145** (136 previos + 9
+nuevos). `vue-tsc` → sin errores.
+
+### Riesgos
+- El dedupe del SSE es defensivo (no se confirmó un caso real de
+  duplicación en producción, solo se identificó la ausencia de la
+  guarda) — bajo riesgo, no cambia ningún otro comportamiento.
+- `zoneName` prioriza la zona del contrato sobre la de la ONT — si
+  alguna vez difieren (el mismo caso que detecta Fase B como
+  `zone_mismatch`), la alerta muestra la del contrato; el detalle
+  completo sigue disponible vía el modal de Fase B, no se duplicó esa
+  lógica aquí.
+
+### Qué queda pendiente (requisito 8 — identificado, NO implementado)
+Las alertas siguen sin historial persistente: se pierden al recargar la
+página, al cerrar el panel, o si el backend se reinicia entre el evento
+y que alguien lo vea. **Solución mínima propuesta** (no implementada,
+requeriría migración — fuera de alcance de este turno): una tabla
+`olt_alert_log` (`olt_device_id`, `ont_db_id`, `kind`, `at`, insert-only,
+sin índice de borrado) poblada por el mismo `pushAlert`/`emitOltAlert`
+ya existente en `oltSyncService.ts` (un `insert` adicional junto al
+`emitOltAlert` actual, reutilizando la detección ya hecha — no se
+duplicaría lógica), con una consulta de solo lectura en el panel para
+mostrar alertas de antes de abrir la página. Evaluar si se autoriza en
+una fase aparte.
+
+### Qué NO se tocó (confirmado)
+Solo lectura de datos ya cargados — sin comandos a OLT/MikroTik, sin
+consultas nuevas, sin modificar clientes/contratos/zonas/vínculos, sin
+migraciones, sin tocar `oltSyncService.ts`/`oltAlerts.ts`/`oltEvents.ts`
+(backend de detección, intacto). Sin push ni despliegue — **commit
+local únicamente**, pendiente de autorización.
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase

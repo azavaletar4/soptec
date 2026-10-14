@@ -557,7 +557,16 @@ export const useOltStore = defineStore('olt', () => {
           } else if (eventName === 'oltAlert') {
             try {
               const alert = JSON.parse(payload) as Omit<OltAlert, 'id'>;
-              alerts.value = [{ ...alert, id: `${alert.ontDbId}-${alert.at}-${alert.kind}` }, ...alerts.value].slice(0, MAX_ALERTS);
+              const id = `${alert.ontDbId}-${alert.at}-${alert.kind}`;
+              // Mejora de alertas (ver ESTADO_DESARROLLO.md 13as, requisito 7):
+              // una reconexion del SSE (red inestable, no una accion del
+              // usuario) puede volver a entregar el mismo evento ya mostrado
+              // — se ignora si ya existe una alerta con el mismo id exacto
+              // (mismo ontDbId+at+kind, nunca colisiona entre eventos reales
+              // distintos porque `at` es a nivel de milisegundo).
+              if (!alerts.value.some((a) => a.id === id)) {
+                alerts.value = [{ ...alert, id }, ...alerts.value].slice(0, MAX_ALERTS);
+              }
             } catch {
               // ignorar payloads malformados
             }
