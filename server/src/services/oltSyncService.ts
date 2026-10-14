@@ -3,6 +3,7 @@ import { runTelnetCommands } from '../telnet/client';
 import { withOltLock, type OltLockPriority } from './oltTelnetLock';
 import { oltEvents, type OltAlertEvent } from './oltEvents';
 import { detectStatusAlert, detectSignalAlert } from './oltAlerts';
+import { buildOltAlertLogRows } from './oltAlertLog';
 import { type OltDeviceRow, telnetTargetFor } from '../lib/oltDevice';
 import {
   listUnconfiguredOntsCommands,
@@ -128,6 +129,11 @@ interface KnownOnt {
   admin_state: string;
   rx_power: number | null;
   tx_power: number | null;
+  // Fase 4 OLT — historial de alertas (ver oltAlertLog.ts): mismo snapshot
+  // de vinculo verificado que ya usaba Fase B, leido de la MISMA consulta
+  // que ya se hacia aqui (sin fila ni consulta nueva).
+  client_id: string | null;
+  contract_id: string | null;
 }
 
 interface PendingUpdate {
@@ -185,10 +191,13 @@ async function performFullSync(
 
   const { data: knownRows } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power')
+    .select('id, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power, client_id, contract_id')
     .eq('olt_device_id', device.id);
   const known = (knownRows ?? []) as KnownOnt[];
   const byPos = new Map(known.map((r) => [`${r.frame}/${r.slot}/${r.port}:${r.ont_id}`, r]));
+  // Fase 4 OLT — historial de alertas: mapa por id para resolver el
+  // snapshot de vinculo de cada alerta sin volver a consultar nada.
+  const knownById = new Map(known.map((r) => [r.id, r]));
   const updatesById = new Map<string, PendingUpdate>();
   // Fase 3 comercial OLT: alertas proactivas, ver oltAlerts.ts — antes de
   // cada "row" se sobreescriba abajo todavia representa lo YA persistido,
@@ -300,6 +309,22 @@ async function performFullSync(
       }
       // Solo tras confirmar que el cambio que la originó quedo persistido
       // (si el bulk update fallo, no hay nada confirmado que alertar).
+      if (alerts.length) {
+        // Fase 4 OLT — historial (ver oltAlertLog.ts/ESTADO_DESARROLLO.md
+        // 13at): best-effort, nunca bloquea ni retrasa la alerta en vivo.
+        // onConflict+ignoreDuplicates sobre el indice unico
+        // (olt_ont_id,kind,at) evita duplicar si este mismo evento exacto
+        // ya se hubiera insertado antes (defensa en profundidad, ademas de
+        // que runningDeviceIds ya impide 2 syncs paralelos de la misma OLT).
+        const rows = buildOltAlertLogRows(alerts, knownById);
+        const { error: logError } = await supabaseAdmin
+          .from('olt_alert_log')
+          .upsert(rows, { onConflict: 'olt_ont_id,kind,at', ignoreDuplicates: true });
+        if (logError) {
+          // eslint-disable-next-line no-console
+          console.error(`[olt-sync] ${device.name}: fallo guardar el historial de alertas (no bloquea la alerta en vivo):`, logError.message);
+        }
+      }
       for (const a of alerts) oltEvents.emitOltAlert(a);
     }
   }

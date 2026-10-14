@@ -3837,6 +3837,155 @@ migraciones, sin tocar `oltSyncService.ts`/`oltAlerts.ts`/`oltEvents.ts`
 (backend de detección, intacto). Sin push ni despliegue — **commit
 local únicamente**, pendiente de autorización.
 
+## 13at. Fase 4 OLT — historial de desconexiones/reconexiones (2026-10-14, IMPLEMENTADO localmente — migración NO aplicada, sin push/deploy)
+
+### Paso 1 — Diagnóstico específico (solo `oltSyncService.ts`/`oltAlerts.ts`/`oltEvents.ts`, sin auditoría general)
+- **Origen/precisión de la fecha**: `at = new Date().toISOString()` se
+  captura **una sola vez al inicio de todo el ciclo de sync**
+  (`performFullSync`) — todas las alertas de esa misma corrida comparten
+  el mismo instante. Es la hora de **detección**, no necesariamente el
+  segundo exacto en que la ONT se cayó (puede haber pasado en cualquier
+  momento desde el ciclo anterior — hasta ~30 min según
+  `oltSyncScheduler.ts`). Dato real del backend, nunca la hora de
+  renderizado del navegador (ya confirmado en 13as).
+- **Reinicio del backend**: no corrompe nada — `before` (el estado
+  comparado) siempre se lee fresco de Supabase al iniciar cada ciclo,
+  nunca de una caché en memoria. Lo único que se pierde es la
+  **notificación en vivo** (SSE) de lo que pasó mientras no había
+  proceso corriendo o nadie con el panel abierto — exactamente la
+  limitación que motiva esta fase.
+- **OLT no responde**: `scanComplete` queda `false` si el escaneo
+  global (`show gpon onu state`) falla — en ese caso el bloque entero de
+  `detectStatusAlert` se **salta por completo** (confirmado leyendo el
+  código, no asumido). Una falla de consulta **nunca** genera una
+  alerta de desconexión falsa.
+- **Eventos repetidos**: `detectStatusAlert` solo dispara en una
+  transición real (`before` ≠ `after`) — un ciclo sin cambio real nunca
+  re-alerta (ya probado en `oltAlerts.test.ts`). El historial nuevo
+  agrega una segunda capa de defensa a nivel de BD (índice único), ver
+  Paso 2.
+- **Relacionar ONT/cliente/contrato sin asociaciones incorrectas**: la
+  fila de `olt_onts` ya cargada en memoria por el sync (`known`) tiene
+  `client_id`/`contract_id` — alcanza con **ampliar el mismo `select`
+  que ya se hacía** (2 columnas más), sin ninguna consulta nueva.
+- **Desconexión real vs. falla de consulta**: ya resuelto (ver arriba,
+  `scanComplete`) — no hacía falta ningún cambio.
+
+### Paso 2 — Diseño mínimo (no existía almacenamiento persistente reutilizable)
+Tabla **insert-only** `olt_alert_log` (mismo patrón que el precedente
+directo ya en el esquema, `debt_hold_events`, Fase 25 — mismas
+columnas/índices/RLS adaptadas):
+- `olt_device_id` (FK cascade), `olt_ont_id` (FK **set null**, nunca
+  cascade — borrar una ONT no debe borrar su historial, regla 3 de la
+  migración OLT), `kind`, `at`, `client_id`/`contract_id` (**snapshot**
+  verificado al momento del evento, mismo criterio exacto de Fase B:
+  solo se llena si ambos existían — nunca un vínculo a medias, nunca
+  recalculado después si la ONT se traslada), `detail`, `created_at`.
+- **Índice único** `(olt_ont_id, kind, at)` — dedupe a nivel de BD,
+  además del `runningDeviceIds` que ya impide 2 syncs paralelos de la
+  misma OLT y del dedupe de la UI (13as).
+- Índices para los filtros pedidos: `(olt_device_id, at desc)`,
+  `client_id` parcial, `contract_id` parcial, `kind`. **Zona**: NO se
+  guarda como columna propia (evita otro snapshot que pueda
+  desalinearse) — se filtra vía join `contract_id → service_contracts.zone_id`,
+  igual patrón que ya usa Fase B al leer.
+- **RLS**: SELECT/INSERT solo SUPERADMIN/ADMIN/TECNICO_RED (regla 9)
+  — sin policy de UPDATE/DELETE, ni para esos 3 roles (insert-only real,
+  verificado: un UPDATE corre pero no afecta ninguna fila).
+- **Duración de la interrupción**: **no se guarda como columna** — se
+  calcula en lectura correlacionando el `offline` más reciente con su
+  `recovered` por `olt_ont_id` (probado en el test SQL). Decisión
+  consciente: un historial insert-only no debería tener una columna que
+  se reescribe después.
+- **Retención**: sin DELETE automático en esta fase (mismo principio
+  que el Kardex, "insert-only, no borrar") — evaluar un job de limpieza
+  aparte si el volumen lo justifica, en una fase futura con autorización
+  explícita.
+- **"Pendiente de vincular"**: ya cubierto — `client_id`/`contract_id`
+  null en la fila.
+
+### Paso 3 — Implementación controlada (local, nada aplicado)
+- **`supabase/migrations/20261014100000_fase160_olt_alert_log.sql`**
+  (nueva, **NO aplicada**): tabla + índices + RLS, tal como el diseño.
+- **`server/src/services/oltAlertLog.ts`** (nuevo, puro):
+  `buildOltAlertLogRows(alerts, ontsById)` — construye las filas a
+  insertar reutilizando las alertas YA detectadas (`oltAlerts.ts`, sin
+  tocar su lógica) y el mismo snapshot de vínculo que Fase B.
+- **`server/src/services/oltSyncService.ts`**: el `select` de `known`
+  ONTs ahora trae también `client_id, contract_id` (2 columnas más en
+  la MISMA consulta); justo donde ya se emitía `emitOltAlert` (solo si
+  el bulk update de estado se confirmó), ahora también hace un
+  `upsert(..., { onConflict: 'olt_ont_id,kind,at', ignoreDuplicates: true })`
+  contra `olt_alert_log` — best-effort, nunca bloquea ni retrasa la
+  alerta en vivo si el insert del historial falla.
+- **`server/tests/oltAlertLogSchema.sql`** + **`server/tests/oltAlertLog.sql.test.ts`**
+  (nuevos, Postgres aislado en Docker — mismo patrón que
+  `ontZoneNapSync.sql.test.ts`): valida el esquema completo antes de
+  pensar en aplicarlo.
+- **`server/src/services/__tests__/oltAlertLog.test.ts`** (nuevo,
+  puro): el constructor de filas en aislamiento.
+- **`package.json`**: script `test:olt-alert-log-sql`.
+
+### Pruebas
+- **Unitarias puras** (9 casos, `oltAlertLog.test.ts`): vinculada,
+  sin vincular (migración SmartOLT), vínculo parcial en ambos sentidos
+  (nunca a medias), ONT no encontrada, cliente con múltiples servicios
+  (cada evento con su propio `contract_id`, nunca mezclados),
+  reconexión/desconexión, señal baja/recuperada, lista vacía. `npm run
+  test:provisioning` → **90/90** (81 previos + 9 nuevos).
+- **SQL aislado** (11 casos, `oltAlertLog.sql.test.ts`, Postgres 17 real
+  en Docker, efímero): caso feliz, ONT sin vincular, **dedupe real**
+  (mismo evento exacto rechazado por el índice único; mismo ONT con
+  otro instante u otro `kind` sí se inserta), **cliente con múltiples
+  servicios** (filtrar por `contract_id` nunca mezcla el otro servicio
+  del mismo cliente), **duración calculable** (correlación
+  offline→recovered por SQL), FK inválida rechazada, **RLS por rol**
+  (SUPERADMIN/ADMIN/TECNICO_RED ven, SOPORTE/FACTURACION/CLIENTE/admin
+  inactivo/anónimo no ven ninguna fila — sin error, 0 filas), **insert-only
+  verificado** (un UPDATE corre pero no cambia nada, ni para
+  SUPERADMIN). `npm run test:olt-alert-log-sql` → **11/11**.
+- `npx tsc -p tsconfig.server.json --noEmit` → solo los 2 errores
+  preexistentes de `oltProvisioningService.ts` (ajenos, ya confirmados
+  en sesiones anteriores). Frontend sin cambios esta vez — `npm run
+  test:fetch-timeout` (145/145) y `vue-tsc` (sin errores) reconfirmados
+  igual, sin regresión.
+
+### Riesgos
+- El `upsert` del historial puede fallar silenciosamente (solo
+  `console.error`, no bloquea el sync) — si Supabase estuviera caído
+  justo en ese instante, ese evento puntual no quedaría en el
+  historial (pero SÍ se siguió emitiendo la alerta en vivo normalmente,
+  no se pierde la notificación inmediata).
+- Sin columna de zona propia: una consulta que filtre por zona necesita
+  el join a `service_contracts` — una query mal escrita podría
+  olvidarlo; documentado explícitamente para quien implemente el
+  endpoint de lectura.
+- **No existen eventos históricos anteriores a esta tabla** — al
+  aplicarse, el historial arranca vacío desde ese momento. **No se
+  inventa ni se reconstruye retroactivamente ninguna fecha pasada** (
+  requisito explícito del usuario) — es una limitación real, no un
+  defecto: no hay ningún dato de antes para recuperar.
+
+### Qué NO se tocó / NO se hizo (confirmado, por restricción explícita)
+Ninguna migración aplicada en Supabase. Ningún comando a OLT/MikroTik.
+Ninguna ONT desconectada para generar un evento de prueba (todo
+probado con datos sintéticos en Postgres aislado). Sin modificar
+contratos/zonas/inventario/facturación. Sin tocar la lógica de
+detección (`oltAlerts.ts`) ni la de distribución en vivo (`oltEvents.ts`).
+Sin push ni despliegue.
+
+### Qué queda pendiente (siguiente etapa, no iniciada)
+- **Endpoint de lectura** (`GET /:id/alert-log` o similar) con los
+  filtros de fecha/cliente/zona/estado y la duración calculada — diseño
+  ya definido arriba, no implementado todavía.
+- **Vista en el panel** (tabla/lista de historial, acceso directo al
+  cliente) — Fase 3 (13as) ya tiene el componente de presentación de
+  una alerta individual; reutilizar su mismo criterio de vínculo
+  verificado para la vista de historial.
+- **Autorización para aplicar la migración** — nada de esto funciona en
+  producción hasta que se apruebe explícitamente.
+- Job de retención (si se vuelve necesario).
+
 ## 13. Próximo paso recomendado
 
 1. Decidir sobre el dato de prueba "DIAGNOSTICO CLAUDE TEST" en Supabase
