@@ -57,3 +57,46 @@ export function buildOltAlertLogRows(
     };
   });
 }
+
+/**
+ * Fase 4 OLT — endpoint de lectura (ver ESTADO_DESARROLLO.md 13au):
+ * `olt_alert_log` es insert-only, sin columna de duración (decisión de
+ * diseño de 13at) — se correlaciona el 'offline' MÁS RECIENTE con su
+ * 'recovered' por `oltOntId` al leer. Nunca se calcula para
+ * 'lowSignal'/'signalRecovered' (umbral de señal, no es una interrupción
+ * de servicio) ni cuando no hay un 'offline' previo dentro de la ventana
+ * consultada (ONT que ya estaba offline antes de que existiera esta
+ * tabla, o antes del rango de fechas pedido) — en ese caso, duración
+ * "no calculable", NUNCA se inventa un valor.
+ */
+export interface DurationTimelineEvent {
+  id: string;
+  oltOntId: string;
+  kind: 'offline' | 'recovered';
+  at: string;
+}
+
+/** Devuelve, por id de fila 'recovered', los minutos desde su 'offline' más reciente del MISMO oltOntId. Las que no tienen par quedan fuera del mapa (duración no calculable, no 0). */
+export function computeRecoveryDurations(events: readonly DurationTimelineEvent[]): Map<string, number> {
+  const byOnt = new Map<string, DurationTimelineEvent[]>();
+  for (const e of events) {
+    const list = byOnt.get(e.oltOntId) ?? [];
+    list.push(e);
+    byOnt.set(e.oltOntId, list);
+  }
+  const result = new Map<string, number>();
+  for (const list of byOnt.values()) {
+    const sorted = [...list].sort((a, b) => a.at.localeCompare(b.at));
+    let openOfflineAt: string | null = null;
+    for (const e of sorted) {
+      if (e.kind === 'offline') {
+        openOfflineAt = e.at; // si hubiera 2 'offline' seguidos sin 'recovered' en medio, se queda con el MAS RECIENTE.
+      } else if (e.kind === 'recovered' && openOfflineAt) {
+        const minutes = Math.round((new Date(e.at).getTime() - new Date(openOfflineAt).getTime()) / 60000);
+        result.set(e.id, minutes);
+        openOfflineAt = null;
+      }
+    }
+  }
+  return result;
+}

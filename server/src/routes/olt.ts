@@ -14,6 +14,7 @@ import {
   type CachedUnconfiguredOnt,
 } from '../services/oltSyncService';
 import { oltEvents, type OntChangedEvent, type SummaryChangedEvent, type OltAlertEvent } from '../services/oltEvents';
+import { computeRecoveryDurations } from '../services/oltAlertLog';
 import {
   testConnectionCommands,
   listOntsCommands,
@@ -362,6 +363,143 @@ oltRoutes.get('/:id/events', requireRole(...STAFF_READ), async (c) => {
       oltEvents.off('oltAlert', onOltAlert);
     }
   });
+});
+
+/**
+ * Fase 4 OLT — historial de desconexiones/reconexiones (ver
+ * ESTADO_DESARROLLO.md 13au). Solo lectura de `olt_alert_log` (Fase 160,
+ * ver 13at) — mismos 3 roles reales que ya exige la RLS de esa tabla
+ * (ONT_WRITE = SUPERADMIN/ADMIN/TECNICO_RED, regla 9 de la migracion
+ * OLT), reutilizado aqui aunque el nombre diga "WRITE": es exactamente
+ * el mismo tercio de roles, no se duplica la lista.
+ *
+ * Filtros: from/to (rango de `at`, ISO), clientId, zoneId (resuelto via
+ * service_contracts.zone_id — olt_alert_log no guarda zona propia, ver
+ * 13at), kind. Paginado simple por limit/offset (maximo 200 por pagina).
+ *
+ * client_id/contract_id que devuelve cada fila son el SNAPSHOT guardado
+ * al momento del evento (no el vinculo actual de la ONT) — por diseño,
+ * un historial no se reescribe si la ONT se traslada despues.
+ */
+oltRoutes.get('/:id/alert-log', requireRole(...ONT_WRITE), async (c) => {
+  const deviceId = c.req.param('id');
+  const url = new URL(c.req.url);
+  const from = url.searchParams.get('from');
+  const to = url.searchParams.get('to');
+  const clientId = url.searchParams.get('clientId');
+  const zoneId = url.searchParams.get('zoneId');
+  const kind = url.searchParams.get('kind');
+  const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit')) || 50, 200));
+  const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+
+  // La zona no se guarda en olt_alert_log (ver 13at) — se resuelve a los
+  // contract_id de esa zona ANTES de filtrar el historial, mismo criterio
+  // de lectura que ya usa Fase B.
+  let contractIdsForZone: string[] | null = null;
+  if (zoneId) {
+    const { data: contractsInZone, error: zoneErr } = await supabaseAdmin
+      .from('service_contracts')
+      .select('id')
+      .eq('zone_id', zoneId);
+    if (zoneErr) return c.json({ error: zoneErr.message }, 500);
+    contractIdsForZone = (contractsInZone ?? []).map((r) => r.id as string);
+    if (contractIdsForZone.length === 0) return c.json({ items: [], total: 0 });
+  }
+
+  // OJO: el select va en UN solo literal de string (no concatenado con +) —
+  // supabase-js necesita el literal completo para tipar el embed; partido
+  // en pedazos degrada a GenericStringError (sin relacion con el esquema
+  // real, confirmado al compilar).
+  let query = supabaseAdmin
+    .from('olt_alert_log')
+    .select(
+      'id, olt_ont_id, kind, at, detail, client_id, contract_id, clients(id, first_name, last_name), service_contracts(id, contract_number, client_code, zones(id, name)), olt_onts(id, serial, description, slot, port, ont_id, status)',
+      { count: 'exact' },
+    )
+    .eq('olt_device_id', deviceId)
+    .order('at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (from) query = query.gte('at', from);
+  if (to) query = query.lte('at', to);
+  if (clientId) query = query.eq('client_id', clientId);
+  if (kind) query = query.eq('kind', kind);
+  if (contractIdsForZone) query = query.in('contract_id', contractIdsForZone);
+
+  const { data, error, count } = await query;
+  if (error) return c.json({ error: error.message }, 500);
+  // Sin un generic `Database` en supabaseAdmin (todo este archivo es asi,
+  // confirmado), supabase-js no puede saber que estos embeds son de
+  // cardinalidad 1 (cada fila tiene a lo sumo 1 cliente/contrato/ONT) y los
+  // tipa como arreglo — se castea a la forma real una sola vez aqui.
+  interface AlertLogRow {
+    id: string;
+    olt_ont_id: string | null;
+    kind: string;
+    at: string;
+    detail: string | null;
+    clients: { id: string; first_name: string; last_name: string } | null;
+    service_contracts: {
+      id: string;
+      contract_number: string | null;
+      client_code: string | null;
+      zones: { id: string; name: string } | null;
+    } | null;
+    olt_onts: {
+      id: string;
+      serial: string;
+      description: string | null;
+      slot: number;
+      port: number;
+      ont_id: number;
+      status: string;
+    } | null;
+  }
+  const rows = (data ?? []) as unknown as AlertLogRow[];
+
+  // Duracion (13at: se calcula en lectura, nunca se guarda como columna):
+  // una sola consulta extra, acotada a las ONTs que aparecen en ESTA
+  // pagina — nunca una consulta masiva de toda la tabla.
+  const ontIds = [...new Set(rows.map((r) => r.olt_ont_id).filter((id): id is string => !!id))];
+  let durationByRecoveredId = new Map<string, number>();
+  if (ontIds.length) {
+    const { data: timeline } = await supabaseAdmin
+      .from('olt_alert_log')
+      .select('id, olt_ont_id, kind, at')
+      .eq('olt_device_id', deviceId)
+      .in('olt_ont_id', ontIds)
+      .in('kind', ['offline', 'recovered'])
+      .order('at', { ascending: true });
+    durationByRecoveredId = computeRecoveryDurations(
+      (timeline ?? []).map((t) => ({ id: t.id as string, oltOntId: t.olt_ont_id as string, kind: t.kind as 'offline' | 'recovered', at: t.at as string })),
+    );
+  }
+
+  const items = rows.map((row) => ({
+    id: row.id,
+    oltOntId: row.olt_ont_id,
+    kind: row.kind,
+    at: row.at,
+    detail: row.detail,
+    durationMinutes: durationByRecoveredId.get(row.id as string) ?? null,
+    client: row.clients ? { id: row.clients.id, name: `${row.clients.first_name} ${row.clients.last_name}`.trim() } : null,
+    contract: row.service_contracts
+      ? { id: row.service_contracts.id, contractNumber: row.service_contracts.contract_number, clientCode: row.service_contracts.client_code }
+      : null,
+    zoneName: row.service_contracts?.zones?.name ?? null,
+    ont: row.olt_onts
+      ? {
+          serial: row.olt_onts.serial,
+          description: row.olt_onts.description,
+          slot: row.olt_onts.slot,
+          port: row.olt_onts.port,
+          ontId: row.olt_onts.ont_id,
+          status: row.olt_onts.status,
+        }
+      : null,
+  }));
+
+  return c.json({ items, total: count ?? items.length });
 });
 
 /** Perfiles de ancho de banda (tcont/traffic) ya configurados en la OLT. */

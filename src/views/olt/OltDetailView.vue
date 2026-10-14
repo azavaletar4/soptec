@@ -12,7 +12,7 @@ import {
   type PonPortIssueCounts,
 } from '@/lib/ontZoneDiscrepancy';
 import OntZoneDiscrepancyModal from './OntZoneDiscrepancyModal.vue';
-import { buildOltAlertView, type OltAlertView } from '@/lib/oltAlertPresentation';
+import { buildOltAlertView, buildOltAlertLogEntryView, type OltAlertView, type OltAlertLogEntryView } from '@/lib/oltAlertPresentation';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -362,6 +362,73 @@ const alertViews = computed<OltAlertView[]>(() =>
 function openOntFromAlert(ontDbId: string) {
   const ont = oltStore.onts.find((o) => o.id === ontDbId);
   if (ont) openOntDetail(ont);
+}
+
+/**
+ * Fase 4 OLT — historial de desconexiones/reconexiones (13at/13au, ver
+ * GET /:id/alert-log). Sección dentro de la misma tarjeta "Alertas y
+ * sincronización" (no un módulo aparte) — colapsada por defecto, es
+ * información secundaria frente a las alertas en vivo. Filtros simples
+ * reutilizando catálogos y datos ya cargados en este panel: zona
+ * (catalogsStore.zones, ya cargado), cliente (derivado de las ONTs de
+ * ESTE dispositivo, sin un buscador nuevo), tipo de evento, fecha.
+ */
+const showAlertLog = ref(false);
+const alertLogItems = ref<OltAlertLogEntryView[]>([]);
+const alertLogTotal = ref(0);
+const alertLogLoading = ref(false);
+const alertLogError = ref<string | null>(null);
+const ALERT_LOG_PAGE_SIZE = 25;
+const alertLogOffset = ref(0);
+const alertLogFilters = ref({ from: '', to: '', clientId: '', zoneId: '', kind: '' });
+
+/** Clientes de ESTE dispositivo con al menos una ONT vinculada — reusa oltStore.onts ya cargado, sin buscador nuevo. */
+const alertLogClientOptions = computed(() => {
+  const map = new Map<string, string>();
+  for (const o of oltStore.onts) {
+    if (o.olt_device_id !== deviceId.value || !o.client_id || !o.clients) continue;
+    map.set(o.client_id, `${o.clients.first_name} ${o.clients.last_name}`.trim());
+  }
+  return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+});
+
+async function loadAlertLog(resetOffset = true) {
+  if (resetOffset) alertLogOffset.value = 0;
+  alertLogLoading.value = true;
+  alertLogError.value = null;
+  try {
+    const f = alertLogFilters.value;
+    const res = await oltStore.fetchAlertLog(deviceId.value, {
+      from: f.from ? `${f.from}T00:00:00` : undefined,
+      to: f.to ? `${f.to}T23:59:59` : undefined,
+      clientId: f.clientId || undefined,
+      zoneId: f.zoneId || undefined,
+      kind: f.kind || undefined,
+      limit: ALERT_LOG_PAGE_SIZE,
+      offset: alertLogOffset.value,
+    });
+    alertLogItems.value = res.items.map(buildOltAlertLogEntryView);
+    alertLogTotal.value = res.total;
+  } catch (e) {
+    alertLogError.value = getErrorMessage(e, 'Error al consultar el historial de alertas');
+  } finally {
+    alertLogLoading.value = false;
+  }
+}
+function toggleAlertLog() {
+  showAlertLog.value = !showAlertLog.value;
+  if (showAlertLog.value && !alertLogItems.value.length) void loadAlertLog();
+}
+function alertLogNextPage() {
+  alertLogOffset.value += ALERT_LOG_PAGE_SIZE;
+  void loadAlertLog(false);
+}
+function alertLogPrevPage() {
+  alertLogOffset.value = Math.max(0, alertLogOffset.value - ALERT_LOG_PAGE_SIZE);
+  void loadAlertLog(false);
+}
+function openOntFromAlertLog(ontDbId: string | null) {
+  if (ontDbId) openOntFromAlert(ontDbId);
 }
 /**
  * Correción puntual (13aq): contadores SEPARADOS — nunca mezclar
@@ -1418,6 +1485,10 @@ const gauges = computed(() => {
           persistente mas alla de esta sesion de navegador) sigue igual,
           documentada en 13as — fuera de alcance de este ajuste.
         -->
+        <p class="text-[11px] text-slate-500 mb-2">
+          La hora mostrada es de <strong>detección</strong> (cuándo el sistema lo notó, en horario de Perú) — el instante
+          exacto de la desconexión real puede haber sido antes, no se conoce con precisión.
+        </p>
         <div v-if="alertViews.length" class="mb-4 space-y-2">
           <div
             v-for="a in alertViews"
@@ -1468,6 +1539,105 @@ const gauges = computed(() => {
           </div>
         </div>
         <p v-else class="text-xs text-slate-500 mb-4">Sin alertas activas en esta sesión.</p>
+
+        <!-- Fase 4 OLT — Historial de alertas (13at/13au): misma tarjeta,
+             sección aparte, colapsada por defecto (información secundaria
+             frente a las alertas en vivo). -->
+        <div class="rounded-xl border border-slate-200 bg-white p-4 mb-4">
+          <button class="flex items-center justify-between w-full text-left" @click="toggleAlertLog">
+            <h3 class="text-sm font-semibold">Historial de alertas</h3>
+            <span class="text-xs text-sky-600">{{ showAlertLog ? 'Ocultar ▲' : 'Ver historial ▼' }}</span>
+          </button>
+
+          <div v-if="showAlertLog" class="mt-3">
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+              <div>
+                <label class="block text-[11px] text-slate-500 mb-1">Desde</label>
+                <input v-model="alertLogFilters.from" type="date" class="field-input text-xs" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-500 mb-1">Hasta</label>
+                <input v-model="alertLogFilters.to" type="date" class="field-input text-xs" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-500 mb-1">Cliente</label>
+                <select v-model="alertLogFilters.clientId" class="field-input text-xs">
+                  <option value="">Todos</option>
+                  <option v-for="c in alertLogClientOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-500 mb-1">Zona</label>
+                <select v-model="alertLogFilters.zoneId" class="field-input text-xs">
+                  <option value="">Todas</option>
+                  <option v-for="z in catalogsStore.zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-500 mb-1">Evento</label>
+                <select v-model="alertLogFilters.kind" class="field-input text-xs">
+                  <option value="">Todos</option>
+                  <option value="offline">Internet desconectado</option>
+                  <option value="recovered">Internet reconectado</option>
+                  <option value="lowSignal">Señal óptica baja</option>
+                  <option value="signalRecovered">Señal óptica recuperada</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn-secondary text-xs mb-3" :disabled="alertLogLoading" @click="loadAlertLog()">
+              {{ alertLogLoading ? 'Consultando...' : 'Filtrar' }}
+            </button>
+            <p v-if="alertLogError" class="text-xs text-red-600 mb-2">{{ alertLogError }}</p>
+
+            <div v-if="alertLogItems.length" class="space-y-2">
+              <div
+                v-for="h in alertLogItems"
+                :key="h.id"
+                class="rounded-lg border px-3 py-2 text-sm"
+                :class="h.severity === 'critical' ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <span class="font-semibold text-xs" :class="h.severity === 'critical' ? 'text-red-800' : 'text-emerald-800'">{{ h.kindLabel }}</span>
+                  <span class="text-xs text-slate-500 whitespace-nowrap">{{ h.atFormatted }} (Perú)</span>
+                </div>
+                <div class="mt-1 text-slate-800 text-sm">
+                  <router-link
+                    v-if="h.client && h.contract"
+                    :to="`/clientes/${h.client.id}/servicios/${h.contract.id}`"
+                    class="font-medium text-sky-700 hover:underline"
+                  >
+                    👤 {{ h.client.name }}
+                  </router-link>
+                  <span v-else class="text-slate-500">⬜ Pendiente de vincular</span>
+                  <span v-if="h.contract?.clientCode" class="text-slate-400"> · código {{ h.contract.clientCode }}</span>
+                  <button v-if="!h.client" class="ml-2 text-xs text-sky-600 hover:underline" @click="openOntFromAlertLog(h.oltOntId)">
+                    Ver ONT
+                  </button>
+                </div>
+                <p class="mt-1 text-[11px] text-slate-500">
+                  <span v-if="h.zoneName">{{ h.zoneName }} · </span>
+                  <span v-if="h.durationMinutes != null">duración aprox. {{ h.durationMinutes }} min · </span>
+                  <span v-if="h.ont?.status">estado actual: {{ h.ont.status }} · </span>
+                  <span v-if="h.ont?.slot != null">Slot {{ h.ont.slot }}/Puerto {{ h.ont.port }}/ONU {{ h.ont.ontId }} · </span>
+                  <span v-if="h.ont?.serial">{{ h.ont.serial }}</span>
+                </p>
+              </div>
+            </div>
+            <p v-else-if="!alertLogLoading" class="text-xs text-slate-500">Sin eventos en el rango consultado.</p>
+
+            <div v-if="alertLogTotal > ALERT_LOG_PAGE_SIZE" class="flex items-center justify-between mt-3 text-xs text-slate-500">
+              <button class="btn-secondary text-xs" :disabled="alertLogOffset === 0 || alertLogLoading" @click="alertLogPrevPage">← Anterior</button>
+              <span>{{ alertLogOffset + 1 }}–{{ Math.min(alertLogOffset + ALERT_LOG_PAGE_SIZE, alertLogTotal) }} de {{ alertLogTotal }}</span>
+              <button
+                class="btn-secondary text-xs"
+                :disabled="alertLogOffset + ALERT_LOG_PAGE_SIZE >= alertLogTotal || alertLogLoading"
+                @click="alertLogNextPage"
+              >
+                Siguiente →
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div class="rounded-xl border border-slate-200 bg-slate-100 p-4 mb-4">
           <h3 class="text-sm font-semibold mb-3">Consultar puerto GPON</h3>

@@ -50,11 +50,16 @@ Requisitos obligatorios:
 
 Precedente ya implementado siguiendo esta regla (referencia de patrón,
 no repetir su investigación): Fase B de discrepancias PON↔zona↔contrato
-(`src/lib/ontZoneDiscrepancy.ts`, `OntZoneDiscrepancyModal.vue`) y las
+(`src/lib/ontZoneDiscrepancy.ts`, `OntZoneDiscrepancyModal.vue`), las
 alertas operativas de OLT (`src/lib/oltAlertPresentation.ts`,
-`ESTADO_DESARROLLO.md` 13as) — mismo criterio de vínculo verificable,
-hora real en horario de Perú, acceso directo a la ficha, datos técnicos
-como secundarios.
+`ESTADO_DESARROLLO.md` 13as) y su historial (`GET /:id/alert-log`,
+sección "Historial de alertas" dentro de la misma tarjeta en
+`OltDetailView.vue`, 13at/13au — tabla `olt_alert_log` todavía **sin
+aplicar en producción**) — mismo criterio de vínculo verificable (en el
+historial, un *snapshot* al momento del evento, nunca el vínculo de
+hoy), hora real en horario de Perú con la distinción explícita entre
+"hora de detección" y hora real del evento, acceso directo a la ficha,
+datos técnicos como secundarios.
 
 ## Modo de desarrollo y validación eficiente
 

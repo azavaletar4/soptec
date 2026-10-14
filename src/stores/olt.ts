@@ -2,6 +2,7 @@ import { acceptHMRUpdate, defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import type { OltAlertLogEntryRaw } from '@/lib/oltAlertPresentation';
 
 export interface OltDevice {
   id: string;
@@ -482,6 +483,25 @@ export const useOltStore = defineStore('olt', () => {
     return apiFetch<DisabledOntsResult>(`/api/olt-devices/${deviceId}/onts/disabled`);
   }
 
+  // Fase 4 OLT — historial de desconexiones/reconexiones (13at/13au, ver
+  // GET /:id/alert-log en server/src/routes/olt.ts). Cada item ya viene
+  // resuelto por el backend contra el SNAPSHOT guardado al momento del
+  // evento — nunca se re-resuelve en el frontend contra el vinculo actual.
+  function fetchAlertLog(
+    deviceId: string,
+    filters: { from?: string; to?: string; clientId?: string; zoneId?: string; kind?: string; limit?: number; offset?: number } = {},
+  ) {
+    const params = new URLSearchParams();
+    if (filters.from) params.set('from', filters.from);
+    if (filters.to) params.set('to', filters.to);
+    if (filters.clientId) params.set('clientId', filters.clientId);
+    if (filters.zoneId) params.set('zoneId', filters.zoneId);
+    if (filters.kind) params.set('kind', filters.kind);
+    params.set('limit', String(filters.limit ?? 50));
+    params.set('offset', String(filters.offset ?? 0));
+    return apiFetch<{ items: OltAlertLogEntryRaw[]; total: number }>(`/api/olt-devices/${deviceId}/alert-log?${params.toString()}`);
+  }
+
   // "Actualizar ahora": encola un sync completo en background (202
   // inmediato); el resultado llega despues via connectOltEvents o sondeando
   // fetchSyncStatus.
@@ -703,6 +723,7 @@ export const useOltStore = defineStore('olt', () => {
     fetchProfiles,
     fetchUnconfiguredOnts,
     fetchDisabledOnts,
+    fetchAlertLog,
     triggerFullSync,
     fetchSyncStatus,
     connectOltEvents,

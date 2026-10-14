@@ -321,8 +321,15 @@ async function performFullSync(
           .from('olt_alert_log')
           .upsert(rows, { onConflict: 'olt_ont_id,kind,at', ignoreDuplicates: true });
         if (logError) {
+          // Prefijo propio (distinto de "[olt-sync]") para que un error de
+          // PERSISTIR el historial sea identificable aparte de un error de
+          // SINCRONIZAR la OLT — nunca bloquea el sync ni la alerta en vivo
+          // (que ya se emite igual, abajo), y nunca genera una alerta falsa
+          // (la deteccion ya ocurrio antes e independiente de este insert).
           // eslint-disable-next-line no-console
-          console.error(`[olt-sync] ${device.name}: fallo guardar el historial de alertas (no bloquea la alerta en vivo):`, logError.message);
+          console.error(
+            `[olt-alert-log] ${device.name} (device ${device.id}): fallo guardar ${rows.length} evento(s) de historial — code=${logError.code ?? 's/d'} mensaje=${logError.message}`,
+          );
         }
       }
       for (const a of alerts) oltEvents.emitOltAlert(a);

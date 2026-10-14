@@ -138,3 +138,46 @@ export function buildOltAlertView(
     contract,
   };
 }
+
+/**
+ * Fase 4 OLT — historial (ver ESTADO_DESARROLLO.md 13au). A diferencia de
+ * `buildOltAlertView` (alertas EN VIVO, resueltas contra el vínculo ACTUAL
+ * de la ONT en `oltStore.onts`), una fila de historial ya viene resuelta
+ * desde el backend contra el SNAPSHOT guardado al momento del evento
+ * (`GET /:id/alert-log`, 13at) — nunca el vínculo de hoy, que puede haber
+ * cambiado si la ONT se trasladó o desvinculó después. Por eso esta
+ * función NO vuelve a resolver cliente/contrato — solo le agrega las
+ * etiquetas/formato (mismas `ALERT_KIND_LABEL`/`formatPeruDateTime` que ya
+ * usan las alertas en vivo, sin duplicar esa lógica).
+ */
+export interface OltAlertLogEntryRaw {
+  id: string;
+  oltOntId: string | null;
+  kind: OltAlertKind;
+  at: string;
+  detail: string;
+  /** minutos desde el 'offline' mas reciente hasta este 'recovered' — null = no calculable (nunca inventado), ver computeRecoveryDurations en el backend. */
+  durationMinutes: number | null;
+  client: { id: string; name: string } | null;
+  contract: { id: string; contractNumber: string | null; clientCode: string | null } | null;
+  zoneName: string | null;
+  ont: { serial: string | null; description: string | null; slot: number | null; port: number | null; ontId: number | null; status: string | null } | null;
+}
+
+export interface OltAlertLogEntryView extends OltAlertLogEntryRaw {
+  kindLabel: string;
+  severity: AlertSeverity;
+  atFormatted: string;
+  /** true solo si el backend ya resolvió AMBOS cliente y contrato (mismo snapshot verificado de 13at) — nunca se deduce aquí. */
+  linked: boolean;
+}
+
+export function buildOltAlertLogEntryView(raw: OltAlertLogEntryRaw): OltAlertLogEntryView {
+  return {
+    ...raw,
+    kindLabel: ALERT_KIND_LABEL[raw.kind],
+    severity: ALERT_KIND_SEVERITY[raw.kind],
+    atFormatted: formatPeruDateTime(raw.at),
+    linked: Boolean(raw.client && raw.contract),
+  };
+}

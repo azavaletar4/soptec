@@ -3974,17 +3974,122 @@ contratos/zonas/inventario/facturación. Sin tocar la lógica de
 detección (`oltAlerts.ts`) ni la de distribución en vivo (`oltEvents.ts`).
 Sin push ni despliegue.
 
-### Qué queda pendiente (siguiente etapa, no iniciada)
-- **Endpoint de lectura** (`GET /:id/alert-log` o similar) con los
-  filtros de fecha/cliente/zona/estado y la duración calculada — diseño
-  ya definido arriba, no implementado todavía.
-- **Vista en el panel** (tabla/lista de historial, acceso directo al
-  cliente) — Fase 3 (13as) ya tiene el componente de presentación de
-  una alerta individual; reutilizar su mismo criterio de vínculo
-  verificado para la vista de historial.
-- **Autorización para aplicar la migración** — nada de esto funciona en
-  producción hasta que se apruebe explícitamente.
-- Job de retención (si se vuelve necesario).
+### Qué quedó pendiente al cerrar esta sección (completado en 13au)
+Endpoint de lectura y vista en el panel — ver 13au. Siguen pendientes:
+autorización para aplicar la migración y, si el volumen lo justifica,
+un job de retención.
+
+## 13au. Fase 4 OLT — endpoint de lectura + vista "Historial de alertas" (2026-10-14, IMPLEMENTADO localmente — migración sigue SIN aplicar, sin push/deploy)
+
+Completa 13at: endpoint de consulta + integración en el panel, sin
+repetir el diagnóstico ni el diseño de la tabla (ya cerrados ahí).
+
+### Implementado
+- **`GET /:id/alert-log`** (`server/src/routes/olt.ts`): mismos 3 roles
+  reales que la RLS de `olt_alert_log` (`ONT_WRITE`, ya existente —
+  reutilizado, no se duplicó la lista). Filtros `from`/`to` (rango de
+  `at`), `clientId`, `zoneId` (resuelto primero a `contract_id`s de esa
+  zona vía `service_contracts.zone_id` — la tabla no guarda zona
+  propia, por diseño de 13at), `kind`; paginado `limit`/`offset`
+  (máx. 200). `client_id`/`contract_id` que devuelve cada fila son el
+  **snapshot** de 13at, nunca el vínculo de hoy. Duración: una consulta
+  extra acotada a los `olt_ont_id` de la página actual (nunca masiva),
+  resuelta con `computeRecoveryDurations` (nuevo, puro, en
+  `oltAlertLog.ts` junto a `buildOltAlertLogRows` — ver Pruebas).
+- **`src/lib/oltAlertPresentation.ts`**: `buildOltAlertLogEntryView`
+  (nueva) — reutiliza `ALERT_KIND_LABEL`/`ALERT_KIND_SEVERITY`/
+  `formatPeruDateTime` ya construidos en 13as; a diferencia de
+  `buildOltAlertView` (alertas en vivo, resuelve contra el vínculo
+  ACTUAL de `oltStore.onts`), esta NO vuelve a resolver cliente/contrato
+  — la fila ya llega resuelta desde el backend contra el snapshot
+  histórico correcto.
+- **`src/stores/olt.ts`**: `fetchAlertLog(deviceId, filtros)`.
+- **`src/views/olt/OltDetailView.vue`**: sección **"Historial de
+  alertas" dentro de la misma tarjeta** "Alertas y sincronización" (sin
+  módulo/vista aparte) — colapsada por defecto. Filtros: fecha
+  desde/hasta, cliente (derivado de `oltStore.onts` de este
+  dispositivo, sin buscador nuevo), zona (`catalogsStore.zones`, ya
+  cargado), tipo de evento. Cada fila: evento diferenciado
+  visualmente, hora en Perú, cliente con link directo o "⬜ Pendiente de
+  vincular" + "Ver ONT" (reutiliza `openOntFromAlert`, 13as), zona,
+  duración aproximada, estado actual de la ONT, datos técnicos como
+  secundarios. Paginación simple anterior/siguiente.
+- **Distinción hora de detección vs. hora real** (requisito explícito):
+  nota aclaratoria agregada en la cabecera de la sección —cubre tanto
+  las alertas en vivo como el historial— "la hora mostrada es de
+  detección... el instante exacto puede haber sido antes, no se conoce
+  con precisión".
+- **Revisión del `upsert` best-effort** (`oltSyncService.ts`): el log de
+  error ahora usa un prefijo propio `[olt-alert-log]` (antes
+  `[olt-sync]`, se confundía con errores de sincronización) e incluye
+  `device.id`, cantidad de filas y el `code` del error de Postgres —
+  identificable sin ambigüedad, sigue sin bloquear el sync ni la alerta
+  en vivo, y confirmado que no puede generar una alerta falsa (la
+  detección ya ocurrió antes e independiente de este insert).
+
+### Archivos modificados
+- `server/src/routes/olt.ts` (`GET /:id/alert-log`).
+- `server/src/services/oltAlertLog.ts` (`computeRecoveryDurations`,
+  nueva).
+- `server/src/services/oltSyncService.ts` (mensaje de error mejorado).
+- `server/src/services/__tests__/oltAlertLog.test.ts` (+6 casos).
+- `src/lib/oltAlertPresentation.ts` (`buildOltAlertLogEntryView` +
+  tipos).
+- `src/lib/__tests__/oltAlertPresentation.test.ts` (+4 casos).
+- `src/stores/olt.ts` (`fetchAlertLog`).
+- `src/views/olt/OltDetailView.vue` (sección "Historial de alertas").
+
+### Pruebas
+- Backend puro (+6, `oltAlertLog.test.ts`): par normal
+  offline→recovered, recovered sin offline previo (no calculable, no
+  inventa), 2 ciclos completos sin mezclarse, 2 offline seguidos (usa
+  el más reciente), 2 ONTs distintas sin mezclarse, lista vacía. `npm
+  run test:provisioning` → **96/96** (90 previos + 6 nuevos).
+- Frontend puro (+4, `oltAlertPresentation.test.ts`): fila resuelta
+  (vinculada), fila sin vínculo (nunca inventa), duración `null` se
+  conserva tal cual (nunca se reemplaza por 0), datos técnicos intactos.
+  `npm run test:fetch-timeout` → **149/149** (145 previos + 4 nuevos).
+- `npx tsc -p tsconfig.server.json --noEmit` → solo los 2 errores
+  preexistentes ajenos. `npx vue-tsc -p tsconfig.app.json --noEmit` →
+  sin errores.
+- `test:olt-alert-log-sql` (11/11, sin cambios desde 13at — la
+  migración no se tocó en esta sección) no se repitió sin necesidad
+  (regla de eficiencia, CLAUDE.md).
+
+### Nota técnica (encontrada al compilar, corregida)
+El `select()` de Supabase con embeds (`clients(...)`, `service_contracts(...)`)
+debe ir en **un solo literal de string** — concatenarlo con `+` degrada
+el tipo a `GenericStringError` (confirmado al compilar, nada que ver
+con el esquema real). Documentado inline en el código para no repetir
+el error.
+
+### Riesgos
+- El filtro de zona hace una consulta extra a `service_contracts` antes
+  de la principal — trivial en volumen, pero son 2 round-trips en vez
+  de 1 cuando se filtra por zona.
+- La paginación es offset/limit simple (no cursor) — con inserciones
+  nuevas durante la navegación, el usuario podría ver una fila
+  repetida o saltarse una al cambiar de página; aceptable para un panel
+  administrativo de consulta, no se justificaba cursor-based para esta
+  entrega.
+- Sigue sin tabla de retención/limpieza — mismo riesgo ya documentado
+  en 13at.
+
+### Qué NO se tocó (confirmado)
+Sin aplicar la migración de 13at todavía. Sin comandos a OLT/MikroTik.
+Sin modificar contratos/zonas/inventario/facturación. Sin tocar
+`oltAlerts.ts` (lógica de detección) ni la emisión SSE en vivo. Sin
+push ni despliegue — **commit local únicamente**.
+
+### ¿Lista Fase 4 para pedir autorización de despliegue?
+**No todavía** — falta: (1) autorización explícita para aplicar la
+migración de `olt_alert_log` en Supabase producción (ninguna parte de
+esto funciona sin la tabla real), (2) validación visual del usuario en
+el panel real tras el despliegue (mismo criterio que fases anteriores),
+(3) confirmar que el volumen real de alertas no amerita ajustar la
+paginación antes de dejarlo en uso diario. El código está probado y
+compila limpio, pero "listo para desplegar" requiere esas 3
+confirmaciones primero.
 
 ## 13. Próximo paso recomendado
 

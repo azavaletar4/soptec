@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatPeruDateTime, buildOltAlertView, ALERT_KIND_LABEL, type OltAlertOntInfo, type OltAlertSource } from '../oltAlertPresentation';
+import {
+  formatPeruDateTime,
+  buildOltAlertView,
+  buildOltAlertLogEntryView,
+  ALERT_KIND_LABEL,
+  type OltAlertOntInfo,
+  type OltAlertSource,
+  type OltAlertLogEntryRaw,
+} from '../oltAlertPresentation';
 
 // ---- formatPeruDateTime ----
 
@@ -109,4 +117,59 @@ test('buildOltAlertView: señal óptica baja/recuperada mantienen su propia etiq
   assert.equal(low.severity, 'critical');
   assert.equal(recov.kindLabel, ALERT_KIND_LABEL.signalRecovered);
   assert.equal(recov.severity, 'ok');
+});
+
+// ---- buildOltAlertLogEntryView (Fase 4, historial, 13au) ----
+
+function logEntry(overrides: Partial<OltAlertLogEntryRaw> = {}): OltAlertLogEntryRaw {
+  return {
+    id: 'log-1',
+    oltOntId: 'ont-1',
+    kind: 'offline',
+    at: '2026-10-14T13:31:00.000Z',
+    detail: 'ONT se desconectó',
+    durationMinutes: null,
+    client: null,
+    contract: null,
+    zoneName: null,
+    ont: null,
+    ...overrides,
+  };
+}
+
+test('buildOltAlertLogEntryView: fila ya resuelta por el backend (snapshot vinculado) -> linked true, NO vuelve a resolver nada', () => {
+  const v = buildOltAlertLogEntryView(
+    logEntry({
+      kind: 'recovered',
+      durationMinutes: 45,
+      client: { id: 'cli-1', name: 'Violeta Garcia Silva' },
+      contract: { id: 'ctr-1', contractNumber: 'C-001', clientCode: 'CL-001' },
+      zoneName: 'PON 1 - AO',
+    }),
+  );
+  assert.equal(v.linked, true);
+  assert.equal(v.kindLabel, 'Internet reconectado');
+  assert.equal(v.severity, 'ok');
+  assert.equal(v.durationMinutes, 45);
+  assert.match(v.atFormatted, /2026/);
+});
+
+test('buildOltAlertLogEntryView: fila sin cliente/contrato (snapshot de una ONT sin vincular) -> linked false, nunca inventa', () => {
+  const v = buildOltAlertLogEntryView(logEntry());
+  assert.equal(v.linked, false);
+  assert.equal(v.client, null);
+  assert.equal(v.contract, null);
+});
+
+test('buildOltAlertLogEntryView: duracion no calculable (null) se conserva tal cual, nunca se reemplaza por 0', () => {
+  const v = buildOltAlertLogEntryView(logEntry({ kind: 'recovered', durationMinutes: null }));
+  assert.equal(v.durationMinutes, null);
+});
+
+test('buildOltAlertLogEntryView: datos tecnicos de la ONT (estado actual) pasan intactos', () => {
+  const v = buildOltAlertLogEntryView(
+    logEntry({ ont: { serial: 'ZTEG0001', description: null, slot: 2, port: 1, ontId: 5, status: 'online' } }),
+  );
+  assert.equal(v.ont?.serial, 'ZTEG0001');
+  assert.equal(v.ont?.status, 'online');
 });
