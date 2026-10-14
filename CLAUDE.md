@@ -15,6 +15,47 @@ SmartRayco está en fase de pruebas operativas reales (octubre 2026). Técnicos 
 administradores lo usan en campo. Clientes, servicios y datos son reales —
 protegerlos siempre (ver regla 13).
 
+## Usabilidad para personal administrativo (regla permanente)
+
+SmartRayco lo usa a diario personal administrativo **sin conocimientos
+técnicos de redes** — toda interfaz debe ser intuitiva, clara y
+comprensible para ese usuario, no solo correcta para quien conoce el
+dominio técnico. Aplica a corrección y desarrollo en **Clientes,
+Contratos, OLT, Soporte, Rutinas, Altas, Inventario, Facturación y App
+Campo** — no solo al módulo en que se trabaje puntualmente.
+
+Requisitos obligatorios:
+
+1. Mostrar nombre del cliente, código y contrato cuando estén
+   vinculados y **verificados** — nunca inferidos por nombre,
+   descripción o posición física (ver regla 6 de la migración OLT).
+2. Mostrar fecha y hora **real** del evento (nunca la hora de
+   renderizado) en horario de Perú (`America/Lima`, sin asumir la zona
+   horaria del dispositivo de quien mira la pantalla).
+3. Ofrecer acceso directo a la ficha del cliente o del servicio/contrato
+   correspondiente — no obligar a buscarlo aparte.
+4. Mensajes de error y alertas en lenguaje sencillo: qué ocurrió y qué
+   debe hacer el usuario — no un mensaje técnico crudo (código, log,
+   jerga de red) como única explicación.
+5. Los datos técnicos (serial, slot/puerto, señal, mensajes crudos)
+   siguen disponibles, pero como información **secundaria** — nunca lo
+   primero que se lee.
+6. No obligar al personal a buscar manualmente un dato que el sistema
+   ya tiene y puede resolver solo (mismo cliente, mismo contrato, misma
+   zona ya cargados en otra parte del mismo panel).
+7. Sin vínculo verificable, mostrar **"Pendiente de vincular"** — nunca
+   inventar ni asumir un dato para rellenar el hueco.
+8. Respetar siempre los 3 roles operativos reales (regla 9 de la
+   migración OLT: SUPERADMIN, ADMIN, TECNICO_RED).
+
+Precedente ya implementado siguiendo esta regla (referencia de patrón,
+no repetir su investigación): Fase B de discrepancias PON↔zona↔contrato
+(`src/lib/ontZoneDiscrepancy.ts`, `OntZoneDiscrepancyModal.vue`) y las
+alertas operativas de OLT (`src/lib/oltAlertPresentation.ts`,
+`ESTADO_DESARROLLO.md` 13as) — mismo criterio de vínculo verificable,
+hora real en horario de Perú, acceso directo a la ficha, datos técnicos
+como secundarios.
+
 ## Modo de desarrollo y validación eficiente
 
 Objetivo: detectar, corregir y validar problemas sin auditorías completas en
