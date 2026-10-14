@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import type { Routine, RoutineStatus } from '@/types/domain';
 
 const ROUTINE_SELECT =
-  '*, clients(id, first_name, last_name, phone, latitude, longitude), zones(id, name), nap_elemento:infra_elementos(id, name), assigned_profile:profiles!routines_assigned_to_fkey(id, full_name, email), ' +
+  '*, routine_returns(id), clients(id, first_name, last_name, phone, latitude, longitude), zones(id, name), nap_elemento:infra_elementos(id, name), assigned_profile:profiles!routines_assigned_to_fkey(id, full_name, email), ' +
   // Fase 159 — contrato trasladado (subtipo traslado_servicio), con su zona/direccion actuales.
   'service_contracts(id, contract_number, client_code, zone_id, installation_address, status, zones(id, name))';
 

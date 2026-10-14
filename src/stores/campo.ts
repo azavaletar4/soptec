@@ -347,6 +347,11 @@ export const useCampoStore = defineStore('campo', () => {
     await ticketsStore.fetchTickets();
   }
 
+  async function returnRoutine(routineId: string, reason: string) {
+    await jobAssigneesStore.returnRoutine(routineId, reason);
+    await fetchAll();
+  }
+
   async function fetchAll() {
     loading.value = true;
     try {
@@ -868,6 +873,7 @@ export const useCampoStore = defineStore('campo', () => {
     selfAssignInstallation,
     selfAssignRoutine,
     returnTicket,
+    returnRoutine,
     fetchAll,
     refreshQueuedCount,
     runDiagnostico,

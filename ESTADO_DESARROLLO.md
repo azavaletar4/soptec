@@ -1,5 +1,25 @@
 # SmartRayco — Estado de desarrollo
 
+## Actualización 2026-10-14 — devolución de rutinas (Fase 161, SOLO LOCAL)
+
+Incidencia de campo: una rutina iniciada no ofrecía «Devolver orden».
+El formulario y RPC existentes solo cubrían Averías. Preparada migración
+`20261014180000_fase161_devolver_rutinas.sql`: tabla `routine_returns`
+con historial, RLS de lectura y sin escritura directa para usuarios; RPC
+`return_routine` para técnico activo asignado, solo `in_progress`, motivo
+obligatorio, registro y liberación completa de cuadrilla en una transacción.
+Vuelve a `pending`, estado real de oficina; no toca `closure_notes`.
+App Campo reutiliza el formulario; oficina ve marca e historial con fecha
+de Perú y puede reasignar mediante el editor existente. Averías/Altas intactas.
+
+Validado: 22 casos SQL más prueba principal (23/23) en PostgreSQL 17 Docker
+sin red, con datos sintéticos y policies relevantes reales; `vue-tsc` limpio.
+Incluye rollback, concurrencia, RLS, trazabilidad y regresión de Averías/Altas.
+No se ejecutó SQL en Supabase, ni push ni deploy. Pendiente validación visual
+y operativa. Aplicar SQL antes del frontend: su SELECT incorpora la relación
+nueva. FK restrictivas preservan auditoría e impiden borrar rutinas/perfiles
+con devoluciones. Procedimiento y rollback: `docs/DEVOLVER-RUTINAS.md`.
+
 **✅ INCIDENCIA CERRADA (2026-10-12): los técnicos no podían cerrar
 Rutinas ni Altas desde App de Campo** — error
 `invalid input value for enum routine_status/installation_status`.

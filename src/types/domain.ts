@@ -330,7 +330,18 @@ export interface Installation {
  *  junto a Ticket (averia) e Installation (alta). A diferencia de esos dos,
  *  client_id es opcional: una rutina puede apuntar a una zona o caja NAP sin
  *  ser de un cliente puntual. */
+export interface RoutineReturn {
+  id: string;
+  routine_id: string;
+  technician_id: string;
+  returned_at: string;
+  reason: string;
+  crew_snapshot: { technician_id: string; role: string }[];
+  technician?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
 export interface Routine {
+  routine_returns?: Pick<RoutineReturn, 'id'>[];
   id: string;
   routine_number: string | null;
   title: string;

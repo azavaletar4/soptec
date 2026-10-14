@@ -138,7 +138,13 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
     if (error) throw error;
   }
 
+  async function returnRoutine(routineId: string, reason: string) {
+    const { error } = await supabase.rpc('return_routine', { p_routine_id: routineId, p_reason: reason });
+    if (error) throw error;
+  }
+
   return {
+    returnRoutine,
     loading,
     fetchAssignees,
     addAssignee,

@@ -18,7 +18,9 @@ import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
 import { findScheduleConflict, conflictConfirmMessage } from '@/lib/scheduleConflict';
 import { TRASLADO_SERVICIO_SUBTIPO } from '@/lib/routineTraslado';
-import type { Routine, RoutineStatus, RoutineTipo, ServiceContract, TicketPriority } from '@/types/domain';
+import { supabase } from '@/lib/supabase';
+import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
+import type { RoutineReturn, Routine, RoutineStatus, RoutineTipo, ServiceContract, TicketPriority } from '@/types/domain';
 
 // Mantenimiento preventivo / peinado de NAPs (Fase 101) — 3er tipo de orden
 // junto a Tickets (averias) e Instalaciones (altas). Reusa job_assignees
@@ -172,6 +174,26 @@ const showModal = ref(false);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const editingRoutine = ref<Routine | null>(null);
+const returns = ref<RoutineReturn[]>([]);
+const returnsError = ref<string | null>(null);
+const loadingReturns = ref(false);
+async function loadReturns(id: string) {
+  returns.value = [];
+  returnsError.value = null;
+  loadingReturns.value = true;
+  try {
+    const { data, error } = await supabase.from('routine_returns')
+      .select('*, technician:profiles!routine_returns_technician_id_fkey(id, full_name, email)')
+      .eq('routine_id', id).order('returned_at', { ascending: false });
+    if (editingRoutine.value?.id !== id) return;
+    if (error) throw error;
+    returns.value = (data ?? []) as RoutineReturn[];
+  } catch (e) {
+    if (editingRoutine.value?.id === id) returnsError.value = getErrorMessage(e, 'No se pudo cargar el historial de devoluciones.');
+  } finally {
+    if (editingRoutine.value?.id === id) loadingReturns.value = false;
+  }
+}
 const clientFilter = ref('');
 
 type TargetKind = 'none' | 'client' | 'zone' | 'nap' | 'direccion';
@@ -261,6 +283,7 @@ function openCreate() {
 
 function openEdit(r: Routine) {
   editingRoutine.value = r;
+  void loadReturns(r.id);
   form.value = {
     title: r.title,
     description: r.description ?? '',
@@ -469,6 +492,7 @@ function formatDate(value: string | null) {
             </span>
           </div>
           <div class="text-slate-900 font-medium mb-1">{{ r.title }}</div>
+          <p v-if="r.routine_returns?.length" class="text-xs text-amber-700">↩ Con devoluciones · ver historial</p>
           <div class="text-xs text-slate-500 mb-1">{{ TIPO_RUTINA_LABEL[r.tipo_rutina] }} · {{ targetLabel(r) }}</div>
           <div class="text-xs text-slate-500">
             {{ formatDate(r.scheduled_date) }} · {{ r.assigned_profile?.full_name || r.assigned_profile?.email || 'Sin asignar' }}
@@ -502,6 +526,7 @@ function formatDate(value: string | null) {
               <td class="px-4 py-3">
                 <div class="font-mono text-xs text-slate-500">{{ r.routine_number }}</div>
                 <div class="text-slate-900">{{ r.title }}</div>
+                <p v-if="r.routine_returns?.length" class="text-xs text-amber-700">↩ Con devoluciones · ver historial</p>
               </td>
               <td class="px-4 py-3 text-slate-600">
                 {{ TIPO_RUTINA_LABEL[r.tipo_rutina] }}
@@ -693,6 +718,17 @@ function formatDate(value: string | null) {
           </div>
 
           <template v-if="editingRoutine">
+            <section class="mb-3 surface p-3" aria-label="Historial de devoluciones">
+              <h3 class="text-sm font-semibold">Historial de devoluciones</h3>
+              <p v-if="loadingReturns" class="text-xs text-slate-500">Cargando devoluciones...</p>
+              <p v-else-if="returnsError" class="text-xs text-red-600">{{ returnsError }}</p>
+              <p v-else-if="!returns.length" class="text-xs text-slate-500">Sin devoluciones registradas.</p>
+              <div v-for="entry in returns" :key="entry.id" class="mt-2 border-t border-slate-100 pt-2">
+                <p class="text-xs font-medium">Orden devuelta · {{ entry.technician?.full_name || entry.technician?.email || 'Técnico' }}</p>
+                <p class="text-xs text-slate-500">{{ formatPeruDateTime(entry.returned_at) }} · Hora de Perú</p>
+                <p class="text-sm whitespace-pre-wrap">{{ entry.reason }}</p>
+              </div>
+            </section>
             <div class="mb-3 pt-3 border-t border-slate-100">
               <label class="block text-xs text-slate-600 mb-1">Cuadrilla</label>
               <CrewAssignEditor

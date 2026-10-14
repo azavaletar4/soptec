@@ -931,6 +931,8 @@ function teardownRealtimeSync() {
 // "Cliente Ausente" (Fase 102, mas abajo), que reprograma y se lo queda el
 // mismo tecnico. ----
 const isMyAssignment = computed(() => assignees.value.some((a) => a.technician_id === auth.user?.id));
+const canReturnRoutine = computed(() => jobType === 'routine' && auth.role === 'TECNICO_RED'
+  && isMyAssignment.value && (trabajo.value?.raw as Routine | undefined)?.status === 'in_progress');
 const showReturnForm = ref(false);
 const returnReason = ref('');
 const returning = ref(false);
@@ -949,7 +951,13 @@ async function handleReturnTicket() {
   returning.value = true;
   returnError.value = null;
   try {
-    await campoStore.returnTicket(jobId, returnReason.value.trim());
+    if (jobType === 'routine') {
+      if (!canReturnRoutine.value) throw new Error('Solo puedes devolver una rutina en progreso asignada a ti.');
+      await campoStore.returnRoutine(jobId, returnReason.value.trim());
+      clearDraft(draftKey);
+    } else {
+      await campoStore.returnTicket(jobId, returnReason.value.trim());
+    }
     toast.success('Orden devuelta. Vuelve a la bolsa de disponibles.');
     router.push('/campo');
   } catch (e) {
@@ -1798,7 +1806,7 @@ async function handleCloseSubmit() {
             </div>
           </div>
 
-          <div v-if="jobType === 'ticket' && isMyAssignment && !ticketFrozen" class="mt-3 pt-3 border-t border-slate-100">
+          <div v-if="(jobType === 'ticket' && isMyAssignment && !ticketFrozen) || canReturnRoutine" class="mt-3 pt-3 border-t border-slate-100">
             <button v-if="!showReturnForm" type="button" class="btn-danger text-xs" @click="toggleReturnForm">
               ↩️ Devolver orden (no puedo continuar)
             </button>
