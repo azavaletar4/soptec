@@ -1,7 +1,12 @@
 -- Fase 160 (Fase 4 OLT — historial de desconexiones/reconexiones).
 --
--- NO APLICADA TODAVIA — requiere autorizacion explicita del usuario antes
--- de correr contra Supabase de produccion (CLAUDE.md, regla 16).
+-- APLICADA en Supabase produccion 2026-10-14 (autorizacion explicita del
+-- usuario) — version registrada 20261014150451. Verificado post-aplicacion:
+-- tabla/columnas/FKs correctas, 6 indices (5 + PK), RLS activo con 2
+-- policies (select/insert, SUPERADMIN/ADMIN/TECNICO_RED), 0 filas nuevas
+-- (nace vacia), y los conteos de olt_devices/olt_onts/clients/
+-- service_contracts quedaron EXACTAMENTE iguales al snapshot previo a la
+-- migracion (1/720/358/366) — ningun dato existente se altero.
 --
 -- Diagnostico previo (ver ESTADO_DESARROLLO.md 13at, Paso 1): las alertas
 -- de oltSyncService.ts/oltAlerts.ts/oltEvents.ts ya tienen una fecha/hora

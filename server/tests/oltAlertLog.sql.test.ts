@@ -60,7 +60,7 @@ test('PostgreSQL isolated: olt_alert_log — esquema, dedupe, RLS y filtros por 
     const roleSql = sqlFile('../../supabase/migrations/20260919020000_fase13_gestion_usuarios.sql')
       .match(/create or replace function public\.current_user_role\(\)[\s\S]*?\$\$;/)![0];
     query(roleSql);
-    const fase160Sql = sqlFile('../../supabase/migrations/20261014100000_fase160_olt_alert_log.sql');
+    const fase160Sql = sqlFile('../../supabase/migrations/20261014150451_fase160_olt_alert_log.sql');
     query(fase160Sql);
 
     await t.test('verificacion final (punto 3): la migracion se puede RE-APLICAR sin error (if not exists / drop policy if exists en todo), y no duplica indices/policies', () => {

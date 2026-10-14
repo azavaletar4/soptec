@@ -3905,7 +3905,7 @@ columnas/índices/RLS adaptadas):
   null en la fila.
 
 ### Paso 3 — Implementación controlada (local, nada aplicado)
-- **`supabase/migrations/20261014100000_fase160_olt_alert_log.sql`**
+- **`supabase/migrations/20261014150451_fase160_olt_alert_log.sql`**
   (nueva, **NO aplicada**): tabla + índices + RLS, tal como el diseño.
 - **`server/src/services/oltAlertLog.ts`** (nuevo, puro):
   `buildOltAlertLogRows(alerts, ontsById)` — construye las filas a
@@ -4135,7 +4135,7 @@ repetir diagnóstico ni diseño ya cerrados en 13at/13au.
 - `src/lib/oltAlertPresentation.ts` (`formatRelativeTime`, nueva).
 - `src/lib/__tests__/oltAlertPresentation.test.ts` (+6 casos).
 - `src/views/olt/OltDetailView.vue` (tiempo relativo en ambas listas).
-- `supabase/migrations/20261014100000_fase160_olt_alert_log.sql`
+- `supabase/migrations/20261014150451_fase160_olt_alert_log.sql`
   (comentario de rollback/respaldo — sin cambios de esquema).
 - `server/tests/oltAlertLog.sql.test.ts` (+1 caso, re-aplicación).
 
