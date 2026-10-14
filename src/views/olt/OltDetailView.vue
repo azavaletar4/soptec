@@ -12,7 +12,13 @@ import {
   type PonPortIssueCounts,
 } from '@/lib/ontZoneDiscrepancy';
 import OntZoneDiscrepancyModal from './OntZoneDiscrepancyModal.vue';
-import { buildOltAlertView, buildOltAlertLogEntryView, type OltAlertView, type OltAlertLogEntryView } from '@/lib/oltAlertPresentation';
+import {
+  buildOltAlertView,
+  buildOltAlertLogEntryView,
+  formatRelativeTime,
+  type OltAlertView,
+  type OltAlertLogEntryView,
+} from '@/lib/oltAlertPresentation';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -362,6 +368,10 @@ const alertViews = computed<OltAlertView[]>(() =>
 function openOntFromAlert(ontDbId: string) {
   const ont = oltStore.onts.find((o) => o.id === ontDbId);
   if (ont) openOntDetail(ont);
+}
+/** Verificación final (punto 2): tiempo relativo evaluado en el momento del render — se evalua de nuevo cada vez que Vue re-renderiza la fila (no hay un timer propio, no hacia falta para este uso). */
+function relativeTime(iso: string): string {
+  return formatRelativeTime(iso, Date.now());
 }
 
 /**
@@ -1505,7 +1515,7 @@ const gauges = computed(() => {
                 <span class="font-semibold" :class="a.severity === 'critical' ? 'text-red-800' : 'text-emerald-800'">{{ a.kindLabel }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <span class="text-xs text-slate-500 whitespace-nowrap">{{ a.atFormatted }} (Perú)</span>
+                <span class="text-xs text-slate-500 whitespace-nowrap">{{ relativeTime(a.atIso) }} · {{ a.atFormatted }} (Perú)</span>
                 <button class="text-xs opacity-60 hover:opacity-100" @click="oltStore.dismissAlert(a.id)">✕</button>
               </div>
             </div>
@@ -1598,7 +1608,7 @@ const gauges = computed(() => {
               >
                 <div class="flex items-start justify-between gap-3">
                   <span class="font-semibold text-xs" :class="h.severity === 'critical' ? 'text-red-800' : 'text-emerald-800'">{{ h.kindLabel }}</span>
-                  <span class="text-xs text-slate-500 whitespace-nowrap">{{ h.atFormatted }} (Perú)</span>
+                  <span class="text-xs text-slate-500 whitespace-nowrap">{{ relativeTime(h.at) }} · {{ h.atFormatted }} (Perú)</span>
                 </div>
                 <div class="mt-1 text-slate-800 text-sm">
                   <router-link

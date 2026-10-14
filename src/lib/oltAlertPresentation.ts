@@ -50,6 +50,27 @@ export function formatPeruDateTime(iso: string): string {
   }).format(d);
 }
 
+/**
+ * Verificación final (2026-10-14, punto 2): tiempo relativo ("hace N
+ * min/h/d") para personal que necesita una lectura rápida sin hacer la
+ * cuenta mental de la fecha exacta — SIEMPRE se muestra junto a
+ * `formatPeruDateTime`, nunca en su lugar (la hora exacta sigue siendo la
+ * referencia real). `nowMs` se recibe como parámetro (mismo patrón ya
+ * usado en `elapsedTime.ts`, `formatElapsedTime`) para que sea
+ * determinístico y comprobable, en vez de llamar a `Date.now()` adentro.
+ */
+export function formatRelativeTime(iso: string, nowMs: number): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const diffMinutes = Math.floor(Math.max(0, nowMs - then) / 60000);
+  if (diffMinutes < 1) return 'hace un momento';
+  if (diffMinutes < 60) return `hace ${diffMinutes} min`;
+  const hours = Math.floor(diffMinutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days} d`;
+}
+
 export interface OltAlertOntInfo {
   id: string;
   serial: string;

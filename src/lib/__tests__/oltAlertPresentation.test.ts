@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatPeruDateTime,
+  formatRelativeTime,
   buildOltAlertView,
   buildOltAlertLogEntryView,
   ALERT_KIND_LABEL,
@@ -21,6 +22,37 @@ test('formatPeruDateTime: ISO real -> fecha/hora en horario de Peru, no la del d
 
 test('formatPeruDateTime: ISO invalido -> mensaje claro, nunca inventa una fecha', () => {
   assert.equal(formatPeruDateTime('no-es-fecha'), 'Fecha no disponible');
+});
+
+// ---- formatRelativeTime (verificacion final, punto 2) ----
+
+test('formatRelativeTime: menos de 1 minuto -> "hace un momento"', () => {
+  const now = new Date('2026-10-14T13:31:30.000Z').getTime();
+  assert.equal(formatRelativeTime('2026-10-14T13:31:00.000Z', now), 'hace un momento');
+});
+
+test('formatRelativeTime: minutos -> "hace N min"', () => {
+  const now = new Date('2026-10-14T13:45:00.000Z').getTime();
+  assert.equal(formatRelativeTime('2026-10-14T13:31:00.000Z', now), 'hace 14 min');
+});
+
+test('formatRelativeTime: horas -> "hace N h"', () => {
+  const now = new Date('2026-10-14T16:31:00.000Z').getTime();
+  assert.equal(formatRelativeTime('2026-10-14T13:31:00.000Z', now), 'hace 3 h');
+});
+
+test('formatRelativeTime: dias -> "hace N d"', () => {
+  const now = new Date('2026-10-17T13:31:00.000Z').getTime();
+  assert.equal(formatRelativeTime('2026-10-14T13:31:00.000Z', now), 'hace 3 d');
+});
+
+test('formatRelativeTime: ISO invalido -> cadena vacia, nunca inventa', () => {
+  assert.equal(formatRelativeTime('no-es-fecha', Date.now()), '');
+});
+
+test('formatRelativeTime: fecha "futura" por reloj desincronizado -> nunca negativo, se trata como "ahora"', () => {
+  const now = new Date('2026-10-14T13:00:00.000Z').getTime();
+  assert.equal(formatRelativeTime('2026-10-14T13:05:00.000Z', now), 'hace un momento');
 });
 
 // ---- buildOltAlertView ----

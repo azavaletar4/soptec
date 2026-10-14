@@ -31,6 +31,22 @@
 -- Kardex) — si el volumen llega a justificarlo, evaluar un job de limpieza
 -- aparte (ej. purgar filas de mas de 180 dias) en una fase futura, con
 -- autorizacion explicita; no se implementa aqui.
+--
+-- Verificacion final (2026-10-14, punto 3) — respaldo y rollback:
+-- esta migracion es PURAMENTE ADITIVA: crea 1 tabla nueva vacia, sus
+-- indices y sus policies — NO altera ninguna columna/constraint/dato de
+-- olt_devices, olt_onts, clients ni service_contracts (solo las referencia
+-- por FK). No requiere respaldo previo de esas tablas porque no las
+-- modifica; el bloqueo que toma al crear las FK es un lock de metadata
+-- breve sobre las tablas referenciadas, no un lock de filas ni una
+-- reescritura de sus datos. Confirmado con la prueba SQL aislada
+-- (oltAlertLog.sql.test.ts, 11/11) antes de considerar aplicarla.
+-- Rollback seguro (la tabla nace vacia, nunca hay datos reales que perder):
+--   drop table if exists public.olt_alert_log;
+-- Re-aplicar esta misma migracion una segunda vez (ej. tras un rollback de
+-- codigo que la deje en el repo pero no en la BD, o al revalidar antes de
+-- producción) es seguro: todas las sentencias usan "if not exists"/
+-- "drop policy if exists" — no falla ni duplica nada si ya existia.
 
 create table if not exists public.olt_alert_log (
   id uuid primary key default gen_random_uuid(),

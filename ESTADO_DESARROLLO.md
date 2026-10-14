@@ -4082,14 +4082,81 @@ Sin modificar contratos/zonas/inventario/facturación. Sin tocar
 push ni despliegue — **commit local únicamente**.
 
 ### ¿Lista Fase 4 para pedir autorización de despliegue?
-**No todavía** — falta: (1) autorización explícita para aplicar la
-migración de `olt_alert_log` en Supabase producción (ninguna parte de
-esto funciona sin la tabla real), (2) validación visual del usuario en
-el panel real tras el despliegue (mismo criterio que fases anteriores),
-(3) confirmar que el volumen real de alertas no amerita ajustar la
-paginación antes de dejarlo en uso diario. El código está probado y
-compila limpio, pero "listo para desplegar" requiere esas 3
-confirmaciones primero.
+Ver 13av — verificación final, único paso pendiente antes de pedir
+autorización es la migración en sí.
+
+## 13av. Fase 4 OLT — verificación final (2026-10-14, correcciones puntuales — migración sigue SIN aplicar, sin push/deploy)
+
+Verificación de 5 puntos específicos sobre el commit `55c38b0`, sin
+repetir diagnóstico ni diseño ya cerrados en 13at/13au.
+
+1. **Orden del historial**: confirmado correcto, ya estaba
+   `.order('at', { ascending: false })` en `GET /:id/alert-log` — sin
+   cambios.
+2. **Tiempo relativo + hora exacta**: **gap real encontrado** — solo se
+   mostraba la hora exacta. Corregido: `formatRelativeTime(iso, nowMs)`
+   nueva (`oltAlertPresentation.ts`, mismo patrón ya usado en
+   `formatElapsedTime`/`elapsedTime.ts` — `nowMs` como parámetro, no
+   `Date.now()` interno, para que sea comprobable) — "hace un
+   momento"/"hace N min"/"hace N h"/"hace N d", mostrado **junto a** la
+   hora exacta en Perú (nunca en su lugar), tanto en las alertas en
+   vivo como en el historial.
+3. **Migración (RLS/índices/idempotencia/respaldo/rollback)**: RLS e
+   índices ya estaban correctos y probados (11/11 en 13at). **Reforzado**:
+   se agregó una prueba explícita de **re-aplicar la migración dos
+   veces** sin error y sin duplicar índices/policies (ahora 12/12), y
+   un comentario explícito en el archivo de migración con el rollback
+   seguro (`drop table if exists public.olt_alert_log;` — la tabla
+   nace vacía, nunca hay datos reales que perder) y la confirmación de
+   que es puramente aditiva (no toca columnas/datos de
+   `olt_devices`/`olt_onts`/`clients`/`service_contracts`, solo las
+   referencia).
+4. **Persistencia best-effort no bloquea el sync de ~723 ONTs**:
+   **verificado correcto, sin cambios necesarios** — el `select`
+   ampliado sigue siendo UNA sola consulta sobre las mismas ~723 filas
+   (2 columnas más, no más filas); el `upsert` del historial es UNA
+   sola llamada bulk (nunca un loop por ONT), gated por
+   `if (alerts.length)` (cero costo en la inmensa mayoría de ciclos sin
+   transiciones reales); best-effort real (nunca lanza, el
+   `emitOltAlert` en vivo sigue corriendo igual si el insert del
+   historial falla). Mismo patrón ya usado y probado en producción para
+   `bulk_update_ont_status_power` — no se introdujo un riesgo nuevo.
+5. **Eventos administrativos no deben aparecer como reales**:
+   **verificado correcto, sin cambios necesarios** — `detectStatusAlert`
+   ya descarta cualquier transición cuando `admin_state` termina en
+   `'disable'` (ya probado: "ONU deshabilitada administrativamente:
+   nunca se confunde con una caída", `oltAlerts.test.ts`), y
+   `olt_alert_log` solo recibe lo que ya pasó ese mismo filtro — ninguna
+   otra ruta (`toggle`, `import-existing`, edición de metadatos) llama a
+   `detectStatusAlert`/`pushAlert`/`emitOltAlert` (confirmado por
+   búsqueda dirigida en `routes/olt.ts`).
+
+### Archivos modificados
+- `src/lib/oltAlertPresentation.ts` (`formatRelativeTime`, nueva).
+- `src/lib/__tests__/oltAlertPresentation.test.ts` (+6 casos).
+- `src/views/olt/OltDetailView.vue` (tiempo relativo en ambas listas).
+- `supabase/migrations/20261014100000_fase160_olt_alert_log.sql`
+  (comentario de rollback/respaldo — sin cambios de esquema).
+- `server/tests/oltAlertLog.sql.test.ts` (+1 caso, re-aplicación).
+
+### Pruebas
+`npm run test:fetch-timeout` → **155/155** (149 previos + 6 nuevos).
+`npm run test:olt-alert-log-sql` → **12/12** (11 previos + 1 nuevo).
+`npm run test:provisioning` → **96/96**, sin cambios (puntos 4 y 5 no
+requirieron código nuevo). `tsc`/`vue-tsc` → sin errores nuevos.
+
+### Riesgos reales (reconfirmados, sin cambios)
+Paginación offset/limit simple (no cursor); sin job de retención;
+filtro de zona hace 1 consulta extra — todos ya documentados en 13au,
+ninguno es bloqueante.
+
+### ¿Lista Fase 4 para pedir autorización de despliegue?
+**Sí, a nivel de código** — los 5 puntos de esta verificación están
+correctos o corregidos, con pruebas pasando. Sigue pendiente, como
+siempre, la **autorización explícita del usuario para aplicar la
+migración** `olt_alert_log` en Supabase producción (nada de esto
+funciona sin la tabla real) y, una vez desplegado, su validación visual
+en el panel.
 
 ## 13. Próximo paso recomendado
 

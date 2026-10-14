@@ -60,7 +60,16 @@ test('PostgreSQL isolated: olt_alert_log — esquema, dedupe, RLS y filtros por 
     const roleSql = sqlFile('../../supabase/migrations/20260919020000_fase13_gestion_usuarios.sql')
       .match(/create or replace function public\.current_user_role\(\)[\s\S]*?\$\$;/)![0];
     query(roleSql);
-    query(sqlFile('../../supabase/migrations/20261014100000_fase160_olt_alert_log.sql'));
+    const fase160Sql = sqlFile('../../supabase/migrations/20261014100000_fase160_olt_alert_log.sql');
+    query(fase160Sql);
+
+    await t.test('verificacion final (punto 3): la migracion se puede RE-APLICAR sin error (if not exists / drop policy if exists en todo), y no duplica indices/policies', () => {
+      query(fase160Sql); // si algo no fuera idempotente, esto tiraria y el test fallaria aca.
+      const indexCount = query("select count(*) from pg_indexes where tablename='olt_alert_log';");
+      const policyCount = query("select count(*) from pg_policies where tablename='olt_alert_log';");
+      assert.equal(indexCount, '6'); // 1 PK + 5 creados explicitamente (dedupe + 4 de filtros)
+      assert.equal(policyCount, '2'); // select + insert, nunca mas de 1 cada una
+    });
 
     await t.test('caso feliz: inserta un evento con cliente/contrato vinculados, queda legible', () => {
       reset();
