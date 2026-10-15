@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import InventorySearchResults from '@/components/inventario/InventorySearchResults.vue';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import AlbumCard from '@/components/inventario/AlbumCard.vue';
 import { useInventoryStore } from '@/stores/inventory';
@@ -10,6 +11,7 @@ import { getErrorMessage } from '@/lib/errors';
 import type { InventoryProduct } from '@/types/domain';
 
 const router = useRouter();
+const route = useRoute();
 const inventoryStore = useInventoryStore();
 const auth = useAuthStore();
 
@@ -17,7 +19,9 @@ const auth = useAuthStore();
 const canDelete = computed(() => auth.isSuperAdmin);
 
 const showModal = ref(false);
-const searchQuery = ref('');
+const searchQuery = ref(String(route.query.q ?? ''));
+watch(searchQuery, (q) => { void router.replace({ query: { ...route.query, q: q || undefined, searchPage: undefined } }); });
+const searchRevision = ref(0);
 const editingProduct = ref<InventoryProduct | null>(null);
 
 const emptyForm = () => ({
@@ -31,9 +35,6 @@ const emptyForm = () => ({
 });
 const form = ref(emptyForm());
 
-function isLowStock(p: InventoryProduct) {
-  return p.current_stock <= p.min_stock;
-}
 
 /** KPIs resumidos: suman lo que devuelve inventory_get_albums (Fase 44), incluye el álbum virtual de averiados/retirados. */
 const kpis = computed(() => {
@@ -45,31 +46,11 @@ const kpis = computed(() => {
   };
 });
 
-// Búsqueda global: si el usuario escribe algo, se abandona el grid de álbumes
-// y se muestra una lista plana filtrada por nombre/categoría (mismo criterio
-// que la tabla original) para no perder esa funcionalidad.
 const isSearching = computed(() => searchQuery.value.trim().length > 0);
-const searchResults = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return [];
-  return inventoryStore.products.filter((p) =>
-    `${p.name} ${p.category ?? ''} ${p.inventory_categories?.name ?? ''}`.toLowerCase().includes(q),
-  );
-});
 
 async function loadAll() {
   await Promise.all([inventoryStore.fetchAlbums(), inventoryStore.fetchCategories()]);
-}
-
-// inventoryStore.products puede contener un subconjunto filtrado por categoría
-// si el usuario viene de un álbum (InventarioAlbumView) — no basta con mirar
-// el largo del array, hay que forzar una carga completa (sin filtro) antes
-// de buscar en todo el inventario.
-const fullProductsLoaded = ref(false);
-async function ensureProductsLoaded() {
-  if (fullProductsLoaded.value) return;
-  await inventoryStore.fetchProducts();
-  fullProductsLoaded.value = true;
+  searchRevision.value++;
 }
 
 onMounted(loadAll);
@@ -135,9 +116,6 @@ async function handleSubmit() {
   if (!formError.value) showModal.value = false;
 }
 
-function goToDetail(p: InventoryProduct) {
-  router.push(`/inventario/${p.id}`);
-}
 
 async function handleDelete(p: InventoryProduct) {
   if (!canDelete.value) return;
@@ -184,60 +162,15 @@ async function handleDelete(p: InventoryProduct) {
     <div class="flex flex-wrap gap-3 mb-4">
       <input
         v-model="searchQuery"
-        placeholder="Buscar producto o categoría en todo el inventario..."
+        placeholder="Buscar producto, modelo, serie o MAC..."
         class="field-input flex-1 min-w-[220px]"
-        @focus="ensureProductsLoaded"
       />
     </div>
 
     <p v-if="inventoryStore.error" class="mb-4 text-sm text-red-600">{{ inventoryStore.error }}</p>
 
     <!-- Búsqueda global activa: lista plana (mismo formato de fila que la tabla original) -->
-    <div v-if="isSearching" class="table-shell">
-      <table class="w-full text-sm min-w-[760px]">
-        <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
-          <tr>
-            <th class="text-left px-4 py-3">Producto</th>
-            <th class="text-left px-4 py-3">Categoría</th>
-            <th class="text-right px-4 py-3">Stock actual</th>
-            <th class="text-left px-4 py-3">Control</th>
-            <th class="text-right px-4 py-3">Precio</th>
-            <th class="text-right px-4 py-3">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="!searchResults.length">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin resultados para "{{ searchQuery }}".</td>
-          </tr>
-          <tr
-            v-for="p in searchResults"
-            :key="p.id"
-            class="border-t border-slate-200 hover:bg-slate-50 cursor-pointer"
-            @click="goToDetail(p)"
-          >
-            <td class="px-4 py-3 text-slate-900">{{ p.name }}</td>
-            <td class="px-4 py-3 text-slate-600">{{ p.inventory_categories?.name ?? p.category ?? '—' }}</td>
-            <td class="px-4 py-3 text-right">
-              <span class="badge" :class="isLowStock(p) ? 'bg-amber-500/15 text-amber-700' : 'bg-green-500/15 text-green-600'">
-                {{ p.current_stock }}
-              </span>
-            </td>
-            <td class="px-4 py-3">
-              <span v-if="p.is_serialized" class="badge bg-sky-500/15 text-sky-700">Por serie/MAC</span>
-              <span v-else class="text-slate-400 text-xs">Por cantidad</span>
-            </td>
-            <td class="px-4 py-3 text-right text-slate-600">S/ {{ Number(p.price).toFixed(2) }}</td>
-            <td class="px-4 py-3 text-right">
-              <div class="flex justify-end gap-2">
-                <button class="text-xs text-sky-700 hover:text-sky-700" @click.stop="openEdit(p)">Editar</button>
-                <button v-if="canDelete" class="text-xs text-red-600 hover:text-red-700" @click.stop="handleDelete(p)">Eliminar</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
+    <InventorySearchResults v-if="isSearching" :query="searchQuery" :revision="searchRevision" editable :can-delete="canDelete" @edit="openEdit" @delete="handleDelete" />
     <!-- Vista por defecto: álbumes/colecciones visuales -->
     <div v-else>
       <div v-if="inventoryStore.loading && !inventoryStore.albums.length" class="text-center text-slate-500 py-10">

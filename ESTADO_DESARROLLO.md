@@ -1,5 +1,14 @@
 # SmartRayco — Estado de desarrollo
 
+## Inventario — búsqueda unificada local (2026-10-15)
+
+Búsqueda paginada por nombre/modelo registrado, serie y MAC en Inventario y álbumes,
+con detalle de unidad y regreso al contexto. Reutiliza Supabase de sesión/RLS;
+sin migraciones ni cambios de existencias/asignaciones. Fase 162 queda separada.
+15/15 pruebas simuladas y navegador local correctos; compilación correcta.
+Pendientes: PostgREST real de pruebas, identidades por rol y rendimiento con volumen.
+Ver `docs/BUSQUEDA-INVENTARIO.md`. Solo local: sin push ni despliegue.
+
 ## Actualización 2026-10-14 — devolución de rutinas (Fase 161, SOLO LOCAL)
 
 Incidencia de campo: una rutina iniciada no ofrecía «Devolver orden».

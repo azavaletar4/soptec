@@ -464,7 +464,7 @@ function runUnitAction(action: (unit: InventoryUnit) => void, unit: InventoryUni
 }
 
 onMounted(async () => {
-  if (!inventoryStore.products.length) await inventoryStore.fetchProducts();
+  await inventoryStore.fetchProduct(productId.value);
   if (!inventoryStore.categories.length) await inventoryStore.fetchCategories();
   await catalogs.fetchStaff();
   if (product.value?.is_serialized) {
@@ -569,7 +569,7 @@ async function handleDeleteProduct() {
 
 <template>
   <AppLayout>
-    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push('/inventario')">← Volver a Inventario</button>
+    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push(typeof route.query.returnTo === 'string' && /^\/inventario(?:\/album\/[a-z0-9_-]+)?(?:\?|$)/.test(route.query.returnTo) ? route.query.returnTo : '/inventario')">← Volver a Inventario</button>
 
     <div v-if="!product" class="text-slate-500">Producto no encontrado.</div>
     <template v-else>

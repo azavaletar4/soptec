@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ProductGridCard from '@/components/inventario/ProductGridCard.vue';
+import InventorySearchResults from '@/components/inventario/InventorySearchResults.vue';
 import MoveAlbumMenu from '@/components/inventario/MoveAlbumMenu.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
@@ -30,7 +31,8 @@ const isRecoveryAlbum = computed(() => !!virtualAlbum.value);
 
 const loading = ref(false);
 const error = ref<string | null>(null);
-const searchQuery = ref('');
+const searchQuery = ref(String(route.query.q ?? ''));
+const searchScope = computed(() => virtualAlbum.value ? { statuses: virtualAlbum.value.statuses } : { categoryId: category.value?.id });
 
 // --- Álbum real (por categoría) ---
 const inStockCounts = ref<Record<string, number>>({});
@@ -60,6 +62,7 @@ async function load() {
   error.value = null;
   try {
     if (!inventoryStore.categories.length) await inventoryStore.fetchCategories();
+    if (searchQuery.value.trim()) return;
 
     if (virtualAlbum.value) {
       recoveryUnits.value = await unitsStore.fetchUnitsByStatus(virtualAlbum.value.statuses);
@@ -78,7 +81,11 @@ async function load() {
 }
 
 onMounted(load);
-watch(slug, load);
+watch(slug, () => { searchQuery.value = ''; void load(); });
+watch(searchQuery, (q, previous) => {
+  void router.replace({ query: { ...route.query, q: q || undefined, searchPage: undefined } });
+  if (!q.trim() && previous.trim()) void load();
+});
 
 function goToDetail(p: InventoryProduct) {
   router.push(`/inventario/${p.id}`);
@@ -159,7 +166,8 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
     </div>
 
     <p v-if="error" class="mb-4 text-sm text-red-600">{{ error }}</p>
-    <div v-if="loading" class="text-center text-slate-500 py-10">Cargando...</div>
+    <InventorySearchResults v-if="searchQuery.trim() && (isRecoveryAlbum || category)" :query="searchQuery" :scope="searchScope" />
+    <div v-else-if="loading" class="text-center text-slate-500 py-10">Cargando...</div>
 
     <!-- Álbum virtual: equipos por recoger / averiados -->
     <template v-else-if="isRecoveryAlbum">

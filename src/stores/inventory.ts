@@ -35,7 +35,18 @@ export const useInventoryStore = defineStore('inventory', () => {
     products.value = (data ?? []) as unknown as InventoryProduct[];
   }
 
-  /** Taxonomía de álbumes (Fase 44) — catálogo casi estático, se carga una vez por sesión. */
+  /** Consulta puntual para abrir resultados ajenos al álbum cargado. */
+  async function fetchProduct(id: string) {
+    const { data, error: err } = await supabase.from('inventory_products').select(PRODUCT_SELECT).eq('id', id).single();
+    if (err) throw err;
+    const product = data as unknown as InventoryProduct;
+    const index = products.value.findIndex((p) => p.id === id);
+    if (index < 0) products.value.push(product);
+    else products.value[index] = product;
+    return product;
+  }
+
+  /** Taxonomía de álbumes: catálogo casi estático. */
   async function fetchCategories() {
     const { data, error: err } = await supabase
       .from('inventory_categories')
@@ -204,6 +215,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     categories,
     albums,
     fetchProducts,
+    fetchProduct,
     fetchCategories,
     fetchAlbums,
     updateProductCategory,
