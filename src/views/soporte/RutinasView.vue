@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import CrewAssignEditor from '@/components/soporte/CrewAssignEditor.vue';
+import RoutineInventory from '@/components/inventario/RoutineInventory.vue';
 import DateRangeFilter, { type DateRange } from '@/components/soporte/DateRangeFilter.vue';
 import { useRoutinesStore } from '@/stores/routines';
 import { useClientsStore } from '@/stores/clients';
@@ -718,6 +719,7 @@ function formatDate(value: string | null) {
           </div>
 
           <template v-if="editingRoutine">
+            <RoutineInventory :key="editingRoutine.id" :routine="editingRoutine" />
             <section class="mb-3 surface p-3" aria-label="Historial de devoluciones">
               <h3 class="text-sm font-semibold">Historial de devoluciones</h3>
               <p v-if="loadingReturns" class="text-xs text-slate-500">Cargando devoluciones...</p>

@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import SignaturePad from '@/components/campo/SignaturePad.vue';
+import RoutineInventory from '@/components/inventario/RoutineInventory.vue';
 import AuthorizeOnuModal from '@/views/olt/AuthorizeOnuModal.vue';
 import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
 import { useCampoStore, isNetworkError, type DiagnosticoResult } from '@/stores/campo';
@@ -2038,6 +2039,7 @@ async function handleCloseSubmit() {
       </div>
 
       <!-- Materiales -->
+      <RoutineInventory v-if="jobType === 'routine'" :key="jobId" :routine="trabajo.raw as Routine" :can-write="canReturnRoutine" />
       <section v-if="isLockedForTecnico" class="surface p-3.5 mb-3 bg-slate-50">
         <h2 class="text-sm font-semibold mb-1">✅ {{ jobType === 'routine' ? 'Rutina completada' : 'Instalación completada' }}</h2>
         <p class="text-xs text-slate-500">

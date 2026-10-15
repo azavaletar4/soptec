@@ -1,0 +1,21 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { executeRoutineInventory, pendingRoutineInventory } from '../routineInventoryRequest';
+
+test('lost response survives reload; exact UUID is reused and payload cannot change', async () => {
+ const data=new Map<string,string>();const storage={getItem:(k:string)=>data.get(k)??null,setItem:(k:string,v:string)=>{data.set(k,v);},removeItem:(k:string)=>{data.delete(k);}};
+ const requests:string[]=[];
+ await assert.rejects(executeRoutineInventory(storage,'actor','routine','consume',{quantity:2},async r=>{requests.push(r.p_operation_id);throw Error('connection lost after commit');},()=> 'operation-1'));
+ assert.equal(pendingRoutineInventory(storage,'actor','routine')?.p_operation_id,'operation-1');
+ await assert.rejects(executeRoutineInventory(storage,'actor','routine','consume',{quantity:3},async()=>({data:null,error:null})),/pendiente/);
+ await executeRoutineInventory(storage,'actor','routine','consume',{quantity:2},async r=>{requests.push(r.p_operation_id);return {data:{ok:true},error:null};});
+ assert.deepEqual(requests,['operation-1','operation-1']);assert.equal(data.size,0);
+});
+
+test('database rejection clears pending request; failed storage never sends',async()=>{
+ const data=new Map<string,string>();const storage={getItem:(k:string)=>data.get(k)??null,setItem:(k:string,v:string)=>{data.set(k,v);},removeItem:(k:string)=>{data.delete(k);}};
+ await assert.rejects(executeRoutineInventory(storage,'actor','routine','consume',{},async()=>({data:null,error:{code:'P0001',message:'stock insuficiente'}}),()=> 'op'));
+ assert.equal(data.size,0);let sent=false;
+ await assert.rejects(executeRoutineInventory({...storage,setItem:()=>{throw Error('quota');}},'actor','routine','consume',{},async()=>{sent=true;return {data:null,error:null};},()=> 'op'));
+ assert.equal(sent,false);
+});

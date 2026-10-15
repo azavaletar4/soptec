@@ -26,6 +26,8 @@
     "test:single-active-job-sql": "node --import tsx --test server/tests/singleActiveJob.sql.test.ts",
     "test:work-order-photo-approval-sql": "node --import tsx --test server/tests/workOrderPhotoApproval.sql.test.ts",
     "test:routine-returns-sql": "node --import tsx --test server/tests/routineReturns.sql.test.ts",
+    "test:routine-inventory-sql": "node --import tsx --test server/tests/routineInventory.sql.test.ts",
+    "test:routine-inventory-request": "node --import tsx --test src/lib/__tests__/routineInventoryRequest.test.ts",
     "test:job-work-sessions-sql": "node --import tsx --test server/tests/jobWorkSessions.sql.test.ts",
     "test:closed-orders-sql": "node --import tsx --test server/tests/closedOrders.sql.test.ts",
     "test:olt-alert-log-sql": "node --import tsx --test server/tests/oltAlertLog.sql.test.ts"
