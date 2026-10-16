@@ -38,6 +38,9 @@ export async function executeFieldInventory(storage: Store, context: FieldInvent
     // Un primer intento con SQLSTATE confirma rollback. Un intento ya incierto
     // nunca se descarta: pudo confirmarse antes de una revocación o cierre.
     if (!pending && error.code && /^[0-9A-Z]{5}$/.test(error.code) && storage.getItem(key) === JSON.stringify(request)) storage.removeItem(key);
+    if (error.code === '55P03') {
+      throw Error('Hay otra operación en curso. Puedes reintentarlo de forma segura. Si hay una operación pendiente, usa «Confirmar operación de inventario pendiente».');
+    }
     throw Error(error.message);
   }
   const receipt = data as FieldInventoryReceipt;

@@ -67,8 +67,11 @@ begin
  end if;
  if not found then raise exception 'Orden no autorizada' using errcode='42501'; end if;
  if actor_role='TECNICO_RED' then
+  -- DML legacy puede retener la asignación antes de su trigger que bloquea
+  -- el padre. No esperar aquí teniendo ya el padre: evitar ciclo padre↔hijo.
+  -- 55P03 aborta toda la operación sin recibo/movimiento; admite reintento.
   perform 1 from public.job_assignees where job_type=p_job_type and job_id=p_job_id
-   and technician_id=actor and role in ('leader','support') for share;
+   and technician_id=actor and role in ('leader','support') for share nowait;
   if not found then raise exception 'Asignación no vigente' using errcode='42501'; end if;
  end if;
  if contract is not null then

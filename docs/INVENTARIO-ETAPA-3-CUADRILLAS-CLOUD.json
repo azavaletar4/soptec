@@ -1,0 +1,632 @@
+{
+    "at":  "2026-10-16T01:13:18.735827+00:00",
+    "read_only":  "on",
+    "functions":  [
+                      {
+                          "name":  "apply_inventory_movement",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.apply_inventory_movement()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  new_stock numeric(12, 2);\n  installation_status public.installation_status;\n  ticket_status public.ticket_status;\nbegin\n  if new.installation_id is not null then\n    select status into installation_status from public.installations where id = new.installation_id;\n    if installation_status in (\u0027completed\u0027, \u0027cancelled\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027) then\n      raise exception \u0027La instalación ya fue completada o cancelada; solo un administrador puede registrar materiales nuevos\u0027;\n    end if;\n  end if;\n\n  if new.ticket_id is not null then\n    select status into ticket_status from public.tickets where id = new.ticket_id;\n    if ticket_status in (\u0027resolved\u0027, \u0027closed\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027, \u0027SOPORTE\u0027) then\n      raise exception \u0027La avería ya fue resuelta; solo administración/soporte puede registrar materiales nuevos\u0027;\n    end if;\n  end if;\n\n  select current_stock into new_stock\n  from public.inventory_products\n  where id = new.product_id\n  for update;\n\n  if new.movement_type = \u0027ingreso\u0027 then\n    new_stock := new_stock + new.quantity;\n  else\n    new_stock := new_stock - new.quantity;\n    if new_stock \u003c 0 then\n      raise exception \u0027Stock insuficiente: quedarian % unidades\u0027, new_stock;\n    end if;\n  end if;\n\n  new.balance_after := new_stock;\n\n  update public.inventory_products\n  set current_stock = new_stock, updated_at = now()\n  where id = new.product_id;\n\n  return new;\nend;\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "apply_inventory_unit_event",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.apply_inventory_unit_event()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  current_status public.inventory_unit_status;\n  current_installation_id uuid;\n  current_ticket_id uuid;\n  current_product_id uuid;\n  installation_status public.installation_status;\n  ticket_status public.ticket_status;\n  unit_category_slug text;\n  existing_onu_count integer;\n  is_occupying_status boolean;\nbegin\n  select status, installation_id, ticket_id, product_id\n    into current_status, current_installation_id, current_ticket_id, current_product_id\n  from public.inventory_units\n  where id = new.unit_id\n  for update;\n\n  new.from_status := current_status;\n  is_occupying_status := new.to_status in (\u0027assigned\u0027, \u0027pending_approval\u0027);\n\n  if current_status = \u0027retired\u0027 then\n    raise exception \u0027El equipo esta dado de baja y no admite mas movimientos\u0027;\n  end if;\n\n  if current_installation_id is not null then\n    select status into installation_status from public.installations where id = current_installation_id;\n    if installation_status in (\u0027completed\u0027, \u0027cancelled\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027) then\n      raise exception \u0027La instalación ya fue completada o cancelada; solo un administrador puede corregir el equipo asignado\u0027;\n    end if;\n  end if;\n\n  if current_ticket_id is not null then\n    select status into ticket_status from public.tickets where id = current_ticket_id;\n    if ticket_status in (\u0027resolved\u0027, \u0027closed\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027, \u0027SOPORTE\u0027) then\n      raise exception \u0027La avería ya fue resuelta; solo administración/soporte puede corregir el equipo asignado\u0027;\n    end if;\n  end if;\n\n  if is_occupying_status then\n    if new.client_id is null then\n      raise exception \u0027Debe indicar el cliente al asignar un equipo\u0027;\n    end if;\n    if not (current_status = \u0027in_stock\u0027 or (current_status = \u0027pending_approval\u0027 and new.to_status = \u0027assigned\u0027)) then\n      raise exception \u0027Solo se puede asignar un equipo que este en bodega, o aprobar uno pendiente (estado actual: %)\u0027, current_status;\n    end if;\n\n    if new.installation_id is not null and new.installation_id is distinct from current_installation_id then\n      select status into installation_status from public.installations where id = new.installation_id;\n      if installation_status in (\u0027completed\u0027, \u0027cancelled\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027) then\n        raise exception \u0027La instalación ya fue completada o cancelada; solo un administrador puede asignar equipo nuevo\u0027;\n      end if;\n    end if;\n\n    if new.ticket_id is not null then\n      select status into ticket_status from public.tickets where id = new.ticket_id;\n      if ticket_status in (\u0027resolved\u0027, \u0027closed\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027, \u0027SOPORTE\u0027) then\n        raise exception \u0027La avería ya fue resuelta; solo administración/soporte puede registrar o aprobar equipo\u0027;\n      end if;\n    end if;\n\n    if new.to_status = \u0027assigned\u0027 and new.ticket_id is not null and public.current_user_role() = \u0027TECNICO_RED\u0027 then\n      raise exception \u0027El equipo entrante de una avería queda pendiente de aprobación — un técnico no puede asignarlo directo\u0027;\n    end if;\n\n    select ic.slug into unit_category_slug\n    from public.inventory_products p\n    left join public.inventory_categories ic on ic.id = p.category_id\n    where p.id = current_product_id;\n\n    if unit_category_slug = \u0027onu\u0027 then\n      if new.installation_id is not null then\n        select count(*) into existing_onu_count\n        from public.inventory_units u\n        join public.inventory_products p2 on p2.id = u.product_id\n        join public.inventory_categories ic2 on ic2.id = p2.category_id\n        where u.installation_id = new.installation_id\n          and u.status in (\u0027assigned\u0027, \u0027pending_approval\u0027)\n          and u.id \u003c\u003e new.unit_id\n          and ic2.slug = \u0027onu\u0027;\n        if existing_onu_count \u003e 0 then\n          raise exception \u0027Solo se puede asignar 1 ONT/Módem por instalación. Si te equivocaste de serie, quita el equipo actual antes de agregar uno nuevo.\u0027;\n        end if;\n      end if;\n\n      if new.contract_id is not null then\n        select count(*) into existing_onu_count\n        from public.inventory_units u\n        join public.inventory_products p2 on p2.id = u.product_id\n        join public.inventory_categories ic2 on ic2.id = p2.category_id\n        where u.contract_id = new.contract_id\n          and u.status in (\u0027assigned\u0027, \u0027pending_approval\u0027)\n          and u.id \u003c\u003e new.unit_id\n          and ic2.slug = \u0027onu\u0027;\n        if existing_onu_count \u003e 0 then\n          raise exception \u0027Solo se puede asignar 1 ONT/Módem por línea. Si te equivocaste, quita o rechaza el equipo actual de esta línea antes de agregar uno nuevo.\u0027;\n        end if;\n      end if;\n    end if;\n  end if;\n\n  update public.inventory_units\n  set\n    status          = new.to_status,\n    client_id       = case when is_occupying_status then new.client_id else null end,\n    contract_id     = case when is_occupying_status then new.contract_id else null end,\n    installation_id = case when is_occupying_status then new.installation_id else null end,\n    ticket_id       = case when is_occupying_status then new.ticket_id else null end,\n    assigned_at     = case when is_occupying_status then now() else assigned_at end,\n    updated_at      = now()\n  where id = new.unit_id;\n\n  return new;\nend;\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "assert_current_job_operator",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.assert_current_job_operator(p_job_type text, p_job_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\nDECLARE s text; r public.user_role := public.current_user_role();\nBEGIN\n IF auth.uid() IS NULL OR r IS NULL THEN RAISE EXCEPTION \u0027Usuario no autorizado o inactivo\u0027; END IF;\n IF p_job_type=\u0027installation\u0027 THEN SELECT status::text INTO s FROM public.installations WHERE id=p_job_id;\n ELSIF p_job_type=\u0027ticket\u0027 THEN SELECT status::text INTO s FROM public.tickets WHERE id=p_job_id;\n ELSIF p_job_type=\u0027routine\u0027 THEN SELECT status::text INTO s FROM public.routines WHERE id=p_job_id;\n ELSE RAISE EXCEPTION \u0027Tipo de orden no valido\u0027; END IF;\n IF s IS NULL THEN RAISE EXCEPTION \u0027Orden no disponible\u0027; END IF;\n IF r=\u0027SUPERADMIN\u0027 THEN RETURN; END IF;\n IF r IN (\u0027ADMIN\u0027,\u0027SOPORTE\u0027) THEN\n   IF p_job_type=\u0027installation\u0027 AND (r=\u0027SOPORTE\u0027 OR s IN (\u0027completed\u0027,\u0027cancelled\u0027)) THEN\n     RAISE EXCEPTION \u0027No tienes permiso para modificar esta Alta\u0027;\n   END IF;\n   RETURN;\n END IF;\n IF r\u003c\u003e\u0027TECNICO_RED\u0027 OR s IN (\u0027completed\u0027,\u0027cancelled\u0027,\u0027resolved\u0027,\u0027closed\u0027) OR NOT EXISTS (\n   SELECT 1 FROM public.job_assignees WHERE job_type=p_job_type AND job_id=p_job_id AND technician_id=auth.uid()\n ) THEN RAISE EXCEPTION \u0027No puedes operar esta orden: revisa su estado y tu asignacion vigente\u0027; END IF;\nEND $function$\n",
+                          "acl":  [
+                                      "postgres=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "current_user_role",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.current_user_role()\n RETURNS user_role\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\n  select role from public.profiles where id = auth.uid() and active;\r\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "enforce_single_active_job",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.enforce_single_active_job()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  v_job_type text := tg_argv[0];\n  v_tech uuid;\n  v_conflict record;\nbegin\n  if new.status is distinct from old.status and new.status = \u0027in_progress\u0027 then\n    for v_tech in\n      select ja.technician_id from public.job_assignees ja\n      where ja.job_type = v_job_type and ja.job_id = new.id\n      order by ja.technician_id\n    loop\n      perform pg_advisory_xact_lock(hashtext(v_tech::text));\n\n      select * into v_conflict from public.find_other_active_job(v_tech, v_job_type, new.id);\n      if found then\n        raise exception \u0027Ya tienes un ticket en ejecución: % % — debes finalizarla antes de iniciar otra atención.\u0027,\n          case v_conflict.job_type when \u0027ticket\u0027 then \u0027Avería\u0027 when \u0027installation\u0027 then \u0027Alta\u0027 else \u0027Rutina\u0027 end,\n          coalesce(v_conflict.job_number, \u0027#\u0027 || left(v_conflict.job_id::text, 8))\n          using errcode = \u0027P0001\u0027, hint = v_conflict.job_type || \u0027:\u0027 || v_conflict.job_id;\n      end if;\n    end loop;\n  end if;\n\n  return new;\nend;\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "enforce_single_active_job_assignees",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.enforce_single_active_job_assignees()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  v_target_status text;\n  v_conflict record;\nbegin\n  if new.job_type = \u0027ticket\u0027 then\n    select status into v_target_status from public.tickets where id = new.job_id;\n  elsif new.job_type = \u0027installation\u0027 then\n    select status into v_target_status from public.installations where id = new.job_id;\n  else\n    select status into v_target_status from public.routines where id = new.job_id;\n  end if;\n\n  -- Sumarse a un trabajo pendiente/programado/abierto nunca se bloquea —\n  -- solo importa cuando ya esta EN CURSO.\n  if v_target_status = \u0027in_progress\u0027 then\n    perform pg_advisory_xact_lock(hashtext(new.technician_id::text));\n\n    select * into v_conflict from public.find_other_active_job(new.technician_id, new.job_type, new.job_id);\n    if found then\n      raise exception \u0027Este técnico ya tiene un trabajo en ejecución: % % — no puede sumarse a otro en curso hasta finalizarlo.\u0027,\n        case v_conflict.job_type when \u0027ticket\u0027 then \u0027Avería\u0027 when \u0027installation\u0027 then \u0027Alta\u0027 else \u0027Rutina\u0027 end,\n        coalesce(v_conflict.job_number, \u0027#\u0027 || left(v_conflict.job_id::text, 8))\n        using errcode = \u0027P0001\u0027, hint = v_conflict.job_type || \u0027:\u0027 || v_conflict.job_id;\n    end if;\n  end if;\n\n  return new;\nend;\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "find_other_active_job",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.find_other_active_job(p_technician_id uuid, p_exclude_job_type text, p_exclude_job_id uuid)\n RETURNS TABLE(job_type text, job_id uuid, job_number text)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\n  select \u0027ticket\u0027, t.id, t.ticket_number\n    from public.tickets t\n    where t.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027ticket\u0027 or t.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027ticket\u0027 and ja.job_id = t.id and ja.technician_id = p_technician_id\n      )\n  union all\n  select \u0027installation\u0027, i.id, null\n    from public.installations i\n    where i.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027installation\u0027 or i.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027installation\u0027 and ja.job_id = i.id and ja.technician_id = p_technician_id\n      )\n  union all\n  select \u0027routine\u0027, r.id, r.routine_number\n    from public.routines r\n    where r.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027routine\u0027 or r.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027routine\u0027 and ja.job_id = r.id and ja.technician_id = p_technician_id\n      )\n  limit 1;\n$function$\n",
+                          "acl":  [
+                                      "postgres=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "guard_job_completion_crew",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.guard_job_completion_crew()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\nBEGIN\n IF auth.uid() IS NOT NULL AND public.current_user_role() IS NULL THEN RAISE EXCEPTION \u0027Usuario inactivo o no autorizado\u0027; END IF;\n IF public.current_user_role()=\u0027TECNICO_RED\u0027 THEN\n   IF OLD.status::text IN (\u0027completed\u0027,\u0027cancelled\u0027,\u0027resolved\u0027,\u0027closed\u0027) THEN\n     RAISE EXCEPTION \u0027La orden ya esta finalizada o cancelada\u0027;\n   END IF;\n   IF NEW.status::text IN (\u0027completed\u0027,\u0027resolved\u0027,\u0027closed\u0027) THEN\n     PERFORM public.assert_current_job_operator(TG_ARGV[0],OLD.id);\n     IF TG_ARGV[0]=\u0027ticket\u0027 AND NEW.status::text=\u0027closed\u0027 THEN\n       RAISE EXCEPTION \u0027El cierre administrativo corresponde a oficina\u0027;\n     END IF;\n   END IF;\n END IF;\n RETURN NEW;\nEND $function$\n",
+                          "acl":  [
+                                      "postgres=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "lock_job_crew_parent",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.lock_job_crew_parent()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\nDECLARE j record; s text; previous jsonb; following jsonb;\nBEGIN\n IF auth.uid() IS NOT NULL AND public.current_user_role() IS NULL THEN RAISE EXCEPTION \u0027Usuario inactivo o no autorizado\u0027; END IF;\n IF TG_OP\u003c\u003e\u0027INSERT\u0027 THEN previous:=to_jsonb(OLD); END IF;\n IF TG_OP\u003c\u003e\u0027DELETE\u0027 THEN following:=to_jsonb(NEW); END IF;\n FOR j IN SELECT DISTINCT x-\u003e\u003e\u0027job_type\u0027 AS job_type,(x-\u003e\u003e\u0027job_id\u0027)::uuid AS job_id\n   FROM jsonb_array_elements(jsonb_build_array(previous,following)) x\n   WHERE x\u003c\u003e\u0027null\u0027::jsonb ORDER BY job_type,job_id\n LOOP\n   IF j.job_type=\u0027installation\u0027 THEN SELECT status::text INTO s FROM public.installations WHERE id=j.job_id FOR UPDATE;\n   ELSIF j.job_type=\u0027ticket\u0027 THEN SELECT status::text INTO s FROM public.tickets WHERE id=j.job_id FOR UPDATE;\n   ELSIF j.job_type=\u0027routine\u0027 THEN SELECT status::text INTO s FROM public.routines WHERE id=j.job_id FOR UPDATE;\n   ELSE RAISE EXCEPTION \u0027Tipo de orden no valido\u0027; END IF;\n   -- Existing office powers, including historical crew edits, are preserved.\n   IF public.current_user_role()=\u0027TECNICO_RED\u0027 AND s IN (\u0027completed\u0027,\u0027cancelled\u0027,\u0027resolved\u0027,\u0027closed\u0027) THEN\n     RAISE EXCEPTION \u0027No puedes cambiar la cuadrilla de una orden finalizada o cancelada\u0027;\n   END IF;\n END LOOP;\n IF TG_OP=\u0027DELETE\u0027 THEN RETURN OLD; END IF; RETURN NEW;\nEND $function$\n",
+                          "acl":  [
+                                      "postgres=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "return_routine",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.return_routine(p_routine_id uuid, p_reason text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  v_uid uuid := auth.uid();\r\n  v_status public.routine_status;\r\n  v_crew jsonb;\r\nbegin\r\n  if v_uid is null or public.current_user_role() is distinct from \u0027TECNICO_RED\u0027 then\r\n    raise exception \u0027Solo un tecnico de red activo puede devolver una rutina\u0027;\r\n  end if;\r\n  if p_reason is null or btrim(p_reason) = \u0027\u0027 then\r\n    raise exception \u0027Escribe el motivo de la devolucion\u0027;\r\n  end if;\r\n  -- Serializa devoluciones y cambios de estado de la misma orden.\r\n  select status into v_status from public.routines where id = p_routine_id for update;\r\n  if not found then raise exception \u0027La rutina no existe\u0027; end if;\r\n  if v_status \u003c\u003e \u0027in_progress\u0027 then\r\n    raise exception \u0027Solo puedes devolver una rutina en progreso\u0027;\r\n  end if;\r\n  perform 1 from public.job_assignees\r\n    where job_type = \u0027routine\u0027 and job_id = p_routine_id for update;\r\n  if not exists (select 1 from public.job_assignees\r\n    where job_type = \u0027routine\u0027 and job_id = p_routine_id and technician_id = v_uid) then\r\n    raise exception \u0027No estas asignado a esta rutina\u0027;\r\n  end if;\r\n  select jsonb_agg(jsonb_build_object(\u0027technician_id\u0027, technician_id, \u0027role\u0027, role)\r\n    order by technician_id) into v_crew from public.job_assignees\r\n    where job_type = \u0027routine\u0027 and job_id = p_routine_id;\r\n  insert into public.routine_returns(routine_id, technician_id, reason, crew_snapshot)\r\n    values (p_routine_id, v_uid, btrim(p_reason), v_crew);\r\n  -- El cambio de estado cierra la sesion de trabajo mediante el trigger existente.\r\n  update public.routines set status = \u0027pending\u0027, assigned_to = null where id = p_routine_id;\r\n  delete from public.job_assignees where job_type = \u0027routine\u0027 and job_id = p_routine_id;\r\nend;\r\n$function$\n",
+                          "acl":  [
+                                      "postgres=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "reverse_assigned_units_by_installation",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.reverse_assigned_units_by_installation(p_installation_id uuid, p_reason text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  r record;\r\nbegin\r\n  for r in\r\n    select u.id\r\n    from public.inventory_units u\r\n    where u.installation_id = p_installation_id\r\n      and u.status = \u0027assigned\u0027\r\n  loop\r\n    insert into public.inventory_unit_events (unit_id, to_status, reason)\r\n    values (r.id, \u0027in_stock\u0027, p_reason);\r\n  end loop;\r\nend;\r\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "reverse_egreso_movements",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.reverse_egreso_movements(p_installation_id uuid, p_ticket_id uuid, p_reason text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  r record;\r\nbegin\r\n  for r in\r\n    select m.*\r\n    from public.inventory_movements m\r\n    where m.movement_type = \u0027egreso\u0027\r\n      and (\r\n        (p_installation_id is not null and m.installation_id = p_installation_id)\r\n        or (p_ticket_id is not null and m.ticket_id = p_ticket_id)\r\n      )\r\n      and not exists (select 1 from public.inventory_movements r2 where r2.reverses_movement_id = m.id)\r\n  loop\r\n    insert into public.inventory_movements (product_id, movement_type, quantity, reason, reverses_movement_id)\r\n    values (r.product_id, \u0027ingreso\u0027, r.quantity, p_reason, r.id);\r\n  end loop;\r\nend;\r\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "reverse_inventory_on_installation_cancel",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.reverse_inventory_on_installation_cancel()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  v_code text;\r\n  v_reason text;\r\nbegin\r\n  select contract_number into v_code from public.service_contracts where id = new.contract_id;\r\n  v_reason := format(\u0027Devolución automática por cancelación de instalación #%s\u0027, coalesce(v_code, new.id::text));\r\n  perform public.reverse_egreso_movements(new.id, null, v_reason);\r\n  perform public.reverse_assigned_units_by_installation(new.id, v_reason);\r\n  return new;\r\nend;\r\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "set_current_job_crew",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.set_current_job_crew(p_job_type text, p_job_id uuid, p_expected jsonb, p_members jsonb)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\nDECLARE r public.user_role:=public.current_user_role(); s text; actual jsonb;\nBEGIN\n IF auth.uid() IS NULL OR r IS NULL OR r NOT IN (\u0027SUPERADMIN\u0027,\u0027ADMIN\u0027,\u0027SOPORTE\u0027) THEN\n   RAISE EXCEPTION \u0027Solo despacho puede reasignar la cuadrilla\u0027;\n END IF;\n IF p_job_type=\u0027installation\u0027 THEN SELECT status::text INTO s FROM public.installations WHERE id=p_job_id FOR UPDATE;\n ELSIF p_job_type=\u0027ticket\u0027 THEN SELECT status::text INTO s FROM public.tickets WHERE id=p_job_id FOR UPDATE;\n ELSIF p_job_type=\u0027routine\u0027 THEN SELECT status::text INTO s FROM public.routines WHERE id=p_job_id FOR UPDATE;\n ELSE RAISE EXCEPTION \u0027Tipo de orden no valido\u0027; END IF;\n IF s IS NULL THEN RAISE EXCEPTION \u0027Orden no disponible\u0027; END IF;\n IF p_job_type=\u0027installation\u0027 AND s IN (\u0027completed\u0027,\u0027cancelled\u0027) AND r\u003c\u003e\u0027SUPERADMIN\u0027 THEN\n   RAISE EXCEPTION \u0027Solo SUPERADMIN puede cambiar la cuadrilla de un Alta cerrada\u0027;\n END IF;\n IF p_expected IS NULL OR jsonb_typeof(p_expected)\u003c\u003e\u0027array\u0027 OR p_members IS NULL OR jsonb_typeof(p_members)\u003c\u003e\u0027array\u0027 THEN\n   RAISE EXCEPTION \u0027Cuadrilla no valida\u0027;\n END IF;\n SELECT coalesce(jsonb_agg(jsonb_build_object(\u0027technician_id\u0027,technician_id,\u0027role\u0027,role) ORDER BY technician_id),\u0027[]\u0027::jsonb)\n INTO actual FROM public.job_assignees WHERE job_type=p_job_type AND job_id=p_job_id;\n IF actual IS DISTINCT FROM (SELECT coalesce(jsonb_agg(x ORDER BY x-\u003e\u003e\u0027technician_id\u0027),\u0027[]\u0027::jsonb) FROM jsonb_array_elements(p_expected) x) THEN\n   RAISE EXCEPTION \u0027La cuadrilla cambio: recarga antes de guardar\u0027;\n END IF;\n IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_members) m WHERE jsonb_typeof(m)\u003c\u003e\u0027object\u0027\n    OR NOT (m ? \u0027technician_id\u0027 AND m ? \u0027role\u0027) OR m-\u003e\u003e\u0027technician_id\u0027 IS NULL\n    OR m-\u003e\u003e\u0027role\u0027 IS NULL OR m-\u003e\u003e\u0027role\u0027 NOT IN (\u0027leader\u0027,\u0027support\u0027)\n    OR NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id=(m-\u003e\u003e\u0027technician_id\u0027)::uuid AND p.active AND p.role=\u0027TECNICO_RED\u0027))\n OR (SELECT count(*) FROM jsonb_array_elements(p_members))\u003c\u003e(SELECT count(DISTINCT x-\u003e\u003e\u0027technician_id\u0027) FROM jsonb_array_elements(p_members) x)\n OR (SELECT count(*) FROM jsonb_array_elements(p_members) x WHERE x-\u003e\u003e\u0027role\u0027=\u0027leader\u0027)\u003e1 THEN\n   RAISE EXCEPTION \u0027Cuadrilla no valida: usa tecnicos activos sin duplicados y un solo lider\u0027;\n END IF;\n DELETE FROM public.job_assignees WHERE job_type=p_job_type AND job_id=p_job_id;\n INSERT INTO public.job_assignees(job_type,job_id,technician_id,role)\n SELECT p_job_type,p_job_id,(m-\u003e\u003e\u0027technician_id\u0027)::uuid,m-\u003e\u003e\u0027role\u0027 FROM jsonb_array_elements(p_members) m;\nEND $function$\n",
+                          "acl":  [
+                                      "postgres=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "sync_assigned_to_from_job_assignees",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.sync_assigned_to_from_job_assignees()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  v_job_type text := coalesce(new.job_type, old.job_type);\n  v_job_id uuid := coalesce(new.job_id, old.job_id);\n  v_leader uuid;\nbegin\n  select technician_id into v_leader\n  from public.job_assignees\n  where job_type = v_job_type and job_id = v_job_id and role = \u0027leader\u0027\n  limit 1;\n\n  if v_job_type = \u0027ticket\u0027 then\n    update public.tickets set assigned_to = v_leader where id = v_job_id;\n  elsif v_job_type = \u0027installation\u0027 then\n    update public.installations set assigned_to = v_leader where id = v_job_id;\n  elsif v_job_type = \u0027routine\u0027 then\n    update public.routines set assigned_to = v_leader where id = v_job_id;\n  end if;\n\n  return coalesce(new, old);\nend;\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "track_job_work_session",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.track_job_work_session()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  v_job_type text := tg_argv[0];\nbegin\n  if new.status is distinct from old.status then\n    if new.status = \u0027in_progress\u0027 and old.status \u003c\u003e \u0027in_progress\u0027 then\n      if not exists (\n        select 1 from public.job_work_sessions\n        where job_type = v_job_type and job_id = new.id and ended_at is null\n      ) then\n        insert into public.job_work_sessions (job_type, job_id, started_at)\n        values (v_job_type, new.id, now());\n      end if;\n    elsif old.status = \u0027in_progress\u0027 and new.status \u003c\u003e \u0027in_progress\u0027 then\n      update public.job_work_sessions\n      set ended_at = now(),\n          end_reason = case\n            when new.status::text in (\u0027completed\u0027, \u0027resolved\u0027, \u0027closed\u0027) then \u0027finished\u0027\n            when new.status::text = \u0027cancelled\u0027 then \u0027cancelled_order\u0027\n            else \u0027paused\u0027\n          end\n      where job_type = v_job_type and job_id = new.id and ended_at is null;\n    end if;\n  end if;\n  return new;\nend;\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      },
+                      {
+                          "name":  "validate_installation_completion",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.validate_installation_completion()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  svc_type public.contract_service_type := \u0027internet_combo\u0027;\r\n  unit_count integer;\r\n  contract_zone_id uuid;\r\n  nap_count integer;\r\nbegin\r\n  if new.status = \u0027completed\u0027 and old.status is distinct from \u0027completed\u0027 then\r\n    if new.contract_id is null then\r\n      raise exception \u0027Esta instalación no tiene un contrato vinculado; vincula uno antes de completarla (se necesita para mapear la Zona y la Caja NAP)\u0027;\r\n    end if;\r\n\r\n    select service_type, zone_id into svc_type, contract_zone_id\r\n    from public.service_contracts where id = new.contract_id;\r\n\r\n    if coalesce(svc_type, \u0027internet_combo\u0027) = \u0027internet_combo\u0027 then\r\n      select count(*) into unit_count from public.inventory_units where installation_id = new.id;\r\n      if unit_count = 0 then\r\n        raise exception \u0027Para instalaciones de internet/combo debes asignar al menos un equipo por Serie/MAC\u0027;\r\n      end if;\r\n    end if;\r\n\r\n    if contract_zone_id is null then\r\n      raise exception \u0027Debes asignar la Zona del servicio antes de completar la instalación\u0027;\r\n    end if;\r\n\r\n    select count(*) into nap_count\r\n    from public.fo_nap_puertos\r\n    where contract_id = new.contract_id and estado = \u0027ocupado\u0027;\r\n    if nap_count = 0 then\r\n      raise exception \u0027Debes asignar la Caja NAP del servicio antes de completar la instalación\u0027;\r\n    end if;\r\n  end if;\r\n\r\n  return new;\r\nend;\r\n$function$\n",
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ]
+                      }
+                  ],
+    "triggers":  [
+                     {
+                         "table":  "installations",
+                         "name":  "trg_installations_current_crew",
+                         "definition":  "CREATE TRIGGER trg_installations_current_crew BEFORE UPDATE OF status ON public.installations FOR EACH ROW EXECUTE FUNCTION guard_job_completion_crew(\u0027installation\u0027)",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "installations",
+                         "name":  "trg_installations_reverse_on_cancel",
+                         "definition":  "CREATE TRIGGER trg_installations_reverse_on_cancel AFTER UPDATE ON public.installations FOR EACH ROW WHEN (((new.status = \u0027cancelled\u0027::installation_status) AND (old.status IS DISTINCT FROM \u0027cancelled\u0027::installation_status))) EXECUTE FUNCTION reverse_inventory_on_installation_cancel()",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "installations",
+                         "name":  "trg_installations_single_active_job",
+                         "definition":  "CREATE TRIGGER trg_installations_single_active_job BEFORE UPDATE ON public.installations FOR EACH ROW EXECUTE FUNCTION enforce_single_active_job(\u0027installation\u0027)",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "installations",
+                         "name":  "trg_installations_validate_completion",
+                         "definition":  "CREATE TRIGGER trg_installations_validate_completion BEFORE UPDATE ON public.installations FOR EACH ROW EXECUTE FUNCTION validate_installation_completion()",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "installations",
+                         "name":  "trg_track_work_session",
+                         "definition":  "CREATE TRIGGER trg_track_work_session AFTER UPDATE ON public.installations FOR EACH ROW EXECUTE FUNCTION track_job_work_session(\u0027installation\u0027)",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "inventory_movements",
+                         "name":  "trg_inventory_movements_apply",
+                         "definition":  "CREATE TRIGGER trg_inventory_movements_apply BEFORE INSERT ON public.inventory_movements FOR EACH ROW EXECUTE FUNCTION apply_inventory_movement()",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "inventory_unit_events",
+                         "name":  "trg_inventory_unit_events_apply",
+                         "definition":  "CREATE TRIGGER trg_inventory_unit_events_apply BEFORE INSERT ON public.inventory_unit_events FOR EACH ROW EXECUTE FUNCTION apply_inventory_unit_event()",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "job_assignees",
+                         "name":  "trg_job_assignees_lock_parent",
+                         "definition":  "CREATE TRIGGER trg_job_assignees_lock_parent BEFORE INSERT OR DELETE OR UPDATE ON public.job_assignees FOR EACH ROW EXECUTE FUNCTION lock_job_crew_parent()",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "job_assignees",
+                         "name":  "trg_job_assignees_single_active_job",
+                         "definition":  "CREATE TRIGGER trg_job_assignees_single_active_job BEFORE INSERT ON public.job_assignees FOR EACH ROW EXECUTE FUNCTION enforce_single_active_job_assignees()",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "job_assignees",
+                         "name":  "trg_job_assignees_sync_leader",
+                         "definition":  "CREATE TRIGGER trg_job_assignees_sync_leader AFTER INSERT OR DELETE OR UPDATE ON public.job_assignees FOR EACH ROW EXECUTE FUNCTION sync_assigned_to_from_job_assignees()",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "routines",
+                         "name":  "trg_routines_current_crew",
+                         "definition":  "CREATE TRIGGER trg_routines_current_crew BEFORE UPDATE OF status ON public.routines FOR EACH ROW EXECUTE FUNCTION guard_job_completion_crew(\u0027routine\u0027)",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "routines",
+                         "name":  "trg_routines_single_active_job",
+                         "definition":  "CREATE TRIGGER trg_routines_single_active_job BEFORE UPDATE ON public.routines FOR EACH ROW EXECUTE FUNCTION enforce_single_active_job(\u0027routine\u0027)",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "routines",
+                         "name":  "trg_track_work_session",
+                         "definition":  "CREATE TRIGGER trg_track_work_session AFTER UPDATE ON public.routines FOR EACH ROW EXECUTE FUNCTION track_job_work_session(\u0027routine\u0027)",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "tickets",
+                         "name":  "trg_tickets_current_crew",
+                         "definition":  "CREATE TRIGGER trg_tickets_current_crew BEFORE UPDATE OF status ON public.tickets FOR EACH ROW EXECUTE FUNCTION guard_job_completion_crew(\u0027ticket\u0027)",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "tickets",
+                         "name":  "trg_tickets_single_active_job",
+                         "definition":  "CREATE TRIGGER trg_tickets_single_active_job BEFORE UPDATE ON public.tickets FOR EACH ROW EXECUTE FUNCTION enforce_single_active_job(\u0027ticket\u0027)",
+                         "enabled":  "O"
+                     },
+                     {
+                         "table":  "tickets",
+                         "name":  "trg_track_work_session",
+                         "definition":  "CREATE TRIGGER trg_track_work_session AFTER UPDATE ON public.tickets FOR EACH ROW EXECUTE FUNCTION track_job_work_session(\u0027ticket\u0027)",
+                         "enabled":  "O"
+                     }
+                 ],
+    "policies":  [
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "installations",
+                         "policyname":  "installations_delete_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "DELETE",
+                         "qual":  "((status = \u0027cancelled\u0027::installation_status) AND (current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role])))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "installations",
+                         "policyname":  "installations_insert_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "installations",
+                         "policyname":  "installations_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "installations",
+                         "policyname":  "installations_update_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "((current_user_role() = \u0027SUPERADMIN\u0027::user_role) OR ((current_user_role() = \u0027ADMIN\u0027::user_role) AND (status \u003c\u003e ALL (ARRAY[\u0027completed\u0027::installation_status, \u0027cancelled\u0027::installation_status]))) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (status \u003c\u003e ALL (ARRAY[\u0027completed\u0027::installation_status, \u0027cancelled\u0027::installation_status])) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027installation\u0027::text) AND (ja.job_id = installations.id) AND (ja.technician_id = auth.uid()))))))",
+                         "with_check":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027installation\u0027::text) AND (ja.job_id = installations.id) AND (ja.technician_id = auth.uid()))))))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_movements",
+                         "policyname":  "inventory_movements_staff_insert",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_movements",
+                         "policyname":  "inventory_movements_staff_select",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_products",
+                         "policyname":  "inventory_products_staff_only",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "ALL",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_unit_events",
+                         "policyname":  "inventory_unit_events_staff_insert",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_unit_events",
+                         "policyname":  "inventory_unit_events_staff_select",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_units",
+                         "policyname":  "inventory_units_delete_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "DELETE",
+                         "qual":  "(current_user_role() = \u0027SUPERADMIN\u0027::user_role)",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_units",
+                         "policyname":  "inventory_units_insert_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_units",
+                         "policyname":  "inventory_units_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_units",
+                         "policyname":  "inventory_units_update_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "job_assignees",
+                         "policyname":  "job_assignees_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "job_assignees",
+                         "policyname":  "job_assignees_write_dispatch",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "ALL",
+                         "qual":  "((current_user_role() = \u0027SUPERADMIN\u0027::user_role) OR ((current_user_role() = ANY (ARRAY[\u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) AND (NOT ((job_type = \u0027installation\u0027::text) AND (EXISTS ( SELECT 1\n   FROM installations i\n  WHERE ((i.id = job_assignees.job_id) AND (i.status = ANY (ARRAY[\u0027completed\u0027::installation_status, \u0027cancelled\u0027::installation_status])))))))))",
+                         "with_check":  "((current_user_role() = \u0027SUPERADMIN\u0027::user_role) OR ((current_user_role() = ANY (ARRAY[\u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) AND (NOT ((job_type = \u0027installation\u0027::text) AND (EXISTS ( SELECT 1\n   FROM installations i\n  WHERE ((i.id = job_assignees.job_id) AND (i.status = ANY (ARRAY[\u0027completed\u0027::installation_status, \u0027cancelled\u0027::installation_status])))))))))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "job_work_sessions",
+                         "policyname":  "job_work_sessions_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "profiles",
+                         "policyname":  "profiles_select_own_or_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "((id = auth.uid()) OR (current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role])))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "profiles",
+                         "policyname":  "profiles_select_staff_for_assignment",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role])) AND (role \u003c\u003e \u0027CLIENTE\u0027::user_role))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "profiles",
+                         "policyname":  "profiles_update_admin_only",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role]))",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routine_returns",
+                         "policyname":  "routine_returns_read_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routines",
+                         "policyname":  "routines_delete_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "DELETE",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routines",
+                         "policyname":  "routines_insert_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routines",
+                         "policyname":  "routines_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routines",
+                         "policyname":  "routines_update_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (status \u003c\u003e ALL (ARRAY[\u0027completed\u0027::routine_status, \u0027cancelled\u0027::routine_status])) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027routine\u0027::text) AND (ja.job_id = routines.id) AND (ja.technician_id = auth.uid()))))))",
+                         "with_check":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027routine\u0027::text) AND (ja.job_id = routines.id) AND (ja.technician_id = auth.uid()))))))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "tickets",
+                         "policyname":  "tickets_delete_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "DELETE",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "tickets",
+                         "policyname":  "tickets_insert_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "tickets",
+                         "policyname":  "tickets_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "tickets",
+                         "policyname":  "tickets_update_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (status \u003c\u003e ALL (ARRAY[\u0027resolved\u0027::ticket_status, \u0027closed\u0027::ticket_status])) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027ticket\u0027::text) AND (ja.job_id = tickets.id) AND (ja.technician_id = auth.uid()))))))",
+                         "with_check":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (status \u003c\u003e \u0027closed\u0027::ticket_status) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027ticket\u0027::text) AND (ja.job_id = tickets.id) AND (ja.technician_id = auth.uid()))))))"
+                     }
+                 ],
+    "phase161":  {
+                     "table_exists":  true,
+                     "function_exists":  true
+                 },
+    "duplicate_reversal_shapes":  [
+                                      {
+                                          "reversals":  26,
+                                          "original_type":  "egreso",
+                                          "same_product":  true,
+                                          "same_quantity":  true,
+                                          "all_ingreso":  true,
+                                          "same_order":  true
+                                      },
+                                      {
+                                          "reversals":  30,
+                                          "original_type":  "egreso",
+                                          "same_product":  true,
+                                          "same_quantity":  true,
+                                          "all_ingreso":  true,
+                                          "same_order":  true
+                                      }
+                                  ]
+}

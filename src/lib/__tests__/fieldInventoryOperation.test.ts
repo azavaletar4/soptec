@@ -10,3 +10,27 @@ test('recibo con orden/acción/clave incorrectas no borra intención',async()=>{
 test('SQLSTATE en primer intento confirma rollback y permite corregir formulario',async()=>{const s=storage();await assert.rejects(executeFieldInventory(s,context,'consume',{},async()=>({data:null,error:{code:'P0001',message:'Stock insuficiente'}})));assert.equal(pendingFieldInventory(s,context),null);});
 test('denegación posterior a una respuesta perdida no descarta la operación anterior',async()=>{const s=storage();await assert.rejects(executeFieldInventory(s,context,'consume',{},async()=>{throw Error('offline');}));await assert.rejects(executeFieldInventory(s,context,'consume',{},async()=>({data:null,error:{code:'42501',message:'Sin acceso'}})));assert(pendingFieldInventory(s,context));});
 test('almacenamiento fallido impide enviar y otra identidad no hereda intención',async()=>{const s=storage();let called=false;await assert.rejects(executeFieldInventory({...s,setItem(){throw Error('quota');}},context,'consume',{},async r=>{called=true;return success(r);}));assert.equal(called,false);await assert.rejects(executeFieldInventory(s,context,'consume',{},async()=>{throw Error('offline');}));assert.equal(pendingFieldInventory(s,{...context,actorId:'other'}),null);});
+test('55P03 inicial muestra mensaje español sin detalles SQL y confirma rollback',async()=>{
+  const s=storage();
+  await assert.rejects(executeFieldInventory(s,context,'consume',{},async()=>({data:null,error:{code:'55P03',message:'could not obtain lock on row in relation job_assignees'}})),error=>{
+    assert(error instanceof Error);
+    assert.match(error.message,/Hay otra operación en curso/);
+    assert.match(error.message,/reintentarlo de forma segura/);
+    assert.doesNotMatch(error.message,/job_assignees|could not obtain lock/);
+    return true;
+  });
+  assert.equal(pendingFieldInventory(s,context),null);
+});
+test('55P03 tras respuesta perdida conserva intención y reintenta con la misma UUID',async()=>{
+  const s=storage();
+  await assert.rejects(executeFieldInventory(s,context,'consume',{},async()=>{throw Error('respuesta perdida');},()=> 'stable-operation'));
+  await assert.rejects(executeFieldInventory(s,context,'consume',{},async r=>{
+    assert.equal(r.p_operation_id,'stable-operation');
+    return {data:null,error:{code:'55P03',message:'lock not available'}};
+  }),/Confirmar operación de inventario pendiente/);
+  assert.equal(pendingFieldInventory(s,context)?.p_operation_id,'stable-operation');
+  await executeFieldInventory(s,context,'consume',{},async r=>{
+    assert.equal(r.p_operation_id,'stable-operation');return success(r);
+  },()=> 'must-not-use-new-id');
+  assert.equal(pendingFieldInventory(s,context),null);
+});
