@@ -47,7 +47,7 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
       if (typeof b.error === 'string') message = b.error;
       else if (typeof b.message === 'string') message = b.message;
     }
-    throw new Error(message);
+    throw Object.assign(new Error(message), { status: res.status });
   }
 
   return body as T;

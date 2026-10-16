@@ -22,8 +22,10 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
+import { createInventoryRefresh } from '@/lib/inventoryRefresh';
+import { startInventorySignals } from '@/lib/inventorySignals';
 import { executeFieldInventory, pendingFieldInventory, type FieldInventoryAction } from '@/lib/fieldInventoryOperation';
-import type { FieldInventoryContext, FieldInventoryProduct, FieldInventoryMovement, FieldInventoryUnit } from '@/types/fieldInventory';
+import type { FieldInventoryContext, FieldInventoryProduct, FieldInventoryMovement, FieldInventoryUnit, FieldInventoryView } from '@/types/fieldInventory';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
@@ -79,13 +81,29 @@ const canProvisionOnt = computed(() => ['SUPERADMIN', 'ADMIN'].includes(auth.rol
 
 const jobType = route.params.tipo as JobType;
 const jobId = route.params.id as string;
-const fieldInventory = createFieldInventoryClient(path => apiFetch(path, {}, 15000), context =>
-  auth.user?.id === context.actorId && ['ADMIN', 'SUPERADMIN', 'TECNICO_RED'].includes(auth.role ?? '') &&
-  trabajo.value?.clientId === context.clientId && trabajo.value?.contractId === context.contractId);
+let inventoryEpoch = 0;
+let inventoryViewAlive = true;
+const inventoryReads = new Set<AbortController>();
+async function readInventory<T>(context: FieldInventoryContext, view: FieldInventoryView, parameters: Record<string, string> = {}, signal?: AbortSignal) {
+ if (!inventoryViewAlive) throw new DOMException('Vista cerrada', 'AbortError');
+ const epoch = inventoryEpoch, request = new AbortController();
+ const cancel = () => request.abort(); signal?.addEventListener('abort', cancel, { once: true });
+ if (signal?.aborted) request.abort(); inventoryReads.add(request);
+ try {
+  return await createFieldInventoryClient(path => apiFetch(path, { signal: request.signal }, 15000), c =>
+   inventoryViewAlive && epoch === inventoryEpoch && auth.user?.id === c.actorId && ['ADMIN', 'SUPERADMIN', 'TECNICO_RED'].includes(auth.role ?? '') &&
+   trabajo.value?.clientId === c.clientId && trabajo.value?.contractId === c.contractId).read<T>(context, view, parameters);
+ } catch (error) {
+  if (epoch === inventoryEpoch && error && typeof error === 'object' && 'status' in error && [401, 403].includes(Number(error.status))) inventoryRefresh.deny();
+  throw error;
+ } finally { inventoryReads.delete(request); signal?.removeEventListener('abort', cancel); }
+}
+const fieldInventory = { read: readInventory };
 const inventoryWriteBusy = ref(false);
 const inventoryPendingNotice = ref('');
 async function writeFieldInventory(action: FieldInventoryAction, payload: Record<string, unknown>) {
   if (inventoryWriteBusy.value) throw Error('Ya hay una operación de inventario en curso.');
+  if (inventoryAccessBlocked.value) throw Error('Comprueba el acceso a la orden antes de registrar inventario.');
   const context = fieldContext();
   if (auth.user?.id !== context.actorId) throw Error('La sesión cambió.');
   inventoryWriteBusy.value = true;
@@ -341,6 +359,7 @@ onMounted(async () => {
   window.addEventListener('pagehide', handleVisibilityOrHide);
 
   if (!campoStore.trabajos.length) await campoStore.fetchAll();
+  if (!inventoryViewAlive) return;
   oltStore.fetchDevices().catch(() => {});
   if (jobType === 'routine') inventoryStore.fetchProducts().catch(() => {});
   catalogs.fetchStaff().catch(() => {});
@@ -356,7 +375,6 @@ onMounted(async () => {
   // ("Provisionar en OLT" mas abajo), no necesita leer una señal que todavia
   // no deberia existir.
   if (jobType !== 'installation') runDiagnostico();
-  await loadMaterials();
   // Una rutina sin cliente puntual (apunta a zona/caja NAP, Fase 101) no
   // tiene ficha de cliente que cargar.
   if (trabajo.value?.clientId) {
@@ -374,7 +392,7 @@ onMounted(async () => {
   if (jobType === 'ticket') {
     infraStore.fetchElementos().catch(() => {});
     fibra.fetchTodosNapPuertos().catch(() => {});
-    await Promise.all([loadEquipos(), loadAssignees()]);
+    await loadAssignees();
   } else if (jobType === 'installation' || jobType === 'routine') {
     // Fase 118: Altas/Rutinas tambien pueden quedar sin tecnico (pool de
     // "Disponibles" de la App de Campo) — necesitan la misma cuadrilla/lock
@@ -394,9 +412,12 @@ onMounted(async () => {
       // aca se congela el snapshot "anterior" (punto 1, revision puntual).
       await ensureTrasladoAnteriorSnapshot();
     }
-    await Promise.all([loadAssignees(), loadInstallEquipos()]);
+    await loadAssignees();
   }
   await restoreDraft();
+  if (inventoryViewAlive && jobType !== 'routine') stopInventorySignals = startInventorySignals({
+    refresh: () => refreshInventory(), online: value => inventoryRefresh.setOnline(value), visible: value => inventoryRefresh.setVisible(value), skipInitialRefresh: true,
+  });
 });
 
 // ---- Diagnostico express ----
@@ -470,21 +491,7 @@ const materialForm = ref({ productId: '', quantity: 1 });
 const savingMaterial = ref(false);
 const materialError = ref<string | null>(null);
 
-async function loadMaterials() {
-  // Rutinas V1 no registra materiales (Fase 101, alcance recortado).
-  if (jobType === 'routine') return;
-  materials.value = [];
-  fieldProducts.value = [];
-  try {
-    const context = fieldContext();
-    const historical = ['completed', 'cancelled', 'resolved', 'closed'].includes(trabajo.value?.raw.status ?? '');
-    const [movementRows, products] = await Promise.all([
-      fieldInventory.read<FieldInventoryMovement>(context, 'materials'),
-      historical ? Promise.resolve({ items: [] as FieldInventoryProduct[] }) : fieldInventory.read<FieldInventoryProduct>(context, 'products'),
-    ]);
-    materials.value = movementRows.items; fieldProducts.value = products.items;
-  } catch (e) { fieldInventoryWarning.value = getErrorMessage(e); }
-}
+async function loadMaterials() { if (jobType !== 'routine') await refreshInventory(true); }
 
 // El Kardex es insert-only (Fase 58, no se borra ninguna fila) — "quitar" o
 // "corregir" un material ya registrado significa revertirlo (movimiento
@@ -695,18 +702,7 @@ const savingInstallUnit = ref(false);
 const installUnitError = ref<string | null>(null);
 const removingInstallUnitId = ref<string | null>(null);
 
-async function loadInstallEquipos() {
-  if (jobType !== 'installation') return;
-  installEquipmentUnits.value = [];
-  loadingInstallEquipment.value = true;
-  try {
-    installEquipmentUnits.value = (await fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'assigned')).items;
-  } catch (e) {
-    fieldInventoryWarning.value = getErrorMessage(e);
-  } finally {
-    loadingInstallEquipment.value = false;
-  }
-}
+async function loadInstallEquipos() { if (jobType !== 'routine') await refreshInventory(true); }
 
 async function onInstallUnitProductChange() {
   installUnitForm.value.unitId = '';
@@ -763,24 +759,7 @@ const assignedUnits = ref<FieldInventoryUnit[]>([]);
 const pendingUnits = ref<FieldInventoryUnit[]>([]);
 const loadingUnits = ref(false);
 
-async function loadEquipos() {
-  if (jobType !== 'ticket' || !trabajo.value) return;
-  loadingUnits.value = true;
-  try {
-    assignedUnits.value = []; pendingUnits.value = [];
-    const [assigned, pending] = await Promise.all([
-      fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'assigned'),
-      fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'pending'),
-    ]);
-    assignedUnits.value = assigned.items;
-    pendingUnits.value = pending.items;
-    fieldInventoryWarning.value = assigned.warning ?? '';
-  } catch (e) {
-    fieldInventoryWarning.value = getErrorMessage(e);
-  } finally {
-    loadingUnits.value = false;
-  }
-}
+async function loadEquipos() { if (jobType !== 'routine') await refreshInventory(true); }
 
 // Desvincular un equipo entrante pendiente de aprobacion (serie/MAC
 // equivocada): vuelve a 'in_stock' (bodega, libre para reasignar) y se
@@ -827,10 +806,8 @@ async function loadAssignees() {
   try {
     assignees.value = await jobAssigneesStore.fetchAssignees(jobType, jobId);
     if (jobType !== 'routine') {
-      fieldInventoryWarning.value = '';
-      await Promise.all([loadMaterials(), jobType === 'installation' ? loadInstallEquipos() : loadEquipos()]);
-      installAvailableUnits.value = []; availableIncomingUnits.value = [];
-      installUnitForm.value.unitId = ''; incomingForm.value.unitId = '';
+      if (inventoryAccessBlocked.value && assignees.value.some(a => a.technician_id === auth.user?.id)) await retryInventoryAccess();
+      else await refreshInventory();
     }
   } finally {
     loadingAssignees.value = false;
@@ -900,51 +877,30 @@ async function handleAddSupport() {
   }
 }
 
-// ---- Sincronizacion en tiempo real (Fase 121) — si el apoyo registra un
-// material, un cambio de equipo (serie saliente/entrante) o la cuadrilla
-// cambia desde otro celular, esta pantalla se refresca sola (los 3 se
-// guardan de inmediato en Supabase apenas se tocan, sin esperar un submit).
+// ---- Cuadrilla por Realtime; inventario mediante reloj genérico de 10 s.
+// Las escrituras propias recargan al confirmar; las de otros técnicos se
+// consultan en el siguiente tick, siempre con autorización contextual.
 // Las fotos del censo/evidencia son la EXCEPCION: no se suben de inmediato,
 // se juntan en el dispositivo y recien se mandan todas juntas al cerrar el
 // trabajo (ver handleCloseSubmit) — es lo que permite el borrador offline de
 // la Fase 116, asi que no hay "foto que aparezca en vivo" en esta pantalla
 // todavia (se veria en el panel web recien cuando el que cierra envia todo). ----
 let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+let stopInventorySignals: (() => void) | null = null;
 
 function setupRealtimeSync() {
   if (jobType !== 'ticket' && jobType !== 'installation' && jobType !== 'routine') return;
-  let channel = supabase
+  const channel = supabase
     .channel(`campo-job-${jobType}-${jobId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'job_assignees', filter: `job_id=eq.${jobId}` }, () => {
       loadAssignees();
     });
-  if (jobType !== 'routine') {
-    const materialColumn = jobType === 'installation' ? 'installation_id' : 'ticket_id';
-    channel = channel.on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'inventory_movements', filter: `${materialColumn}=eq.${jobId}` },
-      () => {
-        loadMaterials();
-      },
-    );
-  }
-  if (jobType === 'ticket') {
-    channel = channel.on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_units', filter: `ticket_id=eq.${jobId}` }, () => {
-      loadEquipos();
-    });
-  } else if (jobType === 'installation') {
-    channel = channel.on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'inventory_units', filter: `installation_id=eq.${jobId}` },
-      () => {
-        loadInstallEquipos();
-      },
-    );
-  }
   realtimeChannel = channel.subscribe();
 }
 
 function teardownRealtimeSync() {
+  stopInventorySignals?.(); stopInventorySignals = null;
+  if (jobType !== 'routine') inventoryRefresh.dispose();
   if (realtimeChannel) {
     supabase.removeChannel(realtimeChannel);
     realtimeChannel = null;
@@ -1070,10 +1026,65 @@ async function handleOutgoingUnit() {
 
 const incomingForm = ref({ productId: '', unitId: '', reason: '' });
 const availableIncomingUnits = ref<FieldInventoryUnit[]>([]);
-watch(() => [auth.user?.id, auth.role], () => {
-  fieldProducts.value = []; materials.value = []; installEquipmentUnits.value = [];
-  installAvailableUnits.value = []; assignedUnits.value = []; pendingUnits.value = []; availableIncomingUnits.value = [];
+const inventoryAccessBlocked = ref(false);
+let inventoryContextKey = '';
+function clearInventoryData() {
+ inventoryEpoch++; for (const request of inventoryReads) request.abort();
+ fieldProducts.value = []; materials.value = []; installEquipmentUnits.value = [];
+ installAvailableUnits.value = []; assignedUnits.value = []; pendingUnits.value = []; availableIncomingUnits.value = [];
+ materialForm.value.productId = ''; installUnitForm.value.productId = ''; installUnitForm.value.unitId = '';
+ incomingForm.value.productId = ''; incomingForm.value.unitId = '';
+ outgoingForm.value.unitId = ''; editingMaterialId.value = null;
+}
+const inventoryRefresh = createInventoryRefresh({
+ clear: clearInventoryData,
+ state: state => {
+  loadingInstallEquipment.value = jobType === 'installation' && state === 'loading';
+  loadingUnits.value = jobType === 'ticket' && state === 'loading';
+  inventoryAccessBlocked.value = state === 'blocked' || inventoryAccessBlocked.value && state === 'offline';
+  if (state === 'blocked') fieldInventoryWarning.value = 'Ya no tienes acceso al inventario de esta orden. Comprueba tu asignación antes de continuar.';
+  if (state === 'idle') fieldInventoryWarning.value = '';
+  if (state === 'unavailable') fieldInventoryWarning.value = 'No se pudo actualizar el inventario. Se reintentará cuando haya conexión.';
+ },
+ load: async (context: FieldInventoryContext, signal) => {
+  const historical = ['completed', 'cancelled', 'resolved', 'closed'].includes(trabajo.value?.raw.status ?? '');
+  const productId = jobType === 'installation' ? installUnitForm.value.productId : incomingForm.value.productId;
+  const [movements, products, assigned, pending, available] = await Promise.all([
+   readInventory<FieldInventoryMovement>(context, 'materials', {}, signal),
+   historical ? Promise.resolve({items: [] as FieldInventoryProduct[]}) : readInventory<FieldInventoryProduct>(context, 'products', {}, signal),
+   readInventory<FieldInventoryUnit>(context, 'assigned', {}, signal),
+   jobType === 'ticket' ? readInventory<FieldInventoryUnit>(context, 'pending', {}, signal) : Promise.resolve({items: [] as FieldInventoryUnit[]}),
+   productId ? readInventory<FieldInventoryUnit>(context, 'available', {productId}, signal) : Promise.resolve({items: [] as FieldInventoryUnit[]}),
+  ]);
+  return { movements, products, assigned, pending, available, productId };
+ },
+ publish: value => {
+  fieldInventoryWarning.value = value.assigned.warning ?? '';
+  materials.value = value.movements.items; fieldProducts.value = value.products.items;
+  if (jobType === 'installation') {
+   installEquipmentUnits.value = value.assigned.items;
+   if (value.productId === installUnitForm.value.productId) installAvailableUnits.value = value.available.items;
+  } else {
+   assignedUnits.value = value.assigned.items; pendingUnits.value = value.pending.items;
+   if (value.productId === incomingForm.value.productId) availableIncomingUnits.value = value.available.items;
+  }
+ },
 });
+function syncInventoryContext() {
+ if (jobType === 'routine') return;
+ const t = trabajo.value, actor = auth.user?.id;
+ const key = JSON.stringify([actor, auth.role, auth.session?.access_token, t?.clientId, t?.contractId]);
+ if (key === inventoryContextKey) return;
+ inventoryContextKey = key; inventoryPendingNotice.value = '';
+ try { if (actor && localStorage.getItem(`campo-inventory:v1:${actor}:${jobType}:${jobId}`)) inventoryPendingNotice.value = 'Hay una operación de inventario pendiente de confirmar.'; } catch { /* mantener intención persistida intacta */ }
+ inventoryRefresh.setContext(t && actor && ['ADMIN','SUPERADMIN','TECNICO_RED'].includes(auth.role ?? '') ? fieldContext() : null);
+}
+async function refreshInventory(afterWrite = false) { if (!inventoryViewAlive || jobType === 'routine') return; syncInventoryContext(); await inventoryRefresh.refresh(afterWrite); }
+async function retryInventoryAccess() { syncInventoryContext(); await inventoryRefresh.retry(); }
+watch(() => [auth.user?.id, auth.role, auth.session?.access_token, trabajo.value?.clientId, trabajo.value?.contractId], () => {
+ if (jobType !== 'routine') { syncInventoryContext(); void inventoryRefresh.refresh(); }
+});
+
 const loadingIncomingUnits = ref(false);
 const savingIncoming = ref(false);
 const incomingError = ref<string | null>(null);
@@ -1383,6 +1394,7 @@ function clearPhoto(category: string) {
 }
 
 onBeforeUnmount(() => {
+  inventoryViewAlive = false;
   for (const url of Object.values(photoPreviewUrls.value)) URL.revokeObjectURL(url);
   for (const entry of equipmentEntries.value) if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
   document.removeEventListener('visibilitychange', handleVisibilityOrHide);
@@ -2111,6 +2123,7 @@ async function handleCloseSubmit() {
         </section>
 
         <p v-if="jobType !== 'routine' && fieldInventoryWarning" role="alert" class="text-xs text-amber-700 mb-3">{{ fieldInventoryWarning }}</p>
+        <button v-if="jobType !== 'routine' && inventoryAccessBlocked" class="btn-secondary text-xs mb-3" @click="retryInventoryAccess">Comprobar acceso al inventario</button>
         <!-- Kit base de materiales (Fase 123, solo Altas) — Averias arranca
              sin nada precargado a proposito (el tecnico agrega solo lo que
              de verdad uso, ver "Materiales usados" mas abajo).
