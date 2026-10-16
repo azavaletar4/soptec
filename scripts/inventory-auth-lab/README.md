@@ -1,5 +1,22 @@
 # Laboratorio local de autorización de inventario
 
+## Etapa 4 Realtime: BLOQUEADO (16/10/2026)
+
+Se añadió experimentalmente Realtime v2.143.3 en la red interna existente,
+con Caddy en `127.0.0.1:54385` y WAL lógico solo en el DB local. Se conservan
+volumen, Auth y fixtures. No está integrado en Campo. La policy por orden
+autoriza el JOIN, pero el técnico retirado siguió recibiendo `{v:1}` en su
+socket abierto aunque la reconsulta contextual ya respondía 403. No usar esta
+configuración como seguridad aprobada ni trasladarla a Cloud.
+
+Evidencia, pendientes y rollback en
+`docs/INVENTARIO-LAB-REALTIME-VALIDACION.md`. No repetir automáticamente
+`realtime-prepare.mjs` ni `realtime-revocation.mjs`: hay journal y fixture
+conservados. `realtime-status.mjs` permite diagnóstico local sin mostrar claves.
+Para iniciar/conservar también Realtime, usar ambos archivos de compose:
+`runtime/compose.json` y `runtime/realtime-compose.json` con `--pull never`.
+Los comandos originales de abajo describen el laboratorio Auth/API anterior.
+
 Estado validado el 16/10/2026. No usa `.env` de la raíz, respaldos ni Cloud.
 
 Servicios: PostgreSQL 17, GoTrue v2.197.0, PostgREST v14.18 y Caddy 2. Auth,

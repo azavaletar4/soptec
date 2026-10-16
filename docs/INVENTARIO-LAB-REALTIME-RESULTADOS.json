@@ -1,0 +1,72 @@
+{
+  "at": "2026-10-16T15:04:35.633Z",
+  "environment": "LOCAL_SYNTHETIC_ONLY",
+  "status": "BLOCKED",
+  "results": [
+    {
+      "test": "JWT real leader",
+      "status": "PASS",
+      "detail": "GoTrue login, firma ES256 y sub/issuer/aud verificados. Token solo en memoria."
+    },
+    {
+      "test": "JWT real support",
+      "status": "PASS",
+      "detail": "GoTrue login, firma ES256 y sub/issuer/aud verificados. Token solo en memoria."
+    },
+    {
+      "test": "JWT real outsider",
+      "status": "PASS",
+      "detail": "GoTrue login, firma ES256 y sub/issuer/aud verificados. Token solo en memoria."
+    },
+    {
+      "test": "JWT real removed",
+      "status": "PASS",
+      "detail": "GoTrue login, firma ES256 y sub/issuer/aud verificados. Token solo en memoria."
+    },
+    {
+      "test": "Fixture aditiva Alta y Avería",
+      "status": "PASS",
+      "detail": "Solo órdenes nuevas y cuadrillas ficticias; sin movimientos ni equipos nuevos."
+    },
+    {
+      "test": "JOIN autorizado/ajeno installation",
+      "status": "PASS",
+      "detail": "Líder/apoyo/futuro retirado aceptados; ajeno rechazado por policy contextual."
+    },
+    {
+      "test": "Aviso mínimo y reconsulta installation",
+      "status": "PASS",
+      "detail": "Payload exactamente {v:1}; reconsulta contextual real 200, sin filas de otra orden."
+    },
+    {
+      "test": "JOIN autorizado/ajeno ticket",
+      "status": "PASS",
+      "detail": "Líder/apoyo/futuro retirado aceptados; ajeno rechazado por policy contextual."
+    },
+    {
+      "test": "Aviso mínimo y reconsulta ticket",
+      "status": "PASS",
+      "detail": "Payload exactamente {v:1}; reconsulta contextual real 200, sin filas de otra orden."
+    },
+    {
+      "test": "Retirado: reconsulta mismo JWT",
+      "status": "PASS",
+      "detail": "403 sin datos tras retirar de la orden ficticia; socket permanece abierto."
+    },
+    {
+      "test": "Revocación de conexión abierta",
+      "status": "FAIL",
+      "detail": "El técnico retirado recibió otro aviso {v:1} tras confirmar DELETE y 403 contextual. Permiso Broadcast cacheado. Parada obligatoria."
+    }
+  ],
+  "productionAccess": false,
+  "revocation": {
+    "membershipRemoved": true,
+    "sameJwt": true,
+    "channelState": "joined",
+    "before": 1,
+    "after": 2,
+    "protectedRowsTransmitted": 0
+  },
+  "inventoryUnchanged": true
+}
