@@ -1,5 +1,19 @@
 # Laboratorio local de autorización de inventario
 
+## Avisos genéricos: APROBADO EN LABORATORIO (16/10/2026)
+
+Ver `docs/INVENTARIO-LAB-GENERICOS-VALIDACION.md`. Reloj aislado sin SQL/Auth,
+frame idéntico cada 10 s y consumidor en `/generic.html` con consultas contextuales
+JWT, limpieza ante 401/403 y pausa hasta comprobar acceso. Seis pruebas unitarias,
+ocho grupos UI/API y dos comprobaciones adicionales de cabeceras/reconexión, más
+build local correctos. No integra todavía la App de Campo ni cierra RLS administrativo.
+
+Arrancar solo `generic-clock.mjs` con `LAB_GENERIC_CLOCK=1`, junto al Auth/API/Vite
+existente; el reloj usa 127.0.0.1:54388 y el proxy una URL fija sin órdenes.
+No repetir `generic-prepare.mjs` ni el runner con journal final: fixture conservada.
+La auditoría `generic-audit.mjs` es de solo lectura. Los prototipos bloqueados
+descritos más abajo permanecen deshabilitados y no son la alternativa aprobada.
+
 ## Prototipo SSE: BLOQUEADO (16/10/2026)
 
 Ver `docs/INVENTARIO-LAB-SSE-VALIDACION.md`: 8 PASS y un FAIL bloqueante con JWT

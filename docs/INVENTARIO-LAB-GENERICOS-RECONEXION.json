@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-16T16:43:24.582Z",
+  "environment": "LOCAL_SYNTHETIC_ONLY",
+  "status": "PASS",
+  "realJwtRole": "support",
+  "producerStopped": true,
+  "cacheCleared": true,
+  "readsWhileDisconnected": 0,
+  "queriesOnReconnect": 3,
+  "manualOfflineEvent": false,
+  "externalRequests": 0,
+  "runtimeExceptions": 0
+}

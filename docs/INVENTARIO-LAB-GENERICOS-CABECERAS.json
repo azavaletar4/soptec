@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-16T16:40:44.430Z",
+  "environment": "LOCAL_SYNTHETIC_ONLY",
+  "status": "PASS",
+  "realJwtSessions": 4,
+  "headers": {
+    "cache-control": "no-store, no-transform",
+    "connection": "keep-alive",
+    "content-type": "text/event-stream",
+    "keep-alive": "timeout=5",
+    "transfer-encoding": "chunked",
+    "x-accel-buffering": "no"
+  },
+  "ignoredRequestHeaders": [
+    "Authorization",
+    "Cookie",
+    "Last-Event-ID",
+    "X-Job-Id"
+  ],
+  "operationalHeaders": 0
+}

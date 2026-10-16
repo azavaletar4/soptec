@@ -1,0 +1,13 @@
+import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import {config,sql,runtime} from './common.mjs';
+config();
+if(existsSync(runtime+'generic-fixture.json'))throw Error('Fixture genérica existente; conservar y no reseed');
+const m=JSON.parse(readFileSync(runtime+'manifest.json','utf8'));
+const f={users:m.users,jobs:m.jobs.slice(0,2).map((j,i)=>({...j,id:randomUUID(),label:i===0?'Alta de avisos genéricos':'Avería de avisos genéricos'}))};
+const baseline=sql(`select jsonb_build_object('products',(select jsonb_agg(to_jsonb(t) order by id) from inventory_products t),'units',(select jsonb_agg(to_jsonb(t) order by id) from inventory_units t),'movements',(select jsonb_agg(to_jsonb(t) order by id) from inventory_movements t),'events',(select jsonb_agg(to_jsonb(t) order by id) from inventory_unit_events t),'receipts',(select jsonb_agg(to_jsonb(t) order by id) from campo_inventory_operations t))`);
+writeFileSync(runtime+'generic-baseline.json',baseline+'\n');
+sql(`begin;${f.jobs.map(j=>`insert into ${j.type==='installation'?'installations':'tickets'}(id,status,client_id,contract_id) values('${j.id}','${j.type==='installation'?'scheduled':'open'}','${j.clientId}','${j.contractId}');
+ insert into job_assignees(job_type,job_id,technician_id,role) values('${j.type}','${j.id}','${m.users.leader}','leader'),('${j.type}','${j.id}','${m.users.support}','support'),('${j.type}','${j.id}','${m.users.removed}','support');`).join('\n')}commit;`);
+writeFileSync(runtime+'generic-fixture.json',JSON.stringify(f,null,2));
+console.log('GENERIC_FIXTURE_READY: dos órdenes nuevas, inventario intacto, cero cambios de esquema/RLS.');

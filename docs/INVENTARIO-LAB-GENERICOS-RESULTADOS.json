@@ -1,0 +1,101 @@
+{
+  "at": "2026-10-16T16:29:34.932Z",
+  "environment": "LOCAL_SYNTHETIC_ONLY",
+  "status": "APPROVED_IN_LAB",
+  "results": [
+    {
+      "test": "Cuatro sesiones reales y limpieza al cambiar de usuario",
+      "status": "PASS",
+      "detail": "UI con Auth/store reales: líder/apoyo/asignado 200; ajeno bloqueado y caché vacío; cambio de sesión limpia inmediatamente."
+    },
+    {
+      "test": "Retirada con avisos abiertos y pausa de consultas",
+      "status": "PASS",
+      "detail": "Retirada mediante RPC/JWT ADMIN ficticio; al siguiente tick, 403 limpia la UI; dos ticks posteriores no generan consultas y las señales continúan idénticas."
+    },
+    {
+      "test": "Ráfaga local sin duplicar consultas",
+      "status": "PASS",
+      "detail": "Cien activaciones concurrentes del controlador producen una sola recarga de la orden visible. No se alteró el reloj de 10 s."
+    },
+    {
+      "test": "Reasignación invalida caché de la orden visible",
+      "status": "PASS",
+      "detail": "El apoyo pierde autorización; se vacían resultados y se detienen consultas automáticas."
+    },
+    {
+      "test": "Recuperación explícita después de restituir autorización",
+      "status": "PASS",
+      "detail": "La restitución no dispara consultas en la orden pausada; Comprobar acceso reautoriza y recarga con JWT real."
+    },
+    {
+      "test": "Desconexión, reconexión y selección visible",
+      "status": "PASS",
+      "detail": "Modo offline limpia y detiene lecturas; reconexión reconsulta solo la Avería visible, sin caché de Alta ni escrituras."
+    },
+    {
+      "test": "Avisos indistinguibles antes/durante actividad y revocaciones",
+      "status": "PASS",
+      "detail": "Cuatro conexiones con JWT distintos: mismos bytes/headers y cadencia global, sin IDs; retirados y reasignados continúan recibiendo el reloj sin información operativa."
+    },
+    {
+      "test": "Recursos acotados y ausencia de accesos externos",
+      "status": "PASS",
+      "detail": "Reloj sin consultas SQL, sin colas de replay; RSS <128 MiB y CPU <5 s en el ensayo. Consultas contextualizadas paginadas; cero peticiones externas."
+    }
+  ],
+  "authentication": "REAL_GOTRUE_BROWSER_AND_API",
+  "productionAccess": false,
+  "resumedAfterHarnessCancellation": true,
+  "activityStarted": 1792168205814,
+  "cancelledInterceptions": 0,
+  "transport": {
+    "frameBytes": 33,
+    "cadenceMs": 10000,
+    "toleranceMs": 500,
+    "baselineFrames": 3,
+    "activityFramesAtLeast": 3,
+    "samples": [
+      {
+        "role": "leader",
+        "frames": 6,
+        "hash": "434bce1bec83aa4357bdbec9fc0add4c2ec5bfb4c7d01363e80899a54c2ce416",
+        "minimumMs": 10006,
+        "maximumMs": 10014
+      },
+      {
+        "role": "support",
+        "frames": 6,
+        "hash": "434bce1bec83aa4357bdbec9fc0add4c2ec5bfb4c7d01363e80899a54c2ce416",
+        "minimumMs": 10006,
+        "maximumMs": 10014
+      },
+      {
+        "role": "outsider",
+        "frames": 6,
+        "hash": "434bce1bec83aa4357bdbec9fc0add4c2ec5bfb4c7d01363e80899a54c2ce416",
+        "minimumMs": 10006,
+        "maximumMs": 10014
+      },
+      {
+        "role": "removed",
+        "frames": 6,
+        "hash": "434bce1bec83aa4357bdbec9fc0add4c2ec5bfb4c7d01363e80899a54c2ce416",
+        "minimumMs": 10006,
+        "maximumMs": 10014
+      }
+    ],
+    "content": "event: invalidate + data: {v:1}; sin ID/retry/contador ni URL de orden"
+  },
+  "resources": {
+    "cpuUserMs": 0,
+    "cpuSystemMs": 0,
+    "rssMiB": 57.33984375,
+    "heapMiB": 7.532600402832031,
+    "connections": 5,
+    "contextRequests": 24
+  },
+  "externalRequests": 0,
+  "runtimeExceptions": 0,
+  "inventoryUnchanged": true
+}
