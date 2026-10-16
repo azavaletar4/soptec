@@ -4816,3 +4816,44 @@ nombre/modelo/serie/MAC sigue LISTA e independiente, sin bloqueo.
 Nada pushed/desplegado (`origin/main` sigue en `b128e42`). Sin Cloud DDL/DML,
 sin nueva fase, sin repetir las 25 pruebas del laboratorio ni las 51
 anteriores.
+
+## Bloqueos de activacion final resueltos (17/10/2026, base 7c33b49)
+
+**LISTO PARA AUTORIZAR** la activacion conjunta (busqueda + Etapa 3 + cierre
+RLS). Detalle completo en `docs/INVENTARIO-ACTIVACION-FINAL-RESUELTO.md`.
+
+- Etapa 3 no depende de Fase 162 ni del cierre RLS (fundacional); el cierre
+  RLS si depende de Etapa 3 (`inventory_ticket_review` inserta en
+  `campo_inventory_operations`). Los triggers de Fase 162 son no-op para las
+  inserciones de Etapa 3 (solo actuan si `routine_id`/`operation_id` no son
+  null). Confirmado que las tres piezas ya conviven en el laboratorio real
+  (contenedor vivo, sin reconstruir): `campo_inventory_operation`,
+  `routine_inventory_operation` e `inventory_order_read` coexisten en la
+  misma base. Orden: respaldo -> Etapa 3 -> cierre RLS -> postchecks ->
+  despliegue frontend/backend lo mas pegado posible al paso anterior.
+- Respaldo nuevo creado y verificado: `scripts/respaldar-activacion-final-privado.ps1`
+  (patron DPAPI ya documentado, sin credenciales por chat). Dos fallas reales
+  encontradas y corregidas al construirlo (ninguna expuso credenciales): un
+  BOM UTF-8 que el cliente Docker de Windows antepone al primer dato de stdin
+  en modo `-i` sin tty (rompia el primer `read`), y el timeout de 60s de
+  `Invoke-PrivateDocker` insuficiente para un `pg_dump` completo (~38MB) —
+  se agrego una copia local con 240s solo para este script, sin tocar la
+  funcion compartida. Resultado: `activacion_final_completo_20261016_230124_a3f1e0d4`,
+  38.392.396 bytes, SHA-256 verificado, restauracion aislada exitosa (32
+  productos/271 movimientos/128 unidades/301 eventos, coincide con Cloud en
+  vivo). Los 4 respaldos anteriores intactos, sin sobrescribir.
+- Rollback preparado para el cierre RLS (`scripts/rollback-inventario-contextual-rls-admin.sql`,
+  las 10 politicas y el `inventory_get_albums` exactos capturados de Cloud) —
+  riesgo concreto documentado: si el despliegue del frontend se demora
+  despues de aplicar el cierre RLS, un tecnico con una orden abierta pierde
+  lectura/escritura de inventario de esa orden hasta que se despliegue o se
+  revierta (nunca ve datos ajenos ni queda una escritura a medias).
+- 51 archivos de codigo cambiados desde el ultimo commit desplegado
+  (`b128e42`); de esos, 28 son el paquete real a desplegar (4 backend, 2
+  migraciones, 22 frontend) y 5 se excluyen explicitamente por ser "Devolver
+  orden" de Fase 161 (`RutinasView.vue`, partes de `campo.ts`/
+  `jobAssignees.ts`/`routines.ts`/`domain.ts`), sin relacion con esta
+  activacion. Lista exacta en el documento.
+
+Sin Cloud DDL/DML, sin push, sin despliegue, sin nueva fase. No se
+repitieron las 25 pruebas del laboratorio ni las 51 anteriores.
