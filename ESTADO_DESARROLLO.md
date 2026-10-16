@@ -4778,3 +4778,41 @@ mismo turno. Falta, antes de autorizar la aplicacion real: decidir entorno
 (Cloud es el unico real en este proyecto), respaldo fresco y captura de
 politicas/grants vigentes, y pedido explicito en el turno en que se vaya a
 aplicar — regla permanente del proyecto, no se ejecuta aqui.
+
+## Preflight Cloud de activacion final (17/10/2026, base 5e9626b)
+
+**BLOQUEADO para la activacion conjunta** — no por el archivo de migracion en
+si (confirmado compatible punto por punto con el esquema real de Cloud via
+consultas de solo lectura a `mzupdnjegfwmpajywckd`), sino por dos hallazgos
+externos nuevos. Detalle completo en
+`docs/INVENTARIO-ACTIVACION-FINAL-PREFLIGHT.md`.
+
+1. **Dependencia dura no resuelta**: el frontend ya migrado localmente
+   (`CampoTrabajoDetailView.vue`, `ticketApprovals.ts`) llama a la RPC
+   `campo_inventory_operation` (Etapa 3, migracion `20261016010000_campo_
+   inventory_operations.sql`) para TODAS las escrituras de Altas/Averias.
+   Confirmado por consulta directa: ni esa funcion ni su tabla de recibos
+   `campo_inventory_operations` existen en Cloud. Etapa 3 seguia "LISTO en
+   laboratorio; BLOQUEADO para activacion independiente" de sesiones
+   anteriores — no se reabre ni se vuelve a probar aqui, solo se confirma que
+   sigue pendiente y ahora es obligatoria, no opcional, para desplegar el
+   frontend actual.
+2. **Respaldo desactualizado**: el mas reciente
+   (`fase162_completo_20261016_202712_1abe24f6`) es anterior a que Fase 162
+   se confirmara en Cloud y a datos reales escritos desde entonces (128
+   unidades hoy vs ~124 el 15/10). No se creo un respaldo nuevo en esta
+   sesion (requiere credencial de BD que no se trae a este contexto). Estado
+   del respaldo administrado propio de Supabase sin reconfirmar (ultimo
+   reporte del usuario, "No backups", es del 14/10).
+
+Confirmado en la misma revision: `inventory_get_albums()` es ejecutable hoy
+por `anon`/PUBLIC en Cloud (tambien senalado por `get_advisors`) — hallazgo
+real y vigente que la migracion corrige. 10 politicas amplias reales
+confirmadas por nombre en las 5 tablas (todas permiten TECNICO_RED/SOPORTE/
+FACTURACION salvo DELETE). Hash del archivo de migracion igual en disco, en
+HEAD de git y en lo ya validado con JWT reales (sin deriva). Busqueda por
+nombre/modelo/serie/MAC sigue LISTA e independiente, sin bloqueo.
+
+Nada pushed/desplegado (`origin/main` sigue en `b128e42`). Sin Cloud DDL/DML,
+sin nueva fase, sin repetir las 25 pruebas del laboratorio ni las 51
+anteriores.
