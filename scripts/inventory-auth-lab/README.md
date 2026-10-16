@@ -2,6 +2,11 @@
 
 ## Etapa 4 Realtime: BLOQUEADO (16/10/2026)
 
+Causa exacta y alternativa de entrega autorizada en servidor:
+`docs/INVENTARIO-REALTIME-REVOCACION-ALTERNATIVA.md`. Broadcast por orden sigue
+descartado como garantía de revocación inmediata. La alternativa SSE con barrera
+SQL está propuesta, sin implementar ni validar; no repetir el ensayo previo.
+
 Se añadió experimentalmente Realtime v2.143.3 en la red interna existente,
 con Caddy en `127.0.0.1:54385` y WAL lógico solo en el DB local. Se conservan
 volumen, Auth y fixtures. No está integrado en Campo. La policy por orden
