@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body><div id="app"></div>
+<script type="module">
+// Solo Vite local con claves sintéticas. No iniciar el backend ni sus schedulers.
+import { createApp } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
+const id = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const actor=id(1),job=id(2),client=id(3),contract=id(4),unitId=id(10);
+const jobType=new URLSearchParams(location.search).get('type') ?? 'installation';
+window.__calls=[]; window.confirm=()=>true;
+await new Promise((resolve,reject)=>{const request=indexedDB.open('smartrayco-campo',1);request.onupgradeneeded=()=>{for(const name of ['closures','drafts'])if(!request.result.objectStoreNames.contains(name))request.result.createObjectStore(name);};request.onsuccess=()=>{request.result.close();resolve();};request.onerror=reject;});
+const person={id:client,first_name:'Cliente',last_name:'Simulado',phone:null,address:null};
+const service={id:contract,client_id:client,status:'active',client_code:'TEST',plans:null,zones:null};
+const product={id:id(6),name:'Equipo de prueba contextual',unit:'unidad',is_active:true,is_serialized:true,current_stock:1,inventory_categories:{slug:'onu'}};
+const unit={id:unitId,product_id:product.id,serial_number:'SERIE-CONTEXTUAL',mac_address:null,status:jobType==='installation'?'assigned':'pending_approval',client_id:client,contract_id:contract,installation_id:jobType==='installation'?job:null,ticket_id:jobType==='ticket'?job:null,product:{id:product.id,name:product.name,unit:'unidad'}};
+const context={jobType,jobId:job,actorId:actor,clientId:client,contractId:contract};
+let removed=false;
+const realFetch=window.fetch.bind(window);
+window.fetch=async(input,init={})=>{
+ const url=new URL(typeof input==='string'?input:input.url,location.href);
+ if(url.origin===location.origin&&!url.pathname.startsWith('/api/'))return realFetch(input,init);
+ const method=init.method??'GET';window.__calls.push({path:url.pathname,query:url.search,method,body:init.body?JSON.parse(init.body):null});
+ let data=[];
+ if(url.pathname.startsWith('/api/campo-inventory/')){
+  const view=url.pathname.split('/').at(-1);
+  data={context,items:view==='products'?[product]:view==='assigned'&&jobType==='installation'&&!removed?[unit]:view==='pending'&&jobType==='ticket'&&!removed?[unit]:view==='unit-context'?[unit]:[],next:null};
+ }else if(url.pathname.startsWith('/api/'))return new Response('{"error":"Servicio ajeno al escenario"}',{status:503,headers:{'Content-Type':'application/json'}});
+ else {
+  const table=url.pathname.split('/').at(-1);
+  if(table==='clients')data=person;
+  if(table==='service_contracts')data=[service];
+  if(table==='job_assignees')data=[{job_type:jobType,job_id:job,technician_id:actor,role:'leader',profile:{full_name:'Técnico simulado'}}];
+  if(table==='inventory_unit_events'&&method==='POST'){removed=true;data={id:id(30),...JSON.parse(init.body)};}
+  else if(method!=='GET'&&method!=='HEAD')throw Error('Escritura inesperada');
+ }
+ return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+};
+const pinia=createPinia();setActivePinia(pinia);
+const {useAuthStore}=await import('/src/stores/auth.ts');const auth=useAuthStore();auth.user={id:actor};auth.role='TECNICO_RED';auth.loading=false;
+const {supabase}=await import('/src/lib/supabase.ts');
+supabase.auth.getSession=async()=>({data:{session:{access_token:'synthetic-session'}},error:null});
+supabase.channel=()=>({on(){return this;},subscribe(){return this;}});supabase.removeChannel=async()=> 'ok';
+const raw={id:job,client_id:client,contract_id:contract,status:'in_progress',assigned_to:actor,clients:person,title:'Avería sintética',created_at:'2026-10-15T12:00:00Z',scheduled_date:null};
+if(jobType==='installation'){const {useInstallationsStore}=await import('/src/stores/installations.ts');useInstallationsStore().installations=[raw];}
+else {const {useTicketsStore}=await import('/src/stores/tickets.ts');useTicketsStore().tickets=[raw];}
+const {default:Component}=await import('/src/views/campo/CampoTrabajoDetailView.vue');
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/campo/:tipo/:id',component:Component}]});
+await router.push(`/campo/${jobType}/${job}`);await router.isReady();
+const {RouterView}=await import('vue-router');createApp(RouterView).use(pinia).use(router).mount('#app');
+window.__ready=true;
+</script></body></html>

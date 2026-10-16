@@ -1,5 +1,17 @@
 # SmartRayco — Estado de desarrollo
 
+## Inventario de Campo — etapas 1 y 2 locales (2026-10-15)
+
+Endpoint GET contextual para Altas/Averías con JWT real, perfil activo y
+job_assignees vigente (líder/apoyo); DTO sin precios, valores ni equipos ajenos.
+Retirada/desvinculación propagan contexto y delegan una sola escritura existente,
+sin modificar su payload. Históricos sin contrato se limitan al vínculo de orden
+con aviso. 24/24 pruebas y navegador local Alta/Avería correctos; build y tipos
+backend correctos. Ver `docs/INVENTARIO-ETAPAS-1-2.md` para archivos y riesgos.
+Sin Cloud, migraciones, RLS, cambios de escrituras, push o despliegue. Rutinas,
+Realtime, offline y Fase 162 sin cambios. REST directo amplio sigue pendiente;
+no se implementaron etapas 3–6 ni se certifican sesiones reales/concurrencia SQL.
+
 ## Seguridad de Inventario — detención controlada (2026-10-15)
 
 **BLOQUEADO antes de crear/aplicar migración RLS.** El cierre de lecturas

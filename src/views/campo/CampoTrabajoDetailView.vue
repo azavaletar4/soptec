@@ -21,6 +21,9 @@ import { useAuthStore } from '@/stores/auth';
 import { useJobAssigneesStore } from '@/stores/jobAssignees';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api';
+import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
+import type { FieldInventoryContext, FieldInventoryProduct, FieldInventoryMovement, FieldInventoryUnit } from '@/types/fieldInventory';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
@@ -42,8 +45,6 @@ import {
   type ClientPhotoCategory,
   type EquipmentPhotoType,
   type Installation,
-  type InventoryMovement,
-  type InventoryUnit,
   type JobAssignee,
   type JobType,
   type Routine,
@@ -79,6 +80,15 @@ const canProvisionOnt = computed(() => ['SUPERADMIN', 'ADMIN'].includes(auth.rol
 
 const jobType = route.params.tipo as JobType;
 const jobId = route.params.id as string;
+const fieldInventory = createFieldInventoryClient(path => apiFetch(path, {}, 15000), context =>
+  auth.user?.id === context.actorId && ['ADMIN', 'SUPERADMIN', 'TECNICO_RED'].includes(auth.role ?? '') &&
+  trabajo.value?.clientId === context.clientId && trabajo.value?.contractId === context.contractId);
+const fieldProducts = ref<FieldInventoryProduct[]>([]);
+const fieldInventoryWarning = ref('');
+function fieldContext(): FieldInventoryContext {
+  if (!['installation', 'ticket'].includes(jobType) || !auth.user || !trabajo.value) throw Error('La orden no está disponible para consultar inventario.');
+  return { jobType: jobType as 'installation' | 'ticket', jobId, actorId: auth.user.id, clientId: trabajo.value.clientId, contractId: trabajo.value.contractId };
+}
 // Fase 116 — clave del borrador local de este cierre (persistencia offline
 // ante el sistema matando el proceso, ver seccion de "Borrador local" abajo).
 const draftKey = `${jobType}_${jobId}`;
@@ -294,7 +304,7 @@ onMounted(async () => {
 
   if (!campoStore.trabajos.length) await campoStore.fetchAll();
   oltStore.fetchDevices().catch(() => {});
-  inventoryStore.fetchProducts().catch(() => {});
+  if (jobType === 'routine') inventoryStore.fetchProducts().catch(() => {});
   catalogs.fetchStaff().catch(() => {});
   setupRealtimeSync();
   // Pre-carga del Diagnostico express: se dispara apenas el tecnico ABRE
@@ -417,7 +427,7 @@ const fieldPrefill = computed(() => ({
 }));
 
 // ---- Materiales usados ----
-const materials = ref<InventoryMovement[]>([]);
+const materials = ref<FieldInventoryMovement[]>([]);
 const materialForm = ref({ productId: '', quantity: 1 });
 const savingMaterial = ref(false);
 const materialError = ref<string | null>(null);
@@ -425,10 +435,17 @@ const materialError = ref<string | null>(null);
 async function loadMaterials() {
   // Rutinas V1 no registra materiales (Fase 101, alcance recortado).
   if (jobType === 'routine') return;
-  materials.value =
-    jobType === 'installation'
-      ? await inventoryStore.fetchMovementsByInstallation(jobId)
-      : await inventoryStore.fetchMovementsByTicket(jobId);
+  materials.value = [];
+  fieldProducts.value = [];
+  try {
+    const context = fieldContext();
+    const historical = ['completed', 'cancelled', 'resolved', 'closed'].includes(trabajo.value?.raw.status ?? '');
+    const [movementRows, products] = await Promise.all([
+      fieldInventory.read<FieldInventoryMovement>(context, 'materials'),
+      historical ? Promise.resolve({ items: [] as FieldInventoryProduct[] }) : fieldInventory.read<FieldInventoryProduct>(context, 'products'),
+    ]);
+    materials.value = movementRows.items; fieldProducts.value = products.items;
+  } catch (e) { fieldInventoryWarning.value = getErrorMessage(e); }
 }
 
 // El Kardex es insert-only (Fase 58, no se borra ninguna fila) — "quitar" o
@@ -466,13 +483,13 @@ async function handleAddMaterial() {
   }
 }
 
-function startEditMaterial(m: InventoryMovement) {
+function startEditMaterial(m: FieldInventoryMovement) {
   editingMaterialId.value = m.id;
   editMaterialQty.value = m.quantity;
   materialError.value = null;
 }
 
-async function handleSaveMaterialQty(m: InventoryMovement) {
+async function handleSaveMaterialQty(m: FieldInventoryMovement) {
   const newQty = editMaterialQty.value;
   editingMaterialId.value = null;
   if (!newQty || newQty === m.quantity) return;
@@ -497,7 +514,7 @@ async function handleSaveMaterialQty(m: InventoryMovement) {
   }
 }
 
-async function handleRemoveMaterial(m: InventoryMovement) {
+async function handleRemoveMaterial(m: FieldInventoryMovement) {
   materialActionBusy.value = m.id;
   materialError.value = null;
   try {
@@ -537,7 +554,7 @@ const KIT_ALTA: KitLine[] = [
 const kitReconexion = ref(false);
 const kitProductChoice = ref<Record<string, string>>({});
 const kitQuantities = ref<Record<string, number>>({});
-const ferreteriaProducts = computed(() => inventoryStore.products.filter((p) => p.is_active && p.inventory_categories?.slug === 'ferreteria'));
+const ferreteriaProducts = computed(() => fieldProducts.value.filter((p) => p.is_active && p.inventory_categories?.slug === 'ferreteria'));
 const kitRows = computed(() =>
   KIT_ALTA.map((line) => {
     const matches = ferreteriaProducts.value.filter((p) => line.match.test(p.name));
@@ -592,7 +609,7 @@ const kitCoveredProductIds = computed(() => {
 // equipos serializados (ONT/Mesh/TV Box, ya se asignan por serie/MAC en el
 // Paso 2) y lo que ya se registra desde el Kit base de arriba.
 const materialSelectableProducts = computed(() =>
-  inventoryStore.products.filter((p) => p.is_active && !p.is_serialized && !kitCoveredProductIds.value.has(p.id)),
+  fieldProducts.value.filter((p) => p.is_active && !p.is_serialized && !kitCoveredProductIds.value.has(p.id)),
 );
 
 function resetKitQuantities() {
@@ -669,10 +686,10 @@ async function handleRegisterKit() {
 // tecnico). Asignar queda vinculado de inmediato al cliente/contrato/orden
 // (inventoryUnitsStore.assignUnit ya pone status='assigned'), igual que en
 // el Panel Web — no se espera al cierre de la orden.
-const installEquipmentUnits = ref<InventoryUnit[]>([]);
+const installEquipmentUnits = ref<FieldInventoryUnit[]>([]);
 const loadingInstallEquipment = ref(false);
 const installUnitForm = ref({ productId: '', unitId: '' });
-const installAvailableUnits = ref<InventoryUnit[]>([]);
+const installAvailableUnits = ref<FieldInventoryUnit[]>([]);
 const loadingInstallAvailableUnits = ref(false);
 const savingInstallUnit = ref(false);
 const installUnitError = ref<string | null>(null);
@@ -680,9 +697,12 @@ const removingInstallUnitId = ref<string | null>(null);
 
 async function loadInstallEquipos() {
   if (jobType !== 'installation') return;
+  installEquipmentUnits.value = [];
   loadingInstallEquipment.value = true;
   try {
-    installEquipmentUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(jobId);
+    installEquipmentUnits.value = (await fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'assigned')).items;
+  } catch (e) {
+    fieldInventoryWarning.value = getErrorMessage(e);
   } finally {
     loadingInstallEquipment.value = false;
   }
@@ -693,9 +713,12 @@ async function onInstallUnitProductChange() {
   installAvailableUnits.value = [];
   if (!installUnitForm.value.productId) return;
   loadingInstallAvailableUnits.value = true;
+  const productId = installUnitForm.value.productId;
   try {
-    const units = await inventoryUnitsStore.fetchUnitsByProduct(installUnitForm.value.productId);
-    installAvailableUnits.value = units.filter((u) => u.status === 'in_stock');
+    const result = await fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'available', { productId });
+    if (productId === installUnitForm.value.productId) installAvailableUnits.value = result.items;
+  } catch (e) {
+    fieldInventoryWarning.value = getErrorMessage(e);
   } finally {
     loadingInstallAvailableUnits.value = false;
   }
@@ -711,7 +734,7 @@ async function handleAssignInstallUnit() {
       contractId: trabajo.value.contractId ?? undefined,
       reason: `App de Campo — ${trabajo.value.clienteNombre}`,
     });
-    installEquipmentUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(jobId);
+    await loadInstallEquipos();
     await onInstallUnitProductChange();
   } catch (e) {
     installUnitError.value = getErrorMessage(e, 'Error al asignar el equipo');
@@ -720,13 +743,14 @@ async function handleAssignInstallUnit() {
   }
 }
 
-async function handleUnassignInstallUnit(unit: InventoryUnit) {
+async function handleUnassignInstallUnit(unit: FieldInventoryUnit) {
   if (!confirm(`¿Quitar "${unit.product?.name ?? 'este equipo'}" de la instalación? Vuelve a bodega disponible.`)) return;
   removingInstallUnitId.value = unit.id;
   installUnitError.value = null;
   try {
-    await inventoryUnitsStore.markRepaired(unit.id, 'Corrección en campo: equipo incorrecto retirado de la instalación');
-    installEquipmentUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(jobId);
+    await fieldInventory.performUnitAction(fieldContext(), unit.id, 'unassign', () =>
+      inventoryUnitsStore.markRepaired(unit.id, 'Corrección en campo: equipo incorrecto retirado de la instalación'));
+    await loadInstallEquipos();
     await onInstallUnitProductChange();
   } catch (e) {
     installUnitError.value = getErrorMessage(e, 'Error al quitar el equipo');
@@ -740,23 +764,24 @@ async function handleUnassignInstallUnit(unit: InventoryUnit) {
 // "entrante" NO queda oficialmente asignado al cliente todavia — se guarda
 // 'pending_approval' y un admin lo aprueba desde TicketDetailView (la BD ya
 // rechaza que un tecnico lo deje 'assigned' directo desde un ticket).
-const assignedUnits = ref<InventoryUnit[]>([]);
-const pendingUnits = ref<InventoryUnit[]>([]);
+const assignedUnits = ref<FieldInventoryUnit[]>([]);
+const pendingUnits = ref<FieldInventoryUnit[]>([]);
 const loadingUnits = ref(false);
 
 async function loadEquipos() {
   if (jobType !== 'ticket' || !trabajo.value) return;
   loadingUnits.value = true;
   try {
+    assignedUnits.value = []; pendingUnits.value = [];
     const [assigned, pending] = await Promise.all([
-      trabajo.value.contractId
-        ? inventoryUnitsStore.fetchUnitsByContract(trabajo.value.contractId)
-        : // clientId nunca es null aqui: esta funcion retorna arriba si jobType !== 'ticket', y un ticket siempre tiene cliente.
-          inventoryUnitsStore.fetchUnitsByClient(trabajo.value.clientId!),
-      inventoryUnitsStore.fetchUnitsByTicket(jobId),
+      fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'assigned'),
+      fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'pending'),
     ]);
-    assignedUnits.value = assigned.filter((u) => u.status === 'assigned');
-    pendingUnits.value = pending.filter((u) => u.status === 'pending_approval');
+    assignedUnits.value = assigned.items;
+    pendingUnits.value = pending.items;
+    fieldInventoryWarning.value = assigned.warning ?? '';
+  } catch (e) {
+    fieldInventoryWarning.value = getErrorMessage(e);
   } finally {
     loadingUnits.value = false;
   }
@@ -770,11 +795,12 @@ async function loadEquipos() {
 const unlinkingUnitId = ref<string | null>(null);
 const unlinkError = ref<string | null>(null);
 
-async function handleUnlinkPendingUnit(unit: InventoryUnit) {
+async function handleUnlinkPendingUnit(unit: FieldInventoryUnit) {
   unlinkingUnitId.value = unit.id;
   unlinkError.value = null;
   try {
-    await inventoryUnitsStore.rejectUnit(unit.id, 'Desvinculado por el técnico (serie/MAC equivocada)');
+    await fieldInventory.performUnitAction(fieldContext(), unit.id, 'unlink', () =>
+      inventoryUnitsStore.rejectUnit(unit.id, 'Desvinculado por el técnico (serie/MAC equivocada)'));
     await loadEquipos();
   } catch (e) {
     unlinkError.value = getErrorMessage(e, 'Error al desvincular el equipo');
@@ -806,6 +832,12 @@ async function loadAssignees() {
   loadingAssignees.value = true;
   try {
     assignees.value = await jobAssigneesStore.fetchAssignees(jobType, jobId);
+    if (jobType !== 'routine') {
+      fieldInventoryWarning.value = '';
+      await Promise.all([loadMaterials(), jobType === 'installation' ? loadInstallEquipos() : loadEquipos()]);
+      installAvailableUnits.value = []; availableIncomingUnits.value = [];
+      installUnitForm.value.unitId = ''; incomingForm.value.unitId = '';
+    }
   } finally {
     loadingAssignees.value = false;
   }
@@ -1048,7 +1080,11 @@ async function handleOutgoingUnit() {
 }
 
 const incomingForm = ref({ productId: '', unitId: '', reason: '' });
-const availableIncomingUnits = ref<InventoryUnit[]>([]);
+const availableIncomingUnits = ref<FieldInventoryUnit[]>([]);
+watch(() => [auth.user?.id, auth.role], () => {
+  fieldProducts.value = []; materials.value = []; installEquipmentUnits.value = [];
+  installAvailableUnits.value = []; assignedUnits.value = []; pendingUnits.value = []; availableIncomingUnits.value = [];
+});
 const loadingIncomingUnits = ref(false);
 const savingIncoming = ref(false);
 const incomingError = ref<string | null>(null);
@@ -1058,9 +1094,12 @@ async function onIncomingProductChange() {
   availableIncomingUnits.value = [];
   if (!incomingForm.value.productId) return;
   loadingIncomingUnits.value = true;
+  const productId = incomingForm.value.productId;
   try {
-    const units = await inventoryUnitsStore.fetchUnitsByProduct(incomingForm.value.productId);
-    availableIncomingUnits.value = units.filter((u) => u.status === 'in_stock');
+    const result = await fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'available', { productId });
+    if (productId === incomingForm.value.productId) availableIncomingUnits.value = result.items;
+  } catch (e) {
+    fieldInventoryWarning.value = getErrorMessage(e);
   } finally {
     loadingIncomingUnits.value = false;
   }
@@ -2078,6 +2117,7 @@ async function handleCloseSubmit() {
           <p class="text-[11px] text-slate-400 mt-1.5 text-center">Paso {{ installStep }} de {{ INSTALL_STEPS.length }}</p>
         </section>
 
+        <p v-if="jobType !== 'routine' && fieldInventoryWarning" role="alert" class="text-xs text-amber-700 mb-3">{{ fieldInventoryWarning }}</p>
         <!-- Kit base de materiales (Fase 123, solo Altas) — Averias arranca
              sin nada precargado a proposito (el tecnico agrega solo lo que
              de verdad uso, ver "Materiales usados" mas abajo).
@@ -2247,7 +2287,7 @@ async function handleCloseSubmit() {
             <form class="space-y-1.5" @submit.prevent="handleAssignInstallUnit">
               <select v-model="installUnitForm.productId" required class="field-input text-sm" @change="onInstallUnitProductChange">
                 <option value="" disabled>Producto (Modem/ONT, TV Box, Mesh)...</option>
-                <option v-for="p in inventoryStore.products.filter((p) => p.is_serialized)" :key="p.id" :value="p.id">{{ p.name }}</option>
+                <option v-for="p in fieldProducts.filter((p) => p.is_serialized)" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
               <select
                 v-model="installUnitForm.unitId"
@@ -2305,7 +2345,7 @@ async function handleCloseSubmit() {
               <form class="space-y-1.5" @submit.prevent="handleIncomingUnit">
                 <select v-model="incomingForm.productId" class="field-input text-sm" @change="onIncomingProductChange">
                   <option value="">Producto...</option>
-                  <option v-for="p in inventoryStore.products.filter((prod) => prod.is_serialized)" :key="p.id" :value="p.id">
+                  <option v-for="p in fieldProducts.filter((prod) => prod.is_serialized)" :key="p.id" :value="p.id">
                     {{ p.name }}
                   </option>
                 </select>

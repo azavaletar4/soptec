@@ -151,7 +151,7 @@ export const useInventoryStore = defineStore('inventory', () => {
    * decision de UI (ver InventarioProductoView.vue): el insert en si ya lo
    * permite la policy existente para todo el staff.
    */
-  function revertMovement(movement: InventoryMovement) {
+  function revertMovement(movement: Pick<InventoryMovement, 'id' | 'product_id' | 'movement_type' | 'quantity' | 'created_at' | 'reason' | 'ticket_id' | 'installation_id'>) {
     return registerMovement({
       productId: movement.product_id,
       type: movement.movement_type === 'ingreso' ? 'egreso' : 'ingreso',
