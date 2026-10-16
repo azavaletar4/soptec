@@ -11,7 +11,6 @@ import { useTicketsStore } from '@/stores/tickets';
 import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useOltStore } from '@/stores/olt';
 import { useInventoryStore } from '@/stores/inventory';
-import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { useClientsStore } from '@/stores/clients';
@@ -23,6 +22,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
+import { executeFieldInventory, pendingFieldInventory, type FieldInventoryAction } from '@/lib/fieldInventoryOperation';
 import type { FieldInventoryContext, FieldInventoryProduct, FieldInventoryMovement, FieldInventoryUnit } from '@/types/fieldInventory';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
@@ -59,7 +59,6 @@ const campoStore = useCampoStore();
 const ticketsStore = useTicketsStore();
 const oltStore = useOltStore();
 const inventoryStore = useInventoryStore();
-const inventoryUnitsStore = useInventoryUnitsStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 const clientsStore = useClientsStore();
@@ -83,6 +82,39 @@ const jobId = route.params.id as string;
 const fieldInventory = createFieldInventoryClient(path => apiFetch(path, {}, 15000), context =>
   auth.user?.id === context.actorId && ['ADMIN', 'SUPERADMIN', 'TECNICO_RED'].includes(auth.role ?? '') &&
   trabajo.value?.clientId === context.clientId && trabajo.value?.contractId === context.contractId);
+const inventoryWriteBusy = ref(false);
+const inventoryPendingNotice = ref('');
+async function writeFieldInventory(action: FieldInventoryAction, payload: Record<string, unknown>) {
+  if (inventoryWriteBusy.value) throw Error('Ya hay una operación de inventario en curso.');
+  const context = fieldContext();
+  if (auth.user?.id !== context.actorId) throw Error('La sesión cambió.');
+  inventoryWriteBusy.value = true;
+  try {
+    // Web Locks evita que dos pestañas sobrescriban la intención persistida.
+    if (!navigator.locks) throw Error('Este navegador no permite registrar inventario de forma segura.');
+    return await navigator.locks.request(`campo-inventory:${context.actorId}:${jobType}:${jobId}`, async () => {
+      if (auth.user?.id !== context.actorId) throw Error('La sesión cambió.');
+      return executeFieldInventory(localStorage, context, action, payload, async request => {
+        const response = await supabase.rpc('campo_inventory_operation', request);
+        if (auth.user?.id !== context.actorId) throw Error('La sesión cambió; confirma el resultado con la sesión original.');
+        return response;
+      });
+    });
+  } finally {
+    inventoryWriteBusy.value = false;
+    inventoryPendingNotice.value = localStorage.getItem(`campo-inventory:v1:${context.actorId}:${jobType}:${jobId}`)
+      ? 'Hay una operación de inventario pendiente de confirmar.' : '';
+  }
+}
+async function retryPendingInventory() {
+  try {
+    const pending = pendingFieldInventory(localStorage, fieldContext());
+    if (!pending) { inventoryPendingNotice.value = ''; return; }
+    await writeFieldInventory(pending.p_action, pending.p_payload);
+    await Promise.all([loadMaterials(), loadInstallEquipos(), loadEquipos()]);
+    toast.success('Operación de inventario confirmada.');
+  } catch (error) { toast.error(getErrorMessage(error)); }
+}
 const fieldProducts = ref<FieldInventoryProduct[]>([]);
 const fieldInventoryWarning = ref('');
 function fieldContext(): FieldInventoryContext {
@@ -294,6 +326,12 @@ const existingPhotoByCategory = computed(() => {
 const DOCUMENT_LABEL: Record<string, string> = { cedula: 'DNI', ruc: 'RUC', pasaporte: 'Pasaporte' };
 
 onMounted(async () => {
+  if (jobType !== 'routine' && auth.user?.id) {
+    try {
+      inventoryPendingNotice.value = localStorage.getItem(`campo-inventory:v1:${auth.user.id}:${jobType}:${jobId}`)
+        ? 'Hay una operación de inventario pendiente de confirmar.' : '';
+    } catch { inventoryPendingNotice.value = 'No se pudo leer la operación pendiente. Revisa el almacenamiento del navegador.'; }
+  }
   // Fase 116 — guardar el borrador justo antes de que el sistema mate el
   // proceso en 2do plano (el tecnico abre la camara nativa o WhatsApp): el
   // evento 'change' de un <input type=file> dispara DESPUES de que la app
@@ -467,12 +505,10 @@ async function handleAddMaterial() {
   savingMaterial.value = true;
   materialError.value = null;
   try {
-    await inventoryStore.registerUsage({
+    await writeFieldInventory('consume', {
       productId: materialForm.value.productId,
       quantity: materialForm.value.quantity,
-      installationId: jobType === 'installation' ? jobId : undefined,
-      ticketId: jobType === 'ticket' ? jobId : undefined,
-      reason: `Campo — ${trabajo.value?.clienteNombre ?? jobId}`,
+      reason: 'Material utilizado desde Campo',
     });
     materialForm.value = { productId: '', quantity: 1 };
     await loadMaterials();
@@ -496,16 +532,10 @@ async function handleSaveMaterialQty(m: FieldInventoryMovement) {
   materialActionBusy.value = m.id;
   materialError.value = null;
   try {
-    await inventoryStore.revertMovement(m);
-    if (newQty > 0) {
-      await inventoryStore.registerUsage({
-        productId: m.product_id,
-        quantity: newQty,
-        installationId: jobType === 'installation' ? jobId : undefined,
-        ticketId: jobType === 'ticket' ? jobId : undefined,
-        reason: `Corrección de cantidad (antes ${m.quantity})`,
-      });
-    }
+    await writeFieldInventory(newQty > 0 ? 'correct' : 'reverse', {
+      movementId: m.id, ...(newQty > 0 ? { quantity: newQty } : {}),
+      reason: 'Corrección de cantidad desde Campo',
+    });
     await loadMaterials();
   } catch (e) {
     materialError.value = getErrorMessage(e, 'Error al corregir la cantidad');
@@ -518,7 +548,7 @@ async function handleRemoveMaterial(m: FieldInventoryMovement) {
   materialActionBusy.value = m.id;
   materialError.value = null;
   try {
-    await inventoryStore.revertMovement(m);
+    await writeFieldInventory('reverse', { movementId: m.id });
     await loadMaterials();
   } catch (e) {
     materialError.value = getErrorMessage(e, 'Error al quitar el material');
@@ -634,49 +664,19 @@ async function handleRegisterKit() {
   }
   savingKit.value = true;
   kitError.value = null;
-  const failures: string[] = [];
-  for (const row of rows) {
-    try {
-      await inventoryStore.registerUsage({
-        productId: row.product!.id,
-        quantity: kitQuantities.value[row.key] ?? 0,
-        installationId: jobId,
-        reason: `App de Campo — ${trabajo.value?.clienteNombre ?? jobId} — kit base`,
-      });
-    } catch (e) {
-      failures.push(`${row.label}: ${getErrorMessage(e)}`);
-    }
+  try {
+    const items = rows.map(row => ({ productId: row.product!.id, quantity: kitQuantities.value[row.key] ?? 0 }));
+    if (dropPrefabQty > 0 && dropPrefabProductId.value) items.push({ productId: dropPrefabProductId.value, quantity: dropPrefabQty });
+    if (dropBobinaQty > 0 && dropBobinaProduct.value) items.push({ productId: dropBobinaProduct.value.id, quantity: dropBobinaQty });
+    await writeFieldInventory('kit', { items, reason: 'Kit base de Alta desde Campo' });
+    resetKitQuantities();
+    await loadMaterials();
+    toast.success('Kit base registrado.');
+  } catch (error) {
+    kitError.value = getErrorMessage(error);
+  } finally {
+    savingKit.value = false;
   }
-  if (dropPrefabQty > 0 && dropPrefabProductId.value) {
-    try {
-      await inventoryStore.registerUsage({
-        productId: dropPrefabProductId.value,
-        quantity: dropPrefabQty,
-        installationId: jobId,
-        reason: `App de Campo — ${trabajo.value?.clienteNombre ?? jobId} — drop prefabricado`,
-      });
-    } catch (e) {
-      failures.push(`Cable Drop: ${getErrorMessage(e)}`);
-    }
-  }
-  if (dropBobinaQty > 0 && dropBobinaProduct.value) {
-    try {
-      await inventoryStore.registerUsage({
-        productId: dropBobinaProduct.value.id,
-        quantity: dropBobinaQty,
-        installationId: jobId,
-        reason: `App de Campo — ${trabajo.value?.clienteNombre ?? jobId} — drop de bobina (${dropBobinaQty} m)`,
-      });
-    } catch (e) {
-      failures.push(`Cable Drop (bobina): ${getErrorMessage(e)}`);
-    }
-  }
-  await loadMaterials();
-  resetKitQuantities();
-  if (failures.length) toast.error(`No se pudo registrar: ${failures.join(' · ')}`);
-  else toast.success('Kit base registrado.');
-  kitError.value = failures.length ? failures.join(' · ') : null;
-  savingKit.value = false;
 }
 
 // ---- Equipos por serie/MAC para Altas (Fase 123) — mismo flujo que ya
@@ -684,7 +684,7 @@ async function handleRegisterKit() {
 // Mesh) y luego la serie/MAC exacta de lo disponible en bodega
 // (status='in_stock', bodega central compartida — no hay stock personal por
 // tecnico). Asignar queda vinculado de inmediato al cliente/contrato/orden
-// (inventoryUnitsStore.assignUnit ya pone status='assigned'), igual que en
+// (la operación contextual conserva status='assigned'), igual que en
 // el Panel Web — no se espera al cierre de la orden.
 const installEquipmentUnits = ref<FieldInventoryUnit[]>([]);
 const loadingInstallEquipment = ref(false);
@@ -729,11 +729,7 @@ async function handleAssignInstallUnit() {
   savingInstallUnit.value = true;
   installUnitError.value = null;
   try {
-    await inventoryUnitsStore.assignUnit(installUnitForm.value.unitId, trabajo.value.clientId, {
-      installationId: jobId,
-      contractId: trabajo.value.contractId ?? undefined,
-      reason: `App de Campo — ${trabajo.value.clienteNombre}`,
-    });
+    await writeFieldInventory('assign', { unitId: installUnitForm.value.unitId });
     await loadInstallEquipos();
     await onInstallUnitProductChange();
   } catch (e) {
@@ -748,8 +744,7 @@ async function handleUnassignInstallUnit(unit: FieldInventoryUnit) {
   removingInstallUnitId.value = unit.id;
   installUnitError.value = null;
   try {
-    await fieldInventory.performUnitAction(fieldContext(), unit.id, 'unassign', () =>
-      inventoryUnitsStore.markRepaired(unit.id, 'Corrección en campo: equipo incorrecto retirado de la instalación'));
+    await writeFieldInventory('unassign', { unitId: unit.id });
     await loadInstallEquipos();
     await onInstallUnitProductChange();
   } catch (e) {
@@ -799,8 +794,7 @@ async function handleUnlinkPendingUnit(unit: FieldInventoryUnit) {
   unlinkingUnitId.value = unit.id;
   unlinkError.value = null;
   try {
-    await fieldInventory.performUnitAction(fieldContext(), unit.id, 'unlink', () =>
-      inventoryUnitsStore.rejectUnit(unit.id, 'Desvinculado por el técnico (serie/MAC equivocada)'));
+    await writeFieldInventory('unlink', { unitId: unit.id });
     await loadEquipos();
   } catch (e) {
     unlinkError.value = getErrorMessage(e, 'Error al desvincular el equipo');
@@ -1063,13 +1057,8 @@ async function handleOutgoingUnit() {
   outgoingError.value = null;
   try {
     // clientId nunca es null aqui: este formulario solo se muestra para jobType === 'ticket'.
-    await inventoryUnitsStore.returnUnit(
-      outgoingForm.value.unitId,
-      outgoingForm.value.condition,
-      outgoingForm.value.reason || 'Retirado en averia',
-      trabajo.value.clientId!,
-      jobId,
-    );
+    await writeFieldInventory('return', { unitId: outgoingForm.value.unitId,
+      condition: outgoingForm.value.condition, reason: outgoingForm.value.reason || 'Retirado en averia' });
     outgoingForm.value = { unitId: '', condition: 'in_stock', reason: '' };
     await loadEquipos();
   } catch (e) {
@@ -1110,10 +1099,8 @@ async function handleIncomingUnit() {
   savingIncoming.value = true;
   incomingError.value = null;
   try {
-    // clientId nunca es null aqui: este formulario solo se muestra para jobType === 'ticket'.
-    await inventoryUnitsStore.stageUnitFromTicket(incomingForm.value.unitId, trabajo.value.clientId!, {
-      contractId: trabajo.value.contractId ?? undefined,
-      ticketId: jobId,
+    await writeFieldInventory('stage', {
+      unitId: incomingForm.value.unitId,
       reason: incomingForm.value.reason || 'Equipo entrante registrado en averia',
     });
     incomingForm.value = { productId: '', unitId: '', reason: '' };
@@ -1698,6 +1685,12 @@ async function handleCloseSubmit() {
     </template>
 
     <template v-else>
+      <section v-if="jobType !== 'routine'" class="surface p-3 mb-3">
+        <p v-if="inventoryPendingNotice" class="text-sm text-amber-700">{{ inventoryPendingNotice }}</p>
+        <button class="text-sm text-blue-700" :disabled="inventoryWriteBusy" @click="retryPendingInventory">
+          Confirmar operación de inventario pendiente
+        </button>
+      </section>
       <!-- Cliente -->
       <section class="surface p-3.5 mb-3">
         <span

@@ -15,6 +15,7 @@ const product={id:id(6),name:'Equipo de prueba contextual',unit:'unidad',is_acti
 const unit={id:unitId,product_id:product.id,serial_number:'SERIE-CONTEXTUAL',mac_address:null,status:jobType==='installation'?'assigned':'pending_approval',client_id:client,contract_id:contract,installation_id:jobType==='installation'?job:null,ticket_id:jobType==='ticket'?job:null,product:{id:product.id,name:product.name,unit:'unidad'}};
 const context={jobType,jobId:job,actorId:actor,clientId:client,contractId:contract};
 let removed=false;
+const receipts=new Map();window.__commitCount=0;
 const realFetch=window.fetch.bind(window);
 window.fetch=async(input,init={})=>{
  const url=new URL(typeof input==='string'?input:input.url,location.href);
@@ -30,7 +31,13 @@ window.fetch=async(input,init={})=>{
   if(table==='clients')data=person;
   if(table==='service_contracts')data=[service];
   if(table==='job_assignees')data=[{job_type:jobType,job_id:job,technician_id:actor,role:'leader',profile:{full_name:'Técnico simulado'}}];
-  if(table==='inventory_unit_events'&&method==='POST'){removed=true;data={id:id(30),...JSON.parse(init.body)};}
+  if(table==='campo_inventory_operation'&&method==='POST'){
+    removed=true;const request=JSON.parse(init.body);
+    const fresh=!receipts.has(request.p_operation_id);
+    if(fresh){window.__commitCount++;receipts.set(request.p_operation_id,{operationId:request.p_operation_id,jobType:request.p_job_type,jobId:request.p_job_id,action:request.p_action,ids:[id(30)],at:'2026-10-15T12:00:00Z'});}
+    if(fresh&&new URLSearchParams(location.search).has('lost'))return new Response('Respuesta perdida',{status:502});
+    data=receipts.get(request.p_operation_id);
+  }
   else if(method!=='GET'&&method!=='HEAD')throw Error('Escritura inesperada');
  }
  return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
