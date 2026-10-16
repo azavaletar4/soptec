@@ -158,6 +158,16 @@ falta deshacer solo esa pieza.
 
 ## 7. Archivos exactos a desplegar
 
+Corrección de conteo al retomar desde `65bd12d`: la lista que sigue contiene
+**25 archivos frontend, 4 backend y 2 migraciones: 31 en total**, no 28.
+Ver `INVENTARIO-ACTIVACION-MANIFIESTO.json` para los nombres y SHA-256 exactos.
+El manifiesto enumera fuentes de esta activación; no autoriza ejecutar
+`deploy/update.sh` sobre toda la rama ni aplicar todas las migraciones.
+La evidencia local `FASE161-DESPLIEGUE-RESULTADO.md` registra el frontend
+desplegado desde `ccdf94f`, conservado como base del paquete seleccionado.
+`b128e42` es la referencia de `origin/main`; no debe confundirse con esa
+imagen desplegada. Ver `INVENTARIO-CONTINUIDAD-CODEX.md` para la corrección.
+
 51 archivos de código cambiaron desde el último commit realmente desplegado
 (`b128e42`, confirmado por `git diff --name-only` acotado a `src/`,
 `server/` y `supabase/migrations/` — sin ruido de otras fases, ese rango no
@@ -178,7 +188,7 @@ fieldInventory.ts`, `server/src/routes/inventorySignals.ts`,
 3), `supabase/migrations/20261016220000_inventario_contextual_rls_admin.sql`
 (cierre RLS).
 
-**Frontend (Vue/TS) — 22 archivos:**
+**Frontend (Vue/TS) — 25 archivos:**
 `src/components/inventario/InventorySearchResults.vue`,
 `src/components/inventario/RoutineInventory.vue`,
 `src/components/layout/AppLayout.vue`,
