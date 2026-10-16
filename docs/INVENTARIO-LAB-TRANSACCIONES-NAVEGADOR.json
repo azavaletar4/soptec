@@ -1,0 +1,50 @@
+{
+  "at": "2026-10-16T14:28:19.173Z",
+  "status": "PASS",
+  "results": [
+    {
+      "test": "leader Alta consumo/corrección/reversión",
+      "status": "PASS"
+    },
+    {
+      "test": "support Avería consumo/corrección/reversión",
+      "status": "PASS"
+    },
+    {
+      "test": "Alta asignación/retiro mediante JWT real",
+      "status": "PASS"
+    },
+    {
+      "test": "Avería entrante pendiente/desvinculación",
+      "status": "PASS"
+    },
+    {
+      "test": "outsider Alta denegación en español sin cambios",
+      "status": "PASS"
+    },
+    {
+      "test": "outsider Avería denegación en español sin cambios",
+      "status": "PASS"
+    },
+    {
+      "test": "removed Alta denegación en español sin cambios",
+      "status": "PASS"
+    },
+    {
+      "test": "removed Avería denegación en español sin cambios",
+      "status": "PASS"
+    },
+    {
+      "test": "Respuesta perdida después del commit / reintento UI sin duplicación",
+      "status": "PASS"
+    },
+    {
+      "test": "55P03 real en español, rollback y nuevo intento seguro",
+      "status": "PASS"
+    }
+  ],
+  "externalRequests": 0,
+  "runtimeExceptions": 0,
+  "finalStock": 20,
+  "simulatedSessions": false
+}

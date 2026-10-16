@@ -1,0 +1,20 @@
+// Recuperación explícita de un checkpoint conocido del harness, no ajuste de saldos.
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync,copyFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import {createClient} from '@supabase/supabase-js';
+import {config,runtime,root,sql,gateway} from './common.mjs';
+const c=config(),f=JSON.parse(readFileSync(runtime+'transactions.json','utf8'));
+const previous=JSON.parse(readFileSync(root+'docs/INVENTARIO-LAB-TRANSACCIONES-NAVEGADOR.json','utf8'));
+assert.match(previous.error,/Timeout UI; estado=Esperando/);
+assert.equal(Number(sql(`select current_stock from inventory_products where id='${f.material}'`)),18);
+const active=JSON.parse(sql(`select jsonb_agg(to_jsonb(m)) from inventory_movements m where product_id='${f.material}' and movement_type='egreso' and not exists(select 1 from inventory_movements r where r.reverses_movement_id=m.id)`));
+assert.equal(active.length,1);assert.equal(active[0].installation_id,f.jobs[0].id);assert.equal(Number(active[0].quantity),2);
+copyFileSync(root+'docs/INVENTARIO-LAB-TRANSACCIONES-NAVEGADOR.json',runtime+'browser-attempt-1.json');
+const auth=createClient(gateway,c.anonKey,{auth:{persistSession:false,autoRefreshToken:false}}),a=c.accounts.find(a=>a.role==='leader');
+const {data,error}=await auth.auth.signInWithPassword({email:a.email,password:a.password});assert(!error);assert(data.session);
+const operationId=randomUUID();
+const response=await fetch(gateway+'/rest/v1/rpc/campo_inventory_operation',{method:'POST',headers:{Authorization:'Bearer '+data.session.access_token,apikey:c.anonKey,'Content-Type':'application/json'},body:JSON.stringify({p_operation_id:operationId,p_job_type:'installation',p_job_id:f.jobs[0].id,p_action:'reverse',p_payload:{movementId:active[0].id,reason:'Reversión explícita del checkpoint del harness de navegador'}})});
+const body=await response.json();assert.equal(response.status,200,JSON.stringify(body));assert.equal(Number(sql(`select current_stock from inventory_products where id='${f.material}'`)),20);
+writeFileSync(runtime+'browser-checkpoint-recovery.json',JSON.stringify({operationId,receipt:body,cause:'Harness DOM timeout; correct confirmado, stock 18 esperado; reversión autorizada de cantidad 2',stockBefore:18,stockAfter:20},null,2));
+console.log('CHECKPOINT_REVERSED_WITH_REAL_LEADER_JWT: historial conservado, stock 18→20; sin UPDATE directo.');

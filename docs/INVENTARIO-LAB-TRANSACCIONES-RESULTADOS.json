@@ -1,0 +1,84 @@
+{
+  "at": "2026-10-16T14:00:13.881Z",
+  "status": "PASS",
+  "environment": "LOCAL_SYNTHETIC_ONLY",
+  "results": [
+    {
+      "test": "Cinco sesiones Auth reales locales",
+      "status": "PASS",
+      "detail": "Líder, apoyo, ajeno, retirado y ADMIN ficticio; JWT verificados, sin service_role para operar."
+    },
+    {
+      "test": "Consumo/corrección/reversión installation",
+      "status": "PASS",
+      "detail": "JWT líder/apoyo; stock 20→17→19→20; filas históricas y enlace de reversión conservados."
+    },
+    {
+      "test": "Consumo/corrección/reversión ticket",
+      "status": "PASS",
+      "detail": "JWT líder/apoyo; stock 20→17→19→20; filas históricas y enlace de reversión conservados."
+    },
+    {
+      "test": "Equipos Alta y Avería",
+      "status": "PASS",
+      "detail": "Asignar/retirar Alta; entrante Avería pendiente/desvincular; salida de equipo asignado a damaged."
+    },
+    {
+      "test": "16 denegaciones de ajeno/retirado",
+      "status": "PASS",
+      "detail": "42501 en materiales y equipos para ambas órdenes; cero cambios de inventario/recibos."
+    },
+    {
+      "test": "Stock insuficiente / corrección atómica",
+      "status": "PASS",
+      "detail": "Error español; ni reversión parcial ni recibo; stock/historial idénticos al estado anterior al fallo."
+    },
+    {
+      "test": "Respuesta perdida real tras commit / helper persistente",
+      "status": "PASS",
+      "detail": "Gateway descarta respuesta después de REST 200; reintento con UUID persistida recupera un recibo, un consumo."
+    },
+    {
+      "test": "Dos peticiones simultáneas de la misma intención",
+      "status": "PASS",
+      "detail": "Respuestas idénticas, una fila y un efecto en stock."
+    },
+    {
+      "test": "Dos técnicos compiten por stock y reversión",
+      "status": "PASS",
+      "detail": "Solo un consumo de 12 y una reversión; segundo consumo sin stock, segunda reversión rechazada."
+    },
+    {
+      "test": "Dos técnicos compiten por equipo",
+      "status": "PASS",
+      "detail": "Una sola asignación; retiro posterior legítimo; sin evento duplicado."
+    },
+    {
+      "test": "Concurrencia JWT ADMIN reassign",
+      "status": "PASS",
+      "detail": "Protección real retiene padre; movimiento espera y luego 42501, sin escritura posterior a cierre/reasignación."
+    },
+    {
+      "test": "Concurrencia JWT ADMIN close",
+      "status": "PASS",
+      "detail": "Protección real retiene padre; movimiento espera y luego 42501, sin escritura posterior a cierre/reasignación."
+    },
+    {
+      "test": "Recibo previo no autoriza al revocado",
+      "status": "PASS",
+      "detail": "Mismo UUID tras reasignación denegado; nuevo técnico autorizado puede revertir el consumo original de la orden."
+    },
+    {
+      "test": "Datos previos conservados / auditoría final",
+      "status": "PASS",
+      "detail": "Mismas filas previas; stock transaccional final 20; ninguna doble reversión."
+    }
+  ],
+  "finalState": {
+    "stock": 20,
+    "events": 8,
+    "receipts": 23,
+    "movements": 18
+  },
+  "productionAccess": false
+}

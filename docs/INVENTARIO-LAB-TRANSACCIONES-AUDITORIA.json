@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-16T14:28:46.225Z",
+  "status": "PASS",
+  "previousLabRowsUnchanged": true,
+  "totals": {
+    "stock": 20,
+    "movements": 34,
+    "active_egresos": 0,
+    "stock_from_kardex": 20,
+    "duplicate_reversals": 0
+  },
+  "receipts": {
+    "total": 40,
+    "incomplete": 0
+  },
+  "units": {
+    "in_stock": 4,
+    "damaged": 1,
+    "allLinksCleared": true
+  },
+  "productionAccess": false
+}
