@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-16T15:48:10.196Z",
+  "environment": "LOCAL_SYNTHETIC_ONLY",
+  "inventoryUnchanged": true,
+  "permissions": {
+    "isSuperuser": false,
+    "canSelectInventory": false,
+    "unfinishedTransactions": 0
+  },
+  "sseServerListening": false
+}

@@ -1,5 +1,16 @@
 # Laboratorio local de autorización de inventario
 
+## Prototipo SSE: BLOQUEADO (16/10/2026)
+
+Ver `docs/INVENTARIO-LAB-SSE-VALIDACION.md`: 8 PASS y un FAIL bloqueante con JWT
+reales. Al pausar el backend, el timeout SQL libera locks; la revocación confirma
+y el proceso reanuda escribiendo un aviso antes de procesar el error de sesión.
+No integrar ni arrancar como transporte seguro. El servidor de ensayo quedó
+detenido; la fixture y evidencia se conservan. No repetir `sse-prepare.mjs` ni
+`sse-validate.mjs`. `sse-audit.mjs` verifica el estado final mediante solo lectura.
+No hay cambios de aplicación ni dependencias nuevas. El prototipo no modifica
+inventario ni conecta a Cloud; usa psql dentro del contenedor fijo del laboratorio.
+
 ## Etapa 4 Realtime: BLOQUEADO (16/10/2026)
 
 Causa exacta y alternativa de entrega autorizada en servidor:

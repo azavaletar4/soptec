@@ -1,0 +1,61 @@
+{
+  "at": "2026-10-16T15:45:17.261Z",
+  "environment": "LOCAL_SYNTHETIC_ONLY",
+  "authentication": "REAL_GOTRUE_ES256",
+  "status": "BLOCKED",
+  "results": [
+    {
+      "test": "Autorización SSE real de cuatro roles",
+      "status": "PASS",
+      "detail": "Líder/apoyo/futuro retirado 200; ajeno 403 sin contexto. JWT GoTrue verificados por backend, sin service_role."
+    },
+    {
+      "test": "Señal mínima y deduplicación por revisión",
+      "status": "PASS",
+      "detail": "Cada conexión recibió una única señal {v:1} por revisión; sin filas de negocio."
+    },
+    {
+      "test": "Retirado con conexión abierta",
+      "status": "PASS",
+      "detail": "RPC de cuadrilla con JWT ADMIN real; tras commit no recibe la nueva revisión y servidor cierra stream."
+    },
+    {
+      "test": "Reconexión del retirado con JWT viejo y nuevo",
+      "status": "PASS",
+      "detail": "Ambas conexiones rechazadas por asignación vigente, sin datos."
+    },
+    {
+      "test": "Cambio de identidad de conexión",
+      "status": "PASS",
+      "detail": "Sesiones SSE distintas no heredan identidad; socket anterior sigue ligado a su JWT. No certifica UI completa de cambio de sesión."
+    },
+    {
+      "test": "Reasignación de Avería con JWT ADMIN real",
+      "status": "PASS",
+      "detail": "Antiguo líder/apoyo dejan de recibir; técnico anteriormente ajeno recibe al estar asignado."
+    },
+    {
+      "test": "Cierre de orden con conexión abierta",
+      "status": "PASS",
+      "detail": "PATCH con JWT ADMIN real; el técnico ya no recibe señales ni puede reconectar."
+    },
+    {
+      "test": "Corte temporal y recuperación contextual",
+      "status": "PASS",
+      "detail": "Reconecta en revisión vigente, sin replay duplicado; reconsulta real de su orden sin materiales ajenos."
+    },
+    {
+      "test": "Pérdida de barrera SQL durante pausa del backend",
+      "status": "FAIL",
+      "detail": "Timeout de sesión SQL libera locks; revocación confirma; proceso reanuda antes de procesar FATAL y encola un aviso posterior al commit. Parada obligatoria."
+    }
+  ],
+  "productionAccess": false,
+  "barrierFault": {
+    "sqlSessionEnded": true,
+    "revocationCommitted": true,
+    "serverEnqueuedAfterCommit": true,
+    "clientObservedFrame": true
+  },
+  "inventoryUnchanged": true
+}
