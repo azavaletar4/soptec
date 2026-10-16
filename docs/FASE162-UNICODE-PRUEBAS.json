@@ -1,0 +1,154 @@
+{
+    "at":  "2026-10-16T20:54:07.0860986Z",
+    "status":  "PASS",
+    "environment":  "ISOLATED_DOCKER_NO_NETWORK",
+    "powershell":  "5.1.19041.6456",
+    "legacy":  {
+                   "stdinEncoding":  "ibm850",
+                   "expectedHex":  "f09f93a6",
+                   "actualHex":  "3f3f",
+                   "lossReproduced":  true
+               },
+    "results":  [
+                    {
+                        "test":  "legacy probe completes",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "exact roundtrip ascii",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "byte SHA256 ascii",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "exact roundtrip latin",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "byte SHA256 latin",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "exact roundtrip supplementary",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "byte SHA256 supplementary",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "exact roundtrip cjk-arabic",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "byte SHA256 cjk-arabic",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "exact roundtrip normalization-distinct",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "byte SHA256 normalization-distinct",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "exact roundtrip sql-json-crlf",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "byte SHA256 sql-json-crlf",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "stderr exact UTF8",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "unpaired surrogate rejected before process starts",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "approved source unchanged 20261015180000_fase162_inventario_rutinas.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "strict UTF8 decode/encode 20261015180000_fase162_inventario_rutinas.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "received SQL bytes unchanged 20261015180000_fase162_inventario_rutinas.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "approved source unchanged 20261016020000_fase162_autorizacion_recibos.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "strict UTF8 decode/encode 20261016020000_fase162_autorizacion_recibos.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "received SQL bytes unchanged 20261016020000_fase162_autorizacion_recibos.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "approved source unchanged fase162-installation-bundle.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "strict UTF8 decode/encode fase162-installation-bundle.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "received SQL bytes unchanged fase162-installation-bundle.sql",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "isolated PostgreSQL ready without network",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "PostgreSQL literal bytes/hash ascii",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "PostgreSQL literal bytes/hash latin",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "PostgreSQL literal bytes/hash supplementary",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "PostgreSQL literal bytes/hash cjk-arabic",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "PostgreSQL literal bytes/hash normalization-distinct",
+                        "status":  "PASS"
+                    },
+                    {
+                        "test":  "PostgreSQL literal bytes/hash sql-json-crlf",
+                        "status":  "PASS"
+                    }
+                ],
+    "approvedFiles":  [
+                          {
+                              "sha256":  "16a7d9a05dfb6b02ddce08051f7293a93bb246429ca8237229c81ac46748b225",
+                              "path":  "supabase/migrations/20261015180000_fase162_inventario_rutinas.sql"
+                          },
+                          {
+                              "sha256":  "17f0c543b0742fb40d2992ea36238f807fe5b4fa13dbdb3e05a837a0b9d34f72",
+                              "path":  "supabase/migrations/20261016020000_fase162_autorizacion_recibos.sql"
+                          },
+                          {
+                              "sha256":  "898c34ab4d0c9f44960af346e380ba4bef5a7f9c6d6b49cf58c08b24f7dc9d1b",
+                              "path":  "scripts/inventory-auth-lab/runtime/fase162-installation-bundle.sql"
+                          }
+                      ],
+    "cloudAccess":  false,
+    "migrationsExecuted":  false
+}

@@ -1,0 +1,56 @@
+{
+  "at": "2026-10-16T20:55:28.62155+00:00",
+  "status": "PASS",
+  "checks": {
+    "readOnly": true,
+    "correctOrigin": true,
+    "clientUtf8": true,
+    "fase162StillAbsent": true,
+    "probeExact": true,
+    "probeBytes": true,
+    "probeSHA256": true,
+    "iconBytes": true,
+    "iconSHA256": true,
+    "functionsLocalExact": true,
+    "functionsServerExact": true,
+    "tablesLocalExact": true,
+    "tablesServerExact": true,
+    "policiesLocalExact": true,
+    "policiesServerExact": true,
+    "typesLocalExact": true,
+    "typesServerExact": true
+  },
+  "counts": {
+    "functions": 37,
+    "tables": 14,
+    "policies": 31
+  },
+  "icon": {
+    "utf8Hex": "27f09f93a6273a3a74657874",
+    "sha256": "5ebfb2ff608e2b0a22762ee0497719e576e5a1d8757c59c0db8ab418b747ffff"
+  },
+  "probe": {
+    "utf8Hex": "f09f93a620f09f9a802045737061c3b16f6c20c3a1c3a9c3adc3b3c3ba20e6bca2e5ad9720d8a7d984d8b9d8b1d8a8d98ad8a920c3a97c65cc810d0a272024205c",
+    "sha256": "9bfca28e8d8de797d4351094840be9b0f4a871b6533884769fca78abb0fa291d"
+  },
+  "rawResponseSHA256": "683fc526dbdcc6769f9a70c473650072b4aa2aedac3332a026ea9224144db559",
+  "approvedArtifacts": [
+    {
+      "file": "supabase/migrations/20261015180000_fase162_inventario_rutinas.sql",
+      "sha256": "16a7d9a05dfb6b02ddce08051f7293a93bb246429ca8237229c81ac46748b225",
+      "unchanged": true
+    },
+    {
+      "file": "supabase/migrations/20261016020000_fase162_autorizacion_recibos.sql",
+      "sha256": "17f0c543b0742fb40d2992ea36238f807fe5b4fa13dbdb3e05a837a0b9d34f72",
+      "unchanged": true
+    },
+    {
+      "file": "scripts/inventory-auth-lab/runtime/fase162-installation-bundle.sql",
+      "sha256": "898c34ab4d0c9f44960af346e380ba4bef5a7f9c6d6b49cf58c08b24f7dc9d1b",
+      "unchanged": true
+    }
+  ],
+  "readOnly": true,
+  "migrationsExecuted": false
+}
