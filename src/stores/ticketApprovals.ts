@@ -3,7 +3,10 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useClientPhotosStore } from '@/stores/clientPhotos';
 import { useClientEquipmentPhotosStore } from '@/stores/clientEquipmentPhotos';
-import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
+import { useAuthStore } from '@/stores/auth';
+import { readOrderInventory } from '@/lib/orderInventory';
+import { executeFieldInventory, pendingFieldInventory } from '@/lib/fieldInventoryOperation';
+import type { FieldInventoryContext } from '@/types/fieldInventory';
 import type { ClientPhotoCategory, EquipmentPhotoType, InventoryUnit, JobType, WorkOrderPhoto } from '@/types/domain';
 
 const WORK_EVIDENCE_BUCKET = 'work-evidence';
@@ -30,7 +33,16 @@ export function parseEquipmentType(category: string): EquipmentPhotoType | null 
 export const useTicketApprovalsStore = defineStore('ticketApprovals', () => {
   const clientPhotosStore = useClientPhotosStore();
   const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
-  const inventoryUnitsStore = useInventoryUnitsStore();
+  const auth = useAuthStore();
+  const reviewEpoch = ref(0);
+  const reviewNamespace = 'office-ticket-inventory:v1';
+  function actor() {
+    if (!auth.user) throw Object.assign(new Error('Inicia sesion nuevamente.'), { status: 401 });
+    return auth.user.id;
+  }
+  function reviewContext(ticketId: string): FieldInventoryContext {
+    return { actorId: actor(), jobType: 'ticket', jobId: ticketId, clientId: null, contractId: null };
+  }
   const loading = ref(false);
 
   async function fetchPendingPhotos(ticketId: string): Promise<PendingPhotoWithUrl[]> {
@@ -114,16 +126,34 @@ export const useTicketApprovalsStore = defineStore('ticketApprovals', () => {
   }
 
   async function fetchPendingEquipment(ticketId: string): Promise<InventoryUnit[]> {
-    const units = await inventoryUnitsStore.fetchUnitsByTicket(ticketId);
-    return units.filter((u) => u.status === 'pending_approval');
+    const id = actor();
+    return (await readOrderInventory<InventoryUnit>(supabase, id, 'ticket', ticketId, 'pending', () => auth.user?.id === id)).items;
   }
 
+  async function review(ticketId: string, action: 'approve' | 'reject', unitId: string) {
+    const id = actor();
+    const { context } = await readOrderInventory(supabase, id, 'ticket', ticketId, 'pending', () => auth.user?.id === id);
+    try {
+      return await executeFieldInventory(localStorage, context, action, { unitId },
+        async request => await supabase.rpc('inventory_ticket_review', request), () => crypto.randomUUID(), reviewNamespace);
+    } finally { reviewEpoch.value++; }
+  }
   function approveEquipment(unit: InventoryUnit) {
-    return inventoryUnitsStore.approveUnit(unit);
+    if (!unit.ticket_id) throw Error('El equipo no tiene averia vinculada.');
+    return review(unit.ticket_id, 'approve', unit.id);
   }
-
   function rejectEquipment(unit: InventoryUnit) {
-    return inventoryUnitsStore.rejectUnit(unit.id, 'Rechazado por administracion al revisar la averia');
+    if (!unit.ticket_id) throw Error('El equipo no tiene averia vinculada.');
+    return review(unit.ticket_id, 'reject', unit.id);
+  }
+  function pendingEquipmentReview(ticketId: string) {
+    void reviewEpoch.value;
+    return auth.user ? pendingFieldInventory(localStorage, reviewContext(ticketId), reviewNamespace) : null;
+  }
+  function retryEquipmentReview(ticketId: string) {
+    const request = pendingEquipmentReview(ticketId);
+    if (!request || !['approve', 'reject'].includes(request.p_action) || typeof request.p_payload.unitId !== 'string') throw Error('No hay revision pendiente valida.');
+    return review(ticketId, request.p_action as 'approve' | 'reject', request.p_payload.unitId);
   }
 
   return {
@@ -136,5 +166,7 @@ export const useTicketApprovalsStore = defineStore('ticketApprovals', () => {
     fetchPendingEquipment,
     approveEquipment,
     rejectEquipment,
+    pendingEquipmentReview,
+    retryEquipmentReview,
   };
 });

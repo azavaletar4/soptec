@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import { useAuthStore } from './auth';
 import { supabase } from '@/lib/supabase';
 import type {
   InventoryAlbumSummary,
@@ -14,14 +15,28 @@ const MOVEMENT_WITH_PRODUCT_SELECT = `${MOVEMENT_SELECT}, product:inventory_prod
 const PRODUCT_SELECT = '*, inventory_categories(id, slug, name, icon, color)';
 
 export const useInventoryStore = defineStore('inventory', () => {
+  const auth = useAuthStore();
+  let epoch = 0;
   const products = ref<InventoryProduct[]>([]);
   const categories = ref<InventoryCategory[]>([]);
   const albums = ref<InventoryAlbumSummary[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  watch(() => [auth.user?.id, auth.role], () => {
+    epoch++; products.value = []; categories.value = []; albums.value = []; error.value = null;
+  }, { flush: 'sync' });
+  function snapshot() {
+    if (!auth.user || !['ADMIN', 'SUPERADMIN'].includes(auth.role ?? '')) throw Error('Inventario administrativo no autorizado.');
+    return { epoch, actor: auth.user.id };
+  }
+  function verify(stamp: ReturnType<typeof snapshot>) {
+    const now = snapshot();
+    if (stamp.epoch !== now.epoch || stamp.actor !== now.actor) throw Error('La sesion de inventario cambio.');
+  }
 
   /** `categoryId` filtra la vista de un álbum puntual (Fase 44); sin filtro trae todo el catálogo activo. */
   async function fetchProducts(opts?: { categoryId?: string }) {
+    const stamp = snapshot();
     loading.value = true;
     error.value = null;
     let query = supabase.from('inventory_products').select(PRODUCT_SELECT).eq('is_active', true);
@@ -32,13 +47,16 @@ export const useInventoryStore = defineStore('inventory', () => {
       error.value = err.message;
       throw err;
     }
+    verify(stamp);
     products.value = (data ?? []) as unknown as InventoryProduct[];
   }
 
   /** Consulta puntual para abrir resultados ajenos al álbum cargado. */
   async function fetchProduct(id: string) {
+    const stamp = snapshot();
     const { data, error: err } = await supabase.from('inventory_products').select(PRODUCT_SELECT).eq('id', id).single();
     if (err) throw err;
+    verify(stamp);
     const product = data as unknown as InventoryProduct;
     const index = products.value.findIndex((p) => p.id === id);
     if (index < 0) products.value.push(product);
@@ -48,17 +66,20 @@ export const useInventoryStore = defineStore('inventory', () => {
 
   /** Taxonomía de álbumes: catálogo casi estático. */
   async function fetchCategories() {
+    const stamp = snapshot();
     const { data, error: err } = await supabase
       .from('inventory_categories')
       .select('*')
       .eq('is_active', true)
       .order('sort_order');
     if (err) throw err;
+    verify(stamp);
     categories.value = (data ?? []) as InventoryCategory[];
   }
 
   /** Contadores/valor total por álbum (RPC inventory_get_albums, Fase 44) — agregado en SQL, no trae todo el inventario al navegador. */
   async function fetchAlbums() {
+    const stamp = snapshot();
     loading.value = true;
     error.value = null;
     const { data, error: err } = await supabase.rpc('inventory_get_albums');
@@ -67,6 +88,7 @@ export const useInventoryStore = defineStore('inventory', () => {
       error.value = err.message;
       throw err;
     }
+    verify(stamp);
     albums.value = (data ?? []) as InventoryAlbumSummary[];
   }
 

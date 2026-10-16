@@ -10,7 +10,6 @@ import { useCampoStore, isNetworkError, type DiagnosticoResult } from '@/stores/
 import { useTicketsStore } from '@/stores/tickets';
 import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useOltStore } from '@/stores/olt';
-import { useInventoryStore } from '@/stores/inventory';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { useClientsStore } from '@/stores/clients';
@@ -60,7 +59,6 @@ const router = useRouter();
 const campoStore = useCampoStore();
 const ticketsStore = useTicketsStore();
 const oltStore = useOltStore();
-const inventoryStore = useInventoryStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 const clientsStore = useClientsStore();
@@ -361,7 +359,6 @@ onMounted(async () => {
   if (!campoStore.trabajos.length) await campoStore.fetchAll();
   if (!inventoryViewAlive) return;
   oltStore.fetchDevices().catch(() => {});
-  if (jobType === 'routine') inventoryStore.fetchProducts().catch(() => {});
   catalogs.fetchStaff().catch(() => {});
   setupRealtimeSync();
   // Pre-carga del Diagnostico express: se dispara apenas el tecnico ABRE

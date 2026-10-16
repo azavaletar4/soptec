@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientSectionCard from '@/components/clientes/ClientSectionCard.vue';
@@ -80,6 +80,10 @@ const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 
 const canDeleteContracts = computed(() => auth.role === 'SUPERADMIN');
+const inventoryAdmin = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? ''));
+function assertInventoryAdmin() {
+  if (!inventoryAdmin.value) throw new Error('Estas operaciones de inventario requieren ADMIN o SUPERADMIN. Utiliza tu orden autorizada de Campo.');
+}
 const canRegisterAdvancePayment = computed(() => ['SUPERADMIN', 'ADMIN', 'FACTURACION'].includes(auth.role ?? ''));
 const canApplyAveria = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 const canCreateTickets = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
@@ -538,8 +542,11 @@ async function loadOnts() {
 }
 
 async function loadUnits() {
+  if (!inventoryAdmin.value) { assignedUnits.value = []; loadingUnits.value = false; return; }
+  const actor = auth.user?.id;
   loadingUnits.value = true;
-  assignedUnits.value = await inventoryUnitsStore.fetchUnitsByClient(clientId.value);
+  const data = await inventoryUnitsStore.fetchUnitsByClient(clientId.value);
+  if (inventoryAdmin.value && auth.user?.id === actor) assignedUnits.value = data;
   loadingUnits.value = false;
 }
 
@@ -600,6 +607,7 @@ async function handleUnassignOntFromContract(ont: OltOnt) {
 }
 
 async function handleAssignUnitToContract() {
+  assertInventoryAdmin();
   if (!reassignUnitId.value || !contract.value) return;
   equipoTabSaving.value = true;
   equipoTabError.value = null;
@@ -616,6 +624,7 @@ async function handleAssignUnitToContract() {
 }
 
 async function handleUnassignUnitFromContract(unit: InventoryUnit) {
+  assertInventoryAdmin();
   equipoTabSaving.value = true;
   equipoTabError.value = null;
   try {
@@ -645,6 +654,7 @@ const loadingStockUnits = ref(false);
 const stockUnitId = ref('');
 
 async function handleStockProductChange() {
+  assertInventoryAdmin();
   stockUnitId.value = '';
   stockAvailableUnits.value = [];
   if (!stockProductId.value) return;
@@ -658,6 +668,7 @@ async function handleStockProductChange() {
 }
 
 async function handleAssignStockUnitToContract() {
+  assertInventoryAdmin();
   if (!stockUnitId.value || !contract.value) return;
   equipoTabSaving.value = true;
   equipoTabError.value = null;
@@ -799,6 +810,7 @@ const returnSaving = ref(false);
 const returnError = ref<string | null>(null);
 
 function openReturn(unit: InventoryUnit) {
+  assertInventoryAdmin();
   returnUnitTarget.value = unit;
   returnForm.value = { condition: 'damaged', reason: '' };
   returnError.value = null;
@@ -806,6 +818,7 @@ function openReturn(unit: InventoryUnit) {
 }
 
 async function handleReturn() {
+  assertInventoryAdmin();
   if (!returnUnitTarget.value) return;
   returnSaving.value = true;
   returnError.value = null;
@@ -831,12 +844,14 @@ const recoveryUnitTarget = ref<InventoryUnit | null>(null);
 const recoveryError = ref<string | null>(null);
 
 function openRecovery(unit: InventoryUnit) {
+  assertInventoryAdmin();
   recoveryUnitTarget.value = unit;
   recoveryError.value = null;
   showRecoveryModal.value = true;
 }
 
 async function handleRecoveryConfirm(payload: { technicianId: string; reason: string }) {
+  assertInventoryAdmin();
   if (!recoveryUnitTarget.value) return;
   try {
     await inventoryUnitsStore.markForRecovery(recoveryUnitTarget.value.id, {
@@ -863,12 +878,14 @@ const addUnitProductOptions = computed(() =>
 );
 
 function openAddUnit() {
+  assertInventoryAdmin();
   addUnitForm.value = { product_id: addUnitProductOptions.value[0]?.id ?? '', serial_number: '', mac_address: '' };
   addUnitError.value = null;
   showAddUnitModal.value = true;
 }
 
 async function handleAddUnit() {
+  assertInventoryAdmin();
   if (!contract.value) return;
   if (!addUnitForm.value.product_id) {
     addUnitError.value = 'Selecciona el modelo del equipo';
@@ -1354,6 +1371,10 @@ async function handleIptvUnlink() {
   }
 }
 
+watch(() => [auth.user?.id, auth.role], () => {
+  assignedUnits.value = []; stockAvailableUnits.value = [];
+  showAddUnitModal.value = false; returnUnitTarget.value = null; recoveryUnitTarget.value = null;
+});
 onMounted(async () => {
   if (!clientsStore.clients.length) await clientsStore.fetchClients();
   // fetchContracts() trae TODOS los contratos de la empresa (hace falta para
@@ -1375,7 +1396,7 @@ onMounted(async () => {
     loadEquipmentPhotos(),
     mikrotikStore.fetchDevices(),
     oltStore.fetchDevices().catch(() => {}),
-    inventoryStore.products.length ? Promise.resolve() : inventoryStore.fetchProducts(),
+    !inventoryAdmin.value || inventoryStore.products.length ? Promise.resolve() : inventoryStore.fetchProducts(),
     infraStore.fetchElementos(),
     fibra.fetchTodosNapPuertos(),
   ]);
@@ -1801,6 +1822,7 @@ onMounted(async () => {
           </div>
         </template>
 
+        <template v-if="inventoryAdmin">
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-sm font-semibold">Equipo de inventario (router/ONU/TV Box)</h3>
           <button type="button" class="text-xs text-sky-700 hover:text-sky-700" @click="openAddUnit">+ Agregar equipo</button>
@@ -1871,6 +1893,7 @@ onMounted(async () => {
               No hay unidades de este modelo disponibles en bodega.
             </p>
           </div>
+        </template>
         </template>
       </div>
       </ClientSectionCard>

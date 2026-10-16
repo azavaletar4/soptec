@@ -7,7 +7,8 @@ import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vu
 import { useBreadcrumbExtra } from '@/composables/useBreadcrumb';
 import { useTicketsStore } from '@/stores/tickets';
 import { useCatalogsStore } from '@/stores/catalogs';
-import { useInventoryStore } from '@/stores/inventory';
+import { readOrderInventory } from '@/lib/orderInventory';
+import { supabase } from '@/lib/supabase';
 import { useTicketApprovalsStore, parseEquipmentType, type PendingPhotoWithUrl } from '@/stores/ticketApprovals';
 import { useClientEquipmentPhotosStore, type ClientEquipmentPhotoWithUrl } from '@/stores/clientEquipmentPhotos';
 import { useAuthStore } from '@/stores/auth';
@@ -23,7 +24,6 @@ const route = useRoute();
 const router = useRouter();
 const ticketsStore = useTicketsStore();
 const catalogs = useCatalogsStore();
-const inventoryStore = useInventoryStore();
 const ticketApprovalsStore = useTicketApprovalsStore();
 const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
@@ -163,7 +163,13 @@ const loadingMaterials = ref(true);
 async function loadMaterials() {
   loadingMaterials.value = true;
   try {
-    materials.value = await inventoryStore.fetchMovementsByTicket(ticketId.value);
+    const actor = auth.user?.id, id = ticketId.value;
+    if (!actor) { materials.value = []; return; }
+    const result = await readOrderInventory<InventoryMovement>(supabase, actor, 'ticket', id, 'materials', () => auth.user?.id === actor && ticketId.value === id);
+    materials.value = result.items;
+  } catch (error) {
+    materials.value = [];
+    throw error;
   } finally {
     loadingMaterials.value = false;
   }
@@ -175,16 +181,29 @@ const pendingEquipment = ref<InventoryUnit[]>([]);
 const loadingApprovals = ref(true);
 const approvalBusyId = ref<string | null>(null);
 const approvalError = ref<string | null>(null);
+const pendingEquipmentReview = computed(() => ticketApprovalsStore.pendingEquipmentReview(ticketId.value));
+async function retryEquipmentReview() {
+  try { await ticketApprovalsStore.retryEquipmentReview(ticketId.value); await loadApprovals(); }
+  catch (error) { approvalError.value = getErrorMessage(error, 'No se pudo confirmar la revision pendiente.'); }
+}
+watch(() => [auth.user?.id, auth.role, ticketId.value], () => {
+  materials.value = []; pendingEquipment.value = [];
+});
 
 async function loadApprovals() {
   loadingApprovals.value = true;
+  const actor = auth.user?.id, id = ticketId.value;
   try {
     const [photos, equipment] = await Promise.all([
       ticketApprovalsStore.fetchPendingPhotos(ticketId.value),
       ticketApprovalsStore.fetchPendingEquipment(ticketId.value),
     ]);
+    if (auth.user?.id !== actor || ticketId.value !== id) return;
     pendingPhotos.value = photos;
     pendingEquipment.value = equipment;
+  } catch (error) {
+    pendingEquipment.value = [];
+    throw error;
   } finally {
     loadingApprovals.value = false;
   }
@@ -779,10 +798,13 @@ async function handleDelete() {
         <!-- Columna derecha: cuadrilla, materiales, seguimiento -->
         <div class="flex flex-col gap-4">
           <div
-            v-if="canEditCrew && (loadingApprovals || pendingPhotos.length || pendingEquipment.length)"
+            v-if="canEditCrew && (loadingApprovals || pendingPhotos.length || pendingEquipment.length || pendingEquipmentReview)"
             class="surface p-4 text-sm border-amber-300"
           >
             <div class="text-amber-700 text-xs font-medium mb-2">⏳ Pendientes de aprobación (censo de avería)</div>
+            <p v-if="pendingEquipmentReview" class="text-xs text-amber-700">Hay una revision de equipo pendiente de confirmar.
+              <button type="button" class="btn-secondary text-xs" :disabled="!!approvalBusyId" @click="retryEquipmentReview">Confirmar revision pendiente</button>
+            </p>
             <p v-if="loadingApprovals" class="text-xs text-slate-400">Cargando...</p>
             <template v-else>
               <div v-if="pendingPhotos.length" class="mb-3">

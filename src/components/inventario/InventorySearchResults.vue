@@ -29,7 +29,7 @@ const labels: Record<InventoryUnitStatus, string> = {
   in_stock: 'Disponible', assigned: 'Asignado', damaged: 'Averiado', in_repair: 'En reparación',
   retired: 'Retirado', en_recupero: 'Por recoger', pending_approval: 'Pendiente de aprobación',
 };
-watch(() => [props.query, props.scope, page.value, props.revision, auth.role], () => {
+watch(() => [props.query, props.scope, page.value, props.revision, auth.user?.id, auth.role], () => {
   clearTimeout(timer);
   controller?.abort();
   const request = ++generation;
@@ -45,7 +45,7 @@ watch(() => [props.query, props.scope, page.value, props.revision, auth.role], (
       if (request === generation) error.value = getErrorMessage(e, 'Error al buscar inventario');
     } finally { if (request === generation) loading.value = false; }
   }, 300);
-}, { immediate: true, deep: true });
+}, { immediate: true, deep: true, flush: 'sync' });
 watch(() => [props.query, props.scope], () => {
   page.value = 0;
 }, { deep: true });

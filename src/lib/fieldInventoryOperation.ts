@@ -1,6 +1,6 @@
 import type { FieldInventoryContext } from '../types/fieldInventory';
 
-export type FieldInventoryAction = 'consume' | 'kit' | 'correct' | 'reverse' | 'assign' | 'unassign' | 'stage' | 'return' | 'unlink';
+export type FieldInventoryAction = 'consume' | 'kit' | 'correct' | 'reverse' | 'assign' | 'unassign' | 'stage' | 'return' | 'unlink' | 'approve' | 'reject';
 export interface FieldInventoryRequest {
   p_operation_id: string; p_job_type: string; p_job_id: string;
   p_action: FieldInventoryAction; p_payload: Record<string, unknown>;
@@ -10,10 +10,10 @@ export interface FieldInventoryReceipt {
 }
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 type Invoke = (request: FieldInventoryRequest) => Promise<{ data: unknown; error: { code?: string; message: string } | null }>;
-const keyFor = (c: FieldInventoryContext) => `campo-inventory:v1:${c.actorId}:${c.jobType}:${c.jobId}`;
-const actions = ['consume','kit','correct','reverse','assign','unassign','stage','return','unlink'];
-export function pendingFieldInventory(storage: Store, context: FieldInventoryContext): FieldInventoryRequest | null {
-  const raw = storage.getItem(keyFor(context));
+const keyFor = (c: FieldInventoryContext, namespace: string) => `${namespace}:${c.actorId}:${c.jobType}:${c.jobId}`;
+const actions = ['consume','kit','correct','reverse','assign','unassign','stage','return','unlink','approve','reject'];
+export function pendingFieldInventory(storage: Store, context: FieldInventoryContext, namespace = 'campo-inventory:v1'): FieldInventoryRequest | null {
+  const raw = storage.getItem(keyFor(context, namespace));
   if (!raw) return null;
   const request = JSON.parse(raw) as FieldInventoryRequest;
   if (request.p_job_type !== context.jobType || request.p_job_id !== context.jobId || !request.p_operation_id ||
@@ -26,8 +26,9 @@ export function pendingFieldInventory(storage: Store, context: FieldInventoryCon
 export async function executeFieldInventory(storage: Store, context: FieldInventoryContext,
   action: FieldInventoryAction, payload: Record<string, unknown>, invoke: Invoke,
   uuid: () => string = () => crypto.randomUUID(),
+  namespace = 'campo-inventory:v1',
 ) {
-  const key = keyFor(context), pending = pendingFieldInventory(storage, context);
+  const key = keyFor(context, namespace), pending = pendingFieldInventory(storage, context, namespace);
   if (pending && (pending.p_action !== action || JSON.stringify(pending.p_payload) !== JSON.stringify(payload))) {
     throw Error('Hay una operación pendiente. Confírmala antes de registrar otra.');
   }

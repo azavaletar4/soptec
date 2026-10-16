@@ -32,6 +32,86 @@ sin migraciones ni cambios de existencias/asignaciones. Fase 162 queda separada.
 Pendientes: PostgREST real de pruebas, identidades por rol y rendimiento con volumen.
 Ver `docs/BUSQUEDA-INVENTARIO.md`. Solo local: sin push ni despliegue.
 
+Validación Cloud de solo lectura 2026-10-15: búsquedas reales, MAC, álbumes,
+FK y paginación correctas con identidad privilegiada de diagnóstico; acceso
+anónimo sin filas. 32 productos/124 unidades; 82 GET/HEAD sin mutaciones.
+15/15 regresiones, navegador sintético y build correctos. **BLOQUEADO**:
+faltan sesiones reales SUPERADMIN/ADMIN/TECNICO_RED para certificar RLS;
+service_role no se usó para simularlas. Evidencia y riesgos en
+`docs/VALIDACION-FINAL-BUSQUEDA-INVENTARIO.md`. Sin cambios de código funcional,
+permisos, datos ni migraciones; sin push/despliegue; Fase 162 separada.
+
+Aclaración de permisos 2026-10-15: Inventario administrativo es exclusivo de
+ADMIN/SUPERADMIN; TECNICO_RED debe quedar denegado. Revisión localizada:
+router también admite SOPORTE/FACTURACION y RLS versionada admite SELECT amplio
+para técnicos; Campo comparte servicios/tablas y debe preservarse. Sin sesiones
+reales disponibles: **BLOQUEADO**, sin certificar políticas desplegadas.
+Pruebas manuales exactas: `docs/VALIDACION-PERMISOS-BUSQUEDA-INVENTARIO.md`.
+No se repitieron pruebas funcionales ni se cambiaron código, permisos o datos.
+
+Corrección controlada de acceso 2026-10-15: catálogo Cloud confirmado por
+SELECT de metadatos con TLS/READ ONLY (5 tablas, 24 policies, 4 funciones).
+Persisten SELECT amplios para técnicos/SOPORTE/FACTURACION y EXECUTE público
+del agregado SECURITY DEFINER. Frontend local ahora restringe las cinco rutas,
+menú y llamada administrativa a ADMIN/SUPERADMIN; no se tocaron stores de Campo.
+11/11 pruebas de autorización, 30 combinaciones ruta/rol y compilación correctas.
+Propuesta de separación contextual por orden y riesgos de RETURNING/Realtime/
+offline en `docs/INVENTARIO-ACCESO-CONTROLADO.md`; evidencia instalada en
+`docs/INVENTARIO-PERMISOS-CLOUD-METADATOS.json`. Sin permisos/DDL/DML remotos,
+migraciones, push o despliegue. Fase 162 separada; capa de datos aún pendiente.
+
+## Cierre de sesión 2026-10-14 — Fase 161 y respaldo completo (sin desplegar)
+
+- Implementación local: commit `ccdf94f` (devolución segura de rutinas).
+  Último commit confirmado en producción: `b128e42`. No hubo push ni deploy.
+- Migración `20261014180000_fase161_devolver_rutinas.sql` pendiente de aplicar.
+  Última migración informada visualmente por el usuario: Fase 160.
+  `routine_returns` y `return_routine` aún no existen en producción.
+- Supabase Cloud: proyecto `mzupdnjegfwmpajywckd`. El usuario confirmó
+  «Last Backup: No backups». La conexión Session Pooler con CA y TLS
+  `verify-full` fue verificada por el usuario. Credenciales NO guardadas.
+- Respaldo completo (esquema + datos), fuera de Git, carpeta privada:
+  `C:\Users\USER\AppData\Local\SmartRaycoBackups\fase161_completo_20261014_205657_893d42d4\completo.dump`.
+  Tamaño: **36.618.871 bytes**. SHA-256:
+  `9287C005D4309FC0E03282936790C61B966BD66FD2640F6466D63E27D7B4FD66`.
+- En esa misma carpeta: `completo.sha256`, `inventario.txt`, `origen.json`,
+  `revision-independiente.json` y `RECUPERACION.txt`. No confundir con el
+  respaldo anterior `fase161_20261014_204444_b8c1e7f4/esquema.dump`, que
+  solo contiene estructura (802.571 bytes).
+- Aprobado: proyecto/base/usuario correctos en metadatos; archivo legible
+  completo mediante `pg_restore --file=/dev/null` (exit 0); inventario con
+  datos de clients, profiles, service_contracts, tickets, installations,
+  routines, job_assignees y job_work_sessions; funciones, permisos y RLS;
+  SHA-256 calculado; ACL sin herencia, solo usuario actual y SYSTEM.
+- **No declarar recuperable todavía**: no quedó registrada la salida
+  original exit 0 de `pg_dump`. No hay manifiesto final exitoso del script.
+  Restauración aislada NO ejecutada: la imagen local `postgres:17` carece
+  de `supabase_vault`, presente en el inventario del respaldo.
+- Pruebas previas del código: 23/23 SQL aislado y Vue sin errores. No hubo
+  devoluciones de prueba en rutinas reales. Scripts privados y diagnósticos
+  adicionales están en disco, sin commit; no contienen credenciales.
+
+### Retomar sin repetir investigaciones
+
+1. Leer `docs/DEVOLVER-RUTINAS.md`, `revision-independiente.json` y
+   `RECUPERACION.txt` de la carpeta privada. No repetir Docker/TLS ni
+   búsquedas de credenciales: usar el procedimiento privado validado.
+2. Identificar la categoría final de error de la consola anterior y confirmar
+   el resultado original de `pg_dump`; si no puede acreditarse, preparar
+   una nueva ejecución privada que registre códigos de salida seguros.
+   El archivo actual se conserva; no sobrescribirlo ni borrarlo.
+3. Preparar PostgreSQL/Supabase compatible con `supabase_vault` y roles
+   necesarios. Ensayar restauración completa sin red, puertos publicados
+   ni servicios externos, con montaje del respaldo de solo lectura. No
+   excluir extensiones ni usar clientes reales para pruebas funcionales.
+4. Documentar resultado de restauración y limitaciones: roles globales,
+   archivos Storage y claves externas Vault no van en `pg_dump`.
+5. Solo después de validar recuperación y recibir **nueva autorización**:
+   aplicar exclusivamente Fase 161; verificar RPC/RLS/PostgREST; luego
+   push y frontend `ccdf94f`. No requiere cambios Hono ni APK.
+
+Sesión cerrada sin migraciones, restauraciones de producción ni despliegues.
+
 ## Actualización 2026-10-14 — devolución de rutinas (Fase 161, SOLO LOCAL)
 
 Incidencia de campo: una rutina iniciada no ofrecía «Devolver orden».
@@ -4558,3 +4638,98 @@ tampoco requiere ninguna migración.
    13v es deliberadamente preventiva hacia adelante, no los toca.
    Limpiarlos (si se decide hacerlo) requiere una fase separada con su
    propia autorización explícita.
+
+Validación de Inventario etapas 1/2 (15/10/2026, commit 3d6a68a): BLOQUEADO para aprobación operativa por falta de sesiones reales y muestras de órdenes sin contrato. SELECT Cloud acotados compatibles; sin escrituras ni cambios RLS. Evidencia y pasos pendientes: docs/VALIDACION-INVENTARIO-ETAPAS-1-2.md. No se repitieron las 24 pruebas locales ni se avanzó a etapas 3-6.
+
+Equipos históricos (15/10/2026): lectura Cloud de 8 unidades sin contrato; 6 con contrato explícito verificable en último evento (2 también con instalación completada), 2 sin prueba de servicio. Las 3 Averías relacionadas están cerradas/resueltas. Sin corrección operativa segura solo de lectura: discrepancia evento/unidad y candados de escritura requieren revisión administrativa. Ver docs/INVENTARIO-EQUIPOS-HISTORICOS.md. Sesiones reales pendientes; sin cambios remotos, etapas 3-6 ni Fase 162.
+
+Clasificación de las 8 unidades (15/10/2026): INDETERMINADAS las ocho; 22 eventos leídos, sin coincidencias exactas en documentación/scripts de pruebas ni prueba independiente de operación real. No se atribuye la discrepancia a pruebas, antigüedad o fallo. Ver docs/INVENTARIO-OCHO-CLASIFICACION-PRUEBAS.md y evidencia sanitizada. Se detiene cualquier propuesta de corrección; sin cambios remotos ni ampliación de retiros.
+
+Etapa 3 de seguridad de inventario (15/10/2026): BLOQUEADO antes de implementar esquema/permisos según condición del usuario. Revisión acotada de escrituras Altas/Averías y RETURNING; corrección de cantidad usa dos peticiones y falta intención durable general. Propuesta transaccional, DTO mínimo y reintentos en docs/INVENTARIO-ETAPA-3-PROPUESTA.md; sin código funcional, Cloud, migraciones ni RLS. Ocho unidades indeterminadas congeladas; sin nueva investigación. Rutinas/Fase 162 separadas.
+
+Etapa 3 implementada LOCALMENTE (15/10/2026): RPC transaccional Altas/Averías con recibos durables, autorización por orden/asignación, kit/corrección atómicos, retiro por contrato exacto y respuesta mínima. Campo usa RPC y conserva intención ante respuesta incierta. Migración 20261016010000 preparada, NO aplicada. 17/17 SQL aisladas, 30/30 TS, 4 escenarios navegador y build correctos. Ver docs/INVENTARIO-ETAPA-3-IMPLEMENTACION.md para riesgos, archivos y rollback. Cloud intacto; permisos directos amplios y sesiones reales pendientes; ocho equipos congelados; Rutinas/Fase 162 separadas.
+
+Preflight Cloud etapa 3 (15/10/2026, 6326203): solo SQL READ ONLY. Columnas y triggers Fase 151 compatibles; Fase 161 efectiva sin entrada en ledger consultado; Fase 162 ausente. BLOQUEADO para aprobar aplicación hasta integración con helpers/triggers reales de cierre/cuadrillas, ausentes de fixture etapa 3, y sesiones reales. 267 movimientos, 2 grupos de reversión repetida; sin corrección ni investigación nueva de las 8 unidades. Ver docs/INVENTARIO-ETAPA-3-PREFLIGHT-CLOUD.md y metadatos. Sin migraciones, escrituras, RLS, push ni despliegue; no se repitieron pruebas locales.
+
+PAUSA SOLICITADA 15/10/2026: trabajo detenido; ver docs/INVENTARIO-ETAPA-3-PAUSA.md. Deadlock 40P01 reproducido con triggers reales de cuadrilla; NOWAIT local corrigió los escenarios, suite nueva 9/9 aprobada. As 9/9 se añadió una aserción de replay tras revocación, AÚN SIN EJECUTAR; último intento interrumpido. Cambios guardados SIN commit; migración solo local, Cloud intacto. Reanudar verificando nueva suite antes de commit; sin push/despliegue, ocho unidades congeladas y Fase 162 separada.
+
+Etapa 3 retomada 16/10/2026: prueba pendiente de técnico revocado aprobada para Altas/Averías; recibo previo no sustituye autorización. NOWAIT probado en UPDATE/DELETE legacy: 55P03 con rollback íntegro, reintento sin duplicar. Mensaje español y dos pruebas TS 55P03 correctos; build correcto. Ver docs/INVENTARIO-ETAPA-3-CORRECCION-NOWAIT.md. Sin Cloud, migraciones aplicadas, push ni despliegue; sesiones reales pendientes. Commit exclusivo de corrección/pruebas, excluyendo cambios ajenos de Fases 161/162.
+
+Laboratorio aislado Auth/inventario preparado 16/10/2026: scripts/inventory-auth-lab, Supabase mínimo local con PostgreSQL/Auth/PostgREST y red/volumen independientes, sin datos ni configuración de producción. JWT reales ES256 de cuatro usuarios ficticios: 49 comprobaciones API y 8 escenarios de navegador correctos; líder/apoyo 200, ajeno/retirado 403, inventario invariable. UI http://127.0.0.1:54384/. Ver docs/INVENTARIO-LAB-AUTH-VALIDACION.md y README de laboratorio para arranque/parada y límites. No certifica mutaciones ni toda App de Campo/RLS administrativa; sin Cloud, push/despliegue, datos reales ni Fase 162. Runtime ignorado por Git; cambios locales sin commit.
+
+Laboratorio transaccional 16/10/2026: APROBADO local con JWT reales. 14 grupos API y 10 escenarios navegador; stock final/Kardex 20, 34 movimientos, 40 recibos completos, cero duplicados. Filas previas del laboratorio intactas; fixture aditiva conservada. Se corrigió timeout del harness visual y se revirtió su checkpoint mediante RPC/JWT del líder, sin editar saldos. Ver docs/INVENTARIO-LAB-TRANSACCIONES.md. No se repitieron 49 lecturas. Sin Cloud, producción, migraciones remotas, push/despliegue ni Fase 162; RLS administrativa amplia y validación integral de Campo/dispositivos pendientes.
+
+Etapa 4 Realtime (16/10/2026, base eaa4510): parada según condición explícita del usuario. Campo suscribe filas de movimientos/unidades; administración no tiene suscripciones propias de inventario. Compose local leído: db/auth/rest/edge, sin Realtime. Invalidaciones privadas exigen transporte y autorización nuevos; propuesta en docs/INVENTARIO-ETAPA-4-REALTIME-PROPUESTA.md. Sin implementación ni pruebas Realtime; no se repitieron pruebas de etapa 3. Ningún cambio a infraestructura, políticas, publicaciones, datos ni Cloud. Nota fuera del commit para conservar cambios previos; Rutinas/Fase 162 y ocho equipos separados.
+
+Etapa 4 laboratorio Realtime (16/10/2026, base d8bfab6): BLOQUEADO por fallo real de revocación de socket abierto. Realtime v2.143.3 instalado solo en red interna local, puerto loopback 54385, WAL lógico en DB local y policy experimental por orden. JWT reales: 10 comprobaciones PASS y 1 FAIL; técnico retirado recibe segundo aviso mínimo aun con GET contextual 403. Se detuvo integración Campo según condición explícita. Hashes inventario/recibos intactos. Ver docs/INVENTARIO-LAB-REALTIME-VALIDACION.md y resultados JSON. No repetir ensayo con journal final; sin Cloud, producción, push, despliegue, Rutinas/Fase 162 ni ocho históricos. Nota fuera del commit para preservar cambios previos.
+
+Revocación Realtime (16/10/2026, base 0aa40d3): causa confirmada en fuente oficial v2.143.3: policies en socket/fastlane y mismo JWT ignorado, sin API pública de revocación selectiva atómica por cuadrilla. BLOQUEADO Broadcast; parada según usuario. Alternativa concreta SSE backend con autorización fresca por entrega y locks compartidos con revocación, aún NO implementada/validada. Distinguir nuevo encolado después de commit de bytes previamente en tránsito. docs/INVENTARIO-REALTIME-REVOCACION-ALTERNATIVA.md; no se repitieron pruebas previas ni se ejecutaron nuevos JWT. Sin cambios de runtime, datos, aplicación, Cloud, Rutinas/Fase 162 ni históricos.
+
+SSE etapa 4 (16/10/2026, base d30a331): prototipo local implementado y BLOQUEADO. 8 escenarios PASS con JWT reales (roles, retirada normal, reasignación, cierre, reconexión), 1 FAIL: pausa event loop 1800ms supera idle timeout SQL 500ms, libera locks, revocación confirma y backend encola/cliente recibe señal posterior antes de procesar FATAL. Parada según condición del usuario, sin cambiar barrera tras fallo. Puerto SSE 54387 detenido; inventario/recibos íntegros, rol sin SELECT administrativo, cero transacciones pendientes. docs/INVENTARIO-LAB-SSE-VALIDACION.md, -RESULTADOS.json y -AUDITORIA.json. Fixture/journals conservados, no repetir suites. Sin Cloud, producción, push, despliegue, Rutinas/Fase 162 ni históricos.
+
+Avisos genéricos etapa 4 (16/10/2026, base 8eeed0b/evaluación posterior): APROBADO exclusivamente en laboratorio. Reloj separado sin SQL/Auth/órdenes, frame fijo 33 bytes cada 10s; consumidor generic.html con JWT real, contexto visible, caché por generación y limpieza/pausa 401/403. 6 unitarias, 8 grupos UI/API, cabeceras y reconexión real PASS; build local correcto. 24 frames idénticos, intervalos 10006-10014ms; RSS 57,34MiB en tramo medido, cero peticiones externas. Se preservaron 5 PASS al corregir cancelación CDP; caída real requirió retry acotado por HTTP500, comprobado. Inventario/recibos íntegros; reloj de ensayo parado. Ver docs/INVENTARIO-LAB-GENERICOS-VALIDACION.md y cuatro JSON. Pendientes App Campo real, volumen/dispositivos y cierre RLS administrativo; sin Cloud, producción, push, despliegue, Rutinas/Fase 162 ni históricos. Nota fuera del commit por cambios previos.
+
+Etapa 4 integrada localmente (16/10/2026, base 030043f): LISTO PARA REVISION. Campo Altas/Averias usa reloj generico /api/inventory-signals, snapshot contextual coalescido y limpieza/pausa 401/403; retirados solo listeners de filas de inventario de Campo. 5 unitarias + 1 HTTP SSE (10.000 ms) + 2 escenarios Vue compuestos + 4 regresiones de equipos + 11 HTTP PASS; vue-tsc/Vite PASS. Ver docs/INVENTARIO-ETAPA-4-INTEGRACION.md. Flutter fisico pendiente (sin dispositivo ADB); pruebas de cierre con persistencia sustituida, no Storage real. Cierre RLS administrativo separado en docs/INVENTARIO-RLS-ADMIN-PENDIENTE.md, pendiente por compatibilidad Rutinas/Fase 162; no iniciar fase automaticamente. Sin Cloud, produccion, datos reales, migraciones remotas, push ni despliegue. Estado global fuera del commit por cambios previos ajenos.
+
+Cierre RLS administrativo (16/10/2026, base 7c03c2b): BLOQUEADO y detenido. Revision focalizada de consumidores: RPC Fase 162 routine_inventory_operation devuelve recibo antes de autorizar asignacion/estado vigente; cambiar RLS de tablas no corrige su SECURITY DEFINER. Corregir esa frontera exige modificar seguridad efectiva de Fase 162, prohibido en este alcance. Rutinas, Soporte/Clientes y lecturas backend con JWT aun dependen de accesos directos. Ver docs/INVENTARIO-CIERRE-RLS-BLOQUEO.md. Solo documentacion; sin migracion preparada/aplicada, pruebas repetidas, cambios de codigo, laboratorio, Cloud, produccion, datos, push o despliegue. No se afirma explotacion real ni nuevos movimientos por recuperar recibo. Estado global fuera del commit por cambios previos.
+
+Correccion puntual de recibos Rutinas (16/10/2026, base 88adc3d): APROBADO EN LABORATORIO. Migracion local 20261016020000 sustituye solo routine_inventory_operation; verifica rol/asignacion antes de recuperar recibos. Conserva reintento tras cierre para asignado activo y exige in_progress para escrituras nuevas. 11/11 grupos JWT reales en DB ficticia separada inventory_routine_receipt_lab/PostgREST 54389: fallo original reproducido, retirado/ajeno/inactivo denegados, lider/apoyo/reintento concurrente correctos, return_routine deniega, oficina conserva roles. Saldo=Kardex=86, cuatro consumos, cinco recibos (uno fixture oficina), cero eventos; inventario laboratorio previo intacto, otras funciones/ACL intactas. Ver docs/INVENTARIO-RUTINAS-RECIBOS-CORRECCION.md. Cierre RLS global sigue pendiente; sin Cloud, produccion, datos reales, historicos, push ni despliegue. No iniciar otra fase. Estado global fuera del commit por cambios previos.
+
+Propuesta consolidada Inventario (16/10/2026, base 7e6abd5): Cloud contrastado solo con catalogos READ ONLY/TLS. routine_inventory_operation ausente (todas las sobrecargas), tabla de recibos y columnas Fase 162 ausentes; parche de recibos no aplicable de forma independiente. Busqueda serie/MAC + guardas UI listas localmente sin migracion; cierre RLS administrativo sigue BLOQUEADO por consumidores/lecturas compartidas y agregado. Propuesta en docs/INVENTARIO-ENTREGA-CONSOLIDADA-PROPUESTA.md y evidencia docs/INVENTARIO-RUTINAS-RECIBOS-CLOUD.json. Sin nuevas funcionalidades, suites repetidas, migraciones, RLS/datos remotos, push ni despliegue. Detenido tras propuesta; sin nuevo commit ni adaptacion de otros modulos.
+
+Entrega independiente de busqueda (16/10/2026): BLOQUEADO por punto 5 del pedido. Evidencia RLS existente permite SELECT amplio a TECNICO_RED/SOPORTE/FACTURACION; guardas 2a5e24c no protegen REST directo de busqueda 2595c77. Detenido antes de rama funcional/commit de entrega o pruebas repetidas. Cambio minimo documentado en docs/INVENTARIO-BUSQUEDA-INDEPENDIENTE-BLOQUEO.md: SELECT administrativo restringido y guard de inventory_get_albums, conservando antes lecturas contextuales/RETURNING de consumidores. No se verifico imagen actualmente desplegada ni se asume ccdf94f vigente por documento historico. Sin codigo, Cloud, datos reales, migraciones, push ni despliegue. No abrir otra fase.
+
+Preparacion instalacion Fase 162 (16/10/2026): BLOQUEADO. Preflight Cloud READ ONLY: compatibilidad estructural OK (87 controles + resumen), fuentes de politicas/triggers/helpers recuperadas acotadamente. Ensayo nuevo PG17 sin red: instalacion atomica 162+parche7e6abd5 PASS, snapshots diez tablas/ocho historicos ficticios y politicas intactos, postcheck combinado PASS, consumo/replay PASS. FAIL carrera recibo vs DELETE job_assignees: deadlock entre Rutina FOR UPDATE y fila de cuadrilla retenida por trigger real lock_job_crew_parent; A aborto, B confirmo. Sin correccion funcional nueva ni autorizacion de aplicar. Ver docs/FASE162-INSTALACION-PREPARADA.md y tres JSON nuevos. Respaldo actualizado pendiente (script privado existente preparado), postchecks y plan de rollback/orden atomico documentados. Sin Cloud DDL/DML, datos reales, push ni despliegue. Detener tras resultado.
+
+Correccion deadlock Fase 162 (16/10/2026): LISTO PARA REVISION LOCAL. RPC de segunda migracion toma asignacion propia FOR SHARE NOWAIT; no se alteran triggers/cuadrillas. 9/9 grupos PG17 sin red: baseline 7e6abd5 reproduce 40P01, candidato 55P03 sin movimiento y revocacion confirma; recibo/nueva operacion denegados despues de retirada, ambos ordenes de concurrencia y reintentos validos. Final stock=Kardex=97, tres consumos/recibos, unidades/eventos intactos. 2/2 instalacion atomica y postchecks, 3/3 helper UUID con respuesta perdida/55P03/revocacion; vue-tsc PASS. Helper conserva UUID pendiente y mensaje espanol. Ver docs/FASE162-DEADLOCK-CORREGIDO.md y JSON. Orden: Fase162 original y parche actualizado juntos en una transaccion; respaldo actual/ventana/autorizacion pendientes. Sin Cloud, datos reales, historicos, push ni despliegue. Estado global fuera del commit por cambios previos.
+
+Preparacion operativa final Fase162 (16/10/2026, codigo f50914c): LISTO PARA AUTORIZAR SQL, sin ejecutar migraciones. Respaldo privado nuevo fase162_completo_20261016_202712_1abe24f6, 38.350.028 bytes, SHA256 CB8B62949BF59A23556C7A69D9516CB1614D5EDDB5490B3488001662AD9A6C94; DPAPI/TLS verify-full, pg_dump/list/read/restore=0, ACL usuario+SYSTEM, dos respaldos anteriores conservados. Timeout cliente60s: dump completo confirmado y verificacion retomada solo local, sin repetir dump. Prechecks15:32 Lima PASS: 37 funciones,14 tablas/triggers,31 policies,enums sin deriva, F162 ausente, ocho historicos conteoigual. Artefactos exactos de f50914c y bundle898c34ab verificados, no ejecutados. Ventana propuesta10min tras autorizacion, locks2s/sentencia60s/transaccion120s, baseline/postchecks y contencion documentados en docs/FASE162-LISTA-PARA-AUTORIZAR.md. Sin pruebas funcionales repetidas, Cloud DDL/DML, push ni despliegue. Autorizar/confirmar pausa y responsables antes de actuar. Estado global fuera de commit por cambios previos.
+
+## Retomado por Claude Code (16/10/2026) — cierre de permisos de Inventario y busqueda
+
+Sesion de transferencia Codex -> Claude Code. Fase 162 (hilo separado, arriba) ya
+esta confirmada en Cloud por los commits `f50914c..9ba461c`; esta entrada es sobre
+el hilo distinto y aun abierto de cierre RLS administrativo + busqueda por
+nombre/modelo/serie/MAC (`INVENTARIO-ENTREGA-CONSOLIDADA-PROPUESTA.md`).
+
+- Busqueda por nombre/modelo (registrado en el nombre)/serie/MAC: ya implementada
+  en `src/lib/inventorySearch.ts`, reutilizada en busqueda general y dentro de
+  cada album (`InventorySearchResults.vue` vía `InventarioAlbumView.vue`). 26/26
+  pruebas (`inventorySearch.test.ts`, `inventoryAuthorization.test.ts`) PASS hoy
+  sin modificar esos archivos. No requiere migracion. Solo quedaba un ajuste
+  pendiente sin probar en `InventorySearchResults.vue` (reactividad a
+  `auth.user?.id`, no solo `auth.role`, con `flush:'sync'`) — se deja tal cual lo
+  dejo Codex, sin tocar.
+- Migracion local sin aplicar `supabase/migrations/20261016220000_inventario_contextual_rls_admin.sql`
+  (cierre RLS admin-only + RPC `inventory_order_read`/`inventory_ticket_review`):
+  revisados sus consumidores reales. `RoutineInventory.vue`, `CampoTrabajoDetailView.vue`
+  (`/campo/:tipo/:id`, Altas/Averias/Rutinas del tecnico) y `TicketDetailView.vue`
+  (`/soporte/:id`) ya estaban migrados a la lectura por RPC antes de esta sesion.
+  Se encontro y elimino un resto muerto: `CampoTrabajoDetailView.vue` todavia
+  llamaba a `inventoryStore.fetchProducts()` (tabla directa) para `jobType==='routine'`,
+  una llamada ya innecesaria desde que `RoutineInventory.vue` se autoabastece por
+  RPC — quedaba silenciada por un `.catch(()=>{})` pero siempre fallaria para
+  TECNICO_RED bajo el guard interno nuevo de `stores/inventory.ts`. Eliminada la
+  llamada, el store y su import (3 lineas). `vue-tsc -p tsconfig.app.json` limpio.
+- **Bloqueo real identificado, no documentado antes con este detalle**:
+  `InstalacionDetailView.vue` (ruta `/soporte/instalaciones/:id`, SIN restriccion
+  de rol en el router — alcanzable por TECNICO_RED) sigue usando
+  `useInventoryUnitsStore` con acceso directo a tablas (`fetchUnitsByInstallation`,
+  `fetchUnitsByProduct`, `assignUnit`, `markRepaired`) sin ningun guard de rol a
+  nivel de datos. Es alcanzable en el uso real: el home movil del tecnico es
+  `/soporte` (ver memoria), `OperacionesHoyView.vue` enruta ahi los trabajos de
+  tipo `installation` (linea ~408), a diferencia de los tickets que ya van a la
+  vista migrada. Esta es la pieza concreta que bloquea aplicar la migracion de
+  cierre RLS: si se aplicara el `enable row level security`/policy admin-only de
+  `20261016220000` tal cual, esta pantalla (activamente usada por tecnicos para
+  Altas) perderia acceso a su inventario. No se modifico esta vista en esta
+  sesion — requiere el mismo patron de migracion a `inventory_order_read` que
+  `CampoTrabajoDetailView.vue`/`RoutineInventory.vue` ya tienen, es un cambio
+  grande (982 lineas) y de riesgo real para operacion de campo en curso; se deja
+  pendiente de decision expresa antes de tocarla.
+- Sin migraciones aplicadas (ni local Docker ni Cloud), sin push, sin despliegue,
+  sin nueva fase iniciada. Archivos ya modificados por Codex (ticketApprovals.ts,
+  stores/inventory.ts, fieldInventoryOperation.ts, fieldInventory.ts + test,
+  types/fieldInventory.ts, RoutineInventory.vue, ClientServiceDetailView.vue,
+  TicketDetailView.vue, InventorySearchResults.vue) se conservan intactos, sin
+  commit todavia.

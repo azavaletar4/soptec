@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { supabase } from '@/lib/supabase';
-import { useInventoryStore } from '@/stores/inventory';
-import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
+import { apiFetch } from '@/lib/api';
+import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
+import { createInventoryRefresh } from '@/lib/inventoryRefresh';
+import { startInventorySignals } from '@/lib/inventorySignals';
+import type { FieldInventoryContext, FieldInventoryProduct } from '@/types/fieldInventory';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { executeRoutineInventory, pendingRoutineInventory, type RoutineInventoryAction, type RoutineInventoryRequest } from '@/lib/routineInventoryRequest';
@@ -10,8 +13,7 @@ import type { InventoryMovement, InventoryUnit, Routine } from '@/types/domain';
 
 const props = defineProps<{ routine: Routine; canWrite?: boolean }>();
 const auth = useAuthStore();
-const inventory = useInventoryStore();
-const units = useInventoryUnitsStore();
+const products = ref<FieldInventoryProduct[]>([]);
 type RoutineUnit = InventoryUnit & { routine_id: string | null };
 type EventRow = { id: string; from_status: string | null; to_status: string; reason: string | null; created_at: string; unit: { serial_number: string | null; mac_address: string | null } | null };
 const materials = ref<InventoryMovement[]>([]);
@@ -37,8 +39,8 @@ const condition = ref<'in_stock' | 'damaged' | 'in_repair'>('in_stock');
 const office = computed(() => ['SUPERADMIN', 'ADMIN', 'SOPORTE'].includes(auth.role ?? ''));
 const writable = computed(() => props.canWrite && auth.role === 'TECNICO_RED' && props.routine.status === 'in_progress');
 const blocked = computed(() => busy.value || loading.value || !!pending.value);
-const consumables = computed(() => inventory.products.filter(p => p.is_active && !p.is_serialized));
-const serialized = computed(() => inventory.products.filter(p => p.is_active && p.is_serialized));
+const consumables = computed(() => products.value.filter(p => p.is_active && !p.is_serialized));
+const serialized = computed(() => products.value.filter(p => p.is_active && p.is_serialized));
 const activeMaterials = computed(() => {
   const reversed = new Set(materials.value.map(m => m.reverses_movement_id).filter(Boolean));
   return materials.value.filter(m => m.movement_type === 'egreso' && !reversed.has(m.id));
@@ -48,31 +50,35 @@ const outgoingChoices = computed(() => assigned.value.filter(u => u.status === '
 function refreshPending() {
   pending.value = auth.user ? pendingRoutineInventory(localStorage, auth.user.id, props.routine.id) : null;
 }
-async function load() {
-  loading.value = true;
-  try {
-    refreshPending();
-    const [m, u, e] = await Promise.all([
-      supabase.from('inventory_movements').select('*, product:inventory_products(id,name,unit)').eq('routine_id', props.routine.id).order('created_at'),
-      supabase.from('inventory_units').select('*, product:inventory_products(id,name,category)').eq('routine_id', props.routine.id),
-      supabase.from('inventory_unit_events').select('id,from_status,to_status,reason,created_at,unit:inventory_units(serial_number,mac_address)').eq('routine_id', props.routine.id).order('created_at'),
-      inventory.fetchProducts(),
+let availableEpoch = 0;
+const context = (): FieldInventoryContext => ({ jobType: 'routine', jobId: props.routine.id,
+  actorId: auth.user?.id ?? '', clientId: props.routine.client_id, contractId: props.routine.contract_id });
+const current = (c: FieldInventoryContext) => JSON.stringify(c) === JSON.stringify(context());
+const refresh = createInventoryRefresh<FieldInventoryContext, { materials: InventoryMovement[]; linked: RoutineUnit[]; events: EventRow[]; products: FieldInventoryProduct[]; assigned: InventoryUnit[]; contracts: {id:string;contract_number:string}[] }>({
+  load: async (c, signal) => {
+    const reads = createFieldInventoryClient(path => apiFetch(path, { signal }, 15000), current);
+    const catalog = auth.role === 'TECNICO_RED' && props.routine.status === 'in_progress';
+    const [m,u,e,p,a,contracts] = await Promise.all([
+      reads.read<InventoryMovement>(c,'materials'), reads.read<RoutineUnit>(c,'linked'), reads.read<EventRow>(c,'events'),
+      catalog ? reads.read<FieldInventoryProduct>(c,'products') : Promise.resolve({items:[]}),
+      catalog ? reads.read<InventoryUnit>(c,'assigned') : Promise.resolve({items:[]}),
+      catalog ? reads.read<{id:string;contract_number:string}>(c,'contracts') : Promise.resolve({items:[]}),
     ]);
-    for (const response of [m, u, e]) if (response.error) throw response.error;
-    materials.value = m.data as InventoryMovement[];
-    linked.value = u.data as RoutineUnit[];
-    events.value = e.data as unknown as EventRow[];
-    if (props.routine.client_id) {
-      const c = await supabase.from('service_contracts').select('id,contract_number').eq('client_id', props.routine.client_id);
-      if (c.error) throw c.error;
-      contracts.value = c.data;
-      assigned.value = await units.fetchUnitsByClient(props.routine.client_id);
-    } else { contracts.value = []; assigned.value = []; }
-  } finally { loading.value = false; }
-}
+    return {materials:m.items,linked:u.items,events:e.items,products:p.items,assigned:a.items,contracts:contracts.items};
+  },
+  clear: () => { availableEpoch++; materials.value=[];linked.value=[];events.value=[];products.value=[];assigned.value=[];available.value=[];contracts.value=[];incoming.value='';outgoing.value=''; },
+  publish: data => { materials.value=data.materials;linked.value=data.linked;events.value=data.events;products.value=data.products;assigned.value=data.assigned;contracts.value=data.contracts;error.value=''; },
+  state: state => { loading.value=state==='loading'; if(state==='blocked')error.value='No tienes acceso vigente al inventario de esta rutina.'; },
+});
+async function load() { refreshPending(); await refresh.refresh(true); }
 async function loadAvailable() {
-  available.value = []; incoming.value = '';
-  if (equipmentProduct.value) available.value = (await units.fetchUnitsByProduct(equipmentProduct.value)).filter(u => u.status === 'in_stock');
+  const epoch=++availableEpoch, product=equipmentProduct.value, c=context();
+  available.value=[];incoming.value='';
+  if(!product||!c.actorId)return;
+  try {
+    const page=await createFieldInventoryClient(path=>apiFetch(path,{},15000),current).read<InventoryUnit>(c,'available',{productId:product});
+    if(epoch===availableEpoch&&product===equipmentProduct.value&&current(c))available.value=page.items;
+  } catch(e) { if(e&&typeof e==='object'&&'status' in e&&[401,403].includes(Number(e.status)))refresh.deny(); throw e; }
 }
 async function mutate(action: RoutineInventoryAction, payload: Record<string, unknown>) {
   if (busy.value || !auth.user) return;
@@ -88,11 +94,14 @@ async function mutate(action: RoutineInventoryAction, payload: Record<string, un
   finally { busy.value = false; refreshPending(); }
 }
 const equipmentPayload = (unitId: string) => ({ unit_id: unitId, contract_id: contractId.value || null, reason: reason.value });
-watch(() => [props.routine.id, auth.user?.id], async () => {
-  contractId.value = props.routine.contract_id ?? '';
-  error.value = '';
-  try { await load(); } catch (e) { error.value = getErrorMessage(e, 'No se pudo cargar inventario de la rutina'); }
-}, { immediate: true });
+watch(() => [props.routine.id,props.routine.client_id,props.routine.contract_id,props.routine.status,auth.user?.id,auth.role], async () => {
+  contractId.value=props.routine.contract_id??'';error.value='';pending.value=null;
+  refresh.setContext(auth.user ? context() : null);refreshPending();
+  if(auth.user)await refresh.refresh();
+}, {immediate:true});
+let stopSignals: (()=>void)|null=null;
+onMounted(()=>{stopSignals=startInventorySignals({refresh:()=>refresh.refresh(),online:value=>refresh.setOnline(value),visible:value=>refresh.setVisible(value),skipInitialRefresh:true});});
+onUnmounted(()=>{stopSignals?.();refresh.dispose();});
 </script>
 
 <template>

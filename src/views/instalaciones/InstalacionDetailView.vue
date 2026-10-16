@@ -17,13 +17,15 @@ import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { countOcupadosReales } from '@/lib/napOccupancy';
+import { supabase } from '@/lib/supabase';
+import { readOrderInventory } from '@/lib/orderInventory';
+import type { FieldInventoryMovement, FieldInventoryUnit } from '@/types/fieldInventory';
 import {
   NAP_CLIENT_LIMIT,
   type ClientPhotoCategory,
   type ContractServiceType,
   type Installation,
   type InstallationStatus,
-  type InventoryMovement,
   type InventoryUnit,
   type TicketPriority,
 } from '@/types/domain';
@@ -254,19 +256,31 @@ async function copyInstallationSummary() {
 // vista — queda consulta de solo lectura. Es flujo de ejecucion tecnica,
 // vive solo en CampoTrabajoDetailView.vue (misma inventoryStore.registerUsage,
 // sin duplicar logica, solo se dejo de invocar desde aca).
-const materials = ref<InventoryMovement[]>([]);
+const materials = ref<FieldInventoryMovement[]>([]);
 const loadingMaterials = ref(false);
+const inventoryReadError = ref<string | null>(null);
 
+// Lectura por RPC (inventory_order_read): la misma usada por CampoTrabajoDetailView/
+// RoutineInventory/TicketDetailView — autoriza por asignacion vigente en SQL, nunca
+// asume el rol desde el navegador. Un tecnico retirado de la cuadrilla recibe un
+// 403 aqui (lo mismo que ya le pasaria en la App de Campo), no ve ni deja ver datos.
 async function loadMaterialsAndUnits() {
-  if (!installation.value) return;
+  if (!installation.value || !auth.user) return;
+  const actorId = auth.user.id, jobId = installation.value.id;
+  const current = () => auth.user?.id === actorId && installation.value?.id === jobId;
   loadingMaterials.value = true;
+  inventoryReadError.value = null;
   try {
     const [mats, units] = await Promise.all([
-      inventoryStore.fetchMovementsByInstallation(installation.value.id),
-      inventoryUnitsStore.fetchUnitsByInstallation(installation.value.id),
+      readOrderInventory<FieldInventoryMovement>(supabase, actorId, 'installation', jobId, 'materials', current),
+      readOrderInventory<FieldInventoryUnit>(supabase, actorId, 'installation', jobId, 'assigned', current),
     ]);
-    materials.value = mats;
-    assignedUnits.value = units;
+    materials.value = mats.items;
+    assignedUnits.value = units.items;
+  } catch (e) {
+    materials.value = [];
+    assignedUnits.value = [];
+    inventoryReadError.value = getErrorMessage(e, 'No se pudo cargar el inventario de esta instalación.');
   } finally {
     loadingMaterials.value = false;
   }
@@ -328,7 +342,7 @@ watch(materialsServiceType, () => {
   unitForm.value = { productId: '', unitId: '' };
   availableUnits.value = [];
 });
-const assignedUnits = ref<InventoryUnit[]>([]);
+const assignedUnits = ref<FieldInventoryUnit[]>([]);
 const availableUnits = ref<InventoryUnit[]>([]);
 const loadingAvailableUnits = ref(false);
 const unitForm = ref({ productId: '', unitId: '' });
@@ -358,7 +372,7 @@ async function handleAssignUnit() {
       contractId: installation.value.contract_id ?? undefined,
       reason: `Instalación ${installation.value.contracts?.contract_number ?? installation.value.id}`,
     });
-    assignedUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(installation.value.id);
+    await loadMaterialsAndUnits();
     await onUnitProductChange();
   } catch (e) {
     unitError.value = getErrorMessage(e, 'Error al asignar el equipo');
@@ -376,7 +390,7 @@ const canRemoveUnit = computed(() => {
   return auth.role === 'SUPERADMIN' || auth.role === 'ADMIN';
 });
 
-async function handleUnassignUnit(unit: InventoryUnit) {
+async function handleUnassignUnit(unit: FieldInventoryUnit) {
   if (!installation.value) return;
   const isCompletedCorrection = installation.value.status === 'completed';
   let reason = 'Corrección en campo: equipo incorrecto retirado de la instalación';
@@ -391,7 +405,7 @@ async function handleUnassignUnit(unit: InventoryUnit) {
   unitError.value = null;
   try {
     await inventoryUnitsStore.markRepaired(unit.id, reason);
-    assignedUnits.value = await inventoryUnitsStore.fetchUnitsByInstallation(installation.value.id);
+    await loadMaterialsAndUnits();
     await onUnitProductChange();
   } catch (e) {
     unitError.value = getErrorMessage(e, 'Error al quitar el equipo');
@@ -609,7 +623,10 @@ onMounted(async () => {
     contractsStore.fetchContracts(),
     catalogsStore.fetchStaff(),
     catalogsStore.fetchZones(),
-    inventoryStore.fetchProducts(),
+    // Catalogo completo de productos: solo ADMIN/SUPERADMIN lo necesitan (eligen
+    // que equipo asignar) — el resto de roles son solo lectura aqui y
+    // stores/inventory.ts ya rechaza este fetch fuera de esos dos roles.
+    ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? '') ? inventoryStore.fetchProducts() : Promise.resolve(),
     infraStore.fetchElementos(),
     fibra.fetchTodosNapPuertos(),
   ]);
@@ -802,6 +819,7 @@ onMounted(async () => {
           <div v-if="materialsServiceType === 'internet_combo'" class="surface p-4 text-sm">
             <h2 class="text-sm font-semibold mb-2">Materiales usados</h2>
             <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
+            <p v-else-if="inventoryReadError" class="text-xs text-red-600 mb-2">{{ inventoryReadError }}</p>
             <template v-else>
               <p v-if="!materials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en esta instalación.</p>
               <ul v-else class="space-y-1.5 mb-4">
@@ -834,7 +852,9 @@ onMounted(async () => {
               Puedes reservar aquí un equipo específico antes de despachar al técnico; si no, el técnico también puede
               asignarlo él mismo desde la App de Campo al tomar la orden.
             </p>
-            <p v-if="!equipmentProducts.length" class="text-xs text-slate-500">
+            <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
+            <p v-else-if="inventoryReadError" class="text-xs text-red-600">{{ inventoryReadError }}</p>
+            <p v-else-if="!equipmentProducts.length && !assignedUnits.length" class="text-xs text-slate-500">
               {{ materialsServiceType === 'solo_iptv' ? 'No hay productos de ONT o TV Box configurados en Inventario.' : 'No hay productos con control por serie/MAC configurados en Inventario.' }}
             </p>
             <template v-else>
