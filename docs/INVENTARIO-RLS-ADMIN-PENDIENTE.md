@@ -4,6 +4,12 @@
 `INVENTARIO-ACCESO-CONTROLADO.md`; no se volvió a consultar Cloud.
 La etapa 4 integrada no cambia tablas, políticas, publicaciones ni grants.
 
+Actualización del cierre solicitado: **BLOQUEADO**. La revisión focalizada
+identificó una dependencia de autorización en el retorno de recibos de la RPC
+Fase 162, que no se corrige con RLS de tablas y exige cambiar su seguridad
+efectiva. Ver `INVENTARIO-CIERRE-RLS-BLOQUEO.md`. Se detuvo antes de preparar
+una migración parcial o alterar consumidores.
+
 El mínimo cierre pendiente debe tratar estos objetos existentes:
 
 1. `inventory_products`, `inventory_categories`, `inventory_units`,
