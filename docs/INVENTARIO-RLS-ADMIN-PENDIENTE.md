@@ -10,6 +10,12 @@ Fase 162, que no se corrige con RLS de tablas y exige cambiar su seguridad
 efectiva. Ver `INVENTARIO-CIERRE-RLS-BLOQUEO.md`. Se detuvo antes de preparar
 una migración parcial o alterar consumidores.
 
+Corrección puntual posterior autorizada: el acceso a recibos de Fase 162 ya
+tiene migración local y 11/11 grupos de prueba JWT aprobados; ver
+`INVENTARIO-RUTINAS-RECIBOS-CORRECCION.md`. No se aplicó en Cloud ni se cerraron
+las dependencias de lecturas contextuales, Soporte/Clientes y RLS que siguen
+listadas abajo. No se inicia automáticamente su adaptación.
+
 El mínimo cierre pendiente debe tratar estos objetos existentes:
 
 1. `inventory_products`, `inventory_categories`, `inventory_units`,

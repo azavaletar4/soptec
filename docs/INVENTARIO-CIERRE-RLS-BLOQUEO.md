@@ -1,5 +1,11 @@
 # Cierre RLS de Inventario — BLOQUEADO por compatibilidad Fase 162
 
+Actualización tras autorización puntual: la rama de recibos se corrigió en una
+migración local independiente y aprobó 11/11 grupos con JWT reales en una base
+ficticia separada. Ver `INVENTARIO-RUTINAS-RECIBOS-CORRECCION.md`. La evidencia
+original siguiente se conserva; el cierre global RLS y sus otros consumidores
+siguen pendientes, no se aplicó ningún cambio en Cloud.
+
 16/10/2026. Base `7c03c2b` y `INVENTARIO-RLS-ADMIN-PENDIENTE.md`.
 Revisión exclusivamente de los consumidores pendientes y sus contratos locales;
 sin auditoría general ni consulta a Cloud. Las etapas 1–4 se conservan.

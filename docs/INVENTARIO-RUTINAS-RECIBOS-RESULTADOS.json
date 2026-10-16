@@ -1,0 +1,73 @@
+{
+  "at": "2026-10-16T19:33:24.341Z",
+  "environment": "LOCAL_SYNTHETIC_SEPARATE_DATABASE",
+  "status": "PASS",
+  "authentication": "REAL_GOTRUE_ES256_JWT",
+  "productionAccess": false,
+  "results": [
+    {
+      "test": "JWT reales",
+      "status": "PASS",
+      "detail": "GoTrue y firma ES256 verificados para líder, apoyo, retirado, ajeno y ADMIN; sin tokens inventados ni service_role."
+    },
+    {
+      "test": "Causa reproducida antes del parche",
+      "status": "PASS",
+      "detail": "RPC original devuelve recibo al técnico retirado, con JWT real y sin otro movimiento."
+    },
+    {
+      "test": "Parche mínimo aplicado solo en DB ficticia",
+      "status": "PASS",
+      "detail": "Una RPC sustituida; resto de funciones, firma, ACL, owner, search_path, movimientos y recibos idénticos. Cuerpo de escrituras idéntico."
+    },
+    {
+      "test": "Retirado con JWT abierto denegado",
+      "status": "PASS",
+      "detail": "Reutiliza JWT/UUID/carga anteriores; no recibe identificadores ni modifica inventario."
+    },
+    {
+      "test": "Ajeno, otra identidad y otra carga denegados",
+      "status": "PASS",
+      "detail": "Sin recuperación de recibos ni cambios de stock/historial."
+    },
+    {
+      "test": "Líder y apoyo autorizados, reintento y envío concurrente",
+      "status": "PASS",
+      "detail": "Recibo estable; simula respuesta descartada y reenvía misma intención; 3 consumos, 3 recibos, stock 90."
+    },
+    {
+      "test": "Inactivo denegado con mismo JWT",
+      "status": "PASS",
+      "detail": "Actividad leída del perfil vigente; reactivación recupera el mismo recibo sin escribir."
+    },
+    {
+      "test": "Compatibilidad de cierre y reintento offline",
+      "status": "PASS",
+      "detail": "Asignado activo recupera recibo tras cierre; operación nueva denegada. No reabre ni cambia el estado."
+    },
+    {
+      "test": "Rutina devuelta deniega recibo",
+      "status": "PASS",
+      "detail": "return_routine original, JWT real, borra asignación; mismo recibo ya no accesible. Stock 86 sin duplicados."
+    },
+    {
+      "test": "Permisos de oficina conservados",
+      "status": "PASS",
+      "detail": "Mismo JWT auténtico con roles efectivos ADMIN/SUPERADMIN/SOPORTE en perfil ficticio; recibo propio de recepción recuperable. Fixture de recibo, sin recepción física nueva."
+    },
+    {
+      "test": "Integridad final",
+      "status": "PASS",
+      "detail": "4 consumos, 5 recibos (uno fixture oficina), cero eventos; saldo=Kardex=86; laboratorio previo intacto."
+    }
+  ],
+  "final": {
+    "stock": 86,
+    "kardex": 86,
+    "movements": 4,
+    "receipts": 5,
+    "events": 0,
+    "previousLabRowsUnchanged": true,
+    "otherFunctionsUnchanged": true
+  }
+}
