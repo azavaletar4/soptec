@@ -1,0 +1,298 @@
+{
+  "status": "COMMIT_CONFIRMADO",
+  "operationalClosure": "BLOQUEADO_VERIFICACION_COMPLEMENTARIA",
+  "window": {
+    "start": "2026-10-16T21:03:18Z",
+    "authorizedDeadline": "2026-10-16T21:13:18Z",
+    "closedAt": "2026-10-16T21:06:34Z"
+  },
+  "commitConfirmedAt": "2026-10-16T21:04:29.3529344Z",
+  "execution": {
+    "status": "INSTALACION_VERIFICADA",
+    "success": true,
+    "exitCode": 0,
+    "gate": true,
+    "commitConfirmed": true,
+    "automaticRetry": false,
+    "requiresReadOnlyInspection": false,
+    "at": "2026-10-16T21:04:29.3529344Z"
+  },
+  "singleTransaction": true,
+  "limitsMs": {
+    "lock": 2000,
+    "statement": 60000,
+    "transaction": 120000
+  },
+  "migrations": [
+    {
+      "path": "supabase/migrations/20261015180000_fase162_inventario_rutinas.sql",
+      "sha256": "16a7d9a05dfb6b02ddce08051f7293a93bb246429ca8237229c81ac46748b225"
+    },
+    {
+      "path": "supabase/migrations/20261016020000_fase162_autorizacion_recibos.sql",
+      "sha256": "17f0c543b0742fb40d2992ea36238f807fe5b4fa13dbdb3e05a837a0b9d34f72"
+    }
+  ],
+  "bundleSHA256": "898c34ab4d0c9f44960af346e380ba4bef5a7f9c6d6b49cf58c08b24f7dc9d1b",
+  "backup": {
+    "status": "RESPALDO_VERIFICADO",
+    "dateUtc": "2026-10-16T20:31:30.1817950Z",
+    "sha256": "CB8B62949BF59A23556C7A69D9516CB1614D5EDDB5490B3488001662AD9A6C94",
+    "bytes": 38350028,
+    "restorationPreviouslyVerified": true,
+    "integrityReconfirmedBeforeExecution": true
+  },
+  "precheck": {
+    "at": "2026-10-16T21:03:50.011837+00:00",
+    "baselineAt": "2026-10-16T19:50:49.319632+00:00",
+    "status": "PASS",
+    "checks": {
+      "readOnly": true,
+      "correctOrigin": true,
+      "functionsUnchanged": true,
+      "tablesAndTriggersUnchanged": true,
+      "policiesUnchanged": true,
+      "enumsUnchanged": true,
+      "fase162Absent": true,
+      "validStock": true,
+      "historicalCountUnchanged": true
+    },
+    "counts": {
+      "tables": 14,
+      "functions": 37,
+      "policies": 31
+    },
+    "writerLocksAtRead": 0,
+    "readOnly": true,
+    "changed": []
+  },
+  "markers": [
+    "F162_GATE_PASSED",
+    "F162_BASELINE_END",
+    "F162_COMMIT_CONFIRMED",
+    "F162_POSTCHECKS_END",
+    "F162_AFTER_END"
+  ],
+  "requiredPostchecks": {
+    "status": "PASS",
+    "count": 26,
+    "rows": [
+      {
+        "control": "Funcion public.check_routine_inventory_receipt(uuid,uuid)",
+        "evidencia": "existe=t; hash esperado=01bcfddcff820c2c7df8737f6d520d37; SECURITY DEFINER=t; search_path={\"search_path=pg_catalog, public, pg_temp\"}; ACL={postgres=X/postgres}",
+        "resultado": "OK"
+      },
+      {
+        "control": "Funcion public.guard_routine_inventory_movement()",
+        "evidencia": "existe=t; hash esperado=f761ed3845cb6afb32e9e6eafc858ab9; SECURITY DEFINER=t; search_path={\"search_path=pg_catalog, public, pg_temp\"}; ACL={postgres=X/postgres}",
+        "resultado": "OK"
+      },
+      {
+        "control": "Funcion public.guard_routine_inventory_unit()",
+        "evidencia": "existe=t; hash esperado=16eb56b7a4520f765dd65190bdb6bd4d; SECURITY DEFINER=t; search_path={\"search_path=pg_catalog, public, pg_temp\"}; ACL={postgres=X/postgres}",
+        "resultado": "OK"
+      },
+      {
+        "control": "Funcion public.guard_routine_inventory_event()",
+        "evidencia": "existe=t; hash esperado=641d3b1921a609d8342833c1a6eaafb0; SECURITY DEFINER=t; search_path={\"search_path=pg_catalog, public, pg_temp\"}; ACL={postgres=X/postgres}",
+        "resultado": "OK"
+      },
+      {
+        "control": "Funcion public.apply_routine_inventory_event(public.inventory_unit_events)",
+        "evidencia": "existe=t; hash esperado=0d446d088bca97fcf4fd18a4c8da6d9a; SECURITY DEFINER=t; search_path={\"search_path=pg_catalog, public, pg_temp\"}; ACL={postgres=X/postgres}",
+        "resultado": "OK"
+      },
+      {
+        "control": "Funcion public.routine_inventory_operation(uuid,uuid,text,jsonb)",
+        "evidencia": "existe=t; hash esperado=7720f97852485732433b3f33495955e2; SECURITY DEFINER=t; search_path={\"search_path=pg_catalog, public, pg_temp\"}; ACL={postgres=X/postgres,authenticated=X/postgres}",
+        "resultado": "OK"
+      },
+      {
+        "control": "Dispatcher y saldo Fase151 public.apply_inventory_unit_event()",
+        "evidencia": "Cuerpo exacto normalizado, sin invocar funcion",
+        "resultado": "OK"
+      },
+      {
+        "control": "Dispatcher y saldo Fase151 public.apply_inventory_movement()",
+        "evidencia": "Cuerpo exacto normalizado, sin invocar funcion",
+        "resultado": "OK"
+      },
+      {
+        "control": "Comprobantes privados",
+        "evidencia": "RLS=t; ACL={postgres=arwdDxtm/postgres}",
+        "resultado": "OK"
+      },
+      {
+        "control": "Guarda fase162_inventory_movement_guard",
+        "evidencia": "BEFORE INSERT/UPDATE/DELETE, por fila, habilitado, sin WHEN",
+        "resultado": "OK"
+      },
+      {
+        "control": "Guarda fase162_inventory_unit_guard",
+        "evidencia": "BEFORE INSERT/UPDATE/DELETE, por fila, habilitado, sin WHEN",
+        "resultado": "OK"
+      },
+      {
+        "control": "Guarda fase162_inventory_event_guard",
+        "evidencia": "BEFORE INSERT/UPDATE/DELETE, por fila, habilitado, sin WHEN",
+        "resultado": "OK"
+      },
+      {
+        "control": "Trigger legacy inventory_movements",
+        "evidencia": "BEFORE INSERT por fila, habilitado, sin WHEN; no desactivado",
+        "resultado": "OK"
+      },
+      {
+        "control": "Trigger legacy inventory_unit_events",
+        "evidencia": "BEFORE INSERT por fila, habilitado, sin WHEN; no desactivado",
+        "resultado": "OK"
+      },
+      {
+        "control": "Indice idx_inventory_movements_routine",
+        "evidencia": "CREATE INDEX idx_inventory_movements_routine ON public.inventory_movements USING btree (routine_id, created_at) WHERE (routine_id IS NOT NULL)",
+        "resultado": "OK"
+      },
+      {
+        "control": "Indice idx_inventory_events_routine",
+        "evidencia": "CREATE INDEX idx_inventory_events_routine ON public.inventory_unit_events USING btree (routine_id, created_at) WHERE (routine_id IS NOT NULL)",
+        "resultado": "OK"
+      },
+      {
+        "control": "Indice idx_inventory_units_routine",
+        "evidencia": "CREATE INDEX idx_inventory_units_routine ON public.inventory_units USING btree (routine_id) WHERE (routine_id IS NOT NULL)",
+        "resultado": "OK"
+      },
+      {
+        "control": "Indice idx_routine_inventory_single_reversal",
+        "evidencia": "CREATE UNIQUE INDEX idx_routine_inventory_single_reversal ON public.inventory_movements USING btree (reverses_movement_id) WHERE ((routine_id IS NOT NULL) AND (reverses_movement_id IS NOT NULL))",
+        "resultado": "OK"
+      },
+      {
+        "control": "FK routine_inventory_operations.routine_id",
+        "evidencia": "FK validada ON DELETE RESTRICT hacia routines",
+        "resultado": "OK"
+      },
+      {
+        "control": "FK routine_inventory_operations.actor_id",
+        "evidencia": "FK validada ON DELETE RESTRICT hacia profiles",
+        "resultado": "OK"
+      },
+      {
+        "control": "FK inventory_movements.routine_id",
+        "evidencia": "FK validada ON DELETE RESTRICT hacia routines",
+        "resultado": "OK"
+      },
+      {
+        "control": "FK inventory_movements.operation_id",
+        "evidencia": "FK validada ON DELETE RESTRICT hacia routine_inventory_operations",
+        "resultado": "OK"
+      },
+      {
+        "control": "FK inventory_unit_events.routine_id",
+        "evidencia": "FK validada ON DELETE RESTRICT hacia routines",
+        "resultado": "OK"
+      },
+      {
+        "control": "FK inventory_unit_events.operation_id",
+        "evidencia": "FK validada ON DELETE RESTRICT hacia routine_inventory_operations",
+        "resultado": "OK"
+      },
+      {
+        "control": "FK inventory_units.routine_id",
+        "evidencia": "FK validada ON DELETE RESTRICT hacia routines",
+        "resultado": "OK"
+      },
+      {
+        "control": "RESULTADO FINAL",
+        "evidencia": "Comparar tambien definiciones de indices, RLS/ACL legacy y snapshot de filas/stock anterior. No invocar movimientos reales para esta comprobacion.",
+        "resultado": "INSTALACION ESTRUCTURAL OK"
+      }
+    ]
+  },
+  "snapshots": {
+    "identical": true,
+    "before": {
+      "crew": {
+        "rows": 161,
+        "digest": "fa4aa92e2fc484851d821a4dfbfeea25"
+      },
+      "units": {
+        "rows": 126,
+        "digest": "300c25f32ab6b333ad6c7e80071e472a"
+      },
+      "events": {
+        "rows": 299,
+        "digest": "b5b484490532ab52755bbae17d559dfb"
+      },
+      "products": {
+        "rows": 32,
+        "digest": "578ced6270a4374e13cb8ca0335a1c01"
+      },
+      "routines": {
+        "rows": 64,
+        "digest": "376e4fc06aa46ddcfe35771075db9ff3"
+      },
+      "movements": {
+        "rows": 271,
+        "digest": "7946a1b5563b859a0541cd7404f3cde1"
+      },
+      "read_only": "on",
+      "linked_contracts": {
+        "rows": 63,
+        "digest": "cb86a3c62116460e74a0acb6a6237504"
+      },
+      "historical_without_contract": {
+        "rows": 8,
+        "digest": "9520c5ceb66b9f92edd269630b3e2946"
+      }
+    },
+    "after": {
+      "crew": {
+        "rows": 161,
+        "digest": "fa4aa92e2fc484851d821a4dfbfeea25"
+      },
+      "units": {
+        "rows": 126,
+        "digest": "300c25f32ab6b333ad6c7e80071e472a"
+      },
+      "events": {
+        "rows": 299,
+        "digest": "b5b484490532ab52755bbae17d559dfb"
+      },
+      "products": {
+        "rows": 32,
+        "digest": "578ced6270a4374e13cb8ca0335a1c01"
+      },
+      "routines": {
+        "rows": 64,
+        "digest": "376e4fc06aa46ddcfe35771075db9ff3"
+      },
+      "movements": {
+        "rows": 271,
+        "digest": "7946a1b5563b859a0541cd7404f3cde1"
+      },
+      "read_only": "on",
+      "linked_contracts": {
+        "rows": 63,
+        "digest": "cb86a3c62116460e74a0acb6a6237504"
+      },
+      "historical_without_contract": {
+        "rows": 8,
+        "digest": "9520c5ceb66b9f92edd269630b3e2946"
+      }
+    }
+  },
+  "supplementaryRead": {
+    "status": "FAILED_STOPPED_WITHOUT_RETRY",
+    "category": "CONSULTA_SQL",
+    "remoteWrites": false,
+    "commitNotReverted": true,
+    "localQueryDefect": "jsonb_array_elements applied to JSON null in legacy trigger collections (job_work_sessions, routine_returns); original server diagnostic not retained, so exact SQLSTATE unconfirmed",
+    "verified": false
+  },
+  "noOperationalDML": true,
+  "noOtherMigrations": true,
+  "noPushOrDeployment": true,
+  "migrationLedgerUpdated": false,
+  "rawOutputSHA256": "6065845b2f9f9a2c83b9dcf85f00bd5b28122c3f9e496c695cec044b501b64d8"
+}
