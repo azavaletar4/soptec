@@ -1,0 +1,45 @@
+{
+  "at": "2026-10-16T21:10:57.938Z",
+  "environment": "ISOLATED_POSTGRES_NO_NETWORK_SYNTHETIC_METADATA",
+  "originalServerErrorNotRetained": true,
+  "results": [
+    {
+      "test": "original verifier reproduces SQLSTATE 22023 on JSON null",
+      "status": "PASS"
+    },
+    {
+      "test": "fixed verifier accepts JSON null and empty arrays",
+      "status": "PASS"
+    },
+    {
+      "test": "missing legacy index still denied",
+      "status": "PASS"
+    },
+    {
+      "test": "changed legacy column still denied",
+      "status": "PASS"
+    },
+    {
+      "test": "removed required trigger is not hidden by null handling",
+      "status": "PASS"
+    },
+    {
+      "test": "missing legacy table detected despite inner joins",
+      "status": "PASS"
+    },
+    {
+      "test": "missing legacy function detected",
+      "status": "PASS"
+    },
+    {
+      "test": "unexpected non-array metadata fails closed",
+      "status": "PASS"
+    }
+  ],
+  "reproducedError": {
+    "sqlstate": "22023",
+    "message": "cannot extract elements from a scalar",
+    "source": "Isolated reproduction, not recovered historical server log"
+  },
+  "status": "PASS"
+}

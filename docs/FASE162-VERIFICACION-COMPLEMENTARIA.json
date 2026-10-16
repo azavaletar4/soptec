@@ -1,0 +1,25 @@
+{
+  "status": "VERIFICACION_COMPLETA",
+  "at": "2026-10-16T21:11:23.972828+00:00",
+  "checks": {
+    "readOnly": true,
+    "fase162Present": true,
+    "legacyColumns": true,
+    "legacyIndexes": true,
+    "legacyPolicies": true,
+    "legacyTriggers": true,
+    "legacyTableCount": true,
+    "legacyConstraints": true,
+    "legacyFunctionCount": true,
+    "legacyFunctionsAndACL": true,
+    "legacyTablesRLSAndACL": true
+  },
+  "receiptsCreated": 0,
+  "receiptCountIsObservationNotBusinessTest": true,
+  "rawResponseSHA256": "9415bc7ab147d48439d2ec1d44b3e380a9f49a2c4b79708aa5aa965fb29bfc9c",
+  "migrationsReexecuted": false,
+  "cloudWrites": false,
+  "previous26PostchecksNotRepeated": true,
+  "historicalErrorAvailable": false,
+  "isolatedReproduction": "docs/FASE162-COMPLEMENTARIA-PRUEBAS.json"
+}
