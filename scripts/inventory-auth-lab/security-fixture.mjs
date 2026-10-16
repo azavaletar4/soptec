@@ -1,0 +1,43 @@
+﻿import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {randomBytes} from 'node:crypto';
+import {root,runtime,project,gateway,config,docker} from './common.mjs';
+const prepared=JSON.parse(readFileSync(runtime+'security-prepared.json','utf8'));
+if(prepared.database!=='inventory_security_lab'||prepared.url!=='http://127.0.0.1:54390')throw Error('Destino no local');
+if(existsSync(runtime+'security-fixture.json'))throw Error('Fixture ya existe; conservar');
+const c=config();const accounts=JSON.parse(readFileSync(runtime+'security-accounts.json','utf8')).filter(a=>a.id);
+const users={};
+// Misma ruta real /signup de GoTrue que security-prepare.mjs (sin /auth/v1).
+for(const role of ['leader','support','outsider','removed']){
+ const account={role,email:`inventory-security-${role}-${Date.now()}@example.test`,password:randomBytes(24).toString('base64url')};
+ const response=await fetch(gateway+'/signup',{method:'POST',headers:{'Content-Type':'application/json','apikey':c.anonKey},body:JSON.stringify({email:account.email,password:account.password})});
+ const body=await response.json();
+ if(!response.ok||!body.user?.id)throw Error('Auth ficticio no disponible: '+JSON.stringify(body));
+ account.id=body.user.id;accounts.push(account);users[role]=account.id;
+}
+const admin=accounts.find(a=>!a.role);if(!admin)throw Error('Admin ficticio ausente');admin.role='ADMIN';
+for(const a of accounts)if(a.id)users[a.role]=a.id;
+const local=s=>docker(['exec','-i',project+'-db','psql','-U','postgres','-d',prepared.database,'-X','-q','-A','-t','-v','ON_ERROR_STOP=1'],s).trim();
+const id=n=>`96600000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const f={users,client:id(1),otherClient:id(2),contract:id(3),otherContract:id(4),otherClientContract:id(5),installation:id(10),ticket:id(11),routine:id(12),category:id(20),material:id(21),model:id(22),stock:id(30),assigned:id(31),thirdParty:id(32),pending:id(33)};
+local(`begin;set local request.jwt.claim.sub='${users.ADMIN}';
+ insert into profiles(id,role,active) values ${['leader','support','outsider','removed'].map(r=>`('${users[r]}','TECNICO_RED',true)`).join(',')};
+ insert into clients(id,first_name,last_name) values('${f.client}','Ficticio','Laboratorio'),('${f.otherClient}','Ajeno','Laboratorio');
+ insert into service_contracts(id,client_id,contract_number) values('${f.contract}','${f.client}','SEC-A'),('${f.otherContract}','${f.client}','SEC-B'),('${f.otherClientContract}','${f.otherClient}','SEC-AJENO');
+ insert into installations(id,status,client_id,contract_id) values('${f.installation}','scheduled','${f.client}','${f.contract}');
+ insert into tickets(id,status,client_id,contract_id) values('${f.ticket}','open','${f.client}','${f.contract}');
+ insert into routines(id,status,client_id,contract_id) values('${f.routine}','pending','${f.client}','${f.contract}');
+ insert into job_assignees(job_type,job_id,technician_id,role) values ${[['installation',f.installation],['ticket',f.ticket],['routine',f.routine]].flatMap(([type,job])=>['leader','support','removed'].map(r=>`('${type}','${job}','${users[r]}','${r==='leader'?'leader':'support'}')`)).join(',')};
+ insert into inventory_categories(id,slug,name,icon,color) values('${f.category}','security-lab','Laboratorio ficticio','L','blue');
+ insert into inventory_products(id,name,unit,current_stock,price,category_id,category,is_serialized) values('${f.material}','Cable MODELO-SAFE','metro',100,987.65,'${f.category}','Marca SAFE',false),('${f.model}','ONT MODELO-SAFE','unidad',0,1234.56,'${f.category}','Marca SAFE',true);
+ insert into inventory_units(id,product_id,serial_number,mac_address) values('${f.stock}','${f.model}','LAB-SEC-STOCK','AA:BB:CC:11:22:33'),('${f.assigned}','${f.model}','LAB-SEC-OWN','AA:BB:CC:44:55:66'),('${f.thirdParty}','${f.model}','LAB-SEC-THIRD','AA:BB:CC:77:88:99'),('${f.pending}','${f.model}','LAB-SEC-PENDING','AA:BB:CC:00:AA:BB');
+ insert into inventory_unit_events(unit_id,to_status,client_id,contract_id,installation_id) values('${f.assigned}','assigned','${f.client}','${f.contract}','${f.installation}');
+ insert into inventory_unit_events(unit_id,to_status,client_id,contract_id) values('${f.thirdParty}','assigned','${f.otherClient}','${f.otherClientContract}');
+ insert into inventory_unit_events(unit_id,to_status,client_id,contract_id,ticket_id) values('${f.pending}','pending_approval','${f.client}','${f.contract}','${f.ticket}');
+ commit;`);
+writeFileSync(runtime+'security-accounts.json',JSON.stringify(accounts));writeFileSync(runtime+'security-fixture.json',JSON.stringify(f));
+const before=local("select md5(pg_get_functiondef('routine_inventory_operation(uuid,uuid,text,jsonb)'::regprocedure))");
+local(readFileSync(root+'supabase/migrations/20261016220000_inventario_contextual_rls_admin.sql','utf8'));
+if(local("select md5(pg_get_functiondef('routine_inventory_operation(uuid,uuid,text,jsonb)'::regprocedure))")!==before)throw Error('Fase 162 modificada');
+local("notify pgrst,'reload schema'");
+writeFileSync(runtime+'security-applied.json',JSON.stringify({at:new Date().toISOString(),database:prepared.database,routineRpcUnchanged:true}));
+console.log('SECURITY_RLS_APPLIED_ONLY_IN_NEW_SYNTHETIC_LAB; FASE162_UNCHANGED');

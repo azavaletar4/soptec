@@ -100,11 +100,13 @@ begin
    raise exception 'La operacion no corresponde a esta orden' using errcode='22023';
   end if;
   execute format($q$select coalesce(jsonb_agg(x.dto),'[]') from (
-   select jsonb_build_object('id',u.id,'product_id',u.product_id,'serial_number',u.serial_number,
+   select (jsonb_build_object('id',u.id,'product_id',u.product_id,'serial_number',u.serial_number,
     'mac_address',u.mac_address,'status',u.status,'client_id',u.client_id,'contract_id',u.contract_id,
-    'installation_id',u.installation_id,'ticket_id',u.ticket_id,'routine_id',u.routine_id,'notes',u.notes,
+    'installation_id',u.installation_id,'ticket_id',u.ticket_id,'routine_id',u.routine_id,
     'product',jsonb_build_object('id',p.id,'name',p.name,'unit',p.unit,
-     'inventory_categories',case when c.id is null then null else jsonb_build_object('slug',c.slug) end)) dto
+     'inventory_categories',case when c.id is null then null else jsonb_build_object('slug',c.slug) end))
+    -- notas administrativas: la clave no se incluye para tecnico/oficina, no solo el valor en null.
+    || case when $9 in ('ADMIN','SUPERADMIN') then jsonb_build_object('notes',u.notes) else '{}'::jsonb end) dto
    from public.inventory_units u join public.inventory_products p on p.id=u.product_id
     left join public.inventory_categories c on c.id=p.category_id
    where case

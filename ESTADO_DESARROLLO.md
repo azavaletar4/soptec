@@ -4733,3 +4733,48 @@ nombre/modelo/serie/MAC (`INVENTARIO-ENTREGA-CONSOLIDADA-PROPUESTA.md`).
   types/fieldInventory.ts, RoutineInventory.vue, ClientServiceDetailView.vue,
   TicketDetailView.vue, InventorySearchResults.vue) se conservan intactos, sin
   commit todavia.
+
+## Validacion final de cierre RLS de Inventario (17/10/2026, base c2f34b9)
+
+**LISTO PARA AUTORIZAR** la migracion
+`20261016220000_inventario_contextual_rls_admin.sql` — con respaldo y captura
+de politicas vigentes antes de aplicar en cualquier entorno real (ver detalle
+y condiciones en `docs/INVENTARIO-CIERRE-RLS-VALIDACION-FINAL.md`). Validada
+en PostgreSQL 17 aislado (laboratorio `scripts/inventory-auth-lab/security-*`,
+reconstruido desde cero en esta sesion) con JWT reales firmados por GoTrue:
+ADMIN, SUPERADMIN, SOPORTE, FACTURACION, tecnico asignado (leader/support),
+retirado y ajeno. 25/25 PASS: ADMIN/SUPERADMIN conservan catalogo/albumes
+generales; tecnicos solo su inventario contextual por orden; Altas/Averias/
+Rutinas conservan RETURNING/reintentos/movimientos
+(`campo_inventory_operation` concurrente, correccion/reversion,
+`routine_inventory_operation` con reintento exacto); Fase 162
+(`routine_inventory_operation`) confirmada **byte-identica** antes/despues de
+la migracion. Sin Cloud, sin push, sin despliegue.
+
+Dos hallazgos corregidos antes de validar: (1) la version anterior de la
+migracion exponia `notes` de equipo a tecnico/oficina en
+`inventory_order_read` — el propio laboratorio lo detecto (su prueba de fuga
+ya cubria price/balance_after/total_value/notes/document_number); corregido
+omitiendo la clave completa (no solo el valor en null) salvo ADMIN/SUPERADMIN,
+via `jsonb_build_object(...) || case when rol admin then ... else '{}' end`.
+(2) el laboratorio de la sesion anterior no podia obtener JWT reales en una
+corrida nueva (GoTrue detras de Caddy sin prefijo `/auth/v1`, que
+`createClient(...).auth.signIn/signUp` siempre antepone) — corregido pidiendo
+el token/cuenta por la ruta real de GoTrue (`fetch` directo a `/token`,
+`/signup`), mismo JWT real, solo cambia como se obtiene; tambien se alineo
+`common.mjs`/`config.json` al puerto que el laboratorio realmente publica
+(54382, ya correcto en `compose.json` desde el origen).
+
+Instalaciones canceladas: el 403 esperado del RPC (a proposito, no es un bug)
+ya no se muestra como error en `InstalacionDetailView.vue` — nuevo helper
+`src/lib/installationInventoryError.ts`
+(`presentInstallationInventoryError`), 5/5 pruebas nuevas. Ningun otro caso de
+error cambia su mensaje; no se afloja ninguna autorizacion.
+
+Pruebas nuevas de esta sesion (no se repitieron las 51 ya aprobadas en
+`c2f34b9`): 25/25 laboratorio real + 5/5 `installationInventoryError.test.ts`;
+`vue-tsc -p tsconfig.app.json` limpio. Commit local pendiente de crear en este
+mismo turno. Falta, antes de autorizar la aplicacion real: decidir entorno
+(Cloud es el unico real en este proyecto), respaldo fresco y captura de
+politicas/grants vigentes, y pedido explicito en el turno en que se vaya a
+aplicar — regla permanente del proyecto, no se ejecuta aqui.

@@ -19,6 +19,7 @@ import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { countOcupadosReales } from '@/lib/napOccupancy';
 import { supabase } from '@/lib/supabase';
 import { readOrderInventory } from '@/lib/orderInventory';
+import { presentInstallationInventoryError } from '@/lib/installationInventoryError';
 import type { FieldInventoryMovement, FieldInventoryUnit } from '@/types/fieldInventory';
 import {
   NAP_CLIENT_LIMIT,
@@ -280,7 +281,7 @@ async function loadMaterialsAndUnits() {
   } catch (e) {
     materials.value = [];
     assignedUnits.value = [];
-    inventoryReadError.value = getErrorMessage(e, 'No se pudo cargar el inventario de esta instalación.');
+    inventoryReadError.value = presentInstallationInventoryError(installation.value?.status, e);
   } finally {
     loadingMaterials.value = false;
   }
