@@ -1,0 +1,705 @@
+{
+    "at":  "2026-10-15T23:52:52.719564+00:00",
+    "read_only":  "on",
+    "database":  "postgres",
+    "user":  "postgres",
+    "tables":  [
+                   {
+                       "relname":  "inventory_categories",
+                       "relrowsecurity":  true,
+                       "relforcerowsecurity":  false
+                   },
+                   {
+                       "relname":  "inventory_movements",
+                       "relrowsecurity":  true,
+                       "relforcerowsecurity":  false
+                   },
+                   {
+                       "relname":  "inventory_products",
+                       "relrowsecurity":  true,
+                       "relforcerowsecurity":  false
+                   },
+                   {
+                       "relname":  "inventory_unit_events",
+                       "relrowsecurity":  true,
+                       "relforcerowsecurity":  false
+                   },
+                   {
+                       "relname":  "inventory_units",
+                       "relrowsecurity":  true,
+                       "relforcerowsecurity":  false
+                   }
+               ],
+    "policies":  [
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "installations",
+                         "policyname":  "installations_delete_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "DELETE",
+                         "qual":  "((status = \u0027cancelled\u0027::installation_status) AND (current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role])))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "installations",
+                         "policyname":  "installations_insert_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "installations",
+                         "policyname":  "installations_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "installations",
+                         "policyname":  "installations_update_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "((current_user_role() = \u0027SUPERADMIN\u0027::user_role) OR ((current_user_role() = \u0027ADMIN\u0027::user_role) AND (status \u003c\u003e ALL (ARRAY[\u0027completed\u0027::installation_status, \u0027cancelled\u0027::installation_status]))) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (status \u003c\u003e ALL (ARRAY[\u0027completed\u0027::installation_status, \u0027cancelled\u0027::installation_status])) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027installation\u0027::text) AND (ja.job_id = installations.id) AND (ja.technician_id = auth.uid()))))))",
+                         "with_check":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027installation\u0027::text) AND (ja.job_id = installations.id) AND (ja.technician_id = auth.uid()))))))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_categories",
+                         "policyname":  "inventory_categories_staff_only",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "ALL",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_movements",
+                         "policyname":  "inventory_movements_staff_insert",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_movements",
+                         "policyname":  "inventory_movements_staff_select",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_products",
+                         "policyname":  "inventory_products_staff_only",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "ALL",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_unit_events",
+                         "policyname":  "inventory_unit_events_staff_insert",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_unit_events",
+                         "policyname":  "inventory_unit_events_staff_select",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_units",
+                         "policyname":  "inventory_units_delete_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "DELETE",
+                         "qual":  "(current_user_role() = \u0027SUPERADMIN\u0027::user_role)",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_units",
+                         "policyname":  "inventory_units_insert_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_units",
+                         "policyname":  "inventory_units_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "inventory_units",
+                         "policyname":  "inventory_units_update_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "job_assignees",
+                         "policyname":  "job_assignees_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "job_assignees",
+                         "policyname":  "job_assignees_write_dispatch",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "ALL",
+                         "qual":  "((current_user_role() = \u0027SUPERADMIN\u0027::user_role) OR ((current_user_role() = ANY (ARRAY[\u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) AND (NOT ((job_type = \u0027installation\u0027::text) AND (EXISTS ( SELECT 1\n   FROM installations i\n  WHERE ((i.id = job_assignees.job_id) AND (i.status = ANY (ARRAY[\u0027completed\u0027::installation_status, \u0027cancelled\u0027::installation_status])))))))))",
+                         "with_check":  "((current_user_role() = \u0027SUPERADMIN\u0027::user_role) OR ((current_user_role() = ANY (ARRAY[\u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) AND (NOT ((job_type = \u0027installation\u0027::text) AND (EXISTS ( SELECT 1\n   FROM installations i\n  WHERE ((i.id = job_assignees.job_id) AND (i.status = ANY (ARRAY[\u0027completed\u0027::installation_status, \u0027cancelled\u0027::installation_status])))))))))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routines",
+                         "policyname":  "routines_delete_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "DELETE",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routines",
+                         "policyname":  "routines_insert_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routines",
+                         "policyname":  "routines_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "routines",
+                         "policyname":  "routines_update_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (status \u003c\u003e ALL (ARRAY[\u0027completed\u0027::routine_status, \u0027cancelled\u0027::routine_status])) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027routine\u0027::text) AND (ja.job_id = routines.id) AND (ja.technician_id = auth.uid()))))))",
+                         "with_check":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027routine\u0027::text) AND (ja.job_id = routines.id) AND (ja.technician_id = auth.uid()))))))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "tickets",
+                         "policyname":  "tickets_delete_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "DELETE",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "tickets",
+                         "policyname":  "tickets_insert_admin",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role]))"
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "tickets",
+                         "policyname":  "tickets_select_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role]))",
+                         "with_check":  null
+                     },
+                     {
+                         "schemaname":  "public",
+                         "tablename":  "tickets",
+                         "policyname":  "tickets_update_staff",
+                         "permissive":  "PERMISSIVE",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "cmd":  "UPDATE",
+                         "qual":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (status \u003c\u003e ALL (ARRAY[\u0027resolved\u0027::ticket_status, \u0027closed\u0027::ticket_status])) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027ticket\u0027::text) AND (ja.job_id = tickets.id) AND (ja.technician_id = auth.uid()))))))",
+                         "with_check":  "((current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027SOPORTE\u0027::user_role])) OR ((current_user_role() = \u0027TECNICO_RED\u0027::user_role) AND (status \u003c\u003e \u0027closed\u0027::ticket_status) AND (EXISTS ( SELECT 1\n   FROM job_assignees ja\n  WHERE ((ja.job_type = \u0027ticket\u0027::text) AND (ja.job_id = tickets.id) AND (ja.technician_id = auth.uid()))))))"
+                     }
+                 ],
+    "table_grants":  [
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "anon",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "anon",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "anon",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "anon",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "anon",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_categories",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "anon",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "anon",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "anon",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "anon",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "anon",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_movements",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "anon",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "anon",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "anon",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "anon",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "anon",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_products",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "anon",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "anon",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "anon",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "anon",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "anon",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_unit_events",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "anon",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "anon",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "anon",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "anon",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "anon",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "anon",
+                             "privilege_type":  "UPDATE"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "DELETE"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "INSERT"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "REFERENCES"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "SELECT"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRIGGER"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "TRUNCATE"
+                         },
+                         {
+                             "table_name":  "inventory_units",
+                             "grantee":  "authenticated",
+                             "privilege_type":  "UPDATE"
+                         }
+                     ],
+    "functions":  [
+                      {
+                          "proname":  "apply_inventory_movement",
+                          "args":  "",
+                          "security_definer":  true,
+                          "acl":  "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.apply_inventory_movement()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  new_stock numeric(12, 2);\n  installation_status public.installation_status;\n  ticket_status public.ticket_status;\nbegin\n  if new.installation_id is not null then\n    select status into installation_status from public.installations where id = new.installation_id;\n    if installation_status in (\u0027completed\u0027, \u0027cancelled\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027) then\n      raise exception \u0027La instalación ya fue completada o cancelada; solo un administrador puede registrar materiales nuevos\u0027;\n    end if;\n  end if;\n\n  if new.ticket_id is not null then\n    select status into ticket_status from public.tickets where id = new.ticket_id;\n    if ticket_status in (\u0027resolved\u0027, \u0027closed\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027, \u0027SOPORTE\u0027) then\n      raise exception \u0027La avería ya fue resuelta; solo administración/soporte puede registrar materiales nuevos\u0027;\n    end if;\n  end if;\n\n  select current_stock into new_stock\n  from public.inventory_products\n  where id = new.product_id\n  for update;\n\n  if new.movement_type = \u0027ingreso\u0027 then\n    new_stock := new_stock + new.quantity;\n  else\n    new_stock := new_stock - new.quantity;\n    if new_stock \u003c 0 then\n      raise exception \u0027Stock insuficiente: quedarian % unidades\u0027, new_stock;\n    end if;\n  end if;\n\n  new.balance_after := new_stock;\n\n  update public.inventory_products\n  set current_stock = new_stock, updated_at = now()\n  where id = new.product_id;\n\n  return new;\nend;\n$function$\n"
+                      },
+                      {
+                          "proname":  "apply_inventory_unit_event",
+                          "args":  "",
+                          "security_definer":  true,
+                          "acl":  "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.apply_inventory_unit_event()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  current_status public.inventory_unit_status;\n  current_installation_id uuid;\n  current_ticket_id uuid;\n  current_product_id uuid;\n  installation_status public.installation_status;\n  ticket_status public.ticket_status;\n  unit_category_slug text;\n  existing_onu_count integer;\n  is_occupying_status boolean;\nbegin\n  select status, installation_id, ticket_id, product_id\n    into current_status, current_installation_id, current_ticket_id, current_product_id\n  from public.inventory_units\n  where id = new.unit_id\n  for update;\n\n  new.from_status := current_status;\n  is_occupying_status := new.to_status in (\u0027assigned\u0027, \u0027pending_approval\u0027);\n\n  if current_status = \u0027retired\u0027 then\n    raise exception \u0027El equipo esta dado de baja y no admite mas movimientos\u0027;\n  end if;\n\n  if current_installation_id is not null then\n    select status into installation_status from public.installations where id = current_installation_id;\n    if installation_status in (\u0027completed\u0027, \u0027cancelled\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027) then\n      raise exception \u0027La instalación ya fue completada o cancelada; solo un administrador puede corregir el equipo asignado\u0027;\n    end if;\n  end if;\n\n  if current_ticket_id is not null then\n    select status into ticket_status from public.tickets where id = current_ticket_id;\n    if ticket_status in (\u0027resolved\u0027, \u0027closed\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027, \u0027SOPORTE\u0027) then\n      raise exception \u0027La avería ya fue resuelta; solo administración/soporte puede corregir el equipo asignado\u0027;\n    end if;\n  end if;\n\n  if is_occupying_status then\n    if new.client_id is null then\n      raise exception \u0027Debe indicar el cliente al asignar un equipo\u0027;\n    end if;\n    if not (current_status = \u0027in_stock\u0027 or (current_status = \u0027pending_approval\u0027 and new.to_status = \u0027assigned\u0027)) then\n      raise exception \u0027Solo se puede asignar un equipo que este en bodega, o aprobar uno pendiente (estado actual: %)\u0027, current_status;\n    end if;\n\n    if new.installation_id is not null and new.installation_id is distinct from current_installation_id then\n      select status into installation_status from public.installations where id = new.installation_id;\n      if installation_status in (\u0027completed\u0027, \u0027cancelled\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027) then\n        raise exception \u0027La instalación ya fue completada o cancelada; solo un administrador puede asignar equipo nuevo\u0027;\n      end if;\n    end if;\n\n    if new.ticket_id is not null then\n      select status into ticket_status from public.tickets where id = new.ticket_id;\n      if ticket_status in (\u0027resolved\u0027, \u0027closed\u0027) and public.current_user_role() not in (\u0027SUPERADMIN\u0027, \u0027ADMIN\u0027, \u0027SOPORTE\u0027) then\n        raise exception \u0027La avería ya fue resuelta; solo administración/soporte puede registrar o aprobar equipo\u0027;\n      end if;\n    end if;\n\n    if new.to_status = \u0027assigned\u0027 and new.ticket_id is not null and public.current_user_role() = \u0027TECNICO_RED\u0027 then\n      raise exception \u0027El equipo entrante de una avería queda pendiente de aprobación — un técnico no puede asignarlo directo\u0027;\n    end if;\n\n    select ic.slug into unit_category_slug\n    from public.inventory_products p\n    left join public.inventory_categories ic on ic.id = p.category_id\n    where p.id = current_product_id;\n\n    if unit_category_slug = \u0027onu\u0027 then\n      if new.installation_id is not null then\n        select count(*) into existing_onu_count\n        from public.inventory_units u\n        join public.inventory_products p2 on p2.id = u.product_id\n        join public.inventory_categories ic2 on ic2.id = p2.category_id\n        where u.installation_id = new.installation_id\n          and u.status in (\u0027assigned\u0027, \u0027pending_approval\u0027)\n          and u.id \u003c\u003e new.unit_id\n          and ic2.slug = \u0027onu\u0027;\n        if existing_onu_count \u003e 0 then\n          raise exception \u0027Solo se puede asignar 1 ONT/Módem por instalación. Si te equivocaste de serie, quita el equipo actual antes de agregar uno nuevo.\u0027;\n        end if;\n      end if;\n\n      if new.contract_id is not null then\n        select count(*) into existing_onu_count\n        from public.inventory_units u\n        join public.inventory_products p2 on p2.id = u.product_id\n        join public.inventory_categories ic2 on ic2.id = p2.category_id\n        where u.contract_id = new.contract_id\n          and u.status in (\u0027assigned\u0027, \u0027pending_approval\u0027)\n          and u.id \u003c\u003e new.unit_id\n          and ic2.slug = \u0027onu\u0027;\n        if existing_onu_count \u003e 0 then\n          raise exception \u0027Solo se puede asignar 1 ONT/Módem por línea. Si te equivocaste, quita o rechaza el equipo actual de esta línea antes de agregar uno nuevo.\u0027;\n        end if;\n      end if;\n    end if;\n  end if;\n\n  update public.inventory_units\n  set\n    status          = new.to_status,\n    client_id       = case when is_occupying_status then new.client_id else null end,\n    contract_id     = case when is_occupying_status then new.contract_id else null end,\n    installation_id = case when is_occupying_status then new.installation_id else null end,\n    ticket_id       = case when is_occupying_status then new.ticket_id else null end,\n    assigned_at     = case when is_occupying_status then now() else assigned_at end,\n    updated_at      = now()\n  where id = new.unit_id;\n\n  return new;\nend;\n$function$\n"
+                      },
+                      {
+                          "proname":  "current_user_role",
+                          "args":  "",
+                          "security_definer":  true,
+                          "acl":  "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.current_user_role()\n RETURNS user_role\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\n  select role from public.profiles where id = auth.uid() and active;\r\n$function$\n"
+                      },
+                      {
+                          "proname":  "inventory_get_albums",
+                          "args":  "",
+                          "security_definer":  true,
+                          "acl":  "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.inventory_get_albums()\n RETURNS TABLE(album_slug text, album_name text, icon text, color text, sort_order integer, item_count bigint, low_stock bigint, total_value numeric)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\n  select\r\n    c.slug,\r\n    c.name,\r\n    c.icon,\r\n    c.color,\r\n    c.sort_order,\r\n    coalesce(count(distinct p.id) filter (where p.id is not null and not p.is_serialized), 0)\r\n      + coalesce(sum(u_counts.in_stock_count) filter (where p.is_serialized), 0) as item_count,\r\n    coalesce(count(*) filter (where not p.is_serialized and p.current_stock \u003c= p.min_stock), 0) as low_stock,\r\n    coalesce(sum(case when p.is_serialized\r\n      then u_counts.in_stock_count * p.price\r\n      else p.current_stock * p.price end), 0) as total_value\r\n  from public.inventory_categories c\r\n  left join public.inventory_products p on p.category_id = c.id and p.is_active\r\n  left join lateral (\r\n    select count(*) as in_stock_count\r\n    from public.inventory_units iu\r\n    where iu.product_id = p.id and iu.status = \u0027in_stock\u0027\r\n  ) u_counts on p.is_serialized\r\n  where c.is_active\r\n  group by c.slug, c.name, c.icon, c.color, c.sort_order\r\n\r\n  union all\r\n\r\n  -- Álbum virtual \"Equipos por Recoger\": recojo pendiente por baja de\r\n  -- servicio/falta de pago/migracion (Fase 51), aun no se sabe en que estado\r\n  -- llega. A proposito no es una fila de inventory_categories (Fase 44).\r\n  select\r\n    \u0027por_recoger\u0027,\r\n    \u0027Equipos por Recoger\u0027,\r\n    \u0027🔄\u0027,\r\n    \u0027rose\u0027,\r\n    98,\r\n    count(*),\r\n    0::bigint,\r\n    coalesce(sum(p.price), 0)\r\n  from public.inventory_units iu\r\n  join public.inventory_products p on p.id = iu.product_id\r\n  where iu.status = \u0027en_recupero\u0027\r\n\r\n  union all\r\n\r\n  -- Álbum virtual \"Averiados / En Reparación\": equipo que fallo estando con\r\n  -- el cliente, ya recibido en bodega para reparar, o dado de baja.\r\n  select\r\n    \u0027averiados\u0027,\r\n    \u0027Averiados / En Reparación\u0027,\r\n    \u0027🛠️\u0027,\r\n    \u0027amber\u0027,\r\n    99,\r\n    count(*),\r\n    0::bigint,\r\n    coalesce(sum(p.price), 0)\r\n  from public.inventory_units iu\r\n  join public.inventory_products p on p.id = iu.product_id\r\n  where iu.status in (\u0027damaged\u0027, \u0027in_repair\u0027, \u0027retired\u0027)\r\n\r\n  order by sort_order;\r\n$function$\n"
+                      }
+                  ]
+}

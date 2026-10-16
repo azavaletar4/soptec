@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { INVENTORY_ADMIN_ROLES } from '@/lib/inventoryAccess';
 
 // TECNICO_RED es de campo: no necesita ver el panorama administrativo
 // completo (dashboard general, clientes, red/OLT, MikroTik, TR-069,
@@ -212,7 +213,7 @@ const router = createRouter({
       path: '/inventario',
       name: 'inventario',
       component: () => import('@/views/inventario/InventarioView.vue'),
-      meta: { requiresAuth: true, roles: NOT_TECNICO, breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario' }] },
+      meta: { requiresAuth: true, roles: INVENTORY_ADMIN_ROLES, breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario' }] },
     },
     {
       path: '/inventario/devoluciones',
@@ -220,7 +221,7 @@ const router = createRouter({
       component: () => import('@/views/inventario/DevolucionesView.vue'),
       meta: {
         requiresAuth: true,
-        roles: NOT_TECNICO,
+        roles: INVENTORY_ADMIN_ROLES,
         breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Devoluciones' }],
       },
     },
@@ -230,7 +231,7 @@ const router = createRouter({
       component: () => import('@/views/inventario/InventarioAlbumView.vue'),
       meta: {
         requiresAuth: true,
-        roles: NOT_TECNICO,
+        roles: INVENTORY_ADMIN_ROLES,
         breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Álbum' }],
       },
     },
@@ -240,7 +241,7 @@ const router = createRouter({
       component: () => import('@/views/inventario/ActivosFijosView.vue'),
       meta: {
         requiresAuth: true,
-        roles: NOT_TECNICO,
+        roles: INVENTORY_ADMIN_ROLES,
         breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Activos y Herramientas' }],
       },
     },
@@ -250,7 +251,7 @@ const router = createRouter({
       component: () => import('@/views/inventario/InventarioProductoView.vue'),
       meta: {
         requiresAuth: true,
-        roles: NOT_TECNICO,
+        roles: INVENTORY_ADMIN_ROLES,
         breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Detalle de producto' }],
       },
     },

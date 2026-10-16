@@ -144,7 +144,7 @@ const GRUPOS: ModuloGrupo[] = [
     key: 'configuracion',
     label: 'Configuración',
     items: [
-      { key: 'inventario', label: 'Inventario', to: '/inventario' },
+      { key: 'inventario', label: 'Inventario', to: '/inventario', requiresAdmin: true },
       { key: 'asistencia', label: 'Control de Asistencia', to: '/asistencia', requiresAdmin: true },
       { key: 'reportes', label: 'Reportes', to: '/reportes' },
       { key: 'usuarios', label: 'Usuarios', to: '/usuarios', requiresSuperadmin: true },

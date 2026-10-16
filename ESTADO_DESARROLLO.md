@@ -1,5 +1,16 @@
 # SmartRayco — Estado de desarrollo
 
+## Seguridad de Inventario — detención controlada (2026-10-15)
+
+**BLOQUEADO antes de crear/aplicar migración RLS.** El cierre de lecturas
+compartidas requiere adaptar RETURNING, escrituras sin contexto de orden y
+Realtime por filas; también coordinar Rutinas sin incorporar Fase 162.
+Se conserva y guarda la corrección frontend ADMIN/SUPERADMIN ya probada:
+11/11 autorizaciones, 30 combinaciones ruta/rol y build correctos, sin cambios
+de código desde esa validación. No se certifican concurrencia ni nuevas RLS.
+Ver `docs/INVENTARIO-SEGURIDAD-BLOQUEO.md`: dependencias, alcance y rollback.
+Cloud no modificado; sin migraciones, datos operativos, push ni despliegue.
+
 ## Inventario — búsqueda unificada local (2026-10-15)
 
 Búsqueda paginada por nombre/modelo registrado, serie y MAC en Inventario y álbumes,

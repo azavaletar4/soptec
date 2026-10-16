@@ -2,7 +2,9 @@
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '@/lib/supabase';
-import { searchInventory, type InventorySearchScope, type SearchUnit } from '@/lib/inventorySearch';
+import type { InventorySearchScope, SearchUnit } from '@/lib/inventorySearch';
+import { searchAdministrativeInventory } from '@/lib/inventoryAdministrativeSearch';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import type { InventoryProduct, InventoryUnitStatus } from '@/types/domain';
 
@@ -10,6 +12,7 @@ const props = defineProps<{ query: string; scope?: InventorySearchScope; editabl
 const emit = defineEmits<{ edit: [product: InventoryProduct]; delete: [product: InventoryProduct] }>();
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
 const products = ref<InventoryProduct[]>([]);
 const units = ref<SearchUnit[]>([]);
 const selected = ref<SearchUnit | null>(null);
@@ -26,7 +29,7 @@ const labels: Record<InventoryUnitStatus, string> = {
   in_stock: 'Disponible', assigned: 'Asignado', damaged: 'Averiado', in_repair: 'En reparación',
   retired: 'Retirado', en_recupero: 'Por recoger', pending_approval: 'Pendiente de aprobación',
 };
-watch(() => [props.query, props.scope, page.value, props.revision], () => {
+watch(() => [props.query, props.scope, page.value, props.revision, auth.role], () => {
   clearTimeout(timer);
   controller?.abort();
   const request = ++generation;
@@ -35,7 +38,7 @@ watch(() => [props.query, props.scope, page.value, props.revision], () => {
   timer = setTimeout(async () => {
     controller = new AbortController();
     try {
-      const result = await searchInventory(supabase, props.query, page.value, props.scope, controller.signal);
+      const result = await searchAdministrativeInventory(supabase, auth.role, props.query, page.value, props.scope, controller.signal);
       if (request !== generation) return;
       products.value = result.products; units.value = result.units; more.value = result.more;
     } catch (e) {
