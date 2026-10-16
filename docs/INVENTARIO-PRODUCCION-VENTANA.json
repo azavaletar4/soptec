@@ -1,0 +1,25 @@
+{
+  "preparedAt": "2026-10-16T23:46:25.161Z",
+  "sourceRevision": "4e967d08559a566ea0605087bd0778361bd835ec",
+  "remoteDirectory": "/opt/smartrayco-staging/inventario-4e967d0",
+  "migrations": [
+    {
+      "file": "supabase/migrations/20261016010000_campo_inventory_operations.sql",
+      "sha256": "e585f2f076100e1325c0db0ec6cfa25702014c15ea46fafa540b39e1c149e259"
+    },
+    {
+      "file": "supabase/migrations/20261016220000_inventario_contextual_rls_admin.sql",
+      "sha256": "1e79cdd23f42eb5d46b30b0a5c3095582cc916210cee53e6801c092ccd5eaa9f"
+    }
+  ],
+  "bundle": {
+    "path": "scripts/inventory-auth-lab/runtime/inventory-production-apply.sql",
+    "sha256": "7c90625f98c00f53144a2aedba6f1cc620f0f2e8fc41133b2de3b4b5c7611631",
+    "singleTransaction": true,
+    "executed": false
+  },
+  "composeOverride": "scripts/inventory-auth-lab/runtime/inventory-production.override.yml",
+  "rollbackOverride": "scripts/inventory-auth-lab/runtime/inventory-production-rollback.override.yml",
+  "requiresNoActiveFieldJobs": true,
+  "credentialsRotationDeferred": true
+}

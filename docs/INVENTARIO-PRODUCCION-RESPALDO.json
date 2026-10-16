@@ -1,0 +1,13 @@
+﻿{
+    "Status":  "RESPALDO_VERIFICADO",
+    "Project":  "mzupdnjegfwmpajywckd",
+    "DateUtc":  "2026-10-16T23:40:05.6688045Z",
+    "Bytes":  38398248,
+    "SHA256":  "04119650FB5A91B9A067721785B20D57B3369A9A4FAA50D4645346A7E7F536AC",
+    "PgDumpExit":  0,
+    "PgRestoreListExit":  0,
+    "PgRestoreReadExit":  0,
+    "RestorationExit":  0,
+    "Backup":  "C:\\Users\\USER\\AppData\\Local\\SmartRaycoBackups\\activacion_final_completo_20261016_233807_8dda07bc\\completo.dump",
+    "Limitations":  "No Storage files, global role attributes/memberships or external Vault keys; no decryption tested. Role names reconstructed as NOLOGIN; isolated supabase_admin SUPERUSER. No writes to Cloud."
+}

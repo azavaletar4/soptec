@@ -1,5 +1,11 @@
 # Continuidad de activación de Inventario
 
+Actualización del responsable del 16/10/2026: rotación de credenciales aplazada,
+sin bloquear por ese motivo la búsqueda. La preparación vigente y la base
+operativa real comprobada por SSH se documentan en
+`INVENTARIO-PRODUCCION-VENTANA.md`. El paquete sobre `ccdf94f` se conserva como
+evidencia; el candidato vigente preserva las protecciones desplegadas de 592d282.
+
 Revisión del 16/10/2026, desde `65bd12d`. **LISTO PARA AUTORIZAR** la
 ejecución coordinada; este documento no autoriza cambios remotos.
 

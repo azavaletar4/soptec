@@ -1,0 +1,201 @@
+{
+  "deployedBase": "592d282b9f51747b672a06aa1a099470f3539512",
+  "inventorySource": "65bd12d",
+  "reviewedAtHead": "655ea29ed527cb1f453f2c0f4837886c2fbb0494",
+  "files": [
+    {
+      "file": "server/src/index.ts",
+      "validatedSha256": "a67cb2523a8850a913dcba0d48b5d3d83e18e2ea6567d6fb5710c38e87c55181",
+      "candidateSha256": "a67cb2523a8850a913dcba0d48b5d3d83e18e2ea6567d6fb5710c38e87c55181",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "server/src/routes/fieldInventory.ts",
+      "validatedSha256": "9d95b99ed372e4ee5b8c07e92951d80eea992fcf3c14caf3ffe037c73060d011",
+      "candidateSha256": "9d95b99ed372e4ee5b8c07e92951d80eea992fcf3c14caf3ffe037c73060d011",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "server/src/routes/inventorySignals.ts",
+      "validatedSha256": "dcaaa105bedda4b635c4555a38d1e0e1b8a416da06f61768f34ec400a249f540",
+      "candidateSha256": "dcaaa105bedda4b635c4555a38d1e0e1b8a416da06f61768f34ec400a249f540",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "server/src/services/fieldInventory.ts",
+      "validatedSha256": "6f0969f2ebe2901f6f3b070d729d83df3ca2ea216dc1a161409ed3e50867ac44",
+      "candidateSha256": "6f0969f2ebe2901f6f3b070d729d83df3ca2ea216dc1a161409ed3e50867ac44",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "supabase/migrations/20261016010000_campo_inventory_operations.sql",
+      "validatedSha256": "e585f2f076100e1325c0db0ec6cfa25702014c15ea46fafa540b39e1c149e259",
+      "candidateSha256": "e585f2f076100e1325c0db0ec6cfa25702014c15ea46fafa540b39e1c149e259",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "supabase/migrations/20261016220000_inventario_contextual_rls_admin.sql",
+      "validatedSha256": "1e79cdd23f42eb5d46b30b0a5c3095582cc916210cee53e6801c092ccd5eaa9f",
+      "candidateSha256": "1e79cdd23f42eb5d46b30b0a5c3095582cc916210cee53e6801c092ccd5eaa9f",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/components/inventario/InventorySearchResults.vue",
+      "validatedSha256": "35005eba6f9af602ee6a00607271d19e2a2507bea77382c00fec6c6ee72efc8d",
+      "candidateSha256": "35005eba6f9af602ee6a00607271d19e2a2507bea77382c00fec6c6ee72efc8d",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/components/inventario/RoutineInventory.vue",
+      "validatedSha256": "bbb21bf888c455fe1da4fd759c42094be331576393916c88eb0eef527e56ee0a",
+      "candidateSha256": "bbb21bf888c455fe1da4fd759c42094be331576393916c88eb0eef527e56ee0a",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/components/layout/AppLayout.vue",
+      "validatedSha256": "dff9763280dcdac75f53017c080ed2433a58a64c0873dac5eab6fb7a5cbbe57a",
+      "candidateSha256": "dff9763280dcdac75f53017c080ed2433a58a64c0873dac5eab6fb7a5cbbe57a",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/api.ts",
+      "validatedSha256": "e717c8bb4e0d05de5ee34cf27e4a071d4290acbaad31829067e7b68afe361b28",
+      "candidateSha256": "e717c8bb4e0d05de5ee34cf27e4a071d4290acbaad31829067e7b68afe361b28",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/fieldInventoryClient.ts",
+      "validatedSha256": "6aec12db1f84990e77984ba3bc7e837d2fefe257fc77dff3285f8eba38b72e77",
+      "candidateSha256": "6aec12db1f84990e77984ba3bc7e837d2fefe257fc77dff3285f8eba38b72e77",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/fieldInventoryOperation.ts",
+      "validatedSha256": "7fd47d6e41359698d8d0d4182d39622fc44fee7d6277346a56c9410ec9834929",
+      "candidateSha256": "7fd47d6e41359698d8d0d4182d39622fc44fee7d6277346a56c9410ec9834929",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/installationInventoryError.ts",
+      "validatedSha256": "941fadb8e524857a5b100014a98adecbbbf325be88eee0b8dd35b93d66e3d687",
+      "candidateSha256": "941fadb8e524857a5b100014a98adecbbbf325be88eee0b8dd35b93d66e3d687",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/inventoryAccess.ts",
+      "validatedSha256": "e61c233e2da0cbde916f029c465fb7bce26e30bff5a2beebee9fa1ac2cfa539d",
+      "candidateSha256": "e61c233e2da0cbde916f029c465fb7bce26e30bff5a2beebee9fa1ac2cfa539d",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/inventoryAdministrativeSearch.ts",
+      "validatedSha256": "0608965cb71385c76e4273954354871e0946b84a015ce693ad222c0d4c766bda",
+      "candidateSha256": "0608965cb71385c76e4273954354871e0946b84a015ce693ad222c0d4c766bda",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/inventoryRefresh.ts",
+      "validatedSha256": "bdf621bc14e54a4ebbee6d242d664059b12d03356a664fb3e4feacd6bf4247b5",
+      "candidateSha256": "bdf621bc14e54a4ebbee6d242d664059b12d03356a664fb3e4feacd6bf4247b5",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/inventorySearch.ts",
+      "validatedSha256": "3e339a12e5d26c610682f3a93617da3f39aa2eaa1326cc513fd7b00f7c54ab3e",
+      "candidateSha256": "3e339a12e5d26c610682f3a93617da3f39aa2eaa1326cc513fd7b00f7c54ab3e",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/inventorySignals.ts",
+      "validatedSha256": "652c420d85f43c190583ddcf31cc6cda007dd4b9e0b28bd89daa36a65c5e701d",
+      "candidateSha256": "652c420d85f43c190583ddcf31cc6cda007dd4b9e0b28bd89daa36a65c5e701d",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/orderInventory.ts",
+      "validatedSha256": "376ba21eb7ce030961f9a9eac658e4a55309916dde444c89b9e4ac2d59dc75fe",
+      "candidateSha256": "376ba21eb7ce030961f9a9eac658e4a55309916dde444c89b9e4ac2d59dc75fe",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/lib/routineInventoryRequest.ts",
+      "validatedSha256": "67eb4443e62fd551a1142893beff73a24bb36d89b676ab4222b2c8396c7d123b",
+      "candidateSha256": "67eb4443e62fd551a1142893beff73a24bb36d89b676ab4222b2c8396c7d123b",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/router/index.ts",
+      "validatedSha256": "90816a881a8287a110bbbb2d82a01d028b513a37a74d246729bc73a902f6f62f",
+      "candidateSha256": "90816a881a8287a110bbbb2d82a01d028b513a37a74d246729bc73a902f6f62f",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/stores/inventory.ts",
+      "validatedSha256": "7232b5091355d246976247db83be12075b398dbfa7bc964c2e3cb2faac2eb02c",
+      "candidateSha256": "7232b5091355d246976247db83be12075b398dbfa7bc964c2e3cb2faac2eb02c",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/stores/ticketApprovals.ts",
+      "validatedSha256": "6551143287c8bb33fe46fe0b74a8a823eb7b0d4fede9b27d0118a902f2d4e00a",
+      "candidateSha256": "6551143287c8bb33fe46fe0b74a8a823eb7b0d4fede9b27d0118a902f2d4e00a",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/types/fieldInventory.ts",
+      "validatedSha256": "7e4683b027d20c036a001ec7bb3ec58a8b86c06873da1598dc2b2a55d5253b53",
+      "candidateSha256": "7e4683b027d20c036a001ec7bb3ec58a8b86c06873da1598dc2b2a55d5253b53",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/views/campo/CampoTrabajoDetailView.vue",
+      "validatedSha256": "9547263e3d9c6aa6feae1a8d3a8d1d6580a9ae915095ba73cc99f69169d50e3d",
+      "candidateSha256": "ea67b54773210eb44afe87581f12dec83ba2f23c8b887c44249eea4d813d7a4b",
+      "preservedDeployedChanges": true
+    },
+    {
+      "file": "src/views/clientes/ClientServiceDetailView.vue",
+      "validatedSha256": "8da4fb1981e46123d8e40e0af8f211a0bfba1a2de03018973c23f50d8cb26d54",
+      "candidateSha256": "8da4fb1981e46123d8e40e0af8f211a0bfba1a2de03018973c23f50d8cb26d54",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/views/instalaciones/InstalacionDetailView.vue",
+      "validatedSha256": "a6b030a2ed356312fd0210d6e9a96973c58635637e89d3493557efd83a83a25b",
+      "candidateSha256": "a6b030a2ed356312fd0210d6e9a96973c58635637e89d3493557efd83a83a25b",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/views/inventario/InventarioAlbumView.vue",
+      "validatedSha256": "ee2a5c49cacbe773300fd20e9b57d3e32d80750f41eca66e5ea2666a6284d015",
+      "candidateSha256": "ee2a5c49cacbe773300fd20e9b57d3e32d80750f41eca66e5ea2666a6284d015",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/views/inventario/InventarioProductoView.vue",
+      "validatedSha256": "dd36a22fee855bc67824775370b238ad1a732cdd0d9048460263d0b74d586a7b",
+      "candidateSha256": "dd36a22fee855bc67824775370b238ad1a732cdd0d9048460263d0b74d586a7b",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/views/inventario/InventarioView.vue",
+      "validatedSha256": "2c3247420e97da6b70633316751da042c3a1400623c8ba8a81a6a629789506ce",
+      "candidateSha256": "2c3247420e97da6b70633316751da042c3a1400623c8ba8a81a6a629789506ce",
+      "preservedDeployedChanges": false
+    },
+    {
+      "file": "src/views/soporte/TicketDetailView.vue",
+      "validatedSha256": "6823a39721e76d3df7ab2ee2ad415206f319932e9beb768e73ad62fd6a8813de",
+      "candidateSha256": "6823a39721e76d3df7ab2ee2ad415206f319932e9beb768e73ad62fd6a8813de",
+      "preservedDeployedChanges": false
+    }
+  ],
+  "unrelatedFunctionalChanges": false,
+  "directory": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\production-candidate-1792193819136",
+  "archive": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\production-candidate-1792193819136.tar.gz",
+  "archiveSha256": "c0e43443b1ca8eb082366a1fa767146870c47c59fb444601afe62e7a6fb8c98c",
+  "configurationIncluded": false,
+  "deployed": false,
+  "sourceRevision": "4e967d08559a566ea0605087bd0778361bd835ec",
+  "localRef": "refs/heads/release/inventario-655ea29-1792194002372"
+}

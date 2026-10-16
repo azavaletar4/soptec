@@ -1,0 +1,156 @@
+{
+    "policies":  [
+                     {
+                         "cmd":  "ALL",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_categories",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_categories_staff_only",
+                         "schemaname":  "public",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_movements",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_movements_staff_insert",
+                         "schemaname":  "public",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_movements",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_movements_staff_select",
+                         "schemaname":  "public",
+                         "with_check":  null
+                     },
+                     {
+                         "cmd":  "ALL",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_products",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_products_staff_only",
+                         "schemaname":  "public",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_unit_events",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_unit_events_staff_insert",
+                         "schemaname":  "public",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_unit_events",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_unit_events_staff_select",
+                         "schemaname":  "public",
+                         "with_check":  null
+                     },
+                     {
+                         "cmd":  "DELETE",
+                         "qual":  "(current_user_role() = \u0027SUPERADMIN\u0027::user_role)",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_units",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_units_delete_staff",
+                         "schemaname":  "public",
+                         "with_check":  null
+                     },
+                     {
+                         "cmd":  "INSERT",
+                         "qual":  null,
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_units",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_units_insert_staff",
+                         "schemaname":  "public",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     },
+                     {
+                         "cmd":  "SELECT",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_units",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_units_select_staff",
+                         "schemaname":  "public",
+                         "with_check":  null
+                     },
+                     {
+                         "cmd":  "UPDATE",
+                         "qual":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))",
+                         "roles":  [
+                                       "authenticated"
+                                   ],
+                         "tablename":  "inventory_units",
+                         "permissive":  "PERMISSIVE",
+                         "policyname":  "inventory_units_update_staff",
+                         "schemaname":  "public",
+                         "with_check":  "(current_user_role() = ANY (ARRAY[\u0027SUPERADMIN\u0027::user_role, \u0027ADMIN\u0027::user_role, \u0027TECNICO_RED\u0027::user_role, \u0027SOPORTE\u0027::user_role, \u0027FACTURACION\u0027::user_role]))"
+                     }
+                 ],
+    "checkedAt":  "2026-10-16T23:45:51.154622+00:00",
+    "read_only":  "on",
+    "albumsGrants":  [
+                         "=X/postgres",
+                         "postgres=X/postgres",
+                         "anon=X/postgres",
+                         "authenticated=X/postgres",
+                         "service_role=X/postgres"
+                     ],
+    "stage3Absent":  true,
+    "fase162RpcMd5":  "b936a41ceff1686763b6fcaa15ed5366",
+    "fase162Present":  true,
+    "inProgressJobs":  {
+                           "tickets":  1,
+                           "routines":  1,
+                           "installations":  0
+                       },
+    "closedRlsAbsent":  true,
+    "databaseCorrect":  true,
+    "inventoryCounts":  {
+                            "units":  128,
+                            "events":  302,
+                            "products":  32,
+                            "movements":  275
+                        },
+    "openFieldSessions":  2,
+    "inventoryLastWrite":  "2026-10-16T23:27:10.934534+00:00",
+    "projectUserCorrect":  true,
+    "albumsDefinitionMd5":  "17d57f4f4bb210077d99edf701d5eec6",
+    "contextualRpcAbsent":  true,
+    "activeInventoryLocks":  0,
+    "openClientTransactions":  0
+}
