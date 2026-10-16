@@ -1,0 +1,48 @@
+{
+  "at": "2026-10-16T19:54:35.227Z",
+  "environment": "ISOLATED_PG_NO_NETWORK_SYNTHETIC",
+  "cloudCaptureAt": "2026-10-16T19:50:49.319632+00:00",
+  "status": "BLOCKED",
+  "results": [
+    {
+      "test": "Instalación atómica y datos previos",
+      "status": "PASS",
+      "detail": "Fase 162 + corrección en una transacción; diez tablas sintéticas intactas, ocho históricos ficticios intactos; políticas previas idénticas, cero recibos."
+    },
+    {
+      "test": "Postcheck conjunto",
+      "status": "PASS",
+      "detail": "Funciones, huella RPC corregida, ACL, guards, dispatcher, índices y siete FK RESTRICT aprobados."
+    },
+    {
+      "test": "RPC bajo políticas y triggers Cloud",
+      "status": "PASS",
+      "detail": "Consumo ficticio y repetición con recibo estable: un movimiento, un recibo, stock 99."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "supabase/migrations/20261015180000_fase162_inventario_rutinas.sql",
+      "sha256": "16a7d9a05dfb6b02ddce08051f7293a93bb246429ca8237229c81ac46748b225"
+    },
+    {
+      "path": "supabase/migrations/20261016020000_fase162_autorizacion_recibos.sql",
+      "sha256": "ba75c72224b4638428712341f2352ba6baaab1690cc1a9b2a937575c1fb0639c"
+    }
+  ],
+  "bundleSha256": "b520a0ae7e544dd280cce481d77cb681c9c2e540de4b183daa8cbcff27b93e32",
+  "correctedRpcHash": "70c4b9632cedc2d3f319a6ed21bac297",
+  "concurrency": [
+    {
+      "code": 3,
+      "deadlock": true,
+      "timeout": false
+    },
+    {
+      "code": 0,
+      "deadlock": false,
+      "timeout": false
+    }
+  ],
+  "error": "Carrera de cuadrilla produjo error: [{\"code\":3,\"deadlock\":true,\"timeout\":false},{\"code\":0,\"deadlock\":false,\"timeout\":false}]"
+}

@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-16T20:18:55.522Z",
+  "environment": "ISOLATED_PG_NO_NETWORK_SYNTHETIC",
+  "cloudCaptureAt": "2026-10-16T19:50:49.319632+00:00",
+  "status": "PASS",
+  "results": [
+    {
+      "test": "Instalación conjunta actualizada",
+      "status": "PASS",
+      "detail": "Dos migraciones en una transacción: integridad de diez tablas y ocho históricos ficticios, políticas intactas y cero recibos."
+    },
+    {
+      "test": "Postchecks de instalación",
+      "status": "PASS",
+      "detail": "Huella NOWAIT, ACL, helpers, dispatcher, índices y FK aprobados."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "supabase/migrations/20261015180000_fase162_inventario_rutinas.sql",
+      "sha256": "16a7d9a05dfb6b02ddce08051f7293a93bb246429ca8237229c81ac46748b225"
+    },
+    {
+      "path": "supabase/migrations/20261016020000_fase162_autorizacion_recibos.sql",
+      "sha256": "17f0c543b0742fb40d2992ea36238f807fe5b4fa13dbdb3e05a837a0b9d34f72"
+    }
+  ],
+  "bundleSha256": "898c34ab4d0c9f44960af346e380ba4bef5a7f9c6d6b49cf58c08b24f7dc9d1b",
+  "correctedRpcHash": "7720f97852485732433b3f33495955e2"
+}

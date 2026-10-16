@@ -1,0 +1,120 @@
+{
+  "at": "2026-10-16T20:12:30.305Z",
+  "environment": "ISOLATED_PG_NO_NETWORK_SYNTHETIC",
+  "cloudCaptureAt": "2026-10-16T19:50:49.319632+00:00",
+  "status": "PASS",
+  "results": [
+    {
+      "test": "Deadlock anterior reproducido",
+      "status": "PASS",
+      "detail": "7e6abd5 frente al DELETE y trigger real: SQLSTATE 40P01; inventario intacto."
+    },
+    {
+      "test": "Parche y postcheck conjunto",
+      "status": "PASS",
+      "detail": "Solo RPC; diez tablas y ocho históricos ficticios intactos; políticas y otras funciones/ACL sin cambios; postchecks aprobados."
+    },
+    {
+      "test": "Carrera de recibo corregida",
+      "status": "PASS",
+      "detail": "55P03 acotado revierte A sin recibos ni movimientos nuevos; retirada B confirma sin deadlock."
+    },
+    {
+      "test": "Tras retirada confirmada",
+      "status": "PASS",
+      "detail": "Antiguo recibo y movimiento nuevo denegados, sin datos protegidos ni variación de stock."
+    },
+    {
+      "test": "Movimiento en carrera no se confirma",
+      "status": "PASS",
+      "detail": "55P03 sin crear recibo; reintento tras revocación denegado, stock intacto."
+    },
+    {
+      "test": "Reintento legítimo y concurrencia",
+      "status": "PASS",
+      "detail": "Dos envíos reales del mismo UUID y repetición tras respuesta descartada: un movimiento adicional, stock 98."
+    },
+    {
+      "test": "Autorización anterior a retirada",
+      "status": "PASS",
+      "detail": "DELETE espera COMMIT autorizado; después confirma y el recibo ya se deniega, sin cambio de saldo."
+    },
+    {
+      "test": "Retirada anterior a inventario",
+      "status": "PASS",
+      "detail": "La RPC espera al padre y después deniega asignación ausente, sin movimiento posterior."
+    },
+    {
+      "test": "Apoyo e integridad final",
+      "status": "PASS",
+      "detail": "Apoyo autorizado y recibo estable; tres consumos/recibos, stock=Kardex=97, unidades/eventos intactos."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "supabase/migrations/20261015180000_fase162_inventario_rutinas.sql",
+      "sha256": "16a7d9a05dfb6b02ddce08051f7293a93bb246429ca8237229c81ac46748b225"
+    },
+    {
+      "path": "supabase/migrations/20261016020000_fase162_autorizacion_recibos.sql",
+      "sha256": "17f0c543b0742fb40d2992ea36238f807fe5b4fa13dbdb3e05a837a0b9d34f72"
+    }
+  ],
+  "bundleSha256": "898c34ab4d0c9f44960af346e380ba4bef5a7f9c6d6b49cf58c08b24f7dc9d1b",
+  "correctedRpcHash": "7720f97852485732433b3f33495955e2",
+  "concurrency": [
+    {
+      "case": "baseline 7e6abd5",
+      "sessions": [
+        {
+          "exit": 3,
+          "sqlstate": "40P01",
+          "ms": 1766
+        },
+        {
+          "exit": 0,
+          "sqlstate": null,
+          "ms": 1479
+        }
+      ]
+    },
+    {
+      "case": "recibo con NOWAIT",
+      "sessions": [
+        {
+          "exit": 3,
+          "sqlstate": "55P03",
+          "ms": 1655
+        },
+        {
+          "exit": 0,
+          "sqlstate": null,
+          "ms": 1366
+        }
+      ]
+    },
+    {
+      "case": "movimiento nuevo con NOWAIT",
+      "sessions": [
+        {
+          "exit": 3,
+          "sqlstate": "55P03",
+          "ms": 1654
+        },
+        {
+          "exit": 0,
+          "sqlstate": null,
+          "ms": 1366
+        }
+      ]
+    }
+  ],
+  "final": {
+    "stock": 97,
+    "kardex": 97,
+    "movements": 3,
+    "receipts": 3,
+    "unitsAndEventsUnchanged": true,
+    "otherFunctionsAndPoliciesUnchanged": true
+  }
+}

@@ -1,0 +1,80 @@
+{
+    "functions":  [
+                      {
+                          "acl":  [
+                                      "postgres=X/postgres",
+                                      "service_role=X/postgres"
+                                  ],
+                          "body":  "\n  select \u0027ticket\u0027, t.id, t.ticket_number\n    from public.tickets t\n    where t.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027ticket\u0027 or t.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027ticket\u0027 and ja.job_id = t.id and ja.technician_id = p_technician_id\n      )\n  union all\n  select \u0027installation\u0027, i.id, null\n    from public.installations i\n    where i.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027installation\u0027 or i.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027installation\u0027 and ja.job_id = i.id and ja.technician_id = p_technician_id\n      )\n  union all\n  select \u0027routine\u0027, r.id, r.routine_number\n    from public.routines r\n    where r.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027routine\u0027 or r.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027routine\u0027 and ja.job_id = r.id and ja.technician_id = p_technician_id\n      )\n  limit 1;\n",
+                          "name":  "find_other_active_job",
+                          "signature":  "find_other_active_job(uuid,text,uuid)",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.find_other_active_job(p_technician_id uuid, p_exclude_job_type text, p_exclude_job_id uuid)\n RETURNS TABLE(job_type text, job_id uuid, job_number text)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\n  select \u0027ticket\u0027, t.id, t.ticket_number\n    from public.tickets t\n    where t.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027ticket\u0027 or t.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027ticket\u0027 and ja.job_id = t.id and ja.technician_id = p_technician_id\n      )\n  union all\n  select \u0027installation\u0027, i.id, null\n    from public.installations i\n    where i.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027installation\u0027 or i.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027installation\u0027 and ja.job_id = i.id and ja.technician_id = p_technician_id\n      )\n  union all\n  select \u0027routine\u0027, r.id, r.routine_number\n    from public.routines r\n    where r.status = \u0027in_progress\u0027\n      and (p_exclude_job_type \u003c\u003e \u0027routine\u0027 or r.id \u003c\u003e p_exclude_job_id)\n      and exists (\n        select 1 from public.job_assignees ja\n        where ja.job_type = \u0027routine\u0027 and ja.job_id = r.id and ja.technician_id = p_technician_id\n      )\n  limit 1;\n$function$\n"
+                      },
+                      {
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ],
+                          "body":  "\r\ndeclare\r\n  current_year int := extract(year from now())::int;\r\n  seq_value    int;\r\nbegin\r\n  insert into public.contract_number_counters (year, last_value)\r\n  values (current_year, 1)\r\n  on conflict (year) do update\r\n    set last_value = public.contract_number_counters.last_value + 1\r\n  returning last_value into seq_value;\r\n\r\n  return \u0027CTR-\u0027 || current_year::text || \u0027-\u0027 || lpad(seq_value::text, 5, \u00270\u0027);\r\nend;\r\n",
+                          "name":  "generate_contract_number",
+                          "signature":  "generate_contract_number()",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.generate_contract_number()\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  current_year int := extract(year from now())::int;\r\n  seq_value    int;\r\nbegin\r\n  insert into public.contract_number_counters (year, last_value)\r\n  values (current_year, 1)\r\n  on conflict (year) do update\r\n    set last_value = public.contract_number_counters.last_value + 1\r\n  returning last_value into seq_value;\r\n\r\n  return \u0027CTR-\u0027 || current_year::text || \u0027-\u0027 || lpad(seq_value::text, 5, \u00270\u0027);\r\nend;\r\n$function$\n"
+                      },
+                      {
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ],
+                          "body":  "\ndeclare\n  current_year int := extract(year from now())::int;\n  seq_value    int;\nbegin\n  insert into public.routine_number_counters (year, last_value)\n  values (current_year, 1)\n  on conflict (year) do update\n    set last_value = public.routine_number_counters.last_value + 1\n  returning last_value into seq_value;\n\n  return \u0027RUT-\u0027 || current_year::text || \u0027-\u0027 || lpad(seq_value::text, 5, \u00270\u0027);\nend;\n",
+                          "name":  "generate_routine_number",
+                          "signature":  "generate_routine_number()",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.generate_routine_number()\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\ndeclare\n  current_year int := extract(year from now())::int;\n  seq_value    int;\nbegin\n  insert into public.routine_number_counters (year, last_value)\n  values (current_year, 1)\n  on conflict (year) do update\n    set last_value = public.routine_number_counters.last_value + 1\n  returning last_value into seq_value;\n\n  return \u0027RUT-\u0027 || current_year::text || \u0027-\u0027 || lpad(seq_value::text, 5, \u00270\u0027);\nend;\n$function$\n"
+                      },
+                      {
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ],
+                          "body":  "\r\ndeclare\r\n  current_year int := extract(year from now())::int;\r\n  seq_value    int;\r\nbegin\r\n  insert into public.ticket_number_counters (year, last_value)\r\n  values (current_year, 1)\r\n  on conflict (year) do update\r\n    set last_value = public.ticket_number_counters.last_value + 1\r\n  returning last_value into seq_value;\r\n\r\n  return \u0027TCK-\u0027 || current_year::text || \u0027-\u0027 || lpad(seq_value::text, 5, \u00270\u0027);\r\nend;\r\n",
+                          "name":  "generate_ticket_number",
+                          "signature":  "generate_ticket_number()",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.generate_ticket_number()\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  current_year int := extract(year from now())::int;\r\n  seq_value    int;\r\nbegin\r\n  insert into public.ticket_number_counters (year, last_value)\r\n  values (current_year, 1)\r\n  on conflict (year) do update\r\n    set last_value = public.ticket_number_counters.last_value + 1\r\n  returning last_value into seq_value;\r\n\r\n  return \u0027TCK-\u0027 || current_year::text || \u0027-\u0027 || lpad(seq_value::text, 5, \u00270\u0027);\r\nend;\r\n$function$\n"
+                      },
+                      {
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ],
+                          "body":  "\r\ndeclare\r\n  r record;\r\nbegin\r\n  for r in\r\n    select u.id\r\n    from public.inventory_units u\r\n    where u.installation_id = p_installation_id\r\n      and u.status = \u0027assigned\u0027\r\n  loop\r\n    insert into public.inventory_unit_events (unit_id, to_status, reason)\r\n    values (r.id, \u0027in_stock\u0027, p_reason);\r\n  end loop;\r\nend;\r\n",
+                          "name":  "reverse_assigned_units_by_installation",
+                          "signature":  "reverse_assigned_units_by_installation(uuid,text)",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.reverse_assigned_units_by_installation(p_installation_id uuid, p_reason text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  r record;\r\nbegin\r\n  for r in\r\n    select u.id\r\n    from public.inventory_units u\r\n    where u.installation_id = p_installation_id\r\n      and u.status = \u0027assigned\u0027\r\n  loop\r\n    insert into public.inventory_unit_events (unit_id, to_status, reason)\r\n    values (r.id, \u0027in_stock\u0027, p_reason);\r\n  end loop;\r\nend;\r\n$function$\n"
+                      },
+                      {
+                          "acl":  [
+                                      "=X/postgres",
+                                      "postgres=X/postgres",
+                                      "anon=X/postgres",
+                                      "authenticated=X/postgres",
+                                      "service_role=X/postgres"
+                                  ],
+                          "body":  "\r\ndeclare\r\n  r record;\r\nbegin\r\n  for r in\r\n    select m.*\r\n    from public.inventory_movements m\r\n    where m.movement_type = \u0027egreso\u0027\r\n      and (\r\n        (p_installation_id is not null and m.installation_id = p_installation_id)\r\n        or (p_ticket_id is not null and m.ticket_id = p_ticket_id)\r\n      )\r\n      and not exists (select 1 from public.inventory_movements r2 where r2.reverses_movement_id = m.id)\r\n  loop\r\n    insert into public.inventory_movements (product_id, movement_type, quantity, reason, reverses_movement_id)\r\n    values (r.product_id, \u0027ingreso\u0027, r.quantity, p_reason, r.id);\r\n  end loop;\r\nend;\r\n",
+                          "name":  "reverse_egreso_movements",
+                          "signature":  "reverse_egreso_movements(uuid,uuid,text)",
+                          "definition":  "CREATE OR REPLACE FUNCTION public.reverse_egreso_movements(p_installation_id uuid, p_ticket_id uuid, p_reason text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO \u0027public\u0027\nAS $function$\r\ndeclare\r\n  r record;\r\nbegin\r\n  for r in\r\n    select m.*\r\n    from public.inventory_movements m\r\n    where m.movement_type = \u0027egreso\u0027\r\n      and (\r\n        (p_installation_id is not null and m.installation_id = p_installation_id)\r\n        or (p_ticket_id is not null and m.ticket_id = p_ticket_id)\r\n      )\r\n      and not exists (select 1 from public.inventory_movements r2 where r2.reverses_movement_id = m.id)\r\n  loop\r\n    insert into public.inventory_movements (product_id, movement_type, quantity, reason, reverses_movement_id)\r\n    values (r.product_id, \u0027ingreso\u0027, r.quantity, p_reason, r.id);\r\n  end loop;\r\nend;\r\n$function$\n"
+                      }
+                  ],
+    "read_only":  "on"
+}

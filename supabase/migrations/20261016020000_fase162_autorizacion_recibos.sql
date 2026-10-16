@@ -26,8 +26,12 @@ begin
    if staff not in ('SUPERADMIN','ADMIN','SOPORTE') then raise exception 'Aprobacion/recepcion exclusiva de oficina'; end if;
  elsif p_action in ('consume','correct','remove','install','withdraw','unlink') then
    if staff<>'TECNICO_RED' then raise exception 'Tecnico activo requerido'; end if;
-   perform 1 from public.job_assignees where job_type='routine' and job_id=r.id for update;
-   if not exists(select 1 from public.job_assignees where job_type='routine' and job_id=r.id and technician_id=uid) then raise exception 'No pertenece a la cuadrilla'; end if;
+   -- DELETE legacy retiene la fila antes de que su trigger bloquee la Rutina.
+   -- No esperar esa fila teniendo el padre: 55P03 revierte sin movimientos.
+   -- SHARE protege la asignación propia hasta COMMIT, también al leer recibos.
+   perform 1 from public.job_assignees where job_type='routine' and job_id=r.id
+     and technician_id=uid and role in ('leader','support') for share nowait;
+   if not found then raise exception 'No pertenece a la cuadrilla'; end if;
  else raise exception 'Accion desconocida'; end if;
  -- También los recibos requieren identidad, rol y cuadrilla vigentes.
  select * into receipt from public.routine_inventory_operations where id=p_operation_id;

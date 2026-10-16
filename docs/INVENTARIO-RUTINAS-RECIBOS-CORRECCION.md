@@ -1,5 +1,11 @@
 # Rutinas: autorización vigente de recibos — APROBADO EN LABORATORIO
 
+Actualización puntual posterior: se corrigió el deadlock con los triggers de
+cuadrilla de Cloud mediante FOR SHARE NOWAIT y conservación del UUID pendiente.
+La segunda migración tiene una revisión nueva; procedimiento y pruebas vigentes
+en `FASE162-DEADLOCK-CORREGIDO.md`. El ensayo JWT de este documento se conserva
+como evidencia histórica de autorización, no como prueba de esa concurrencia.
+
 16/10/2026. Base `88adc3d`. Corrección puntual autorizada de compatibilidad con
 Fase 162. No constituye el cierre global RLS administrativo ni un despliegue.
 

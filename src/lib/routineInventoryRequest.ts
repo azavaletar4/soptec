@@ -30,9 +30,14 @@ export async function executeRoutineInventory(
   storage.setItem(key, JSON.stringify(request));
   const { data, error } = await invoke(request);
   if (error) {
-    // A PostgreSQL error means the entire transaction rolled back. Transport
-    // errors (including a lost response after commit) retain the receipt key.
-    if (error.code && /^[0-9A-Z]{5}$/.test(error.code)) storage.removeItem(key);
+    // Puede ser la recuperación de una respuesta ya confirmada y perdida.
+    // Un conflicto de lock no permite olvidar el UUID y consumir otra vez.
+    if (error.code === '55P03') {
+      throw new Error('Hay otra operación en curso sobre esta rutina. Reintenta la operación pendiente de forma segura.');
+    }
+    // El error revierte este intento, no un posible COMMIT anterior cuya
+    // respuesta se perdió. Una recuperación pendiente conserva su identidad.
+    if (!pending && error.code && /^[0-9A-Z]{5}$/.test(error.code)) storage.removeItem(key);
     throw new Error(error.message);
   }
   storage.removeItem(key);
