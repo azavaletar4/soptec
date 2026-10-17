@@ -18,19 +18,19 @@ const isLowStock = computed(
 </script>
 
 <template>
-  <div class="surface-hover p-4 flex flex-col gap-2 cursor-pointer" @click="$emit('open')">
+  <div class="surface-hover p-4 flex flex-col gap-2 cursor-pointer" role="button" tabindex="0" :aria-label="`Ver modelo ${product.name}`" @click="$emit('open')" @keydown.enter.self="$emit('open')" @keydown.space.prevent.self="$emit('open')">
     <div class="flex items-start justify-between gap-2">
       <h4 class="text-sm font-semibold text-slate-900 leading-snug">{{ product.name }}</h4>
       <span
         class="badge shrink-0"
         :class="isLowStock ? 'bg-amber-500/15 text-amber-700' : 'bg-green-500/15 text-green-600'"
       >
-        {{ stockLabel }}
+        {{ stockLabel }} {{ product.is_serialized ? 'en almacén' : product.unit }}
       </span>
     </div>
 
     <div class="flex flex-wrap gap-1.5">
-      <span v-if="product.is_serialized" class="badge bg-sky-500/15 text-sky-700">Por serie/MAC</span>
+      <span v-if="product.is_serialized" class="badge bg-sky-500/15 text-sky-700">Modelo · unidades por serie/MAC</span>
       <span v-else class="badge bg-slate-100 text-slate-500">Por cantidad</span>
       <span v-if="!product.is_active" class="badge bg-red-500/15 text-red-600">Inactivo</span>
     </div>

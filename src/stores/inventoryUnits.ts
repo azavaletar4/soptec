@@ -12,10 +12,10 @@ export const useInventoryUnitsStore = defineStore('inventoryUnits', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
 
-  async function fetchUnitsByProduct(productId: string) {
+  async function fetchUnitsByProduct(productId: string, opts?: { includeCustodyProfile?: boolean }) {
     const { data, error: err } = await supabase
       .from('inventory_units')
-      .select(UNIT_SELECT)
+      .select(opts?.includeCustodyProfile ? `${UNIT_SELECT}, custody_profile:profiles!inventory_units_custody_technician_id_fkey(id, full_name, email)` : UNIT_SELECT)
       .eq('product_id', productId)
       .order('created_at', { ascending: false });
     if (err) throw err;

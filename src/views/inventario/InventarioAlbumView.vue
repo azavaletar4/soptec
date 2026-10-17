@@ -8,12 +8,14 @@ import MoveAlbumMenu from '@/components/inventario/MoveAlbumMenu.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { getErrorMessage } from '@/lib/errors';
+import { useConfirm } from '@/composables/useConfirm';
 import type { InventoryProduct, InventoryUnit, InventoryUnitStatus } from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
 const inventoryStore = useInventoryStore();
 const unitsStore = useInventoryUnitsStore();
+const { confirmDialog } = useConfirm();
 
 // Álbumes virtuales (Fase 44, separados en Fase 51c): no son filas de
 // inventory_categories, se arman agregando por status de inventory_units.
@@ -88,13 +90,14 @@ watch(searchQuery, (q, previous) => {
 });
 
 function goToDetail(p: InventoryProduct) {
-  router.push(`/inventario/${p.id}`);
+  router.push({ name: 'inventario-detalle', params: { id: p.id }, query: { returnTo: route.fullPath } });
 }
 
 // --- Mover producto de álbum ---
 const movingProduct = ref<InventoryProduct | null>(null);
 async function moveProductToCategory(categoryId: string) {
   if (!movingProduct.value) return;
+  if (!await confirmDialog({ title: 'Cambiar categoría del modelo', message: 'Cambiará la categoría del producto. No cambia la ubicación ni el estado de sus equipos.' })) return;
   try {
     await inventoryStore.updateProductCategory(movingProduct.value.id, categoryId);
     movingProduct.value = null;
@@ -108,6 +111,7 @@ async function moveProductToCategory(categoryId: string) {
 const movingUnit = ref<InventoryUnit | null>(null);
 async function moveUnitStatus(status: InventoryUnitStatus, reason: string) {
   if (!movingUnit.value) return;
+  if (!await confirmDialog({ title: 'Confirmar cambio de estado', message: `Se registrará un movimiento de este equipo a ${STATUS_LABEL[status]}. Revisa su ubicación física antes de confirmar.`, danger: true })) return;
   try {
     await unitsStore.registerEvent({
       unitId: movingUnit.value.id,
@@ -159,14 +163,16 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
           <h1 class="text-2xl font-semibold">{{ albumTitle }}</h1>
           <p class="text-slate-600 text-sm mt-1">
             {{ isRecoveryAlbum ? filteredUnits.length : filteredProducts.length }}
-            {{ isRecoveryAlbum ? (filteredUnits.length === 1 ? 'equipo' : 'equipos') : (filteredProducts.length === 1 ? 'ítem' : 'ítems') }}
+            {{ isRecoveryAlbum ? 'equipos físicos' : 'modelos / materiales' }}
           </p>
         </div>
       </div>
     </div>
 
+    <div class="surface p-4 mb-4 text-sm text-slate-600">{{ isRecoveryAlbum ? 'Bandeja por estado: cada tarjeta representa un equipo físico registrado.' : 'Categoría del catálogo: cada tarjeta representa un modelo o material, no un equipo individual. Abre un modelo para ver series, MAC y ubicación.' }}</div>
     <div class="flex flex-wrap gap-3 mb-4">
-      <input v-model="searchQuery" placeholder="Buscar en este álbum..." class="field-input flex-1 min-w-[220px]" />
+      <input v-model="searchQuery" placeholder="Buscar modelo, serie o MAC en esta categoría..." class="field-input flex-1 min-w-[220px]" />
+      <router-link to="/inventario/conciliacion" class="btn-secondary">Revisar diferencias</router-link>
     </div>
 
     <p v-if="error" class="mb-4 text-sm text-red-600">{{ error }}</p>
@@ -188,6 +194,7 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
             {{ u.serial_number ? `S/N ${u.serial_number}` : '' }}
             {{ u.mac_address ? `MAC ${u.mac_address}` : '' }}
           </p>
+          <router-link :to="{ name: 'inventario-detalle', params: { id: u.product_id }, query: { unit: u.id, returnTo: route.fullPath } }" class="text-xs text-sky-700 underline">Ver equipo y Kardex</router-link>
           <p v-if="u.clients" class="text-xs text-slate-500">
             Cliente:
             <router-link :to="`/clientes/${u.clients.id}`" class="text-sky-600 hover:underline">

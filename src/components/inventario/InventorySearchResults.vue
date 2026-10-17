@@ -68,7 +68,7 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort(); generation++; 
       </div>
     </div>
     <div v-for="u in units" :key="u.id" class="surface p-4">
-      <router-link :to="{ path: `/inventario/${u.product_id}`, query: { returnTo: route.fullPath } }" class="text-sky-700 hover:underline">{{ u.product.name }}</router-link>
+      <router-link :to="{ path: `/inventario/${u.product_id}`, query: { unit: u.id, returnTo: route.fullPath } }" class="text-sky-700 hover:underline">{{ u.product.name }}</router-link>
       <p class="text-xs text-slate-500">{{ u.product.inventory_categories?.name ?? u.product.category ?? 'Sin categoría' }} · {{ labels[u.status] }}</p>
       <p class="text-sm">Serie: {{ u.serial_number || 'Sin registrar' }} · MAC: {{ u.mac_address || 'Sin registrar' }}</p>
       <p v-if="u.clients" class="text-sm">Cliente: <router-link class="text-sky-700 hover:underline" :to="`/clientes/${u.clients.id}`">{{ u.clients.first_name }} {{ u.clients.last_name }}</router-link></p>

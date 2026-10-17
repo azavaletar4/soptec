@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
+import { matchesEquipmentFilter, UNIT_LOCATION_LABELS } from '@/lib/inventoryPresentation';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import MoveAlbumMenu from '@/components/inventario/MoveAlbumMenu.vue';
@@ -103,6 +104,8 @@ async function handleRevertMovement(m: InventoryMovement) {
 // ---- Unidades serializadas (control por numero de serie / MAC) ----
 const units = ref<InventoryUnit[]>([]);
 const unitsLoading = ref(true);
+const equipmentQuery = ref(''), equipmentStatus = ref(''), equipmentPage = ref(0);
+watch([equipmentQuery, equipmentStatus], () => { equipmentPage.value = 0; });
 
 const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   in_stock: 'En bodega',
@@ -138,6 +141,8 @@ const unitKpis = computed(() => {
     in_repair: counts.in_repair ?? 0,
     retired: counts.retired ?? 0,
     en_recupero: counts.en_recupero ?? 0,
+    custody: (counts.with_technician ?? 0) + (counts.pending_return ?? 0),
+    review: counts.pending_approval ?? 0,
   };
 });
 
@@ -154,15 +159,17 @@ const UNIT_STATUS_SORT_ORDER: Record<InventoryUnitStatus, number> = {
 };
 
 const sortedUnits = computed(() =>
-  [...units.value].sort((a, b) => UNIT_STATUS_SORT_ORDER[a.status] - UNIT_STATUS_SORT_ORDER[b.status]),
+  units.value.filter(unit => matchesEquipmentFilter(unit, equipmentQuery.value, equipmentStatus.value)).sort((a, b) => UNIT_STATUS_SORT_ORDER[a.status] - UNIT_STATUS_SORT_ORDER[b.status]),
 );
+const visibleUnits = computed(() => sortedUnits.value.slice(equipmentPage.value * 25, (equipmentPage.value + 1) * 25));
 
 const unitsError = ref<string | null>(null);
 
 async function loadUnits() {
   unitsLoading.value = true;
   try {
-    units.value = await inventoryUnitsStore.fetchUnitsByProduct(productId.value);
+    units.value = await inventoryUnitsStore.fetchUnitsByProduct(productId.value, { includeCustodyProfile: true });
+    equipmentPage.value = Math.min(equipmentPage.value, Math.max(0, Math.ceil(sortedUnits.value.length / 25) - 1));
   } finally {
     unitsLoading.value = false;
   }
@@ -290,6 +297,7 @@ async function onAssignClientChange() {
 
 async function handleAssign() {
   if (!assignUnitTarget.value || !assignClientId.value) return;
+  if (!await confirmDialog({ title: 'Confirmar asignación a cliente', message: 'Se registrará un movimiento y el equipo dejará de estar disponible en almacén. Confirma que corresponde al cliente y servicio elegidos.' })) return;
   assignSaving.value = true;
   assignError.value = null;
   try {
@@ -321,6 +329,7 @@ function openReturn(unit: InventoryUnit) {
 
 async function handleReturn() {
   if (!returnUnitTarget.value) return;
+  if (!await confirmDialog({ title: 'Confirmar recepción o cambio de estado', message: `Se registrará el estado ${UNIT_LOCATION_LABELS[returnForm.value.condition]}. Confirma la condición física del equipo.`, danger: true })) return;
   returnSaving.value = true;
   returnError.value = null;
   try {
@@ -366,6 +375,7 @@ async function handleRecoveryConfirm(payload: { technicianId: string; reason: st
 }
 
 async function handleMarkRepaired(unit: InventoryUnit) {
+  if (!await confirmDialog({ title: 'Confirmar equipo reparado', message: 'El equipo volverá a estar disponible en almacén y se registrará un movimiento.' })) return;
   try {
     await inventoryUnitsStore.markRepaired(unit.id);
     await loadUnits();
@@ -500,6 +510,7 @@ const showMoveMenu = ref(false);
 const moveError = ref<string | null>(null);
 async function moveToCategory(categoryId: string) {
   if (!product.value) return;
+  if (!await confirmDialog({ title: 'Cambiar categoría del modelo', message: 'Cambia la categoría de este producto. No cambia la ubicación de sus unidades.' })) return;
   try {
     await inventoryStore.updateProductCategory(product.value.id, categoryId);
     showMoveMenu.value = false;
@@ -567,6 +578,7 @@ async function handleMovement() {
     movementError.value = 'La cantidad debe ser mayor a 0';
     return;
   }
+  if (!await confirmDialog({ title: 'Confirmar movimiento de existencias', message: `Se registrará ${MOVEMENT_LABEL[movementType.value]} de ${movementForm.value.quantity} ${product.value.unit}. Esta operación cambia las existencias.`, danger: movementType.value === 'egreso' })) return;
   await submitMovement();
   if (!movementError.value) showMovementModal.value = false;
 }
@@ -590,7 +602,7 @@ async function handleDeleteProduct() {
 
 <template>
   <AppLayout>
-    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push(typeof route.query.returnTo === 'string' && /^\/inventario(?:\/custodia|\/album\/[a-z0-9_-]+)?(?:\?|$)/.test(route.query.returnTo) ? route.query.returnTo : '/inventario')">← Volver a Inventario</button>
+    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push(typeof route.query.returnTo === 'string' && /^\/inventario(?:\/custodia|\/conciliacion|\/album\/[a-z0-9_-]+)?(?:\?|$)/.test(route.query.returnTo) ? route.query.returnTo : '/inventario')">← Volver a Inventario</button>
 
     <div v-if="!product" class="text-slate-500">Producto no encontrado.</div>
     <template v-else>
@@ -605,7 +617,8 @@ async function handleDeleteProduct() {
           </p>
           <p v-if="moveError" class="text-xs text-red-600 mt-1">{{ moveError }}</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+          <router-link to="/inventario/conciliacion" class="btn-secondary">Revisar diferencias</router-link>
           <button class="btn-secondary" @click="showMoveMenu = true">🔀 Mover a otro álbum</button>
           <button class="btn-secondary" @click="openEdit">Editar producto</button>
           <button v-if="canDelete" class="px-3 py-1.5 rounded-lg text-sm text-red-600 hover:bg-red-500/10" @click="handleDeleteProduct">Eliminar</button>
@@ -691,6 +704,7 @@ async function handleDeleteProduct() {
       </template>
 
       <template v-else>
+        <div class="surface p-4 mb-4 text-sm text-slate-600"><strong>Modelo: {{ product.name }}.</strong> Cada fila representa una unidad física. Los indicadores muestran estados registrados, no confirman la ubicación física. Las diferencias se revisan en Conciliación.</div>
         <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))">
           <div class="surface p-4">
             <div class="text-2xl font-bold text-slate-900">{{ unitKpis.total }}</div>
@@ -715,12 +729,19 @@ async function handleDeleteProduct() {
           <div class="surface p-4 flex items-center">
             <button class="btn-primary w-full" @click="openCreateUnit">+ Registrar equipo</button>
           </div>
+          <div class="surface p-4"><div class="text-2xl font-bold text-indigo-700">{{ unitKpis.custody }}</div><div class="text-xs text-slate-500 mt-1">Bajo custodia (incluye devolución pendiente)</div></div>
+          <div class="surface p-4"><div class="text-2xl font-bold text-amber-700">{{ unitKpis.review }}</div><div class="text-xs text-slate-500 mt-1">Por revisar / pendiente de aprobación</div></div>
         </div>
 
         <p v-if="unitsError" class="text-sm text-red-600 mb-3">{{ unitsError }}</p>
         <p v-if="recoveryError" class="text-sm text-red-600 mb-3">{{ recoveryError }}</p>
 
         <h2 class="text-lg font-semibold mb-3">Equipos (serie / MAC)</h2>
+        <div class="flex flex-wrap gap-3 mb-3">
+          <label class="text-xs flex-1 min-w-[180px]">Buscar unidad<input v-model="equipmentQuery" class="field-input mt-1" placeholder="Serie, MAC o cliente" /></label>
+          <label class="text-xs">Ubicación / estado<select v-model="equipmentStatus" class="field-input mt-1"><option value="">Todos los estados</option><option v-for="(label, value) in UNIT_LOCATION_LABELS" :key="value" :value="value">{{ label }}</option></select></label>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">{{ sortedUnits.length }} de {{ units.length }} unidades · Los filtros no cambian los totales.</p>
         <div class="table-shell">
           <table class="w-full text-sm min-w-[760px]">
             <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
@@ -728,7 +749,7 @@ async function handleDeleteProduct() {
                 <th class="text-left px-4 py-3">Serie</th>
                 <th class="text-left px-4 py-3">MAC</th>
                 <th class="text-left px-4 py-3">Estado</th>
-                <th class="text-left px-4 py-3">Cliente</th>
+                <th class="text-left px-4 py-3">Cliente o técnico vinculado</th>
                 <th class="text-left px-4 py-3">Notas</th>
                 <th class="text-center px-4 py-3">Acciones</th>
               </tr>
@@ -737,12 +758,12 @@ async function handleDeleteProduct() {
               <tr v-if="unitsLoading">
                 <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
               </tr>
-              <tr v-else-if="!units.length">
-                <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin equipos registrados todavía.</td>
+              <tr v-else-if="!sortedUnits.length">
+                <td colspan="6" class="px-4 py-6 text-center text-slate-500">Sin equipos que coincidan con los filtros.</td>
               </tr>
-              <tr v-for="u in sortedUnits" :key="u.id" class="border-t border-slate-200">
-                <td class="px-4 py-3 font-mono text-xs">{{ u.serial_number || '—' }}</td>
-                <td class="px-4 py-3 font-mono text-xs whitespace-nowrap">{{ u.mac_address || '—' }}</td>
+              <tr v-for="u in visibleUnits" :key="u.id" class="border-t border-slate-200">
+                <td class="px-4 py-3 font-mono text-xs"><button class="text-sky-700 underline" @click="openHistory(u)">{{ u.serial_number || 'Ver Kardex' }}</button></td>
+                <td class="px-4 py-3 font-mono text-xs whitespace-nowrap"><button class="text-sky-700 underline" @click="openHistory(u)">{{ u.mac_address || '—' }}</button></td>
                 <td class="px-4 py-3">
                   <span class="badge" :class="UNIT_STATUS_CLASS[u.status]">{{ UNIT_STATUS_LABEL[u.status] }}</span>
                 </td>
@@ -750,7 +771,9 @@ async function handleDeleteProduct() {
                   <router-link v-if="u.clients" :to="`/clientes/${u.clients.id}`" class="text-sky-600 hover:underline">
                     {{ u.clients.first_name }} {{ u.clients.last_name }}
                   </router-link>
-                  <span v-else>—</span>
+                  <span v-else-if="u.custody_technician_id && u.custody_profile?.id === u.custody_technician_id">Técnico: {{ u.custody_profile.full_name || u.custody_profile.email || 'Nombre no disponible' }}</span>
+                  <span v-else-if="u.pending_pickup_by && u.pending_pickup_profile?.id === u.pending_pickup_by">Recojo: {{ u.pending_pickup_profile.full_name || u.pending_pickup_profile.email }}</span>
+                  <span v-else class="text-xs text-slate-500">Sin responsable vinculado</span>
                 </td>
                 <td class="px-4 py-3 text-slate-600 text-xs max-w-[220px] truncate" :title="u.notes ?? ''">{{ u.notes || '—' }}</td>
                 <td class="px-4 py-3 text-center">
@@ -772,6 +795,7 @@ async function handleDeleteProduct() {
           </table>
         </div>
 
+        <div v-if="sortedUnits.length > 25" class="flex justify-between items-center mt-3 text-xs"><button class="btn-secondary" :disabled="equipmentPage === 0" @click="equipmentPage--">Anterior</button><span>Página {{ equipmentPage + 1 }} de {{ Math.ceil(sortedUnits.length / 25) }}</span><button class="btn-secondary" :disabled="(equipmentPage + 1) * 25 >= sortedUnits.length" @click="equipmentPage++">Siguiente</button></div>
         <Teleport to="body">
           <div v-if="actionsMenuUnit" class="fixed inset-0 z-40" @click="closeActionsMenu"></div>
           <div
@@ -1085,7 +1109,7 @@ async function handleDeleteProduct() {
               </div>
               <p v-if="ev.reason" class="text-slate-600 mt-1">{{ ev.reason }}</p>
               <p v-if="ev.clients" class="text-slate-500 mt-0.5">Cliente: {{ ev.clients.first_name }} {{ ev.clients.last_name }}</p>
-              <p v-if="ev.assigned_profile" class="text-slate-500 mt-0.5">Técnico asignado al recojo: {{ ev.assigned_profile.full_name || ev.assigned_profile.email }}</p>
+              <p v-if="ev.assigned_profile" class="text-slate-500 mt-0.5">Técnico vinculado al movimiento: {{ ev.assigned_profile.full_name || ev.assigned_profile.email }}</p>
               <p class="text-slate-400 mt-0.5">{{ ev.author?.full_name || ev.author?.email || '—' }}</p>
             </li>
           </ul>

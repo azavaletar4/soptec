@@ -256,6 +256,12 @@ const router = createRouter({
       },
     },
     {
+      path: '/inventario/conciliacion',
+      name: 'inventario-conciliacion',
+      component: () => import('@/views/inventario/InventarioConciliacionView.vue'),
+      meta: { requiresAuth: true, roles: INVENTORY_ADMIN_ROLES, breadcrumb: [{ label: 'Inventario', to: '/inventario' }, { label: 'Conciliación de equipos' }] },
+    },
+    {
       path: '/inventario/activos-fijos',
       name: 'inventario-activos-fijos',
       component: () => import('@/views/inventario/ActivosFijosView.vue'),

@@ -8,6 +8,7 @@ const props = defineProps<{
   itemCount: number;
   lowStock: number;
   totalValue: number;
+  countLabel?: string;
 }>();
 
 defineEmits<{ click: [] }>();
@@ -40,7 +41,7 @@ const accentClass = computed(() => ACCENT[props.color] ?? ACCENT.slate);
 
     <div>
       <h3 class="text-base font-semibold text-slate-900">{{ name }}</h3>
-      <p class="mt-0.5 text-xs text-slate-500">{{ itemCount }} {{ itemCount === 1 ? 'ítem' : 'ítems' }}</p>
+      <p class="mt-0.5 text-xs text-slate-500">{{ itemCount }} {{ countLabel || 'ítems en almacén / referencias de materiales' }}</p>
     </div>
 
     <div class="mt-auto pt-2 border-t border-slate-200/70">

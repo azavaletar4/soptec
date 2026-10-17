@@ -47,6 +47,8 @@ const kpis = computed(() => {
 });
 
 const isSearching = computed(() => searchQuery.value.trim().length > 0);
+const categoryAlbums = computed(() => inventoryStore.albums.filter(a => !['por_recoger', 'averiados'].includes(a.album_slug)));
+const locationAlbums = computed(() => inventoryStore.albums.filter(a => ['por_recoger', 'averiados'].includes(a.album_slug)));
 
 async function loadAll() {
   await Promise.all([inventoryStore.fetchAlbums(), inventoryStore.fetchCategories()]);
@@ -137,7 +139,8 @@ async function handleDelete(p: InventoryProduct) {
         <h1 class="text-2xl font-semibold">Inventario</h1>
         <p class="text-slate-600 text-sm mt-1">{{ kpis.total }} ítems · {{ kpis.lowStock }} con stock bajo</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
+        <router-link to="/inventario/conciliacion" class="btn-secondary">Revisar diferencias de equipos</router-link>
         <button class="btn-secondary" @click="router.push('/inventario/activos-fijos')">🧰 Activos y Herramientas</button>
         <button class="btn-secondary" @click="router.push('/inventario/custodia')">🎒 Custodia de técnicos</button>
         <button class="btn-secondary" @click="router.push('/inventario/devoluciones')">Devoluciones</button>
@@ -148,7 +151,7 @@ async function handleDelete(p: InventoryProduct) {
     <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))">
       <div class="surface p-4">
         <div class="text-2xl font-semibold">{{ kpis.total }}</div>
-        <div class="text-xs text-slate-500 mt-1">Productos activos</div>
+        <div class="text-xs text-slate-500 mt-1">Ítems del resumen de inventario</div>
       </div>
       <div class="surface p-4">
         <div class="text-2xl font-semibold" :class="kpis.lowStock ? 'text-amber-600' : ''">{{ kpis.lowStock }}</div>
@@ -160,6 +163,7 @@ async function handleDelete(p: InventoryProduct) {
       </div>
     </div>
 
+    <p class="text-xs text-slate-500 mb-4">Los conteos conservan el resumen existente: equipos serializados en almacén, referencias de materiales y bandejas de estados. No representan la cantidad de modelos ni un conteo físico.</p>
     <div class="flex flex-wrap gap-3 mb-4">
       <input
         v-model="searchQuery"
@@ -177,9 +181,12 @@ async function handleDelete(p: InventoryProduct) {
       <div v-if="inventoryStore.loading && !inventoryStore.albums.length" class="text-center text-slate-500 py-10">
         Cargando álbumes...
       </div>
-      <div v-else class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
+      <template v-else>
+      <h2 class="font-semibold mb-1">¿Qué tipo de equipo o material buscas?</h2>
+      <p class="text-xs text-slate-500 mb-3">Categorías del catálogo. Dentro encontrarás los modelos y sus unidades físicas.</p>
+      <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
         <AlbumCard
-          v-for="a in inventoryStore.albums"
+          v-for="a in categoryAlbums"
           :key="a.album_slug"
           :icon="a.icon"
           :name="a.album_name"
@@ -190,6 +197,18 @@ async function handleDelete(p: InventoryProduct) {
           @click="openAlbum(a.album_slug)"
         />
       </div>
+      <h2 class="font-semibold mt-6 mb-1">¿Dónde figura el equipo?</h2>
+      <p class="text-xs text-slate-500 mb-3">Ubicación y estado registrados, independientes de la categoría o modelo.</p>
+      <div class="flex flex-wrap gap-2 mb-4">
+        <router-link to="/inventario/conciliacion?status=in_stock" class="btn-secondary">En almacén</router-link>
+        <router-link to="/inventario/conciliacion?status=assigned" class="btn-secondary">Asignados a clientes</router-link>
+        <router-link to="/inventario/custodia" class="btn-secondary">Bajo custodia de técnicos</router-link>
+        <router-link to="/inventario/conciliacion?status=pending_approval" class="btn-secondary">Por revisar</router-link>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <AlbumCard v-for="a in locationAlbums" :key="a.album_slug" :icon="a.icon" :name="a.album_name" :color="a.color" :item-count="a.item_count" :low-stock="a.low_stock" :total-value="a.total_value" count-label="equipos registrados en este estado" @click="openAlbum(a.album_slug)" />
+      </div>
+      </template>
     </div>
 
     <Teleport to="body">
