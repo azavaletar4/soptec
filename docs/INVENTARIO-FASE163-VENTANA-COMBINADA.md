@@ -145,3 +145,71 @@ terminen o se pausen la Alta de Jadir y la Rutina activa. Todo lo demás
 orden, respaldo, rollback, pruebas) está verificado y listo. En cuanto no
 haya instalaciones/averías/rutinas en `in_progress` ni sesiones de Campo
 abiertas, se puede autorizar la ventana con el orden de la sección 5.
+
+## 9. COMPLETADO — 17/10/2026, 13:52 h Lima
+
+Autorización explícita recibida y ejecutada tras corregir el criterio de
+bloqueo: una orden `in_progress` no es por sí sola una escritura SQL
+activa. Verificado por lectura antes de ejecutar: `pg_stat_activity` sin
+consultas activas ajenas (solo el slot de Realtime), `pg_locks` sin
+bloqueos sobre `installations/tickets/routines/job_assignees/
+job_work_sessions/inventory_*` ni advisory locks, cero equipos
+`pending_approval` sin resolver. No existe un modo de mantenimiento
+técnico en el código (se buscó, no hay) — la garantía real fue la
+ausencia de actividad verificada más el diseño ya seguro de las tres
+migraciones (DDL puramente aditivo, ninguna toca filas de
+`installations/tickets/job_assignees`).
+
+**Migraciones aplicadas en Cloud, en este orden, cada una verificada antes
+de continuar con la siguiente** (Alta de Jadir re-confirmada intacta
+después de cada una):
+
+1. `fase163_postergar_instalaciones` — `installation_postponements` +
+   `postpone_installation(uuid,text)`.
+2. `etapa3_campo_inventory_operations` — `campo_inventory_operations` +
+   `campo_inventory_operation(uuid,text,uuid,text,jsonb)`.
+3. `inventario_contextual_rls_admin` — `inventory_order_read`,
+   `inventory_ticket_review`, `inventory_get_albums()` reescrita, cierre
+   de RLS a `inventory_admin_only` (5 políticas, una por tabla).
+
+**Postchecks, todos en verde**: las 3 RPC/tablas nuevas existen; 5
+políticas `inventory_admin_only`; MD5 de `routine_inventory_operation`
+(Fase 162) y de `set_current_job_crew` (hotfix de cuadrillas) sin
+cambios; inventario sin alterar (32 productos/128 unidades/275
+movimientos/302 eventos, idéntico a antes de empezar); Alta de Jadir
+siempre `in_progress`, siempre asignada a él, `installation_postponements`
+en 0 filas (nadie la ejecutó).
+
+**Despliegue de frontend/backend**: candidato `ef8adfa` (tag
+`desplegado-fase163-inventario-20261017`), construido en
+`/opt/smartrayco-staging/fase163-inventario-ef8adfa-20261017/` (mismo
+patrón que el hotfix de cuadrillas: imágenes rotuladas con la revisión
+exacta, rollback taggeado antes del swap, `up -d --no-deps --no-build
+--pull never frontend backend`, contenedores restantes verificados sin
+cambio, HTTPS y 3 assets de entrada confirmados por `curl`). Confirmado
+por lectura dentro del contenedor desplegado: el bundle real incluye la
+llamada a `postpone_installation` y el texto «Postergar instalación (no
+puedo continuar)» — la función está disponible para Jadir sin que esta
+tarea la haya ejecutado en su nombre (`installation_postponements` sigue
+en 0 filas).
+
+**Verificaciones funcionales**: búsqueda por serie/MAC y permisos
+administrativos se sustentan en las 15 pruebas unitarias ya existentes de
+`inventorySearch.ts` (no se repitieron) más la verificación estructural
+de esta sesión (5 políticas `inventory_admin_only` activas en Cloud). No
+se validó con una sesión HTTP real de un usuario ADMIN/SUPERADMIN/técnico
+real porque esta tarea no tiene ni debe manejar contraseñas/tokens por
+chat — limitación ya documentada desde la preparación original, sigue
+pendiente para quien tenga esas sesiones a mano.
+
+**Rollback disponible, no usado**: `rollback.override.yml` en el mismo
+directorio de staging (`smartrayco-frontend:rollback-fase163-ef8adfa-20261017`,
+`smartrayco-backend:rollback-fase163-ef8adfa-20261017`, apuntando
+exactamente a las imágenes `592d282` anteriores). Rollback de Fase 163 a
+nivel SQL (sección 6 de este documento) sigue disponible si se decide
+revertir — no se ejecutó, no hizo falta.
+
+**No se tocó**: la Alta de Jadir (sigue abierta, intacta, a la espera de
+que él mismo la postergue o complete), ninguna otra orden real, ningún
+dato de inventario real, OLT ni MikroTik. No se rotó ninguna credencial.
+No hubo `git push` (los commits/tags son locales).

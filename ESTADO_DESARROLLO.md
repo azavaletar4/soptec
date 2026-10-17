@@ -4890,11 +4890,35 @@ Averias/Rutinas — las 23 en verde. `vue-tsc -p tsconfig.app.json --noEmit`
 y `vite build` limpios (candidato compatible con el paquete de Inventario
 preparado en `4e967d0`, sin tocar ninguno de sus 31 archivos).
 
-**PENDIENTE — no aplicado ni desplegado**: migracion
-`supabase/migrations/20261017010000_fase163_postergar_instalaciones.sql`.
-El SELECT de `installations.ts` ya incluye `installation_postponements(id)`
-(mismo riesgo ya documentado para Fase 161/`routine_returns`): desplegar
-este commit sin aplicar antes la migracion rompe TODO listado de
-instalaciones (relacion inexistente en Cloud). Aplicar primero la
-migracion, confirmar PostgREST, y solo despues desplegar frontend/backend.
-No se toco Supabase Cloud ni la orden real de Jadir en esta tarea.
+**ACTUALIZACION 17/10/2026 13:52h Lima — DESPLEGADO EN PRODUCCION.**
+Autorizacion explicita del responsable recibida y ejecutada. Las 3
+migraciones (Fase 163, Etapa 3 `campo_inventory_operations`, cierre RLS
+`inventario_contextual_rls_admin`) se aplicaron en Cloud en ese orden,
+cada una verificada antes de continuar. Frontend/backend desplegados
+desde el candidato combinado `ef8adfa` (tag `desplegado-fase163-inventario-20261017`,
+31 archivos de Inventario + Fase 163, fusion real de 3 vias con el hotfix
+de cuadrillas `592d282` no fusionado a `main` — ver hallazgo abajo).
+Detalle completo, verificaciones y rollback disponible en
+`docs/INVENTARIO-FASE163-VENTANA-COMBINADA.md` seccion 9.
+
+La Alta de Jadir se preservo intacta durante todo el proceso (`in_progress`,
+asignada a el, sin postergaciones registradas) — se verifico antes y
+despues de cada paso, nunca se modifico. El criterio de bloqueo inicial
+("hay un trabajo activo") se corrigio con el responsable: se verifico por
+`pg_stat_activity`/`pg_locks` que no habia ninguna escritura SQL activa
+ni bloqueo incompatible antes de proceder — un estado `in_progress` no es
+por si solo una transaccion abierta.
+
+**Hallazgo de esta sesion, pendiente de resolver en otra tarea (no
+abierta aqui)**: produccion (revision `592d282`) tiene un hotfix de
+cierre de cuadrilla (`set_current_job_crew`/`assert_current_job_operator`/
+`guard_job_completion_crew`/`lock_job_crew_parent`, migraciones
+`20261015193000`/`20261015220000`) ya aplicado en Supabase Cloud pero
+**ausente del historial de `main`** — vive en la rama/worktree separada
+`hotfix/cierre-alta-cuadrilla` (`revision-fase2/hotfix-cierre-alta/`),
+nunca fusionada. El candidato desplegado hoy lo incorporo correctamente
+(fusion de 3 vias verificada + 4 pruebas nuevas de compatibilidad), pero
+`main` sigue sin ese hotfix en su propio historial — cualquier build
+futuro desde `main` sin este cuidado especial lo perderia. Recomendado
+fusionar esa rama a `main` cuando se pueda (higiene de git, sin impacto
+funcional).
