@@ -4994,3 +4994,21 @@ conservan intactos.
 **RESPALDO VERIFICADO — LISTO PARA AUTORIZAR** la activacion de Fase 164
 (orden exacto y rollback en `docs/FASE164-VALIDACION-FINAL.md`). No se
 aplico ninguna migracion en Cloud ni se desplego nada en esta tarea.
+
+## Fase 164: paquete final de despliegue preparado (17/10/2026, 15:15h Lima)
+
+Produccion confirmada en `ef8adfa` (frontend+backend). Candidato nuevo
+preparado SOBRE esa base real (no sobre `main` a secas): commit local
+`b4d8abb`, tag `candidato-fase164`, mismo metodo de indice aislado. Los 9
+archivos compartidos con el paquete ya desplegado son byte a byte
+identicos entre el ancestro de Fase164 y `ef8adfa` (confirmado con
+`--ignore-space-at-eol`) — se tomo la version de Fase164 directo, sin
+fusion de tres vias. `vue-tsc`/`vite build` limpios sobre el candidato
+real (no solo sobre el codigo fuente). Verificacion final de actividad
+tecnica: cero por ambas vias (estado de ordenes Y `pg_stat_activity`/
+`pg_locks` reales). Rollback actualizado con la salvedad de no borrar
+custodia real ya registrada. Detalle completo en
+`docs/FASE164-VALIDACION-FINAL.md` secciones 8-10.
+
+**LISTO PARA AUTORIZAR** la activacion completa. Nada aplicado en Cloud,
+sin push, sin despliegue.

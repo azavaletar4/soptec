@@ -172,12 +172,75 @@ confirmado de nuevo en el laboratorio (fila `ONT MODELO-SAFE`/equipos de
 prueba, nunca datos reales de TV Box). Ninguna consulta de esta tarea
 tocó Cloud con escritura alguna.
 
+## 8. Paquete final de despliegue (17/10/2026, 15:15 h Lima)
+
+Producción confirmada corriendo `ef8adfa` en frontend y backend (misma
+revisión que quedó activa tras la activación de Fase 163/Inventario). Se
+preparó el candidato de Fase 164 **sobre esa base real**, no sobre
+`main` a secas — commit local `b4d8abb`, tag `candidato-fase164`, mismo
+método de índice aislado que `ef8adfa`/`4e967d0` (no tocó `HEAD` ni los
+fuentes de trabajo).
+
+Los 9 archivos que Fase 164 y el paquete ya desplegado tocan en común
+(`router/index.ts`, `domain.ts`, `ClientServiceDetailView.vue`,
+`InventarioAlbumView.vue`, `InventarioProductoView.vue`,
+`InventarioView.vue`, `InventorySearchResults.vue`, `CampoLayout.vue`,
+`DevolucionesView.vue`) son **byte a byte idénticos** entre el ancestro
+de Fase 164 (`c525616`) y `ef8adfa` — verificado con `git diff
+--ignore-space-at-eol` (un único caso con diferencia de fin de línea
+CRLF/LF, cero diferencia de contenido real). No hizo falta ninguna
+fusión de tres vías: se tomó la versión de Fase 164 directamente para
+esos 9 archivos, más los 5 exclusivos
+(`technicianCustody.ts`, `CampoCustodiaView.vue`,
+`InventarioCustodiaView.vue`, las 2 migraciones). Las protecciones de
+Fase 161/162/163, el hotfix de cuadrillas y los 31 archivos de
+Inventario ya desplegados quedan intactos — ninguno se modificó en este
+commit.
+
+`vue-tsc -p tsconfig.app.json --noEmit` y `vite build` limpios **sobre
+el candidato real** (worktree desechable del tag `candidato-fase164`, ya
+eliminado) — confirmado que el bundle final incluye de verdad el código
+nuevo (`deliver_unit_to_technician`/`my_inventory_custody` presentes en
+`dist/assets/technicianCustody-*.js`). No se repitieron las 18 pruebas
+SQL ni las 12 de JWT reales ya aprobadas.
+
+## 9. Operaciones técnicas activas — verificación final
+
+Solo lectura, 15:14 h Lima: **cero** actividad por cualquier medida —
+`pg_stat_activity` sin consultas activas ajenas, `pg_locks` sin
+bloqueos relevantes (ni de fila ni *advisory*), cero sesiones de Campo
+abiertas, cero Altas/Averías/Rutinas `in_progress`, cero equipos
+`pending_approval` sin resolver. A diferencia de la vez que esto se
+bloqueó por una Alta real en curso, aquí **ambas verificaciones
+coinciden**: ni el estado de las órdenes ni la actividad SQL real
+muestran nada pendiente. No existe un modo de mantenimiento técnico en
+el código (ya se buscó antes); la garantía es la ausencia de actividad
+verificada dos veces hoy, no una promesa de que no pueda aparecer una
+escritura en el instante exacto de la ventana — mismo criterio ya
+aceptado para la activación anterior.
+
+## 10. Rollback compatible con el estado actual
+
+Igual que el ya documentado en la sección 6, con la misma salvedad
+explícita: **si ya hubo entregas/devoluciones reales antes de un
+rollback, no ejecutar los `DROP TABLE` de custodia** (se perdería ese
+historial) — revertir únicamente las 3 funciones ensanchadas
+(`apply_inventory_unit_event`, `campo_inventory_operation`,
+`apply_routine_inventory_event`) a su versión anterior exacta y dejar
+los equipos ya entregados en `with_technician`/`pending_return` para
+resolverlos manualmente con administración. El `DROP` completo (sección
+6) solo aplica si Fase 164 se revierte **antes** de que exista ninguna
+entrega/devolución real registrada.
+
 ## Estado
 
-**RESPALDO VERIFICADO — LISTO PARA AUTORIZAR LA ACTIVACIÓN.** Las siete
-condiciones pedidas están cumplidas: compatibilidad exacta con Cloud,
-permisos con JWT reales para los 4 roles, ausencia de duplicados,
-regresión de Altas/Averías/Rutinas, aislamiento por técnico, respaldo
-fresco verificado y restaurable, y rollback/orden documentados. No se
-aplicó ninguna migración en Cloud, no hubo push ni despliegue, no se
-modificó ningún TV Box ni dato real.
+**RESPALDO VERIFICADO — PAQUETE LISTO — LISTO PARA AUTORIZAR LA
+ACTIVACIÓN.** Las condiciones pedidas están cumplidas: compatibilidad
+exacta con Cloud, permisos con JWT reales para los 4 roles, ausencia de
+duplicados, regresión de Altas/Averías/Rutinas, aislamiento por técnico,
+respaldo fresco verificado y restaurable, candidato de despliegue
+compatible con la versión real en producción (`ef8adfa`) compilado y
+verificado, cero actividad técnica real confirmada por dos vías
+independientes, y rollback compatible con datos reales ya en custodia.
+No se aplicó ninguna migración en Cloud, no hubo push ni despliegue, no
+se modificó ningún TV Box, orden ni equipo real.
