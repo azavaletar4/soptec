@@ -947,6 +947,47 @@ async function handleReturnTicket() {
   }
 }
 
+// ---- Postergar instalacion (Fase 163): el tecnico llego a una Alta en
+// progreso y el cliente no esta / no puede continuar. A diferencia de
+// "Devolver orden" (tickets/rutinas, arriba), esta accion es propia de
+// instalaciones: deja la Alta 'pending' sin tecnico asignado (mismo patron
+// que returnRoutine) con un registro obligatorio de quien/cuando/motivo,
+// visible para que administracion la reprograme. ----
+const canPostponeInstallation = computed(() => jobType === 'installation' && auth.role === 'TECNICO_RED'
+  && isMyAssignment.value && (trabajo.value?.raw as Installation | undefined)?.status === 'in_progress');
+const showPostponeForm = ref(false);
+const postponeReason = ref('');
+const postponing = ref(false);
+const postponeError = ref<string | null>(null);
+
+function togglePostponeForm() {
+  showPostponeForm.value = !showPostponeForm.value;
+  postponeError.value = null;
+}
+
+function usePostponeReasonClienteAusente() {
+  postponeReason.value = 'Cliente ausente';
+}
+
+async function handlePostponeInstallation() {
+  if (!postponeReason.value.trim()) {
+    postponeError.value = 'Escribe el motivo de la postergación.';
+    return;
+  }
+  postponing.value = true;
+  postponeError.value = null;
+  try {
+    await campoStore.postponeInstallation(jobId, postponeReason.value.trim());
+    await clearDraft(draftKey);
+    toast.success('Instalación postergada. Queda pendiente de reprogramación.');
+    router.push('/campo');
+  } catch (e) {
+    postponeError.value = getErrorMessage(e, 'No se pudo postergar la instalación');
+  } finally {
+    postponing.value = false;
+  }
+}
+
 // ---- Cliente Ausente / re-agendamiento prioritario (Fase 102): el tecnico
 // llego y no habia nadie. A diferencia de "Devolver orden", el ticket SIGUE
 // asignado al mismo tecnico — solo se reprograma (status='rescheduled',
@@ -1868,6 +1909,32 @@ async function handleCloseSubmit() {
                 </button>
               </div>
               <p v-if="returnError" class="text-xs text-red-600">{{ returnError }}</p>
+            </div>
+          </div>
+
+          <div v-if="canPostponeInstallation" class="mt-3 pt-3 border-t border-slate-100">
+            <button v-if="!showPostponeForm" type="button" class="btn-danger text-xs" @click="togglePostponeForm">
+              📅 Postergar instalación (no puedo continuar)
+            </button>
+            <div v-else class="space-y-2">
+              <button type="button" class="btn-secondary text-xs !bg-amber-500/15 !text-amber-700 !border-amber-300" @click="usePostponeReasonClienteAusente">
+                🏠 Cliente ausente
+              </button>
+              <textarea
+                v-model="postponeReason"
+                rows="2"
+                placeholder="Motivo de la postergación (ej. cliente ausente, no contesta...)"
+                class="field-input text-sm"
+              ></textarea>
+              <div class="flex gap-2">
+                <button type="button" class="btn-secondary text-xs flex-1" :disabled="postponing" @click="togglePostponeForm">
+                  Cancelar
+                </button>
+                <button type="button" class="btn-destructive text-xs flex-1" :disabled="postponing" @click="handlePostponeInstallation">
+                  {{ postponing ? 'Postergando...' : 'Confirmar postergación' }}
+                </button>
+              </div>
+              <p v-if="postponeError" class="text-xs text-red-600">{{ postponeError }}</p>
             </div>
           </div>
         </template>

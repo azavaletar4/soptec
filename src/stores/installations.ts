@@ -7,8 +7,13 @@ import type { Installation, InstallationStatus } from '@/types/domain';
 // ya lo capturaba la conversion de prospecto (13k) pero esta vista no lo
 // pedia, asi que el resumen para el tecnico (InstalacionDetailView.vue) no
 // lo podia mostrar sin una consulta aparte.
+// Fase 163: installation_postponements(id) solo para saber si tiene
+// historial (badge "Con postergaciones" en InstalacionesView.vue) — el
+// detalle completo (quien/cuando/motivo) se carga aparte en
+// InstalacionDetailView.vue, mismo patron que routine_returns(id) en
+// routines.ts.
 const INSTALLATION_SELECT =
-  '*, clients(id, first_name, last_name, phone, phone_2, address, latitude, longitude), contracts:service_contracts(id, contract_number, service_type), assigned_profile:profiles!installations_assigned_to_fkey(id, full_name, email)';
+  '*, installation_postponements(id), clients(id, first_name, last_name, phone, phone_2, address, latitude, longitude), contracts:service_contracts(id, contract_number, service_type), assigned_profile:profiles!installations_assigned_to_fkey(id, full_name, email)';
 
 export const useInstallationsStore = defineStore('installations', () => {
   const installations = ref<Installation[]>([]);

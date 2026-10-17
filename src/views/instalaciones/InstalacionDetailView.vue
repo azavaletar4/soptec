@@ -20,12 +20,14 @@ import { countOcupadosReales } from '@/lib/napOccupancy';
 import { supabase } from '@/lib/supabase';
 import { readOrderInventory } from '@/lib/orderInventory';
 import { presentInstallationInventoryError } from '@/lib/installationInventoryError';
+import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import type { FieldInventoryMovement, FieldInventoryUnit } from '@/types/fieldInventory';
 import {
   NAP_CLIENT_LIMIT,
   type ClientPhotoCategory,
   type ContractServiceType,
   type Installation,
+  type InstallationPostponement,
   type InstallationStatus,
   type InventoryUnit,
   type TicketPriority,
@@ -618,6 +620,30 @@ function formatDate(value: string | null) {
   return new Date(value + 'T00:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Fase 163: historial de postergaciones (solo lectura) — quien, cuando y
+// por que motivo se postergo una Alta en progreso; visible para
+// ADMIN/SUPERADMIN/TECNICO_RED (misma policy de installation_postponements).
+const postponements = ref<InstallationPostponement[]>([]);
+const postponementsError = ref<string | null>(null);
+const loadingPostponements = ref(false);
+async function loadPostponements(id: string) {
+  postponements.value = [];
+  postponementsError.value = null;
+  loadingPostponements.value = true;
+  try {
+    const { data, error } = await supabase.from('installation_postponements')
+      .select('*, technician:profiles!installation_postponements_technician_id_fkey(id, full_name, email)')
+      .eq('installation_id', id).order('postponed_at', { ascending: false });
+    if (installation.value?.id !== id) return;
+    if (error) throw error;
+    postponements.value = (data ?? []) as InstallationPostponement[];
+  } catch (e) {
+    if (installation.value?.id === id) postponementsError.value = getErrorMessage(e, 'No se pudo cargar el historial de postergaciones.');
+  } finally {
+    if (installation.value?.id === id) loadingPostponements.value = false;
+  }
+}
+
 onMounted(async () => {
   if (!installationsStore.installations.length) await installationsStore.fetchInstallations();
   await Promise.all([
@@ -639,6 +665,7 @@ onMounted(async () => {
     iptvNoteDraft.value = installation.value.iptv_account_note ?? '';
     initCompleteForm();
     await loadMaterialsAndUnits();
+    await loadPostponements(installation.value.id);
   }
 });
 </script>
@@ -692,6 +719,17 @@ onMounted(async () => {
           <div class="surface p-4 text-sm">
             <h2 class="text-sm font-semibold mb-2">Cuadrilla asignada</h2>
             <CrewAssignEditor job-type="installation" :job-id="installation.id" :technicians="technicians" :readonly="!canEditCrew" />
+          </div>
+
+          <div v-if="loadingPostponements || postponementsError || postponements.length" class="surface p-4 text-sm" aria-label="Historial de postergaciones">
+            <h2 class="text-sm font-semibold mb-2">Historial de postergaciones</h2>
+            <p v-if="loadingPostponements" class="text-xs text-slate-500">Cargando postergaciones...</p>
+            <p v-else-if="postponementsError" class="text-xs text-red-600">{{ postponementsError }}</p>
+            <div v-for="entry in postponements" :key="entry.id" class="mt-2 border-t border-slate-100 pt-2">
+              <p class="text-xs font-medium">Postergada por {{ entry.technician?.full_name || entry.technician?.email || 'Técnico' }}</p>
+              <p class="text-xs text-slate-500">{{ formatPeruDateTime(entry.postponed_at) }} · Hora de Perú</p>
+              <p class="text-sm whitespace-pre-wrap">{{ entry.reason }}</p>
+            </div>
           </div>
 
           <div v-if="installation.notes || canEdit(installation)" class="surface p-4 text-sm">

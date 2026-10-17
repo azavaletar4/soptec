@@ -352,6 +352,14 @@ export const useCampoStore = defineStore('campo', () => {
     await fetchAll();
   }
 
+  // Fase 163: postergar una Alta en progreso (ej. cliente ausente) — queda
+  // 'pending' sin tecnico asignado, visible para que administracion la
+  // reprograme. Mismo patron que returnRoutine.
+  async function postponeInstallation(installationId: string, reason: string) {
+    await jobAssigneesStore.postponeInstallation(installationId, reason);
+    await installationsStore.fetchInstallations();
+  }
+
   async function fetchAll() {
     loading.value = true;
     try {
@@ -874,6 +882,7 @@ export const useCampoStore = defineStore('campo', () => {
     selfAssignRoutine,
     returnTicket,
     returnRoutine,
+    postponeInstallation,
     fetchAll,
     refreshQueuedCount,
     runDiagnostico,

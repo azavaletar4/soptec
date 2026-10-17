@@ -299,7 +299,18 @@ export interface Ticket {
   assigned_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
 
+export interface InstallationPostponement {
+  id: string;
+  installation_id: string;
+  technician_id: string;
+  postponed_at: string;
+  reason: string;
+  crew_snapshot: { technician_id: string; role: string }[];
+  technician?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
 export interface Installation {
+  installation_postponements?: Pick<InstallationPostponement, 'id'>[];
   id: string;
   client_id: string;
   contract_id: string | null;

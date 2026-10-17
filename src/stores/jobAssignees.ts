@@ -143,8 +143,20 @@ export const useJobAssigneesStore = defineStore('jobAssignees', () => {
     if (error) throw error;
   }
 
+  /**
+   * Fase 163: el tecnico postergar una Alta ya tomada (ej. el cliente
+   * salio) — mismo patron que returnRoutine: libera la cuadrilla completa,
+   * deja la instalacion 'pending' sin asignar y un registro obligatorio
+   * (installation_postponements) con el motivo.
+   */
+  async function postponeInstallation(installationId: string, reason: string) {
+    const { error } = await supabase.rpc('postpone_installation', { p_installation_id: installationId, p_reason: reason });
+    if (error) throw error;
+  }
+
   return {
     returnRoutine,
+    postponeInstallation,
     loading,
     fetchAssignees,
     addAssignee,

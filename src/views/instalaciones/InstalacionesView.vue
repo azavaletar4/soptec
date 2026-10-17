@@ -343,6 +343,14 @@ function formatDate(value: string | null) {
             <td class="px-4 py-3 cursor-pointer hover:text-sky-600" @click="goToClient(inst)">
               {{ inst.clients ? `${inst.clients.first_name} ${inst.clients.last_name}` : '—' }}
               <span v-if="!inst.clients?.latitude" class="block text-[10px] text-amber-600/80">Sin GPS registrado</span>
+              <button
+                v-if="inst.installation_postponements?.length"
+                type="button"
+                class="block text-[10px] text-amber-700 hover:underline"
+                @click.stop="goToDetail(inst)"
+              >
+                📅 Con postergaciones · ver historial
+              </button>
             </td>
             <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ inst.contracts?.contract_number ?? '—' }}</td>
             <td class="px-4 py-3 text-slate-600">
