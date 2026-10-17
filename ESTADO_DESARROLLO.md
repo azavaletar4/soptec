@@ -4966,3 +4966,31 @@ verde. `vue-tsc` y `vite build` limpios.
 
 **PENDIENTE — no aplicado ni desplegado**: ambas migraciones de Fase 164.
 No se modifico inventario real ni ningun producto real en esta tarea.
+
+## Fase 164: validacion final y respaldo verificado (17/10/2026, 15:05h Lima)
+
+Commit local `c9f861f` (validacion JWT reales) + commit de respaldo (ver
+siguiente). Compatibilidad exacta con Cloud confirmada reutilizando
+`scripts/inventory-auth-lab/` sobre `inventory_security_lab` (MD5
+normalizado de `apply_inventory_unit_event`/`campo_inventory_operation`/
+`apply_routine_inventory_event` identico al leido hoy de Cloud antes de
+aplicar Fase164a/164 ahi — cero errores). 12 pruebas nuevas con JWT reales
+(GoTrue, login real) para ADMIN/SUPERADMIN/tecnico asignado/tecnico ajeno,
+mas SOPORTE/FACTURACION como limite — las 12 en verde. Detalle completo en
+`docs/FASE164-VALIDACION-FINAL.md`.
+
+**Respaldo**: `respaldar-activacion-final-privado.ps1` quedo fijado al
+checkpoint previo a la activacion de hoy (Etapa3/RLS ausentes) y se
+detuvo correctamente con `ORIGEN_INESPERADO` al intentarlo contra el
+estado actual. Se preparo su sucesor, `scripts/respaldar-fase164-pre-activacion-privado.ps1`
+(mismo procedimiento DPAPI no interactivo, solo cambia el estado exigido
+por el precheck), y se ejecuto con exito:
+`fase164_pre_activacion_completo_20261017_200422_837da96f`, 38.449.204
+bytes, SHA-256 `5E3EFDD6...FFEE4`, origen confirmado (Fase162/163/Etapa3/RLS
+presentes, Fase164 ausente), restauracion aislada `RESTORE_EXIT=0` con
+conteos identicos a Cloud (32/275/128/302). Los 7 respaldos anteriores se
+conservan intactos.
+
+**RESPALDO VERIFICADO — LISTO PARA AUTORIZAR** la activacion de Fase 164
+(orden exacto y rollback en `docs/FASE164-VALIDACION-FINAL.md`). No se
+aplico ninguna migracion en Cloud ni se desplego nada en esta tarea.
