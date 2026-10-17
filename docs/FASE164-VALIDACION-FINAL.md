@@ -232,15 +232,61 @@ resolverlos manualmente con administración. El `DROP` completo (sección
 6) solo aplica si Fase 164 se revierte **antes** de que exista ninguna
 entrega/devolución real registrada.
 
+## 11. DESPLEGADO Y VALIDADO (17/10/2026, 15:22 h Lima)
+
+Autorización explícita recibida y ejecutada en el orden indicado.
+
+**Migraciones aplicadas en Cloud** (guardas de deriva en verde, cero
+error):
+1. `fase164a_custodia_estados` — `with_technician`/`pending_return`.
+2. `fase164_custodia_tecnicos` — `custody_technician_id`, las 9
+   funciones/tablas nuevas, el ensanche de `apply_inventory_unit_event`/
+   `campo_inventory_operation`/`apply_routine_inventory_event`.
+
+**Postchecks, todos en verde**: las 8 RPC + 3 tablas nuevas existen con
+sus grants correctos; `custody_technician_id` existe; 3 nuevas políticas
+RLS; enum con los 2 valores nuevos; cierre RLS de inventario (5 políticas
+`inventory_admin_only`) intacto; `postpone_installation`/
+`campo_inventory_operation`/`routine_inventory_operation` siguen
+presentes y llamables; inventario **sin alterar** (32 productos/128
+unidades/275 movimientos/302 eventos, idéntico antes y después);
+`technician_material_custody` con **0 filas** (ninguna entrega ficticia).
+
+**Commit desplegado**: `b4d8abb` (tag `desplegado-fase164-20261017`),
+padre `ef8adfa`. Build en `/opt/smartrayco-staging/fase164-20261017/`:
+ambas imágenes construidas con el candidato exacto, rollback etiquetado
+desde las imágenes `ef8adfa` previas (confirmado por aserción del
+propio script antes de construir), swap con `--no-deps --no-build
+--pull never frontend backend`, el resto de contenedores (Caddy,
+GenieACS, Mongo) sin cambios, HTTPS y 3 assets de entrada verificados
+por `curl`.
+
+**Verificación de acceso** (sin crear entregas ficticias ni operar sobre
+datos reales — no hay sesión real de usuario disponible en esta tarea
+para un click-through completo, misma limitación ya aceptada antes):
+confirmado dentro del contenedor ya desplegado que el bundle real sirve
+"Custodia de técnicos" (`InventarioCustodiaView.vue`, `InventarioView.vue`)
+y el módulo `technicianCustody.js`; `my_inventory_custody()` tiene
+EXECUTE otorgado a `authenticated` (así llega el técnico desde App de
+Campo); `inventory_custody_summary()` solo ejecutable por quien además
+pasa su propio chequeo de rol ADMIN/SUPERADMIN dentro de la función.
+
+**Altas/Averías/Rutinas**: `campo_inventory_operation`,
+`routine_inventory_operation` y `postpone_installation` siguen
+presentes y ejecutables tras el despliegue — sin ninguna orden real
+activa en este momento (0 en progreso) no se forzó ninguna operación
+real para "probarlo en vivo"; la regresión funcional ya quedó validada
+con JWT reales (sección 2) y no se repitió.
+
+Cero escrituras a existencias/movimientos/órdenes/contratos reales. No
+se operó OLT ni MikroTik. No hubo push ni cambios ajenos al candidato.
+
 ## Estado
 
-**RESPALDO VERIFICADO — PAQUETE LISTO — LISTO PARA AUTORIZAR LA
-ACTIVACIÓN.** Las condiciones pedidas están cumplidas: compatibilidad
-exacta con Cloud, permisos con JWT reales para los 4 roles, ausencia de
-duplicados, regresión de Altas/Averías/Rutinas, aislamiento por técnico,
-respaldo fresco verificado y restaurable, candidato de despliegue
-compatible con la versión real en producción (`ef8adfa`) compilado y
-verificado, cero actividad técnica real confirmada por dos vías
-independientes, y rollback compatible con datos reales ya en custodia.
-No se aplicó ninguna migración en Cloud, no hubo push ni despliegue, no
-se modificó ningún TV Box, orden ni equipo real.
+**DESPLEGADO Y VALIDADO.** Fase 164 — custodia de equipos y materiales
+por técnico — está en producción (`b4d8abb`, frontend y backend).
+Rollback disponible y no usado
+(`smartrayco-frontend:rollback-fase164-20261017`,
+`smartrayco-backend:rollback-fase164-20261017`, apuntando exactamente a
+las imágenes `ef8adfa` anteriores) — con la salvedad ya documentada de
+no borrar las tablas de custodia si llegan a tener datos reales.

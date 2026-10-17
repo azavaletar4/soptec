@@ -5012,3 +5012,26 @@ custodia real ya registrada. Detalle completo en
 
 **LISTO PARA AUTORIZAR** la activacion completa. Nada aplicado en Cloud,
 sin push, sin despliegue.
+
+## Fase 164: DESPLEGADA EN PRODUCCION (17/10/2026, 15:22h Lima)
+
+Autorizacion explicita recibida y ejecutada. Migraciones
+`fase164a_custodia_estados` y `fase164_custodia_tecnicos` aplicadas en
+Cloud (guardas de deriva en verde). Frontend/backend desplegados desde
+el candidato `b4d8abb` (tag `desplegado-fase164-20261017`, padre
+`ef8adfa`) con el mismo metodo de staging ya usado (build, rollback
+taggeado desde las imagenes `ef8adfa` previas, swap `--no-deps
+--no-build --pull never`, resto de contenedores sin cambios, HTTPS y
+assets verificados).
+
+Postchecks en verde: 8 RPC + 3 tablas nuevas, `custody_technician_id`,
+3 politicas RLS nuevas, enum con los 2 valores nuevos, cierre RLS de
+inventario intacto (5 politicas), `postpone_installation`/
+`campo_inventory_operation`/`routine_inventory_operation` siguen
+presentes, inventario sin alterar (32/128/275/302 identico antes y
+despues), `technician_material_custody` con 0 filas (ninguna entrega
+ficticia). Detalle completo en `docs/FASE164-VALIDACION-FINAL.md`
+seccion 11.
+
+Rollback disponible y no usado. No se opero OLT ni MikroTik, no se
+modifico ninguna orden/contrato/existencia real, no hubo push.
