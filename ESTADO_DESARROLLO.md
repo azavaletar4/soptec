@@ -4857,3 +4857,44 @@ RLS). Detalle completo en `docs/INVENTARIO-ACTIVACION-FINAL-RESUELTO.md`.
 
 Sin Cloud DDL/DML, sin push, sin despliegue, sin nueva fase. No se
 repitieron las 25 pruebas del laboratorio ni las 51 anteriores.
+
+## Fase 163: postergar instalaciones desde App de Campo (17/10/2026)
+
+Caso real de piloto: el tecnico Jadir tenia una Alta `in_progress` sin
+forma de liberarla cuando el cliente salio (Averias ya tenia "Devolver
+orden" desde Fase 99, Rutinas desde Fase 161; Altas no tenia equivalente).
+
+Commit local `4bbfa9a`. Mismo patron exacto que `return_routine` (Fase
+161): tabla `installation_postponements` (quien/cuando/motivo/foto de
+cuadrilla) + RPC SECURITY DEFINER `postpone_installation(uuid,text)` —
+exige tecnico asignado, estado `in_progress`, motivo no vacio; deja la
+instalacion `pending` sin tecnico (visible para ADMIN/SUPERADMIN via la
+policy `installations_staff_only` ya existente, reprograman con el editor
+de cuadrilla ya existente) y libera la sesion de trabajo activa con el
+trigger ya existente (`track_job_work_session`, Fase 150/150b) —
+end_reason `paused`. No completa la instalacion ni toca notes/fotos/
+equipos/materiales/movimientos/contrato. No afecta Averias ni Rutinas
+(RPCs independientes, con prueba de regresion cruzada).
+
+App de Campo (`CampoTrabajoDetailView.vue`): boton "Postergar instalación"
+con motivo obligatorio y atajo "Cliente ausente". Administracion
+(`InstalacionDetailView.vue`): historial de postergaciones de solo
+lectura; `InstalacionesView.vue`: badge "Con postergaciones" con acceso
+directo a la ficha (regla de usabilidad administrativa).
+
+23 pruebas nuevas (`npm run test:installation-postponements-sql`,
+PostgreSQL 17 aislado en Docker, sin red, datos sinteticos): identidad,
+RLS, estados, motivo obligatorio, apoyo de cuadrilla, concurrencia,
+rollback por fallo al liberar cuadrilla, permisos y regresion cruzada con
+Averias/Rutinas — las 23 en verde. `vue-tsc -p tsconfig.app.json --noEmit`
+y `vite build` limpios (candidato compatible con el paquete de Inventario
+preparado en `4e967d0`, sin tocar ninguno de sus 31 archivos).
+
+**PENDIENTE — no aplicado ni desplegado**: migracion
+`supabase/migrations/20261017010000_fase163_postergar_instalaciones.sql`.
+El SELECT de `installations.ts` ya incluye `installation_postponements(id)`
+(mismo riesgo ya documentado para Fase 161/`routine_returns`): desplegar
+este commit sin aplicar antes la migracion rompe TODO listado de
+instalaciones (relacion inexistente en Cloud). Aplicar primero la
+migracion, confirmar PostgREST, y solo despues desplegar frontend/backend.
+No se toco Supabase Cloud ni la orden real de Jadir en esta tarea.
