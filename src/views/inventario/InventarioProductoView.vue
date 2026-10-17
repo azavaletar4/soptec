@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import MoveAlbumMenu from '@/components/inventario/MoveAlbumMenu.vue';
@@ -422,17 +423,30 @@ const showHistoryModal = ref(false);
 const historyUnitTarget = ref<InventoryUnit | null>(null);
 const historyEvents = ref<InventoryUnitEvent[]>([]);
 const historyLoading = ref(false);
+const historyError = ref<string | null>(null);
 
 async function openHistory(unit: InventoryUnit) {
   historyUnitTarget.value = unit;
   showHistoryModal.value = true;
   historyLoading.value = true;
+  historyEvents.value = [];
+  historyError.value = null;
   try {
     historyEvents.value = await inventoryUnitsStore.fetchEvents(unit.id);
+  } catch (e) {
+    historyError.value = getErrorMessage(e, 'No se pudo cargar el historial del equipo');
   } finally {
     historyLoading.value = false;
   }
 }
+
+async function openLinkedEquipment() {
+  const unitId = typeof route.query.unit === 'string' ? route.query.unit : null;
+  if (!unitId) return;
+  const unit = units.value.find(item => item.id === unitId && item.product_id === productId.value);
+  if (unit) await openHistory(unit);
+}
+watch(() => route.query.unit, openLinkedEquipment);
 
 // ---- Menu de acciones por fila (Fase 83) ----
 // Antes cada fila mostraba todos sus botones sueltos en la celda: con varios
@@ -475,6 +489,7 @@ onMounted(async () => {
   await catalogs.fetchStaff();
   if (product.value?.is_serialized) {
     await loadUnits();
+    await openLinkedEquipment();
   } else {
     await loadMovements();
   }
@@ -575,7 +590,7 @@ async function handleDeleteProduct() {
 
 <template>
   <AppLayout>
-    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push(typeof route.query.returnTo === 'string' && /^\/inventario(?:\/album\/[a-z0-9_-]+)?(?:\?|$)/.test(route.query.returnTo) ? route.query.returnTo : '/inventario')">← Volver a Inventario</button>
+    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push(typeof route.query.returnTo === 'string' && /^\/inventario(?:\/custodia|\/album\/[a-z0-9_-]+)?(?:\?|$)/.test(route.query.returnTo) ? route.query.returnTo : '/inventario')">← Volver a Inventario</button>
 
     <div v-if="!product" class="text-slate-500">Producto no encontrado.</div>
     <template v-else>
@@ -1060,12 +1075,13 @@ async function handleDeleteProduct() {
           <p class="text-xs text-slate-500 mb-4 font-mono">{{ historyUnitTarget?.serial_number || historyUnitTarget?.mac_address }}</p>
 
           <p v-if="historyLoading" class="text-slate-500 text-sm">Cargando...</p>
+          <p v-else-if="historyError" class="text-red-600 text-sm">{{ historyError }}</p>
           <p v-else-if="!historyEvents.length" class="text-slate-500 text-sm">Sin eventos registrados.</p>
           <ul v-else class="space-y-3">
             <li v-for="ev in historyEvents" :key="ev.id" class="text-xs border-l-2 border-slate-300 pl-3">
               <div class="flex items-center gap-2">
                 <span class="badge" :class="UNIT_STATUS_CLASS[ev.to_status]">{{ UNIT_STATUS_LABEL[ev.to_status] }}</span>
-                <span class="text-slate-500">{{ formatDate(ev.created_at) }}</span>
+                <span class="text-slate-500">{{ formatPeruDateTime(ev.created_at) }} (Perú)</span>
               </div>
               <p v-if="ev.reason" class="text-slate-600 mt-1">{{ ev.reason }}</p>
               <p v-if="ev.clients" class="text-slate-500 mt-0.5">Cliente: {{ ev.clients.first_name }} {{ ev.clients.last_name }}</p>

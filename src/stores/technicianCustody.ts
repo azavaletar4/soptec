@@ -34,6 +34,22 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     if (err) throw err;
   }
 
+  async function fetchTechnicianHistory(technicianId: string) {
+    const [units, materials] = await Promise.all([
+      supabase.from('inventory_unit_events')
+        .select('*, author:profiles!inventory_unit_events_created_by_fkey(id, full_name, email), equipment:inventory_units(id, product_id, serial_number, mac_address)')
+        .eq('assigned_to', technicianId)
+        .or('to_status.in.(with_technician,pending_return),from_status.in.(with_technician,pending_return)')
+        .order('created_at', { ascending: false }).limit(100),
+      supabase.from('technician_material_custody_events')
+        .select('*, author:profiles!technician_material_custody_events_created_by_fkey(id, full_name, email), product:inventory_products(id, name, unit)')
+        .eq('technician_id', technicianId).order('created_at', { ascending: false }).limit(100),
+    ]);
+    if (units.error) throw units.error;
+    if (materials.error) throw materials.error;
+    return { units: (units.data ?? []) as unknown as Array<import('@/types/domain').InventoryUnitEvent & { equipment: { id: string; product_id: string; serial_number: string | null; mac_address: string | null } | null }>, materials: (materials.data ?? []) as unknown as Array<{ id: string; event_type: string; quantity: number; created_at: string; reason: string | null; author: { full_name: string | null; email: string | null } | null; product: { name: string; unit: string } | null }> };
+  }
+
   async function receiveUnitReturn(unitId: string, condition: 'in_stock' | 'damaged' | 'in_repair', reason?: string) {
     const { error: err } = await supabase.rpc('receive_unit_return', { p_unit_id: unitId, p_condition: condition, p_reason: reason ?? null });
     if (err) throw err;
@@ -81,6 +97,7 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     error,
     fetchCustodySummary,
     fetchAllMaterialCustody,
+    fetchTechnicianHistory,
     deliverUnitToTechnician,
     receiveUnitReturn,
     deliverMaterialToTechnician,

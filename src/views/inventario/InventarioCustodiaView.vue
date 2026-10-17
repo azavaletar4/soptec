@@ -11,7 +11,9 @@
 // diferencia fisica (ej. menos TV Box de los que el sistema muestra en
 // almacen) no se corrige aqui, requiere un ajuste administrativo aparte
 // (ver inventory_custody_summary()).
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { chooseCustodyTechnician, currentCustodyDelivery, custodyEquipmentLocation } from '@/lib/technicianCustodyPresentation';
+import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
@@ -20,7 +22,7 @@ import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
-import type { InventoryCustodySummaryRow, InventoryUnit, TechnicianMaterialReturnRequest } from '@/types/domain';
+import type { InventoryCustodySummaryRow, InventoryUnit, InventoryUnitEvent, TechnicianMaterialReturnRequest } from '@/types/domain';
 
 const inventoryStore = useInventoryStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
@@ -55,6 +57,8 @@ async function loadAll() {
     pendingMaterialRequests.value = materialRequests;
     custodyUnits.value = units;
     materialCustody.value = materials;
+    selectedTechnicianId.value = chooseCustodyTechnician(selectedTechnicianId.value, technicianRows.value);
+    await loadTechnicianHistory();
   } catch (e) {
     loadError.value = getErrorMessage(e, 'No se pudo cargar la custodia de técnicos');
   } finally {
@@ -96,7 +100,43 @@ const technicianRows = computed(() =>
 const selectedTechnicianId = ref<string | null>(null);
 const selectedTechnician = computed(() => technicianRows.value.find((t) => t.id === selectedTechnicianId.value) ?? null);
 function selectTechnician(id: string) {
-  selectedTechnicianId.value = selectedTechnicianId.value === id ? null : id;
+  selectedTechnicianId.value = id;
+}
+
+const unitEvents = ref<Record<string, InventoryUnitEvent[]>>({});
+const history = ref<Awaited<ReturnType<typeof custodyStore.fetchTechnicianHistory>> | null>(null);
+const historyLoading = ref(false);
+const historyError = ref<string | null>(null);
+let historyRequest = 0;
+async function loadTechnicianHistory() {
+  const request = ++historyRequest;
+  const technician = selectedTechnician.value;
+  history.value = null;
+  unitEvents.value = {};
+  historyError.value = null;
+  historyLoading.value = !!technician;
+  if (!technician) return;
+  try {
+    const [result, events] = await Promise.all([
+      custodyStore.fetchTechnicianHistory(technician.id),
+      Promise.all(technician.units.map(async unit => [unit.id, await inventoryUnitsStore.fetchEvents(unit.id)] as const)),
+    ]);
+    if (request !== historyRequest) return;
+    history.value = result;
+    unitEvents.value = Object.fromEntries(events);
+  } catch (e) {
+    if (request === historyRequest) historyError.value = getErrorMessage(e, 'No se pudo cargar el historial');
+  } finally {
+    if (request === historyRequest) historyLoading.value = false;
+  }
+}
+watch(selectedTechnicianId, () => { if (!loading.value) void loadTechnicianHistory(); });
+function deliveryFor(unit: InventoryUnit) { return currentCustodyDelivery(unit, unitEvents.value[unit.id] ?? []); }
+function eventLabel(event: InventoryUnitEvent) {
+  if (event.to_status === 'with_technician') return 'Entrega a técnico';
+  if (event.to_status === 'pending_return') return 'Solicitud de devolución';
+  if (['in_stock', 'damaged', 'in_repair'].includes(event.to_status)) return 'Devolución recibida';
+  return `Cambio de custodia: ${event.from_status ?? 'sin estado previo'} → ${event.to_status}`;
 }
 
 // ---- Pestaña Entregas: equipo serializado ----
@@ -322,7 +362,11 @@ onMounted(loadAll);
                 <tbody>
                   <tr v-for="u in selectedTechnician.units" :key="u.id" class="border-t border-slate-200">
                     <td class="px-3 py-2">{{ u.product?.name }}</td>
-                    <td class="px-3 py-2 font-mono text-xs">{{ u.serial_number || u.mac_address }}</td>
+                    <td class="px-3 py-2 text-xs">
+                      <router-link :to="custodyEquipmentLocation(u.product_id, u.id)" class="font-mono text-sky-700 underline">{{ u.serial_number || u.mac_address || 'Ver equipo' }}</router-link>
+                      <p class="text-slate-500 mt-1">Entrega: {{ historyLoading ? 'Cargando...' : deliveryFor(u) ? formatPeruDateTime(deliveryFor(u)!.created_at) + ' (Perú)' : 'Fecha no disponible' }}</p>
+                      <p class="text-slate-500">Por: {{ deliveryFor(u)?.author?.full_name || deliveryFor(u)?.author?.email || 'Responsable no disponible' }}</p>
+                    </td>
                     <td class="px-3 py-2">
                       <span class="badge text-[10px]" :class="u.status === 'pending_return' ? 'bg-amber-500/15 text-amber-700' : 'bg-indigo-500/15 text-indigo-700'">
                         {{ u.status === 'pending_return' ? 'Devolución en espera' : 'En custodia' }}
@@ -351,6 +395,29 @@ onMounted(loadAll);
                 </tbody>
               </table>
             </div>
+            <details class="mt-5 border-t pt-3">
+              <summary class="cursor-pointer text-sm font-semibold">Historial de custodia de este técnico</summary>
+              <p class="text-xs text-slate-500 my-2">Últimos 100 registros de equipos y 100 de materiales. Son movimientos históricos; la custodia vigente se muestra arriba. Horario de Perú.</p>
+              <p v-if="historyLoading" class="text-sm">Cargando historial...</p>
+              <p v-else-if="historyError" class="text-sm text-red-600">{{ historyError }} <button class="underline" @click="loadTechnicianHistory">Reintentar</button></p>
+              <template v-else-if="history">
+                <p v-if="!history.units.length && !history.materials.length" class="text-sm text-slate-500">Sin movimientos de custodia registrados.</p>
+                <ul class="space-y-3 text-xs">
+                  <li v-for="event in history.units" :key="event.id" class="border-l-2 pl-3">
+                    <strong>{{ eventLabel(event) }}</strong> · {{ formatPeruDateTime(event.created_at) }} (Perú)
+                    <router-link v-if="event.equipment" :to="custodyEquipmentLocation(event.equipment.product_id, event.equipment.id)" class="block text-sky-700 underline">{{ event.equipment.serial_number || event.equipment.mac_address || 'Ver equipo' }}</router-link>
+                    <p>Registrado por: {{ event.author?.full_name || event.author?.email || 'Responsable no disponible' }}</p>
+                    <p v-if="event.reason">{{ event.reason }}</p>
+                  </li>
+                  <li v-for="event in history.materials" :key="event.id" class="border-l-2 pl-3">
+                    <strong>{{ event.event_type === 'delivery' ? 'Entrega de material' : 'Devolución de material' }}</strong> · {{ formatPeruDateTime(event.created_at) }} (Perú)
+                    <p>{{ event.product?.name || 'Producto no disponible' }}: {{ event.quantity }} {{ event.product?.unit }}</p>
+                    <p>Registrado por: {{ event.author?.full_name || event.author?.email || 'Responsable no disponible' }}</p>
+                    <p v-if="event.reason">{{ event.reason }}</p>
+                  </li>
+                </ul>
+              </template>
+            </details>
           </template>
         </div>
       </section>
