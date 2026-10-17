@@ -186,6 +186,16 @@ const router = createRouter({
         breadcrumb: [{ label: 'App de Campo', to: '/campo' }, { label: 'Detalle de trabajo' }],
       },
     },
+    {
+      path: '/campo/custodia',
+      name: 'campo-custodia',
+      component: () => import('@/views/campo/CampoCustodiaView.vue'),
+      meta: {
+        requiresAuth: true,
+        roles: ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'],
+        breadcrumb: [{ label: 'App de Campo', to: '/campo' }, { label: 'Mis equipos y materiales' }],
+      },
+    },
     { path: '/mapa', redirect: '/mapa/red' },
     {
       path: '/mapa/red',
@@ -233,6 +243,16 @@ const router = createRouter({
         requiresAuth: true,
         roles: INVENTORY_ADMIN_ROLES,
         breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Álbum' }],
+      },
+    },
+    {
+      path: '/inventario/custodia',
+      name: 'inventario-custodia',
+      component: () => import('@/views/inventario/InventarioCustodiaView.vue'),
+      meta: {
+        requiresAuth: true,
+        roles: INVENTORY_ADMIN_ROLES,
+        breadcrumb: [{ label: 'Configuración' }, { label: 'Inventario', to: '/inventario' }, { label: 'Custodia de técnicos' }],
       },
     },
     {

@@ -32,7 +32,8 @@
     "test:routine-inventory-request": "node --import tsx --test src/lib/__tests__/routineInventoryRequest.test.ts",
     "test:job-work-sessions-sql": "node --import tsx --test server/tests/jobWorkSessions.sql.test.ts",
     "test:closed-orders-sql": "node --import tsx --test server/tests/closedOrders.sql.test.ts",
-    "test:olt-alert-log-sql": "node --import tsx --test server/tests/oltAlertLog.sql.test.ts"
+    "test:olt-alert-log-sql": "node --import tsx --test server/tests/oltAlertLog.sql.test.ts",
+    "test:technician-custody-sql": "node --import tsx --test server/tests/technicianCustody.sql.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.1",

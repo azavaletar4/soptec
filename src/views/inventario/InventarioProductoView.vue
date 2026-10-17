@@ -111,6 +111,8 @@ const UNIT_STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   retired: 'Dado de baja',
   en_recupero: 'Por Recoger',
   pending_approval: 'Pendiente de aprobación',
+  with_technician: 'En custodia de técnico',
+  pending_return: 'Devolución en espera',
 };
 const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
@@ -120,6 +122,8 @@ const UNIT_STATUS_CLASS: Record<InventoryUnitStatus, string> = {
   retired: 'bg-slate-500/15 text-slate-600',
   en_recupero: 'bg-rose-500/15 text-rose-700',
   pending_approval: 'bg-orange-500/15 text-orange-700',
+  with_technician: 'bg-indigo-500/15 text-indigo-700',
+  pending_return: 'bg-orange-500/15 text-orange-700',
 };
 
 const unitKpis = computed(() => {
@@ -142,8 +146,10 @@ const UNIT_STATUS_SORT_ORDER: Record<InventoryUnitStatus, number> = {
   damaged: 2,
   en_recupero: 3,
   pending_approval: 4,
-  assigned: 5,
-  retired: 6,
+  with_technician: 5,
+  pending_return: 6,
+  assigned: 7,
+  retired: 8,
 };
 
 const sortedUnits = computed(() =>

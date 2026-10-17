@@ -139,6 +139,7 @@ async function handleDelete(p: InventoryProduct) {
       </div>
       <div class="flex gap-2">
         <button class="btn-secondary" @click="router.push('/inventario/activos-fijos')">🧰 Activos y Herramientas</button>
+        <button class="btn-secondary" @click="router.push('/inventario/custodia')">🎒 Custodia de técnicos</button>
         <button class="btn-secondary" @click="router.push('/inventario/devoluciones')">Devoluciones</button>
         <button class="btn-primary" @click="openCreate">+ Nuevo producto</button>
       </div>

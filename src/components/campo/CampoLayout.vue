@@ -91,6 +91,17 @@ onBeforeUnmount(() => {
           <path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </router-link>
+      <router-link
+        to="/campo/custodia"
+        class="p-2 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
+        aria-label="Mis equipos y materiales"
+        title="Mis equipos y materiales"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M6 8h12l1 12H5L6 8Z" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M9 8V6a3 3 0 0 1 6 0v2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </router-link>
       <button
         class="p-2 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
         aria-label="Cambiar contraseña"

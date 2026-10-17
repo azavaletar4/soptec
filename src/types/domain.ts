@@ -35,7 +35,18 @@ export interface RoutineAdicionales {
   mesh?: number;
 }
 export type InventoryMovementType = 'ingreso' | 'egreso';
-export type InventoryUnitStatus = 'in_stock' | 'assigned' | 'damaged' | 'in_repair' | 'retired' | 'en_recupero' | 'pending_approval';
+export type InventoryUnitStatus =
+  | 'in_stock'
+  | 'assigned'
+  | 'damaged'
+  | 'in_repair'
+  | 'retired'
+  | 'en_recupero'
+  | 'pending_approval'
+  /** Fase 164: entregado a un tecnico, aun no instalado en un cliente. */
+  | 'with_technician'
+  /** Fase 164: el tecnico solicito devolverlo, falta que administracion confirme la recepcion. */
+  | 'pending_return';
 export type WorkOrderPhotoStatus = 'pending_approval' | 'approved' | 'rejected';
 export type InfraElementoTipo = 'caja_nap' | 'splitter' | 'manga' | 'armario' | 'poste' | 'camara' | 'otro';
 export type VehiculoTipo = 'auto' | 'moto';
@@ -453,6 +464,8 @@ export interface InventoryUnit {
   assigned_at: string | null;
   /** Tecnico asignado a ir a recoger el equipo (Fase 51) — solo distinto de null mientras status = 'en_recupero'. */
   pending_pickup_by: string | null;
+  /** Fase 164: tecnico que tiene el equipo en su custodia — solo distinto de null mientras status es 'with_technician'/'pending_return'. */
+  custody_technician_id: string | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;
@@ -463,6 +476,61 @@ export interface InventoryUnit {
     | null;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
   pending_pickup_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+  custody_profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+/** Fase 164: saldo de un consumible en custodia de un tecnico (no es stock central — ver technician_material_custody_events). */
+export interface TechnicianMaterialCustody {
+  technician_id: string;
+  product_id: string;
+  quantity: number;
+  updated_at: string;
+  product?: Pick<InventoryProduct, 'id' | 'name' | 'unit'> | null;
+}
+
+export interface TechnicianMaterialReturnRequest {
+  id: string;
+  technician_id: string;
+  product_id: string;
+  quantity: number;
+  reason: string;
+  status: 'pending' | 'confirmed' | 'rejected';
+  requested_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  product?: Pick<InventoryProduct, 'id' | 'name' | 'unit'> | null;
+  technician?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+/** Fase 164 (Fase C): resumen de conciliacion de solo lectura — almacen vs custodia de tecnicos vs instalado. ADMIN/SUPERADMIN exclusivo. */
+export interface InventoryCustodySummaryRow {
+  product_id: string;
+  product_name: string;
+  is_serialized: boolean;
+  unit: string;
+  warehouse_qty: number;
+  custody_qty: number;
+  installed_qty: number | null;
+  other_qty: number | null;
+  custody_by_technician: Record<string, number>;
+}
+
+export interface MyInventoryCustody {
+  units: Array<{
+    id: string;
+    serial_number: string | null;
+    mac_address: string | null;
+    status: InventoryUnitStatus;
+    product: Pick<InventoryProduct, 'id' | 'name'>;
+  }>;
+  materials: Array<{ product: Pick<InventoryProduct, 'id' | 'name' | 'unit'>; quantity: number }>;
+  pendingReturnRequests: Array<{
+    id: string;
+    product: Pick<InventoryProduct, 'id' | 'name'>;
+    quantity: number;
+    status: 'pending' | 'confirmed' | 'rejected';
+    requested_at: string;
+  }>;
 }
 
 export interface InventoryUnitEvent {

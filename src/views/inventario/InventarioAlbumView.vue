@@ -130,6 +130,8 @@ const STATUS_LABEL: Record<InventoryUnitStatus, string> = {
   retired: 'Retirado',
   en_recupero: 'Por Recoger',
   pending_approval: 'Pendiente de aprobación',
+  with_technician: 'En custodia de técnico',
+  pending_return: 'Devolución en espera',
 };
 const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
   in_stock: 'bg-green-500/15 text-green-600',
@@ -139,6 +141,8 @@ const STATUS_BADGE: Record<InventoryUnitStatus, string> = {
   retired: 'bg-slate-200 text-slate-500',
   en_recupero: 'bg-rose-500/15 text-rose-700',
   pending_approval: 'bg-orange-500/15 text-orange-700',
+  with_technician: 'bg-indigo-500/15 text-indigo-700',
+  pending_return: 'bg-orange-500/15 text-orange-700',
 };
 </script>
 

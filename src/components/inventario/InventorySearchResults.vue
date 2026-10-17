@@ -28,6 +28,7 @@ let generation = 0;
 const labels: Record<InventoryUnitStatus, string> = {
   in_stock: 'Disponible', assigned: 'Asignado', damaged: 'Averiado', in_repair: 'En reparación',
   retired: 'Retirado', en_recupero: 'Por recoger', pending_approval: 'Pendiente de aprobación',
+  with_technician: 'En custodia de técnico', pending_return: 'Devolución en espera',
 };
 watch(() => [props.query, props.scope, page.value, props.revision, auth.user?.id, auth.role], () => {
   clearTimeout(timer);
