@@ -27,6 +27,7 @@
     "test:work-order-photo-approval-sql": "node --import tsx --test server/tests/workOrderPhotoApproval.sql.test.ts",
     "test:routine-returns-sql": "node --import tsx --test server/tests/routineReturns.sql.test.ts",
     "test:installation-postponements-sql": "node --import tsx --test server/tests/installationPostponements.sql.test.ts",
+    "test:installation-postponements-hotfix-compat-sql": "node --import tsx --test server/tests/installationPostponementHotfixCompat.sql.test.ts",
     "test:routine-inventory-sql": "node --import tsx --test server/tests/routineInventory.sql.test.ts",
     "test:routine-inventory-request": "node --import tsx --test src/lib/__tests__/routineInventoryRequest.test.ts",
     "test:job-work-sessions-sql": "node --import tsx --test server/tests/jobWorkSessions.sql.test.ts",
