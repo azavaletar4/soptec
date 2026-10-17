@@ -19,6 +19,16 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     return (data ?? []) as unknown as InventoryCustodySummaryRow[];
   }
 
+  /** Saldo de materiales en custodia de TODOS los tecnicos (una sola consulta) — para agrupar por tecnico en la UI sin pedirlo producto por producto. */
+  async function fetchAllMaterialCustody() {
+    const { data, error: err } = await supabase
+      .from('technician_material_custody')
+      .select('*, product:inventory_products(id, name, unit), technician:profiles!technician_material_custody_technician_id_fkey(id, full_name, email)')
+      .gt('quantity', 0);
+    if (err) throw err;
+    return (data ?? []) as unknown as Array<{ technician_id: string; product_id: string; quantity: number; updated_at: string; product: { id: string; name: string; unit: string } | null; technician: { id: string; full_name: string | null; email: string | null } | null }>;
+  }
+
   async function deliverUnitToTechnician(unitId: string, technicianId: string, reason?: string) {
     const { error: err } = await supabase.rpc('deliver_unit_to_technician', { p_unit_id: unitId, p_technician_id: technicianId, p_reason: reason ?? null });
     if (err) throw err;
@@ -70,6 +80,7 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     loading,
     error,
     fetchCustodySummary,
+    fetchAllMaterialCustody,
     deliverUnitToTechnician,
     receiveUnitReturn,
     deliverMaterialToTechnician,
