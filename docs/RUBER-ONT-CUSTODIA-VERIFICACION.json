@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-17T22:20:54.149239+00:00",
+  "technician": "Ruber Pizango",
+  "client": "Angel Laneras Miguel",
+  "serial": "48575443DEB9F6B6",
+  "product": "HUAWEI HG8145X6-13",
+  "unitUnchanged": true,
+  "installationUnchanged": true,
+  "eventsUnchanged": true,
+  "readOnly": true,
+  "ruberEligible": true,
+  "otherCrewIneligible": true,
+  "writeFunctionUnchanged": true,
+  "triggerFunctionUnchanged": true,
+  "readFunctionMd5": "8cc863804104190ce7a3b9cfb67bf458",
+  "eligibilityVerification": "SELECT READ ONLY with exact new available predicate; no impersonation or real installation executed"
+}
