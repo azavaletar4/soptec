@@ -4922,3 +4922,47 @@ nunca fusionada. El candidato desplegado hoy lo incorporo correctamente
 futuro desde `main` sin este cuidado especial lo perderia. Recomendado
 fusionar esa rama a `main` cuando se pueda (higiene de git, sin impacto
 funcional).
+
+## Fase 164: custodia de equipos/materiales por tecnico (17/10/2026)
+
+Commit local `7587c0d`. Problema real: SmartRayco mostraba 9 TV Box
+"disponibles" sin poder distinguir almacen de lo entregado a un tecnico
+(fisicamente solo habia 1) — no existia un estado intermedio entre bodega
+e instalado. No se asumio ni se inventó ninguna asignacion historica.
+
+Dos migraciones LOCALES, NO aplicadas: `20261017020000_fase164a_custodia_estados.sql`
+(enum `with_technician`/`pending_return`) y `20261017030000_fase164_custodia_tecnicos.sql`
+(todo lo demas). Reusa el Kardex insert-only de `inventory_units`/
+`inventory_unit_events` (Fase 11c) con el mismo patron de delegacion que
+Fase 162 ya uso para rutinas — una rama nueva (`apply_technician_custody_event`),
+sin tocar el resto de `apply_inventory_unit_event`. Para consumibles,
+tabla de saldo `technician_material_custody` + su propio Kardex
+(`technician_material_custody_events`) + `technician_material_return_requests`,
+**sin tocar `inventory_movements`/`current_stock`** — entregar a un
+tecnico no es consumo; el consumo real sigue exactamente igual que antes.
+
+Unico cambio a codigo YA DESPLEGADO hoy mismo (Etapa 3, Fase 162): un
+solo `OR` agregado en `campo_inventory_operation` y en
+`apply_routine_inventory_event` para que un tecnico pueda instalar un
+equipo que ya tenia en custodia, igual que uno directo de bodega — con
+guardas de deriva (MD5 del cuerpo vigente en Cloud) que detienen la
+migracion si esas funciones cambiaron desde que se preparo este archivo.
+
+Frontend: `InventarioCustodiaView.vue` (`/inventario/custodia`,
+ADMIN/SUPERADMIN: entrega, recepcion de devoluciones, conciliacion
+almacen/custodia/instalado) y `CampoCustodiaView.vue`
+(`/campo/custodia`, tecnico: solo ve y devuelve lo suyo, nuevo icono en
+`CampoLayout.vue`). RLS: tecnico nunca accede a las tablas de inventario
+directas (ya cerradas a ADMIN/SUPERADMIN desde la activacion de hoy),
+todo pasa por RPC (`my_inventory_custody`, `request_unit_return`,
+`request_material_return`).
+
+18 pruebas nuevas (`npm run test:technician-custody-sql`, Postgres 17
+aislado): entrega, doble asignacion bloqueada, devolucion con recepcion
+administrativa, RLS (tecnico solo ve lo propio), instalacion desde
+custodia en Alta Y en Rutina (ambas rutas ensanchadas), regresion del
+flujo original (instalar directo desde bodega sigue igual) — las 18 en
+verde. `vue-tsc` y `vite build` limpios.
+
+**PENDIENTE — no aplicado ni desplegado**: ambas migraciones de Fase 164.
+No se modifico inventario real ni ningun producto real en esta tarea.
