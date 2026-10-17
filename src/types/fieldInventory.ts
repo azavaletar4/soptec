@@ -12,6 +12,8 @@ export type FieldInventoryProduct = Pick<InventoryProduct, 'id' | 'name' | 'unit
   inventory_categories: { slug: string } | null;
 };
 export type FieldInventoryUnit = Pick<InventoryUnit, 'id' | 'product_id' | 'serial_number' | 'mac_address' | 'status' | 'client_id' | 'contract_id' | 'installation_id' | 'ticket_id' | 'notes'> & {
+  custody_technician_id?: string | null;
+  routine_id?: string | null;
   product: { id: string; name: string; unit: string; inventory_categories: { slug: string } | null } | null;
 };
 export type FieldInventoryMovement = Pick<InventoryMovement, 'id' | 'product_id' | 'movement_type' | 'quantity' | 'reason' | 'ticket_id' | 'installation_id' | 'created_at' | 'reverses_movement_id' | 'product'>;

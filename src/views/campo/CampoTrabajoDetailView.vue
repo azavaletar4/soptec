@@ -21,6 +21,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
+import { createInstallationCustodySelector, isInstallableOwnCustody } from '@/lib/installationCustodySelector';
 import { createInventoryRefresh } from '@/lib/inventoryRefresh';
 import { startInventorySignals } from '@/lib/inventorySignals';
 import { executeFieldInventory, pendingFieldInventory, type FieldInventoryAction } from '@/lib/fieldInventoryOperation';
@@ -683,13 +684,8 @@ async function handleRegisterKit() {
   }
 }
 
-// ---- Equipos por serie/MAC para Altas (Fase 123) — mismo flujo que ya
-// existia en el Panel Web: el tecnico elige el producto (Modem/ONT, TV Box,
-// Mesh) y luego la serie/MAC exacta de lo disponible en bodega
-// (status='in_stock', bodega central compartida — no hay stock personal por
-// tecnico). Asignar queda vinculado de inmediato al cliente/contrato/orden
-// (la operación contextual conserva status='assigned'), igual que en
-// el Panel Web — no se espera al cierre de la orden.
+// Altas: únicamente unidades disponibles en custodia del actor autenticado.
+// La RPC vuelve a comprobar propiedad/estado bajo bloqueo antes de asignar.
 const installEquipmentUnits = ref<FieldInventoryUnit[]>([]);
 const loadingInstallEquipment = ref(false);
 const installUnitForm = ref({ productId: '', unitId: '' });
@@ -698,31 +694,48 @@ const loadingInstallAvailableUnits = ref(false);
 const savingInstallUnit = ref(false);
 const installUnitError = ref<string | null>(null);
 const removingInstallUnitId = ref<string | null>(null);
+const installationCustodyEditable = computed(() => jobType === 'installation'
+  && ['pending', 'scheduled', 'in_progress'].includes(trabajo.value?.raw.status ?? '') && !inventoryAccessBlocked.value);
+const installCustodySelector = createInstallationCustodySelector({
+  read: async (context, productId) => (await fieldInventory.read<FieldInventoryUnit>(context, 'available', { productId })).items,
+  isCurrent: (context, productId) => inventoryViewAlive && auth.user?.id === context.actorId
+    && context.jobId === jobId && context.jobType === jobType && route.params.id === context.jobId && route.params.tipo === context.jobType
+    && installUnitForm.value.productId === productId && installationCustodyEditable.value
+    && trabajo.value?.clientId === context.clientId && trabajo.value?.contractId === context.contractId
+    && !isLockedForTecnico.value && !inventoryAccessBlocked.value,
+  clear: () => { installAvailableUnits.value = []; installUnitForm.value.unitId = ''; },
+  publish: units => { installAvailableUnits.value = units; },
+  loading: value => { loadingInstallAvailableUnits.value = value; },
+  error: error => { installUnitError.value = getErrorMessage(error, 'No se pudo verificar tu custodia. Actualiza las series.'); },
+});
+watch(() => [route.params.id, route.params.tipo, trabajo.value?.raw.status], () => installCustodySelector.invalidate());
 
 async function loadInstallEquipos() { if (jobType !== 'routine') await refreshInventory(true); }
 
 async function onInstallUnitProductChange() {
-  installUnitForm.value.unitId = '';
-  installAvailableUnits.value = [];
-  if (!installUnitForm.value.productId) return;
-  loadingInstallAvailableUnits.value = true;
-  const productId = installUnitForm.value.productId;
+  installUnitError.value = null;
+  installCustodySelector.invalidate();
+  if (!installUnitForm.value.productId) return false;
   try {
-    const result = await fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'available', { productId });
-    if (productId === installUnitForm.value.productId) installAvailableUnits.value = result.items;
+    return await installCustodySelector.load(fieldContext(), installUnitForm.value.productId);
   } catch (e) {
-    fieldInventoryWarning.value = getErrorMessage(e);
-  } finally {
-    loadingInstallAvailableUnits.value = false;
+    installUnitError.value = getErrorMessage(e);
+    return false;
   }
 }
 
 async function handleAssignInstallUnit() {
-  if (!trabajo.value?.clientId || !installUnitForm.value.unitId) return;
+  if (!installationCustodyEditable.value || !trabajo.value?.clientId || !installUnitForm.value.unitId) return;
   savingInstallUnit.value = true;
   installUnitError.value = null;
   try {
-    await writeFieldInventory('assign', { unitId: installUnitForm.value.unitId });
+    const unitId = installUnitForm.value.unitId;
+    const context = fieldContext();
+    if (!await onInstallUnitProductChange() || !installAvailableUnits.value.some(unit => unit.id === unitId
+      && isInstallableOwnCustody(unit, context.actorId, installUnitForm.value.productId))) {
+      throw Error('El equipo ya no está disponible en tu custodia. Actualiza las series y elige nuevamente.');
+    }
+    await writeFieldInventory('assign', { unitId });
     await loadInstallEquipos();
     await onInstallUnitProductChange();
   } catch (e) {
@@ -1067,6 +1080,7 @@ const availableIncomingUnits = ref<FieldInventoryUnit[]>([]);
 const inventoryAccessBlocked = ref(false);
 let inventoryContextKey = '';
 function clearInventoryData() {
+ installCustodySelector.invalidate();
  inventoryEpoch++; for (const request of inventoryReads) request.abort();
  fieldProducts.value = []; materials.value = []; installEquipmentUnits.value = [];
  installAvailableUnits.value = []; assignedUnits.value = []; pendingUnits.value = []; availableIncomingUnits.value = [];
@@ -1092,16 +1106,16 @@ const inventoryRefresh = createInventoryRefresh({
    historical ? Promise.resolve({items: [] as FieldInventoryProduct[]}) : readInventory<FieldInventoryProduct>(context, 'products', {}, signal),
    readInventory<FieldInventoryUnit>(context, 'assigned', {}, signal),
    jobType === 'ticket' ? readInventory<FieldInventoryUnit>(context, 'pending', {}, signal) : Promise.resolve({items: [] as FieldInventoryUnit[]}),
-   productId ? readInventory<FieldInventoryUnit>(context, 'available', {productId}, signal) : Promise.resolve({items: [] as FieldInventoryUnit[]}),
+   productId && !historical ? readInventory<FieldInventoryUnit>(context, 'available', {productId}, signal) : Promise.resolve({items: [] as FieldInventoryUnit[]}),
   ]);
-  return { movements, products, assigned, pending, available, productId };
+  return { movements, products, assigned, pending, available, productId, context };
  },
  publish: value => {
   fieldInventoryWarning.value = value.assigned.warning ?? '';
   materials.value = value.movements.items; fieldProducts.value = value.products.items;
   if (jobType === 'installation') {
    installEquipmentUnits.value = value.assigned.items;
-   if (value.productId === installUnitForm.value.productId) installAvailableUnits.value = value.available.items;
+   if (value.productId === installUnitForm.value.productId) installCustodySelector.accept(value.context, value.productId, value.available.items);
   } else {
    assignedUnits.value = value.assigned.items; pendingUnits.value = value.pending.items;
    if (value.productId === incomingForm.value.productId) availableIncomingUnits.value = value.available.items;
@@ -1433,6 +1447,7 @@ function clearPhoto(category: string) {
 
 onBeforeUnmount(() => {
   inventoryViewAlive = false;
+  installCustodySelector.invalidate();
   for (const url of Object.values(photoPreviewUrls.value)) URL.revokeObjectURL(url);
   for (const entry of equipmentEntries.value) if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
   document.removeEventListener('visibilitychange', handleVisibilityOrHide);
@@ -2330,13 +2345,11 @@ async function handleCloseSubmit() {
         </section>
         </div>
 
-        <!-- Equipos por serie/MAC (Fase 123, Altas) — mismo stock de bodega
-             central que ya se usa desde el Panel Web (status='in_stock'),
-             no hay un stock personal por tecnico.
-             Paso 2 (Instalación y red) del wizard de Alta. -->
+        <!-- Altas: custodia propia vigente. Paso 2 del wizard. -->
         <div v-show="showStep(2)">
         <section v-if="jobType === 'installation'" class="surface p-3.5 mb-3">
           <h2 class="text-sm font-semibold mb-2">🔧 Equipos asignados (serie/MAC)</h2>
+          <p class="text-xs text-slate-500 mb-2">Solo puedes instalar equipos disponibles bajo tu custodia. Si falta uno, solicita su entrega en Inventario.</p>
           <p v-if="loadingInstallEquipment" class="text-xs text-slate-400">Cargando...</p>
           <template v-else>
             <ul v-if="installEquipmentUnits.length" class="space-y-1.5 mb-3 text-xs">
@@ -2354,7 +2367,7 @@ async function handleCloseSubmit() {
             </ul>
             <p v-else class="text-xs text-amber-600 mb-3">Sin equipos asignados a esta instalación todavía.</p>
 
-            <form class="space-y-1.5" @submit.prevent="handleAssignInstallUnit">
+            <form v-if="installationCustodyEditable && !isLockedForTecnico" class="space-y-1.5" @submit.prevent="handleAssignInstallUnit">
               <select v-model="installUnitForm.productId" required class="field-input text-sm" @change="onInstallUnitProductChange">
                 <option value="" disabled>Producto (Modem/ONT, TV Box, Mesh)...</option>
                 <option v-for="p in fieldProducts.filter((p) => p.is_serialized)" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -2369,9 +2382,10 @@ async function handleCloseSubmit() {
                 <option v-for="u in installAvailableUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
               </select>
               <p v-if="installUnitForm.productId && !loadingInstallAvailableUnits && !installAvailableUnits.length" class="text-[11px] text-amber-700">
-                Sin unidades disponibles en bodega para este producto.
+                No tienes equipos disponibles bajo tu custodia para este producto.
               </p>
-              <button type="submit" :disabled="savingInstallUnit || !installUnitForm.unitId" class="btn-secondary text-xs w-full">
+              <button type="button" class="btn-secondary text-xs w-full" :disabled="!installUnitForm.productId || loadingInstallAvailableUnits || savingInstallUnit" @click="onInstallUnitProductChange">Actualizar mis series</button>
+              <button type="submit" :disabled="savingInstallUnit || loadingInstallAvailableUnits || !installUnitForm.unitId" class="btn-secondary text-xs w-full">
                 {{ savingInstallUnit ? 'Asignando...' : '+ Asignar equipo' }}
               </button>
             </form>
