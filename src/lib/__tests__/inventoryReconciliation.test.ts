@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reconcileInventory, normalizeMac, normalizeSerial, readInventoryReconciliation, type ReconciliationUnit, type ReconciliationInstallation, type ReconciliationClosure } from '../inventoryReconciliation';
+import { reconcileInventory, normalizeMac, normalizeSerial, readInventoryReconciliation, type ReconciliationUnit, type ReconciliationInstallation, type ReconciliationTicket, type ReconciliationClosure } from '../inventoryReconciliation';
 import { matchesEquipmentFilter } from '../inventoryPresentation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -10,6 +10,8 @@ function unit(overrides: Partial<ReconciliationUnit> = {}): ReconciliationUnit {
 }
 const order: ReconciliationInstallation = { id: 'order', client_id: 'client', contract_id: 'contract', status: 'completed' };
 const closure: ReconciliationClosure = { id: 'closure', job_id: 'order', client_id: 'client', ont_serial: ' ont-001 ', created_at: '2026-10-17T20:00:00Z' };
+const ticket: ReconciliationTicket = { id: 'ticket', client_id: 'client', contract_id: 'contract', status: 'resolved' };
+const ticketClosure: ReconciliationClosure = { id: 'tclosure', job_id: 'ticket', client_id: 'client', ont_serial: ' ont-001 ', created_at: '2026-10-17T20:00:00Z' };
 
 test('un cierre o una orden finalizada no convierten almacén en instalado', () => {
   assert.equal(reconcileInventory([unit()], [order], [])[0]!.classification, 'unknown');
@@ -41,6 +43,35 @@ test('serie exacta, MAC completa y categorías sin inferencia por nombre', () =>
   const tv = unit({ product: { name: 'TV Box', is_serialized: true, inventory_categories: { slug: 'tvbox', name: 'TV Box' } } });
   assert.equal(reconcileInventory([tv], [order], [closure])[0]!.serialMatches, 0);
 });
+test('avería resuelta con serie coincidente es señal por revisar, nunca instalación confirmada', () => {
+  assert.equal(reconcileInventory([unit()], [], [], [], [ticketClosure])[0]!.ticketSerialMatches, 0);
+  const match = reconcileInventory([unit()], [], [], [ticket], [ticketClosure])[0]!;
+  assert.equal(match.classification, 'possible'); assert.equal(match.ticketSerialMatches, 1); assert.equal(match.serialMatches, 0);
+  assert(match.reasons.some(r => r.includes('avería')));
+  const manyTickets = reconcileInventory([unit()], [], [], [ticket], [ticketClosure, { ...ticketClosure, id: 'tclosure-2' }])[0]!;
+  assert.equal(manyTickets.ticketSerialMatches, 2); assert.notEqual(manyTickets.classification, 'installed');
+});
+test('avería abierta, en progreso o con cliente distinto no genera coincidencia', () => {
+  assert.equal(reconcileInventory([unit()], [], [], [{ ...ticket, status: 'open' }], [ticketClosure])[0]!.ticketSerialMatches, 0);
+  assert.equal(reconcileInventory([unit()], [], [], [{ ...ticket, status: 'in_progress' }], [ticketClosure])[0]!.ticketSerialMatches, 0);
+  assert.equal(reconcileInventory([unit()], [], [], [{ ...ticket, status: 'rescheduled' }], [ticketClosure])[0]!.ticketSerialMatches, 0);
+  assert.equal(reconcileInventory([unit()], [], [], [ticket], [{ ...ticketClosure, client_id: 'otro' }])[0]!.ticketSerialMatches, 0);
+  assert.equal(reconcileInventory([unit()], [], [], [{ ...ticket, status: 'closed' }], [ticketClosure])[0]!.ticketSerialMatches, 1);
+});
+test('coincidencias de Alta y de Avería se cuentan por separado, sin mezclarse', () => {
+  const row = reconcileInventory([unit()], [order], [closure], [ticket], [ticketClosure])[0]!;
+  assert.equal(row.serialMatches, 1); assert.equal(row.ticketSerialMatches, 1);
+  assert(row.reasons.some(r => r.includes('instalación finalizada')));
+  assert(row.reasons.some(r => r.includes('avería')));
+  const tv = unit({ product: { name: 'TV Box', is_serialized: true, inventory_categories: { slug: 'tvbox', name: 'TV Box' } } });
+  assert.equal(reconcileInventory([tv], [order], [closure], [ticket], [ticketClosure])[0]!.ticketSerialMatches, 0);
+});
+test('omitir tickets/cierres de avería preserva exactamente el comportamiento anterior (regresión)', () => {
+  const withoutTickets = reconcileInventory([unit()], [order], [closure]);
+  const withEmptyTickets = reconcileInventory([unit()], [order], [closure], [], []);
+  assert.deepEqual(withoutTickets, withEmptyTickets);
+  assert.equal(withoutTickets[0]!.ticketSerialMatches, 0);
+});
 test('conciliación y filtros no alteran unidades ni conteos por estado', () => {
   const units = [unit(), unit({ id: 'two', serial_number: 'OTHER', status: 'pending_approval' })];
   const before = JSON.stringify(units);
@@ -68,6 +99,9 @@ test('lector: solo SELECT, paginación completa, errores visibles y rol restring
   const result = await readInventoryReconciliation(makeDb(), 'ADMIN', signal);
   assert.equal(result.counts.units, 501); assert.equal(result.rows.length, 501);
   assert(calls.some(c => c.from === 500));
+  assert(calls.some(c => c.table === 'tickets'));
+  assert.equal(calls.filter(c => c.table === 'work_order_closures').length, 2);
+  assert.equal(result.counts.tickets, 0); assert.equal(result.counts.ticketClosures, 0);
   assert.equal((await readInventoryReconciliation(makeDb(false, 100), 'ADMIN', signal)).rows.length, 501);
   await assert.rejects(readInventoryReconciliation(makeDb(true), 'ADMIN', signal), /READ_DENIED/);
   await assert.rejects(readInventoryReconciliation(makeDb(false, 500, null), 'ADMIN', signal), /verificar el total/);

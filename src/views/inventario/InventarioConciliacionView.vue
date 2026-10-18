@@ -11,7 +11,7 @@ import { UNIT_LOCATION_LABELS } from '@/lib/inventoryPresentation';
 
 const route = useRoute(), auth = useAuthStore();
 const rows = ref<ReconciliationRow[]>([]), loading = ref(false), error = ref(''), checkedAt = ref('');
-const counts = ref({ units: 0, installations: 0, closures: 0 });
+const counts = ref({ units: 0, installations: 0, closures: 0, tickets: 0, ticketClosures: 0 });
 const query = ref(''), category = ref(''), classification = ref(''), status = ref(typeof route.query.status === 'string' ? route.query.status : '');
 const page = ref(0);
 let controller: AbortController | undefined, generation = 0;
@@ -53,6 +53,7 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
       <strong class="text-sky-700">Solo lectura.</strong> Una instalación finalizada no demuestra dónde está un equipo hoy.
       Las confirmaciones corresponden a vínculos vigentes del sistema; requieren conteo físico para confirmar existencias reales.
       <p class="mt-2">Las coincidencias de serie se comparan con el serial de ONT del cierre, únicamente para la categoría ONUs / ONTs. Las MAC permiten detectar duplicados entre unidades.</p>
+      <p class="mt-2">También se compara contra cierres de avería (Soporte) resueltos o cerrados que registraron el serial de la ONT en sitio. Esa coincidencia puede indicar un reemplazo de equipo o solo una verificación durante la visita — nunca se marca como instalación confirmada por sí sola; siempre queda para revisión.</p>
     </div>
     <p v-if="error" role="alert" class="surface p-4 text-red-600 mb-4">{{ error }}. No se presenta un reporte parcial. Si falta acceso a una fuente, requiere revisión posterior; no se cambian permisos.</p>
     <p v-if="loading" class="py-8 text-center text-slate-500">Leyendo registros...</p>
@@ -60,7 +61,7 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
       <div class="grid sm:grid-cols-3 gap-3 mb-4">
         <div class="surface p-4"><strong class="text-2xl">{{ rows.length }}</strong><p class="text-xs text-slate-500">Unidades físicas registradas (serializadas)</p></div>
         <div class="surface p-4"><strong class="text-2xl text-amber-700">{{ warehouseCandidates }}</strong><p class="text-xs text-slate-500">En almacén con señales por revisar</p></div>
-        <div class="surface p-4"><p class="text-sm">{{ formatPeruDateTime(checkedAt) }} (Perú)</p><p class="text-xs text-slate-500">Lectura de {{ counts.installations }} órdenes y {{ counts.closures }} cierres con serial</p></div>
+        <div class="surface p-4"><p class="text-sm">{{ formatPeruDateTime(checkedAt) }} (Perú)</p><p class="text-xs text-slate-500">Lectura de {{ counts.installations }} altas y {{ counts.closures }} cierres de alta, {{ counts.tickets }} averías y {{ counts.ticketClosures }} cierres de avería con serial</p></div>
       </div>
       <div class="surface p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <label class="text-xs">Buscar serie, MAC, modelo o cliente<input v-model="query" class="field-input mt-1" placeholder="Buscar en el reporte" /></label>

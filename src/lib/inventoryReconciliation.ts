@@ -15,10 +15,13 @@ export interface ReconciliationUnit {
   technician: { id: string; full_name: string | null; email: string | null } | null;
 }
 export interface ReconciliationInstallation { id: string; client_id: string; contract_id: string | null; status: string }
+export interface ReconciliationTicket { id: string; client_id: string; contract_id: string | null; status: string }
 export interface ReconciliationClosure { id: string; job_id: string; client_id: string | null; ont_serial: string | null; created_at: string }
 export interface ReconciliationRow {
   unit: ReconciliationUnit; classification: ReconciliationClass; reasons: string[];
   category: string; installation: ReconciliationInstallation | null; serialMatches: number;
+  /** Cierres de Averia (job_type='ticket') con la misma serie; evidencia documental de reemplazo/verificacion en sitio, nunca una instalacion confirmada por si sola. */
+  ticketSerialMatches: number;
 }
 export const normalizeSerial = (value: string | null) => (value ?? '').trim().toUpperCase();
 export function normalizeMac(value: string | null) {
@@ -30,7 +33,13 @@ export function equipmentCategory(unit: ReconciliationUnit) {
 }
 
 /** Evidencia documental; nunca escribe ni convierte un cierre histórico en ubicación vigente. */
-export function reconcileInventory(units: ReconciliationUnit[], installations: ReconciliationInstallation[], closures: ReconciliationClosure[]): ReconciliationRow[] {
+export function reconcileInventory(
+  units: ReconciliationUnit[],
+  installations: ReconciliationInstallation[],
+  closures: ReconciliationClosure[],
+  tickets: ReconciliationTicket[] = [],
+  ticketClosures: ReconciliationClosure[] = [],
+): ReconciliationRow[] {
   const serials = new Map<string, number>(), macs = new Map<string, number>();
   for (const unit of units) {
     const serial = normalizeSerial(unit.serial_number), mac = normalizeMac(unit.mac_address);
@@ -45,6 +54,16 @@ export function reconcileInventory(units: ReconciliationUnit[], installations: R
     if (!serial || order?.status !== 'completed' || order.client_id !== closure.client_id) continue;
     closureSerials.set(serial, [...(closureSerials.get(serial) ?? []), closure]);
   }
+  // Averia (ticket) resuelta/cerrada con la misma serie: puede ser un reemplazo o una
+  // verificacion en sitio durante la visita — nunca una instalacion por si sola (regla 6).
+  const ticketsById = new Map(tickets.map(item => [item.id, item]));
+  const ticketClosureSerials = new Map<string, ReconciliationClosure[]>();
+  for (const closure of ticketClosures) {
+    const ticket = ticketsById.get(closure.job_id);
+    const serial = normalizeSerial(closure.ont_serial);
+    if (!serial || !ticket || !['resolved', 'closed'].includes(ticket.status) || ticket.client_id !== closure.client_id) continue;
+    ticketClosureSerials.set(serial, [...(ticketClosureSerials.get(serial) ?? []), closure]);
+  }
   return units.map(unit => {
     const reasons: string[] = [];
     const serial = normalizeSerial(unit.serial_number), mac = normalizeMac(unit.mac_address);
@@ -54,7 +73,9 @@ export function reconcileInventory(units: ReconciliationUnit[], installations: R
     const contractVerified = !unit.contract_id || (unit.contract?.id === unit.contract_id && unit.contract.client_id === unit.client_id);
     const orderVerified = !unit.installation_id || (!!installation && installation.client_id === unit.client_id && (!installation.contract_id || installation.contract_id === unit.contract_id));
     // ont_serial identifica ONT; no es un campo genérico para TV Box/MAC.
-    const serialMatches = equipmentCategory(unit) === 'onu' ? closureSerials.get(serial)?.length ?? 0 : 0;
+    const isOnt = equipmentCategory(unit) === 'onu';
+    const serialMatches = isOnt ? closureSerials.get(serial)?.length ?? 0 : 0;
+    const ticketSerialMatches = isOnt ? ticketClosureSerials.get(serial)?.length ?? 0 : 0;
     let classification: ReconciliationClass = 'unknown';
     if (duplicate) reasons.push('Serie o MAC repetida en más de una unidad; identidad ambigua.');
     if (unit.status === 'assigned' && clientVerified && contractVerified && orderVerified && !unit.custody_technician_id && !duplicate) {
@@ -62,12 +83,13 @@ export function reconcileInventory(units: ReconciliationUnit[], installations: R
     } else if (['with_technician', 'pending_return'].includes(unit.status) && unit.custody_technician_id && unit.technician?.id === unit.custody_technician_id && !unit.client_id && !unit.contract_id && !duplicate) {
       classification = 'custody'; reasons.push('Custodia vigente con técnico vinculado explícitamente.');
     } else {
-      if (duplicate || serialMatches || unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id || unit.status === 'assigned') classification = 'possible';
+      if (duplicate || serialMatches || ticketSerialMatches || unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id || unit.status === 'assigned') classification = 'possible';
       if (serialMatches) reasons.push(`Serie exacta en ${serialMatches} cierre(s) de instalación finalizada. Evidencia histórica, no ubicación actual.`);
+      if (ticketSerialMatches) reasons.push(`Serie exacta en ${ticketSerialMatches} cierre(s) de avería resuelta o cerrada. Puede ser un reemplazo de equipo o una verificación en sitio; no confirma por sí sola que esta unidad quedó instalada — revisar manualmente.`);
       if (unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id) reasons.push('Revisar coherencia de estado y vínculos registrados; no confirma instalación ni custodia actual.');
       if (!reasons.length) reasons.push('Sin evidencia suficiente de ubicación actual.');
     }
-    return { unit, classification, reasons, category: equipmentCategory(unit), installation, serialMatches };
+    return { unit, classification, reasons, category: equipmentCategory(unit), installation, serialMatches, ticketSerialMatches };
   });
 }
 
@@ -91,10 +113,15 @@ async function readPages<T>(query: (from: number, to: number) => PromiseLike<{ d
 }
 export async function readInventoryReconciliation(db: SupabaseClient, role: string | null, signal: AbortSignal) {
   assertAdministrativeInventoryAccess(role);
-  const [units, installations, closures] = await Promise.all([
+  const [units, installations, closures, tickets, ticketClosures] = await Promise.all([
     readPages<ReconciliationUnit>((from, to) => db.from('inventory_units').select('id, product_id, serial_number, mac_address, status, client_id, contract_id, installation_id, custody_technician_id, product:inventory_products!inner(name, is_serialized, inventory_categories(slug, name)), clients(id, first_name, last_name), contract:service_contracts!inventory_units_contract_id_fkey(id, client_id, contract_number), technician:profiles!inventory_units_custody_technician_id_fkey(id, full_name, email)', { count: 'exact' }).eq('product.is_serialized', true).order('id').range(from, to).abortSignal(signal)),
     readPages<ReconciliationInstallation>((from, to) => db.from('installations').select('id, client_id, contract_id, status', { count: 'exact' }).order('id').range(from, to).abortSignal(signal)),
     readPages<ReconciliationClosure>((from, to) => db.from('work_order_closures').select('id, job_id, client_id, ont_serial, created_at', { count: 'exact' }).eq('job_type', 'installation').not('ont_serial', 'is', null).order('id').range(from, to).abortSignal(signal)),
+    readPages<ReconciliationTicket>((from, to) => db.from('tickets').select('id, client_id, contract_id, status', { count: 'exact' }).order('id').range(from, to).abortSignal(signal)),
+    readPages<ReconciliationClosure>((from, to) => db.from('work_order_closures').select('id, job_id, client_id, ont_serial, created_at', { count: 'exact' }).eq('job_type', 'ticket').not('ont_serial', 'is', null).order('id').range(from, to).abortSignal(signal)),
   ]);
-  return { rows: reconcileInventory(units, installations, closures), counts: { units: units.length, installations: installations.length, closures: closures.length } };
+  return {
+    rows: reconcileInventory(units, installations, closures, tickets, ticketClosures),
+    counts: { units: units.length, installations: installations.length, closures: closures.length, tickets: tickets.length, ticketClosures: ticketClosures.length },
+  };
 }
