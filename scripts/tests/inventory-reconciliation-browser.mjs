@@ -97,28 +97,58 @@ try {
  assert(await click('SER-MATCH'));await until('document.body.innerText.includes("Historial del equipo")');
  assert(await click('Cerrar'));await noWrites();
  assert(await click('Revisar diferencias'));
- await until('document.body.innerText.includes("4 resultados")');
- const report=await body();
- for(const label of ['Instalación confirmada','Custodia confirmada','Posible coincidencia que requiere revisión','Ubicación sin verificar'])assert(report.includes(label));
- const badges=await evaluate('Array.from(document.querySelectorAll("article .badge")).map(x=>x.textContent.trim())');
- assert.equal(badges.length,4);assert.equal(new Set(badges).size,4);
+ // Por defecto solo "Necesitan revisión" (regla 5): de las 4 unidades del fixture,
+ // solo SER-MATCH (posible, serie coincide con un cierre) y la TV Box (sin
+ // verificar) deben aparecer; la asignada y la de custodia quedan afuera.
+ await until('document.body.innerText.includes("2 resultados")');
+ let report=await body();
+ assert(report.includes('Necesitan revisión (2)'));assert(report.includes('Todo el inventario (4)'));
+ assert(report.includes('Pendientes de revisión'));assert(report.includes('Total registrado'));assert(report.includes('Documentalmente coherentes'));
+ for(const label of ['Posible coincidencia que requiere revisión','Ubicación sin verificar'])assert(report.includes(label));
+ for(const label of ['Instalación confirmada','Custodia confirmada'])assert(!report.includes(label));
+ assert(report.includes('Motivo de revisión: En almacén con indicios de estar instalado'));
+ assert(report.includes('Motivo de revisión: Ubicación sin verificar'));
  assert(report.includes('Serie exacta en 1 cierre(s)'));
+ let badges=await evaluate('Array.from(document.querySelectorAll("article .badge")).map(x=>x.textContent.trim())');
+ assert.equal(badges.length,2);assert.equal(new Set(badges).size,2);
+
+ // Ninguna unidad desaparece: la segunda vista sigue dando acceso a las 4.
+ assert(await click('Todo el inventario'));
+ await until('document.body.innerText.includes("4 resultados")');
+ report=await body();
+ for(const label of ['Instalación confirmada','Custodia confirmada','Posible coincidencia que requiere revisión','Ubicación sin verificar'])assert(report.includes(label));
+ assert(report.includes('Sin alertas — vínculo documental coherente.'));
+ badges=await evaluate('Array.from(document.querySelectorAll("article .badge")).map(x=>x.textContent.trim())');
+ assert.equal(badges.length,4);assert.equal(new Set(badges).size,4);
+ await noWrites();
+
  assert(await field('Categoría','tvbox'));await until('document.body.innerText.includes("1 resultados")');
  assert((await body()).includes('TV Box de prueba'));assert(!(await body()).includes('SER-ASIGNADA'));
  assert(await field('Categoría',''));assert(await field('Ubicación registrada','in_stock'));
  await until('document.body.innerText.includes("2 resultados")');
+ assert(await field('Ubicación registrada',''));await until('document.body.innerText.includes("4 resultados")');
+
+ // Capturas de ambas vistas (viewport móvil), filtros ya en blanco.
+ await c('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+ assert(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth'));
+ const capture=async name=>{const metrics=await c('Page.getLayoutMetrics');const screenshot=await c('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:metrics.cssContentSize.width,height:metrics.cssContentSize.height,scale:1}});await writeFile(name,Buffer.from(screenshot.data,'base64'));};
+ await capture('docs/INVENTARIO-CONCILIACION-TODO-LOCAL.png');
+ assert(await click('Necesitan revisión'));await until('document.body.innerText.includes("2 resultados")');
+ await capture('docs/INVENTARIO-CONCILIACION-REVISION-LOCAL.png');
+ await c('Emulation.setDeviceMetricsOverride',{width:0,height:0,deviceScaleFactor:0,mobile:false});
+
+ // Búsqueda, navegación al detalle/Kardex y regreso — mismo patrón ya probado antes de esta mejora.
  assert(await field('Buscar serie','SER-MATCH'));await until('document.body.innerText.includes("1 resultados")');
  assert(await click('SER-MATCH'));await until('document.body.innerText.includes("Historial del equipo")');
  assert(await click('Cerrar'));assert(await click('Volver a Inventario'));
- await until('document.body.innerText.includes("4 resultados")');
- await c('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
- assert(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth'));
- const metrics=await c('Page.getLayoutMetrics');
- const screenshot=await c('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:metrics.cssContentSize.width,height:metrics.cssContentSize.height,scale:1}});
- await writeFile('docs/INVENTARIO-CONCILIACION-LOCAL.png',Buffer.from(screenshot.data,'base64'));
+ // Vuelve a entrar (montaje nuevo): la vista predeterminada vuelve a ser "Necesitan revisión".
+ await until('document.body.innerText.includes("2 resultados")');
+ assert((await body()).includes('Necesitan revisión (2)'));
+ await noWrites();
+
  await evaluate('window.__denyClosures=true');assert(await click('Actualizar lectura'));
  await until('document.body.innerText.includes("No se presenta un reporte parcial")');
  assert(!(await body()).includes('SER-MATCH'));await noWrites();assert.equal(errors.length,0);
- console.log('INVENTORY_SECTIONS=PASS; ALBUM_NAVIGATION=PASS; PRODUCT_FILTERS=PASS; EXISTING_KARDEX=PASS; RECONCILIATION_CLASSES=PASS; CATEGORY_STATUS_SEARCH=PASS; MOBILE=PASS; READ_FAILURE=PASS; EXISTING_COUNTS_UNCHANGED=PASS; BROWSER_EXCEPTIONS=0; REAL_WRITES=0');
+ console.log('INVENTORY_SECTIONS=PASS; ALBUM_NAVIGATION=PASS; PRODUCT_FILTERS=PASS; EXISTING_KARDEX=PASS; RECONCILIATION_DEFAULT_REVIEW=PASS; RECONCILIATION_FULL_INVENTORY_REACHABLE=PASS; CATEGORY_STATUS_SEARCH=PASS; MOBILE=PASS; READ_FAILURE=PASS; EXISTING_COUNTS_UNCHANGED=PASS; BROWSER_EXCEPTIONS=0; REAL_WRITES=0');
  await send('Browser.close');
 } finally {if(ws)ws.close();chrome.kill();}

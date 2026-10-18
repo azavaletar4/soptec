@@ -6,25 +6,38 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
-import { readInventoryReconciliation, RECONCILIATION_LABELS, normalizeMac, type ReconciliationRow } from '@/lib/inventoryReconciliation';
+import { readInventoryReconciliation, RECONCILIATION_LABELS, normalizeMac, type ReconciliationRow, type ReconciliationClass } from '@/lib/inventoryReconciliation';
+import { needsReview, reviewReasonLabel, sortByReviewPriority } from '@/lib/inventoryReconciliationReview';
 import { UNIT_LOCATION_LABELS } from '@/lib/inventoryPresentation';
 
 const route = useRoute(), auth = useAuthStore();
 const rows = ref<ReconciliationRow[]>([]), loading = ref(false), error = ref(''), checkedAt = ref('');
 const counts = ref({ units: 0, installations: 0, closures: 0, tickets: 0, ticketClosures: 0 });
+// Vista predeterminada: solo lo que necesita revisión (regla 5 de usabilidad —
+// lo documentalmente coherente no debe ocupar espacio en la vista principal).
+// "Todo el inventario" mantiene accesible cada unidad, igual que antes.
+const view = ref<'review' | 'all'>('review');
 const query = ref(''), category = ref(''), classification = ref(''), status = ref(typeof route.query.status === 'string' ? route.query.status : '');
 const page = ref(0);
 let controller: AbortController | undefined, generation = 0;
+const reviewCount = computed(() => rows.value.filter(needsReview).length);
+const coherentCount = computed(() => rows.value.length - reviewCount.value);
+const noReviewPending = computed(() => view.value === 'review' && reviewCount.value === 0);
+const classificationOptions = computed<ReconciliationClass[]>(() => view.value === 'review' ? ['possible', 'unknown'] : ['installed', 'custody', 'possible', 'unknown']);
+watch(view, () => { classification.value = ''; page.value = 0; });
 const categories = computed(() => [...new Map(rows.value.map(row => [row.category, row.unit.product?.inventory_categories?.name ?? 'Sin categoría'])).entries()]);
-const filtered = computed(() => rows.value.filter(row => {
+const scoped = computed(() => view.value === 'review' ? rows.value.filter(needsReview) : rows.value);
+const filtered = computed(() => {
   const term = query.value.trim().toLocaleLowerCase();
-  const u = row.unit;
-  return (!category.value || category.value === row.category) && (!classification.value || classification.value === row.classification)
-    && (!status.value || status.value === u.status)
-    && (!term || `${u.product?.name ?? ''} ${u.serial_number ?? ''} ${u.mac_address ?? ''} ${u.clients?.first_name ?? ''} ${u.clients?.last_name ?? ''}`.toLocaleLowerCase().includes(term) || (!!normalizeMac(term) && normalizeMac(term) === normalizeMac(u.mac_address)));
-}));
+  const base = scoped.value.filter(row => {
+    const u = row.unit;
+    return (!category.value || category.value === row.category) && (!classification.value || classification.value === row.classification)
+      && (!status.value || status.value === u.status)
+      && (!term || `${u.product?.name ?? ''} ${u.serial_number ?? ''} ${u.mac_address ?? ''} ${u.clients?.first_name ?? ''} ${u.clients?.last_name ?? ''}`.toLocaleLowerCase().includes(term) || (!!normalizeMac(term) && normalizeMac(term) === normalizeMac(u.mac_address)));
+  });
+  return view.value === 'review' ? sortByReviewPriority(base) : base;
+});
 const visible = computed(() => filtered.value.slice(page.value * 25, (page.value + 1) * 25));
-const warehouseCandidates = computed(() => rows.value.filter(row => row.unit.status === 'in_stock' && row.classification === 'possible').length);
 watch([query, category, classification, status], () => { page.value = 0; });
 async function load() {
   controller?.abort(); controller = new AbortController(); const request = ++generation;
@@ -59,17 +72,22 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
     <p v-if="loading" class="py-8 text-center text-slate-500">Leyendo registros...</p>
     <template v-else-if="checkedAt">
       <div class="grid sm:grid-cols-3 gap-3 mb-4">
-        <div class="surface p-4"><strong class="text-2xl">{{ rows.length }}</strong><p class="text-xs text-slate-500">Unidades físicas registradas (serializadas)</p></div>
-        <div class="surface p-4"><strong class="text-2xl text-amber-700">{{ warehouseCandidates }}</strong><p class="text-xs text-slate-500">En almacén con señales por revisar</p></div>
-        <div class="surface p-4"><p class="text-sm">{{ formatPeruDateTime(checkedAt) }} (Perú)</p><p class="text-xs text-slate-500">Lectura de {{ counts.installations }} altas y {{ counts.closures }} cierres de alta, {{ counts.tickets }} averías y {{ counts.ticketClosures }} cierres de avería con serial</p></div>
+        <div class="surface p-4"><strong class="text-2xl text-amber-700">{{ reviewCount }}</strong><p class="text-xs text-slate-500">Pendientes de revisión</p></div>
+        <div class="surface p-4"><strong class="text-2xl">{{ rows.length }}</strong><p class="text-xs text-slate-500">Total registrado (serializadas)</p></div>
+        <div class="surface p-4"><strong class="text-2xl text-sky-700">{{ coherentCount }}</strong><p class="text-xs text-slate-500">Documentalmente coherentes (instalado/custodia)</p></div>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">{{ formatPeruDateTime(checkedAt) }} (Perú) · Lectura de {{ counts.installations }} altas y {{ counts.closures }} cierres de alta, {{ counts.tickets }} averías y {{ counts.ticketClosures }} cierres de avería con serial.</p>
+      <div class="flex gap-2 mb-4" role="tablist">
+        <button type="button" role="tab" :aria-selected="view === 'review'" class="btn-secondary" :class="view === 'review' ? 'bg-amber-100 text-amber-800 border-amber-300' : ''" @click="view = 'review'">Necesitan revisión ({{ reviewCount }})</button>
+        <button type="button" role="tab" :aria-selected="view === 'all'" class="btn-secondary" :class="view === 'all' ? 'bg-sky-50 text-sky-700 border-sky-300' : ''" @click="view = 'all'">Todo el inventario ({{ rows.length }})</button>
       </div>
       <div class="surface p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <label class="text-xs">Buscar serie, MAC, modelo o cliente<input v-model="query" class="field-input mt-1" placeholder="Buscar en el reporte" /></label>
         <label class="text-xs">Categoría<select v-model="category" class="field-input mt-1"><option value="">Todas las categorías</option><option v-for="[slug, name] in categories" :key="slug" :value="slug">{{ name }}</option></select></label>
-        <label class="text-xs">Resultado<select v-model="classification" class="field-input mt-1"><option value="">Todos los resultados</option><option v-for="(label, value) in RECONCILIATION_LABELS" :key="value" :value="value">{{ label }}</option></select></label>
+        <label class="text-xs">Resultado<select v-model="classification" class="field-input mt-1"><option value="">Todos los resultados</option><option v-for="value in classificationOptions" :key="value" :value="value">{{ RECONCILIATION_LABELS[value] }}</option></select></label>
         <label class="text-xs">Ubicación registrada<select v-model="status" class="field-input mt-1"><option value="">Todos los estados</option><option v-for="(label, value) in UNIT_LOCATION_LABELS" :key="value" :value="value">{{ label }}</option></select></label>
       </div>
-      <p class="text-xs text-slate-500 mb-3">{{ filtered.length }} resultados · Fuentes visibles para tu sesión, leídas en varias consultas; pueden cambiar mientras se consulta. No es un conteo físico ni una captura transaccional.</p>
+      <p class="text-xs text-slate-500 mb-3">{{ filtered.length }} resultados en {{ view === 'review' ? 'Necesitan revisión' : 'Todo el inventario' }} · Fuentes visibles para tu sesión, leídas en varias consultas; pueden cambiar mientras se consulta. No es un conteo físico ni una captura transaccional.</p>
       <div class="space-y-3">
         <article v-for="row in visible" :key="row.unit.id" class="surface p-4">
           <div class="flex flex-wrap justify-between gap-2">
@@ -77,7 +95,9 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
             <span class="badge self-start" :class="row.classification === 'possible' ? 'bg-amber-100 text-amber-800' : row.classification === 'unknown' ? 'bg-slate-100 text-slate-600' : 'bg-sky-50 text-sky-700'">{{ RECONCILIATION_LABELS[row.classification] }}</span>
           </div>
           <p class="text-xs text-slate-500 mt-2">Estado registrado: {{ UNIT_LOCATION_LABELS[row.unit.status] || row.unit.status }}</p>
-          <ul class="text-sm text-slate-600 mt-2 list-disc pl-5"><li v-for="reason in row.reasons" :key="reason">{{ reason }}</li></ul>
+          <p v-if="needsReview(row)" class="text-sm font-medium text-amber-800 mt-2">Motivo de revisión: {{ reviewReasonLabel(row) }}</p>
+          <p v-else class="text-sm text-sky-700 mt-2">Sin alertas — vínculo documental coherente.</p>
+          <ul class="text-xs text-slate-400 mt-1 list-disc pl-5"><li v-for="reason in row.reasons" :key="reason">{{ reason }}</li></ul>
           <div class="text-xs mt-3 flex flex-wrap gap-3">
             <router-link v-if="row.unit.client_id && row.unit.clients?.id === row.unit.client_id" :to="`/clientes/${row.unit.client_id}`" class="text-sky-700 underline">Cliente vinculado: {{ row.unit.clients.first_name }} {{ row.unit.clients.last_name }}</router-link>
             <router-link v-if="row.unit.contract?.id === row.unit.contract_id && row.unit.client_id && row.unit.contract?.client_id === row.unit.client_id" :to="`/clientes/${row.unit.client_id}/servicios/${row.unit.contract_id}`" class="text-sky-700 underline">Contrato vinculado: {{ row.unit.contract?.contract_number || row.unit.contract_id }}</router-link>
@@ -87,7 +107,8 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
             <span v-if="row.unit.custody_technician_id && row.unit.technician?.id === row.unit.custody_technician_id">Técnico vinculado: {{ row.unit.technician.full_name || row.unit.technician.email || 'Nombre no disponible' }}</span>
           </div>
         </article>
-        <p v-if="!filtered.length" class="surface p-6 text-center text-slate-500">No hay unidades que coincidan con los filtros.</p>
+        <p v-if="!filtered.length && noReviewPending" class="surface p-6 text-center text-slate-500">No hay equipos pendientes de revisión en esta lectura.</p>
+        <p v-else-if="!filtered.length" class="surface p-6 text-center text-slate-500">No hay unidades que coincidan con los filtros.</p>
       </div>
       <div class="flex justify-between items-center gap-2 mt-4 text-xs"><button class="btn-secondary" :disabled="page === 0" @click="page--">Anterior</button><span>Página {{ page + 1 }} de {{ Math.max(1, Math.ceil(filtered.length / 25)) }}</span><button class="btn-secondary" :disabled="(page + 1) * 25 >= filtered.length" @click="page++">Siguiente</button></div>
     </template>
