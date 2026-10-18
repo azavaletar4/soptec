@@ -1,9 +1,9 @@
 # Despliegue seguro por commit explícito (`deploy/safe-update.sh`)
 
-**Estado: implementado y probado en entorno aislado. NO activado todavía —
-`deploy/update.sh` sigue siendo el script que se usa hoy. Falta
-autorización explícita del usuario para empezar a usar `safe-update.sh` en
-la VM real.**
+**Estado: commits ya publicados en `origin/main` (push verificado el
+18/10/2026). Script todavía NO está en la VM ni se ejecutó nada contra
+ella — falta el bootstrap (sección siguiente) y autorización explícita
+para esa transferencia y para el primer uso real.**
 
 Referencia: incidente del 18/10/2026 documentado en
 `docs/TECNICOS-ACTIVOS-ASIGNADO-INCIDENTE-ALCANCE.md` — un `git pull
@@ -77,18 +77,109 @@ a un `git reset --hard ... && docker compose up -d --build` manual.
 
 ## `deploy/rollback.sh` — prioriza reusar imágenes, no reconstruir
 
-`bash deploy/rollback.sh <rollback-tag>` (o sin argumento, toma el tag más
-reciente de `.last_rollback_tag`):
+**Corregido el 18/10/2026 tras un incidente real** (detalle completo en
+`ESTADO_DESARROLLO.md`): la primera versión, invocada sin argumentos,
+leía `.last_rollback_tag` en silencio y ejecutaba el rollback de
+inmediato, sin ningún paso de confirmación — así se disparó un `git
+reset --hard` real contra la VM por accidente. La versión corregida:
 
-1. Bloquea igual que `safe-update.sh` si hay cambios locales sin
-   commitear.
-2. Revierte el código (`git reset --hard`) al commit del tag.
-3. Para cada servicio (`frontend`, `backend`): si existe la imagen
-   respaldada `smartrayco-<servicio>:<rollback-tag>`, la reutiliza
-   (`docker tag ... :latest`) y **no reconstruye** (`docker compose up -d
-   --no-build`). Solo reconstruye el/los servicios para los que NO exista
-   una imagen respaldada (por ejemplo, un rollback a un punto anterior a
-   que existiera esta mecánica de respaldo).
+- **Nunca actúa sin un tag explícito.** `bash deploy/rollback.sh
+  <rollback-tag>` o `bash deploy/rollback.sh --use-last-rollback` (esta
+  última, una opción explícita para usar el tag de `.last_rollback_tag`
+  — ya no es el comportamiento por defecto). Sin argumentos, con `-h` o
+  con `--help`: solo muestra el uso y sale, sin tocar nada.
+- Valida, en orden, **antes de pedir confirmación**: que el commit/tag
+  exista, que no haya cambios locales sin commitear, y la disponibilidad
+  de imágenes Docker respaldadas para `frontend`/`backend` (si falta
+  alguna, avisa que esa reconstruiría en vez de reusar).
+- **Exige confirmación explícita** (escribir `"si"`, igual que
+  `safe-update.sh`) antes de aplicar nada, salvo `DEPLOY_YES=1`. Si no
+  hay nada que leer en la entrada (por ejemplo, invocado por SSH sin
+  terminal interactiva y sin pipear una respuesta, como en el incidente),
+  la lectura falla y el script aborta sin modificar nada — nunca asume
+  una confirmación que no se dio.
+- Recién con todo lo anterior confirmado: revierte el código (`git reset
+  --hard`) y, por servicio, reusa la imagen Docker ya respaldada
+  (`docker tag ... :latest` + `docker compose up -d --no-build`) o
+  reconstruye solo el/los servicios sin imagen respaldada.
+
+12/12 pruebas en `scripts/tests/deploy-rollback.test.sh`, incluyendo la
+reproducción exacta del incidente (sin argumentos, `--help`, canal sin
+terminal interactiva, argumentos inválidos/de más) — todas confirman que
+nada se modifica hasta que la confirmación es explícita.
+
+## Bootstrap pendiente — estado verificado el 18/10/2026 (NO ejecutado)
+
+El script no puede traerse a sí mismo a la VM la primera vez (no existe
+ahí todavía), así que su primera llegada es, necesariamente, un paso
+manual revisado — no `deploy/update.sh`, no `safe-update.sh` (todavía no
+está), solo un `git merge --ff-only` a un commit exacto ya verificado.
+
+**Verificado por SSH (solo lectura, nada modificado en la VM):**
+
+- VM: `HEAD = bdf3df2fcb1e7ea1233e694705816b97ba2941b4`, rama `main`,
+  working tree limpio salvo `?? .last_rollback_tag` (el mismo archivo
+  suelto de siempre — se vuelve inocuo en cuanto este bootstrap traiga el
+  `.gitignore` corregido).
+- `origin/main` (tras `git fetch`, ya con el push de hoy): exactamente
+  **2 commits** por delante de la VM — `ba01049` y
+  `38ef2d4fdd192c2119e7a4d85afb076c4cc31359` (este último, la punta
+  actual) — ningún commit ajeno de otra sesión.
+- Diff real `bdf3df2..38ef2d4` (confirmado con `git diff --stat`, ver
+  commits): **solo 7 archivos de herramienta de despliegue/documentación**
+  — `.gitignore`, `ESTADO_DESARROLLO.md`, `deploy/safe-update.sh`,
+  `deploy/rollback.sh`, `docs/DEPLOY-SEGURO-POR-COMMIT.md`,
+  `scripts/tests/deploy-safe-update.test.sh`,
+  `scripts/tests/deploy-rollback.test.sh`. **Cero archivos de
+  `src/`, `server/` ni `supabase/migrations/`** — no hay nada de código
+  de aplicación en este salto, por eso el bootstrap no requiere
+  reconstruir contenedores.
+- Respaldo ya existente en la VM (de un despliegue anterior, sin
+  relación con este bootstrap): tag git `rollback-20261018174723` →
+  commit `b128e42`, más la imagen `smartrayco-frontend:rollback-pre-tecnico-asignado-b128e42`.
+  Ninguno de los dos se toca ni se necesita para este paso.
+
+**Procedimiento exacto (pendiente de autorización para ejecutarse — nada de esto corrió todavía):**
+
+```bash
+ssh root@192.168.55.201
+cd /opt/smartrayco
+
+# 1. Traer referencias remotas, sin tocar el working tree todavia.
+git fetch origin
+
+# 2. Confirmar que lo entrante es EXACTAMENTE lo esperado antes de aplicar nada.
+git log --oneline HEAD..38ef2d4fdd192c2119e7a4d85afb076c4cc31359
+#   debe mostrar solo:
+#     38ef2d4 Corrige el bloqueo de .last_rollback_tag y agrega rollback que reusa imagenes
+#     ba01049 Documenta el incidente de alcance del 18/10 y agrega despliegue seguro por commit
+git diff --stat HEAD 38ef2d4fdd192c2119e7a4d85afb076c4cc31359
+#   debe mostrar solo los 7 archivos listados arriba -- si aparece
+#   CUALQUIER otro archivo (src/, server/, supabase/migrations/, o algo
+#   no documentado aqui), DETENERSE y no continuar.
+
+# 3. Recien con lo anterior confirmado: avanzar al commit exacto (no a
+#    "origin/main" generico -- al SHA preciso que ya se reviso).
+git merge --ff-only 38ef2d4fdd192c2119e7a4d85afb076c4cc31359
+
+# 4. Permisos de ejecucion (git en Linux normalmente ya preserva el bit,
+#    pero confirmarlo no hace dano).
+chmod +x deploy/safe-update.sh deploy/rollback.sh
+
+# 5. Confirmar que no quedo nada pendiente -- .last_rollback_tag ya NO
+#    deberia aparecer (ahora esta en .gitignore).
+git status --short
+```
+
+Explícitamente **NO** incluye: `bash deploy/update.sh`, `docker compose
+... up -d --build`, ni ejecutar `safe-update.sh`/`rollback.sh`. Es
+únicamente avanzar el checkout de git a un commit ya revisado byte a
+byte, de herramientas de despliegue, sin código de aplicación.
+
+**Recuperación si algo saliera mal con este bootstrap puntual** (no hay
+Docker involucrado, así que no hay nada que reconstruir): `git reset
+--hard bdf3df2fcb1e7ea1233e694705816b97ba2941b4` vuelve la VM exactamente
+a donde está ahora.
 
 ## Uso previsto (cuando se autorice)
 
@@ -168,10 +259,13 @@ Escenarios cubiertos (11/11 PASS):
 Ejecutar: `bash scripts/tests/deploy-safe-update.test.sh`
 
 `scripts/tests/deploy-rollback.test.sh` — mismo enfoque aislado, para
-`deploy/rollback.sh` (4/4 PASS): rollback con árbol limpio (vuelve al
-commit del tag), rollback bloqueado por cambios locales sin commitear,
-tag/commit inexistente bloqueado con mensaje claro, y uso sin argumento
-leyendo el tag de `.last_rollback_tag`.
+`deploy/rollback.sh` (12/12 PASS): sin argumentos muestra ayuda sin
+modificar nada, `--help` igual, tag válido por un canal sin terminal
+interactiva y sin `DEPLOY_YES` se bloquea (reproduce el incidente real),
+opción desconocida y argumentos de más bloqueados, `--use-last-rollback`
+sin/con `.last_rollback_tag`, cambios locales sin commitear bloquean,
+tag/commit inexistente bloqueado, `DEPLOY_YES=1` aplica, y ambas ramas de
+la confirmación interactiva (`"si"`/`"no"` por stdin).
 
 Ejecutar: `bash scripts/tests/deploy-rollback.test.sh`
 
