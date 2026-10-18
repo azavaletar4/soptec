@@ -8,6 +8,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import { readInventoryReconciliation, RECONCILIATION_LABELS, normalizeMac, type ReconciliationRow, type ReconciliationClass } from '@/lib/inventoryReconciliation';
 import { needsReview, reviewReasonLabel, sortByReviewPriority } from '@/lib/inventoryReconciliationReview';
+import { isReconciliationResultCurrent, watchSessionIdentity } from '@/lib/reconciliationSessionGuard';
 import { UNIT_LOCATION_LABELS } from '@/lib/inventoryPresentation';
 
 const route = useRoute(), auth = useAuthStore();
@@ -41,16 +42,30 @@ const visible = computed(() => filtered.value.slice(page.value * 25, (page.value
 watch([query, category, classification, status], () => { page.value = 0; });
 async function load() {
   controller?.abort(); controller = new AbortController(); const request = ++generation;
-  const actor = auth.user?.id;
+  const requested = { generation: request, actorId: auth.user?.id, role: auth.role };
   rows.value = []; checkedAt.value = ''; error.value = ''; loading.value = true; page.value = 0;
   try {
     const result = await readInventoryReconciliation(supabase, auth.role, controller.signal);
-    if (request !== generation || actor !== auth.user?.id) return;
+    // Nunca aplicar una respuesta tardía: ni de una petición ya reemplazada
+    // (generation avanzó), ni si el usuario o el rol cambiaron mientras la
+    // lectura estaba en curso.
+    if (!isReconciliationResultCurrent(requested, { generation, actorId: auth.user?.id, role: auth.role })) return;
     rows.value = result.rows; counts.value = result.counts; checkedAt.value = new Date().toISOString();
   } catch (e) { if (request === generation) error.value = getErrorMessage(e, 'No se pudo leer la conciliación'); }
   finally { if (request === generation) loading.value = false; }
 }
-watch(() => [auth.user?.id, auth.role], () => { generation++; controller?.abort(); rows.value = []; checkedAt.value = ''; loading.value = false; error.value = 'La sesión cambió. Vuelve a abrir el reporte.'; }, { flush: 'sync' });
+// Causa raíz del bug reportado (cambiar de pestaña del navegador y volver
+// borraba el reporte): onAuthStateChange reemplaza auth.user por un objeto
+// NUEVO en cada TOKEN_REFRESHED —incluido el que Supabase dispara al
+// recuperar el foco de la pestaña—, aunque el id/rol sigan siendo los
+// mismos. watchSessionIdentity compara VALORES, no la referencia del
+// objeto, así que una renovación de sesión del mismo usuario y rol ya no
+// invalida el reporte; un cambio real de identidad o de permisos sí lo
+// hace, igual que antes.
+watchSessionIdentity(() => auth.user?.id, () => auth.role, () => {
+  generation++; controller?.abort(); rows.value = []; checkedAt.value = ''; loading.value = false;
+  error.value = 'La sesión cambió. Vuelve a abrir el reporte.';
+});
 onMounted(load);
 onBeforeUnmount(() => { generation++; controller?.abort(); });
 </script>
@@ -68,7 +83,10 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
       <p class="mt-2">Las coincidencias de serie se comparan con el serial de ONT del cierre, únicamente para la categoría ONUs / ONTs. Las MAC permiten detectar duplicados entre unidades.</p>
       <p class="mt-2">También se compara contra cierres de avería (Soporte) resueltos o cerrados que registraron el serial de la ONT en sitio. Esa coincidencia puede indicar un reemplazo de equipo o solo una verificación durante la visita — nunca se marca como instalación confirmada por sí sola; siempre queda para revisión.</p>
     </div>
-    <p v-if="error" role="alert" class="surface p-4 text-red-600 mb-4">{{ error }}. No se presenta un reporte parcial. Si falta acceso a una fuente, requiere revisión posterior; no se cambian permisos.</p>
+    <div v-if="error" role="alert" class="surface p-4 mb-4">
+      <p class="text-red-600">{{ error }}. No se presenta un reporte parcial. Si falta acceso a una fuente, requiere revisión posterior; no se cambian permisos.</p>
+      <button class="btn-secondary mt-3" :disabled="loading" @click="load">Reintentar</button>
+    </div>
     <p v-if="loading" class="py-8 text-center text-slate-500">Leyendo registros...</p>
     <template v-else-if="checkedAt">
       <div class="grid sm:grid-cols-3 gap-3 mb-4">
