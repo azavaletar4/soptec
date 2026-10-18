@@ -33,9 +33,14 @@ test('serie o MAC duplicada sin otro vínculo es tier 2, no tier 1', () => {
   for (const row of rows) { assert.equal(row.classification, 'possible'); assert.equal(reviewTier(row), 2); }
 });
 
-test('ubicación sin verificar es tier 3', () => {
+test('ubicación sin verificar (sin ningún vínculo) ya NO es pendiente de revisión', () => {
+  // Caso normal de un equipo "En almacén" sin ninguna evidencia contradictoria
+  // (problema reportado): reviewTier() sigue calculando 3 internamente, pero
+  // needsReview lo excluye — no debe ocupar espacio en "Necesitan revisión".
   const [row] = reconcileInventory([unit()], [], []);
-  assert.equal(row!.classification, 'unknown'); assert.equal(reviewTier(row!), 3);
+  assert.equal(row!.classification, 'unknown');
+  assert.equal(needsReview(row!), false);
+  assert.equal(reviewTier(row!), 3);
 });
 
 test('otros vínculos por confirmar (possible fuera de almacén/duplicado) son tier 4', () => {
@@ -66,7 +71,9 @@ test('el orden de prioridad nunca reclasifica ni cambia la lista completa, solo 
   assert.equal(sorted.length, rows.length);
   assert.deepEqual(new Set(sorted.map((r) => r.unit.id)), new Set(rows.map((r) => r.unit.id)));
   const reviewIds = sorted.filter(needsReview).map((r) => r.unit.id);
-  assert.deepEqual(reviewIds, ['tier1-almacen', 'tier2-duplicado', 'tier2-duplicado-b', 'tier3-unknown']);
-  assert.equal(sorted.at(-1)!.unit.id, 'coherente');
+  // 'tier3-unknown' (sin ningún vínculo) ya no es pendiente de revisión.
+  assert.deepEqual(reviewIds, ['tier1-almacen', 'tier2-duplicado', 'tier2-duplicado-b']);
+  // Los no-pendientes conservan su orden relativo original al final (orden estable).
+  assert.deepEqual(sorted.slice(-2).map((r) => r.unit.id), ['coherente', 'tier3-unknown']);
   assert.equal(JSON.stringify(units), before);
 });

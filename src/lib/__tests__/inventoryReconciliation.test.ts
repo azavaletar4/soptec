@@ -12,6 +12,8 @@ const order: ReconciliationInstallation = { id: 'order', client_id: 'client', co
 const closure: ReconciliationClosure = { id: 'closure', job_id: 'order', client_id: 'client', ont_serial: ' ont-001 ', created_at: '2026-10-17T20:00:00Z' };
 const ticket: ReconciliationTicket = { id: 'ticket', client_id: 'client', contract_id: 'contract', status: 'resolved' };
 const ticketClosure: ReconciliationClosure = { id: 'tclosure', job_id: 'ticket', client_id: 'client', ont_serial: ' ont-001 ', created_at: '2026-10-17T20:00:00Z' };
+const order2: ReconciliationInstallation = { id: 'order2', client_id: 'otro-cliente', contract_id: 'contrato2', status: 'completed' };
+const typoClosure: ReconciliationClosure = { id: 'closure-typo', job_id: 'order2', client_id: 'otro-cliente', ont_serial: 'ONT-002', created_at: '2026-10-18T20:00:00Z' };
 
 test('un cierre o una orden finalizada no convierten almacén en instalado', () => {
   assert.equal(reconcileInventory([unit()], [order], [])[0]!.classification, 'unknown');
@@ -52,6 +54,51 @@ test('contrato huérfano (sin cliente, orden ni avería) de un movimiento ya rev
   const withClient = unit({ status: 'in_stock', client_id: 'client', contract_id: 'contract' });
   assert.equal(reconcileInventory([withClient], [], [])[0]!.classification, 'possible');
   assert(!reconcileInventory([withClient], [], [])[0]!.reasons.some((r) => r.includes('remanente')));
+});
+test('equipo nuevo en almacén o devolución válida (sin ningún vínculo) no es pendiente', () => {
+  assert.equal(reconcileInventory([unit()], [], [])[0]!.classification, 'unknown');
+  // Devolución válida: client_id/contract_id/installation_id/ticket_id ya limpios, sin remanente.
+  const returned = unit({ status: 'in_stock', client_id: null, contract_id: null, installation_id: null, ticket_id: null });
+  assert.equal(reconcileInventory([returned], [], [])[0]!.classification, 'unknown');
+});
+test('serie similar a un cierre verificado: posible error de digitación (conservador, nunca prueba identidad)', () => {
+  const plain = unit(); // serial 'ONT-001', en almacén, sin ningún vínculo
+  const row = reconcileInventory([plain], [order2], [typoClosure])[0]!;
+  assert.equal(row.classification, 'possible');
+  assert(row.typoCandidate);
+  assert.equal(row.typoCandidate!.ambiguous, false);
+  assert.equal(row.typoCandidate!.source, 'installation');
+  assert.equal(row.typoCandidate!.unitSerial, 'ONT-001');
+  assert.equal(row.typoCandidate!.sourceSerial, 'ONT-002');
+  assert.equal(row.typoCandidate!.clientId, 'otro-cliente');
+  assert.equal(row.typoCandidate!.contractId, 'contrato2');
+  assert(row.reasons.some((r) => r.includes('error de digitación') && r.includes('ONT-002') && r.includes('ONT-001')));
+});
+test('series ambiguas (2+ candidatos empatados) no eligen una al azar, se marcan y se explican', () => {
+  const a = unit({ id: 'a', serial_number: 'ONT-001' });
+  const b = unit({ id: 'b', serial_number: 'ONT-003' }); // también a distancia 1 de 'ONT-002'
+  const rows = reconcileInventory([a, b], [order2], [typoClosure]);
+  for (const row of rows) {
+    assert.equal(row.classification, 'possible');
+    assert(row.typoCandidate);
+    assert.equal(row.typoCandidate!.ambiguous, true);
+    assert(row.reasons.some((r) => r.includes('más de una unidad') || r.includes('no se puede determinar')));
+  }
+});
+test('si ya existe coincidencia exacta en Inventario, no se sugiere ningún candidato por similitud', () => {
+  const exact = unit({ id: 'exact', serial_number: 'ONT-002' });
+  const near = unit({ id: 'near', serial_number: 'ONT-001' });
+  const rows = reconcileInventory([exact, near], [order2], [typoClosure]);
+  assert.equal(rows.find((r) => r.unit.id === 'near')!.typoCandidate, null);
+});
+test('la detección de posible error de digitación nunca aplica a TV Box ni mezcla categorías', () => {
+  const tv = unit({ product: { name: 'TV Box', is_serialized: true, inventory_categories: { slug: 'tvbox', name: 'TV Box' } } });
+  assert.equal(reconcileInventory([tv], [order2], [typoClosure])[0]!.typoCandidate, null);
+});
+test('series demasiado cortas quedan fuera de la comparación por similitud (límite determinista)', () => {
+  const shortUnit = unit({ serial_number: 'AB1' });
+  const shortClosure: ReconciliationClosure = { ...typoClosure, ont_serial: 'AB2' };
+  assert.equal(reconcileInventory([shortUnit], [order2], [shortClosure])[0]!.typoCandidate, null);
 });
 test('custodia se confirma únicamente con estado y técnico verificables', () => {
   const custody = unit({ status: 'with_technician', custody_technician_id: 'tech', technician: { id: 'tech', full_name: 'Técnico', email: null } });

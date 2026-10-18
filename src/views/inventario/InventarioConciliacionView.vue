@@ -22,9 +22,13 @@ const query = ref(''), category = ref(''), classification = ref(''), status = re
 const page = ref(0);
 let controller: AbortController | undefined, generation = 0;
 const reviewCount = computed(() => rows.value.filter(needsReview).length);
-const coherentCount = computed(() => rows.value.length - reviewCount.value);
+const coherentCount = computed(() => rows.value.filter(row => row.classification === 'installed' || row.classification === 'custody').length);
+// 'unknown' = sin ningún vínculo, duplicado ni coincidencia de serie (exacta o
+// por posible error de digitación) — el caso normal de un equipo en almacén,
+// nunca un pendiente (ver needsReview). Se muestra aparte, nunca oculto.
+const noEvidenceCount = computed(() => rows.value.filter(row => row.classification === 'unknown').length);
 const noReviewPending = computed(() => view.value === 'review' && reviewCount.value === 0);
-const classificationOptions = computed<ReconciliationClass[]>(() => view.value === 'review' ? ['possible', 'unknown'] : ['installed', 'custody', 'possible', 'unknown']);
+const classificationOptions = computed<ReconciliationClass[]>(() => view.value === 'review' ? ['possible'] : ['installed', 'custody', 'possible', 'unknown']);
 watch(view, () => { classification.value = ''; page.value = 0; });
 const categories = computed(() => [...new Map(rows.value.map(row => [row.category, row.unit.product?.inventory_categories?.name ?? 'Sin categoría'])).entries()]);
 const scoped = computed(() => view.value === 'review' ? rows.value.filter(needsReview) : rows.value);
@@ -94,7 +98,7 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
         <div class="surface p-4"><strong class="text-2xl">{{ rows.length }}</strong><p class="text-xs text-slate-500">Total registrado (serializadas)</p></div>
         <div class="surface p-4"><strong class="text-2xl text-sky-700">{{ coherentCount }}</strong><p class="text-xs text-slate-500">Documentalmente coherentes (instalado/custodia)</p></div>
       </div>
-      <p class="text-xs text-slate-500 mb-3">{{ formatPeruDateTime(checkedAt) }} (Perú) · Lectura de {{ counts.installations }} altas y {{ counts.closures }} cierres de alta, {{ counts.tickets }} averías y {{ counts.ticketClosures }} cierres de avería con serial.</p>
+      <p class="text-xs text-slate-500 mb-3">{{ formatPeruDateTime(checkedAt) }} (Perú) · Lectura de {{ counts.installations }} altas y {{ counts.closures }} cierres de alta, {{ counts.tickets }} averías y {{ counts.ticketClosures }} cierres de avería con serial. {{ noEvidenceCount }} equipos sin ningún vínculo ni coincidencia (p. ej. en almacén sin novedad) no se cuentan como pendientes — siguen visibles en "Todo el inventario".</p>
       <div class="flex gap-2 mb-4" role="tablist">
         <button type="button" role="tab" :aria-selected="view === 'review'" class="btn-secondary" :class="view === 'review' ? 'bg-amber-100 text-amber-800 border-amber-300' : ''" @click="view = 'review'">Necesitan revisión ({{ reviewCount }})</button>
         <button type="button" role="tab" :aria-selected="view === 'all'" class="btn-secondary" :class="view === 'all' ? 'bg-sky-50 text-sky-700 border-sky-300' : ''" @click="view = 'all'">Todo el inventario ({{ rows.length }})</button>
@@ -114,6 +118,7 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
           </div>
           <p class="text-xs text-slate-500 mt-2">Estado registrado: {{ UNIT_LOCATION_LABELS[row.unit.status] || row.unit.status }}</p>
           <p v-if="needsReview(row)" class="text-sm font-medium text-amber-800 mt-2">Motivo de revisión: {{ reviewReasonLabel(row) }}</p>
+          <p v-else-if="row.classification === 'unknown'" class="text-sm text-slate-500 mt-2">Sin vínculos ni coincidencias registradas — no requiere revisión.</p>
           <p v-else class="text-sm text-sky-700 mt-2">Sin alertas — vínculo documental coherente.</p>
           <ul class="text-xs text-slate-400 mt-1 list-disc pl-5"><li v-for="reason in row.reasons" :key="reason">{{ reason }}</li></ul>
           <div class="text-xs mt-3 flex flex-wrap gap-3">
@@ -123,6 +128,11 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
             <router-link v-if="row.ticket && row.ticket.client_id === row.unit.client_id" :to="`/soporte/${row.ticket.id}`" class="text-sky-700 underline">Avería vinculada: {{ row.ticket.id }}</router-link>
             <span v-else-if="row.unit.ticket_id" class="text-amber-700">Avería vinculada sin confirmar: cliente/contrato no coincide — revisar manualmente.</span>
             <span v-if="row.unit.custody_technician_id && row.unit.technician?.id === row.unit.custody_technician_id">Técnico vinculado: {{ row.unit.technician.full_name || row.unit.technician.email || 'Nombre no disponible' }}</span>
+            <template v-if="row.typoCandidate">
+              <router-link :to="`/clientes/${row.typoCandidate.clientId}`" class="text-amber-700 underline">Cliente del cierre con serie similar: ver ficha</router-link>
+              <router-link v-if="row.typoCandidate.source === 'installation'" :to="`/soporte/instalaciones/${row.typoCandidate.jobId}`" class="text-amber-700 underline">Alta del cierre: {{ row.typoCandidate.jobId }}</router-link>
+              <router-link v-else :to="`/soporte/${row.typoCandidate.jobId}`" class="text-amber-700 underline">Avería del cierre: {{ row.typoCandidate.jobId }}</router-link>
+            </template>
           </div>
         </article>
         <p v-if="!filtered.length && noReviewPending" class="surface p-6 text-center text-slate-500">No hay equipos pendientes de revisión en esta lectura.</p>

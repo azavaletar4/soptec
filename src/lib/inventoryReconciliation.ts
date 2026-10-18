@@ -17,6 +17,20 @@ export interface ReconciliationUnit {
 export interface ReconciliationInstallation { id: string; client_id: string; contract_id: string | null; status: string }
 export interface ReconciliationTicket { id: string; client_id: string; contract_id: string | null; status: string }
 export interface ReconciliationClosure { id: string; job_id: string; client_id: string | null; ont_serial: string | null; created_at: string }
+/**
+ * Candidato conservador de error de digitación: una serie registrada en un
+ * cierre de Alta/Avería verificado (orden completada/resuelta, mismo
+ * cliente) que NO coincide exacto con ninguna unidad de Inventario, pero
+ * difiere en exactamente 1 carácter de la serie de ESTA unidad. Nunca
+ * prueba que sea el mismo equipo — solo señala la diferencia encontrada
+ * para que administración lo verifique manualmente.
+ */
+export interface SerialTypoCandidate {
+  source: 'installation' | 'ticket'; sourceSerial: string; unitSerial: string;
+  clientId: string; contractId: string | null; jobId: string;
+  /** true si 2+ unidades distintas empatan a distancia 1 de la misma serie del cierre — no se elige una al azar. */
+  ambiguous: boolean;
+}
 export interface ReconciliationRow {
   unit: ReconciliationUnit; classification: ReconciliationClass; reasons: string[];
   category: string; installation: ReconciliationInstallation | null; serialMatches: number;
@@ -24,6 +38,8 @@ export interface ReconciliationRow {
   ticketSerialMatches: number;
   /** inventory_units.ticket_id — vinculo directo verificado por FK (stage/return de Fase 164), no una coincidencia por serie. Solo vigente mientras el equipo siga assigned/pending_approval (el trigger lo limpia al retirarlo). */
   ticket: ReconciliationTicket | null;
+  /** Ver SerialTypoCandidate — null si no hay ningún cierre verificado a distancia 1 de la serie de esta unidad. */
+  typoCandidate: SerialTypoCandidate | null;
 }
 export const normalizeSerial = (value: string | null) => (value ?? '').trim().toUpperCase();
 export function normalizeMac(value: string | null) {
@@ -32,6 +48,26 @@ export function normalizeMac(value: string | null) {
 }
 export function equipmentCategory(unit: ReconciliationUnit) {
   return unit.product?.inventory_categories?.slug ?? 'sin-categoria';
+}
+const MIN_SERIAL_LENGTH_FOR_TYPO_CHECK = 6;
+/** true si `a` y `b` difieren en exactamente 1 carácter (sustitución, o una inserción/eliminación) — distancia de edición acotada a 1, determinista y barata; nunca una similitud "aproximada" sin límite. */
+function isOneCharApart(a: string, b: string): boolean {
+  if (a === b) return false;
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  if (la === lb) {
+    let diff = 0;
+    for (let i = 0; i < la; i++) if (a[i] !== b[i]) { diff++; if (diff > 1) return false; }
+    return diff === 1;
+  }
+  const [short, long] = la < lb ? [a, b] : [b, a];
+  let i = 0, j = 0, skipped = false;
+  while (i < short.length && j < long.length) {
+    if (short[i] === long[j]) { i++; j++; continue; }
+    if (skipped) return false;
+    skipped = true; j++;
+  }
+  return true;
 }
 
 /** Evidencia documental; nunca escribe ni convierte un cierre histórico en ubicación vigente. */
@@ -66,6 +102,47 @@ export function reconcileInventory(
     if (!serial || !ticket || !['resolved', 'closed'].includes(ticket.status) || ticket.client_id !== closure.client_id) continue;
     ticketClosureSerials.set(serial, [...(ticketClosureSerials.get(serial) ?? []), closure]);
   }
+  // Detección conservadora de posibles errores de digitación: solo para ONT
+  // (nunca mezclar categorías — una serie de TV Box nunca se compara contra
+  // una serie de ONT), solo cierres ya verificados (orden completada/resuelta,
+  // mismo cliente) cuya serie NO tiene ninguna coincidencia exacta en
+  // Inventario, y solo contra unidades a distancia de edición exactamente 1.
+  // Nunca se elige un candidato al azar entre varios empatados — se marca
+  // ambiguo y se explica, nunca se prueba que sea el mismo equipo.
+  const onuUnits = units.filter(u => equipmentCategory(u) === 'onu');
+  const onuSerials = new Set(onuUnits.map(u => normalizeSerial(u.serial_number)).filter(s => s.length >= MIN_SERIAL_LENGTH_FOR_TYPO_CHECK));
+  const verifiedSources: { serial: string; source: 'installation' | 'ticket'; clientId: string; contractId: string | null; jobId: string }[] = [];
+  for (const closure of closures) {
+    const order = orders.get(closure.job_id);
+    const serial = normalizeSerial(closure.ont_serial);
+    if (serial.length < MIN_SERIAL_LENGTH_FOR_TYPO_CHECK || order?.status !== 'completed' || order.client_id !== closure.client_id || onuSerials.has(serial)) continue;
+    verifiedSources.push({ serial, source: 'installation', clientId: closure.client_id!, contractId: order.contract_id, jobId: closure.job_id });
+  }
+  for (const closure of ticketClosures) {
+    const ticket = ticketsById.get(closure.job_id);
+    const serial = normalizeSerial(closure.ont_serial);
+    if (serial.length < MIN_SERIAL_LENGTH_FOR_TYPO_CHECK || !ticket || !['resolved', 'closed'].includes(ticket.status) || ticket.client_id !== closure.client_id || onuSerials.has(serial)) continue;
+    verifiedSources.push({ serial, source: 'ticket', clientId: closure.client_id!, contractId: ticket.contract_id, jobId: closure.job_id });
+  }
+  const typoCandidatesByUnit = new Map<string, SerialTypoCandidate>();
+  for (const src of verifiedSources) {
+    const matchedUnits = onuUnits.filter(u => {
+      const s = normalizeSerial(u.serial_number);
+      return s.length >= MIN_SERIAL_LENGTH_FOR_TYPO_CHECK && isOneCharApart(src.serial, s);
+    });
+    if (!matchedUnits.length) continue;
+    const ambiguous = matchedUnits.length > 1;
+    for (const u of matchedUnits) {
+      // Si la unidad ya tiene un candidato de OTRO cierre, tambien queda ambigua: no se puede
+      // asumir cual de los dos cierres (si alguno) explica realmente esta unidad.
+      const existing = typoCandidatesByUnit.get(u.id);
+      typoCandidatesByUnit.set(u.id, {
+        source: src.source, sourceSerial: src.serial, unitSerial: normalizeSerial(u.serial_number),
+        clientId: src.clientId, contractId: src.contractId, jobId: src.jobId,
+        ambiguous: ambiguous || !!existing,
+      });
+    }
+  }
   return units.map(unit => {
     const reasons: string[] = [];
     const serial = normalizeSerial(unit.serial_number), mac = normalizeMac(unit.mac_address);
@@ -93,6 +170,7 @@ export function reconcileInventory(
     const isOnt = equipmentCategory(unit) === 'onu';
     const serialMatches = isOnt ? closureSerials.get(serial)?.length ?? 0 : 0;
     const ticketSerialMatches = isOnt ? ticketClosureSerials.get(serial)?.length ?? 0 : 0;
+    const typoCandidate = typoCandidatesByUnit.get(unit.id) ?? null;
     let classification: ReconciliationClass = 'unknown';
     if (duplicate) reasons.push('Serie o MAC repetida en más de una unidad; identidad ambigua.');
     if (unit.status === 'assigned' && clientVerified && contractVerified && orderVerified && !unit.custody_technician_id && !duplicate) {
@@ -100,16 +178,22 @@ export function reconcileInventory(
     } else if (['with_technician', 'pending_return'].includes(unit.status) && unit.custody_technician_id && unit.technician?.id === unit.custody_technician_id && !unit.client_id && !unit.contract_id && !duplicate) {
       classification = 'custody'; reasons.push('Custodia vigente con técnico vinculado explícitamente.');
     } else {
-      if (duplicate || serialMatches || ticketSerialMatches || unit.client_id || unit.installation_id || unit.ticket_id || unit.custody_technician_id || unit.status === 'assigned' || orphanContract) classification = 'possible';
+      if (duplicate || serialMatches || ticketSerialMatches || unit.client_id || unit.installation_id || unit.ticket_id || unit.custody_technician_id || unit.status === 'assigned' || orphanContract || typoCandidate) classification = 'possible';
       if (serialMatches) reasons.push(`Serie exacta en ${serialMatches} cierre(s) de instalación finalizada. Evidencia histórica, no ubicación actual.`);
       if (ticketSerialMatches) reasons.push(`Serie exacta en ${ticketSerialMatches} cierre(s) de avería resuelta o cerrada. Puede ser un reemplazo de equipo o una verificación en sitio; no confirma por sí sola que esta unidad quedó instalada — revisar manualmente.`);
       if (unit.ticket_id && !ticketVerified) reasons.push('El equipo señala una Avería cuyo cliente o contrato registrado no coincide; vínculo documental sin confirmar — revisar manualmente.');
       else if (unit.ticket_id && unit.status === 'pending_approval') reasons.push('Equipo entrante de una Avería, pendiente de aprobación administrativa; no es instalación confirmada todavía.');
       if (orphanContract) reasons.push(`Tiene el contrato ${unit.contract?.contract_number || unit.contract_id} registrado pero ningún cliente vinculado — probablemente un dato remanente de un movimiento anterior ya revertido (ver estado registrado e historial del equipo); no indica que esté instalado. Revisar y limpiar el vínculo.`);
-      else if (unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id) reasons.push('Revisar coherencia de estado y vínculos registrados; no confirma instalación ni custodia actual.');
+      if (typoCandidate) {
+        const origen = typoCandidate.source === 'installation' ? 'una Alta finalizada' : 'una Avería resuelta/cerrada';
+        reasons.push(typoCandidate.ambiguous
+          ? `Esta unidad tiene la serie ${typoCandidate.unitSerial}; ${origen} registró la serie ${typoCandidate.sourceSerial} (cliente/contrato ${typoCandidate.contractId ?? 'sin contrato'}), que difiere en 1 carácter — pero hay más de una unidad igual de cercana, no se puede determinar cuál sin revisión manual. No es evidencia de que sea el mismo equipo.`
+          : `Esta unidad tiene la serie ${typoCandidate.unitSerial}; ${origen} registró la serie ${typoCandidate.sourceSerial} (cliente vinculado al cierre, contrato ${typoCandidate.contractId ?? 'sin contrato'}), que difiere en exactamente 1 carácter — posible error de digitación en cualquiera de los dos registros. No confirma que sea el mismo equipo; verificar manualmente antes de corregir cualquier dato.`);
+      }
+      if (!orphanContract && (unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id)) reasons.push('Revisar coherencia de estado y vínculos registrados; no confirma instalación ni custodia actual.');
       if (!reasons.length) reasons.push('Sin evidencia suficiente de ubicación actual.');
     }
-    return { unit, classification, reasons, category: equipmentCategory(unit), installation, serialMatches, ticketSerialMatches, ticket };
+    return { unit, classification, reasons, category: equipmentCategory(unit), installation, serialMatches, ticketSerialMatches, ticket, typoCandidate };
   });
 }
 

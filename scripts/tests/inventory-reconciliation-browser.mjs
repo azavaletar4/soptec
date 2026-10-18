@@ -98,26 +98,29 @@ try {
  assert(await click('Cerrar'));await noWrites();
  assert(await click('Revisar diferencias'));
  // Por defecto solo "Necesitan revisión" (regla 5): de las 4 unidades del fixture,
- // solo SER-MATCH (posible, serie coincide con un cierre) y la TV Box (sin
- // verificar) deben aparecer; la asignada y la de custodia quedan afuera.
- await until('document.body.innerText.includes("2 resultados")');
+ // solo SER-MATCH (posible, serie coincide con un cierre) debe aparecer — la TV
+ // Box sin ningún vínculo ("Ubicación sin verificar") ya NO es pendiente (caso
+ // real reportado: un equipo en almacén sin evidencia contradictoria no debe
+ // ocupar la cola de revisión); la asignada y la de custodia quedan afuera.
+ await until('document.body.innerText.includes("1 resultados")');
  let report=await body();
- assert(report.includes('Necesitan revisión (2)'));assert(report.includes('Todo el inventario (4)'));
+ assert(report.includes('Necesitan revisión (1)'));assert(report.includes('Todo el inventario (4)'));
  assert(report.includes('Pendientes de revisión'));assert(report.includes('Total registrado'));assert(report.includes('Documentalmente coherentes'));
- for(const label of ['Posible coincidencia que requiere revisión','Ubicación sin verificar'])assert(report.includes(label));
- for(const label of ['Instalación confirmada','Custodia confirmada'])assert(!report.includes(label));
+ assert(report.includes('Posible coincidencia que requiere revisión'));
+ for(const label of ['Instalación confirmada','Custodia confirmada','Ubicación sin verificar'])assert(!report.includes(label));
  assert(report.includes('Motivo de revisión: En almacén con indicios de estar instalado'));
- assert(report.includes('Motivo de revisión: Ubicación sin verificar'));
  assert(report.includes('Serie exacta en 1 cierre(s)'));
  let badges=await evaluate('Array.from(document.querySelectorAll("article .badge")).map(x=>x.textContent.trim())');
- assert.equal(badges.length,2);assert.equal(new Set(badges).size,2);
+ assert.equal(badges.length,1);assert.equal(new Set(badges).size,1);
 
- // Ninguna unidad desaparece: la segunda vista sigue dando acceso a las 4.
+ // Ninguna unidad desaparece: la segunda vista sigue dando acceso a las 4,
+ // incluida la TV Box sin novedad (ya no pendiente, pero tampoco oculta).
  assert(await click('Todo el inventario'));
  await until('document.body.innerText.includes("4 resultados")');
  report=await body();
  for(const label of ['Instalación confirmada','Custodia confirmada','Posible coincidencia que requiere revisión','Ubicación sin verificar'])assert(report.includes(label));
  assert(report.includes('Sin alertas — vínculo documental coherente.'));
+ assert(report.includes('Sin vínculos ni coincidencias registradas — no requiere revisión.'));
  badges=await evaluate('Array.from(document.querySelectorAll("article .badge")).map(x=>x.textContent.trim())');
  assert.equal(badges.length,4);assert.equal(new Set(badges).size,4);
  await noWrites();
@@ -133,7 +136,7 @@ try {
  assert(await evaluate('document.documentElement.scrollWidth<=document.documentElement.clientWidth'));
  const capture=async name=>{const metrics=await c('Page.getLayoutMetrics');const screenshot=await c('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:metrics.cssContentSize.width,height:metrics.cssContentSize.height,scale:1}});await writeFile(name,Buffer.from(screenshot.data,'base64'));};
  await capture('docs/INVENTARIO-CONCILIACION-TODO-LOCAL.png');
- assert(await click('Necesitan revisión'));await until('document.body.innerText.includes("2 resultados")');
+ assert(await click('Necesitan revisión'));await until('document.body.innerText.includes("1 resultados")');
  await capture('docs/INVENTARIO-CONCILIACION-REVISION-LOCAL.png');
  await c('Emulation.setDeviceMetricsOverride',{width:0,height:0,deviceScaleFactor:0,mobile:false});
 
@@ -142,8 +145,8 @@ try {
  assert(await click('SER-MATCH'));await until('document.body.innerText.includes("Historial del equipo")');
  assert(await click('Cerrar'));assert(await click('Volver a Inventario'));
  // Vuelve a entrar (montaje nuevo): la vista predeterminada vuelve a ser "Necesitan revisión".
- await until('document.body.innerText.includes("2 resultados")');
- assert((await body()).includes('Necesitan revisión (2)'));
+ await until('document.body.innerText.includes("1 resultados")');
+ assert((await body()).includes('Necesitan revisión (1)'));
  await noWrites();
 
  await evaluate('window.__denyClosures=true');assert(await click('Actualizar lectura'));
