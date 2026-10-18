@@ -2,7 +2,10 @@ import { computed } from 'vue';
 import { useTicketsStore } from '@/stores/tickets';
 import { useInstallationsStore } from '@/stores/installations';
 import { useRoutinesStore } from '@/stores/routines';
+import { ACTIVE_STATUS } from '@/lib/jobStatus';
 import type { Installation, JobType, Routine, Ticket, TicketPriority } from '@/types/domain';
+
+export { ACTIVE_STATUS };
 
 /**
  * Cruza Tickets (averias) + Installations (altas) + Routines en una sola
@@ -32,12 +35,6 @@ export interface UnifiedJob {
   updatedAt: string;
   raw: Ticket | Installation | Routine;
 }
-
-export const ACTIVE_STATUS: Record<JobType, string[]> = {
-  ticket: ['open', 'in_progress', 'rescheduled'],
-  installation: ['pending', 'scheduled', 'in_progress'],
-  routine: ['pending', 'scheduled', 'in_progress'],
-};
 
 // Traduccion de estado para "Operaciones de Hoy"/"Historico de Atendidos"
 // (Fase 107/108) — los 3 tipos juntos solo usan 9 valores en total y

@@ -5,7 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import { teardropIcon } from '@/views/mapa/mapIcons';
 import { formatElapsedTime } from '@/lib/elapsedTime';
 import { waLink, telLink } from '@/lib/phone';
-import { ACTIVE_STATUS, type UnifiedJob } from '@/composables/useUnifiedJobs';
+import { type UnifiedJob } from '@/composables/useUnifiedJobs';
+import { isJobCompletedToday, resolveTechDispatchStatus, type TechDispatchStatus } from '@/lib/technicianDispatchStatus';
 import type { AsistenciaRegistro, JobType, StaffProfile } from '@/types/domain';
 
 // Panel estilo despacho de campo (TOA-like): una tarjeta por tecnico con su
@@ -13,15 +14,17 @@ import type { AsistenciaRegistro, JobType, StaffProfile } from '@/types/domain';
 // Fase 126 — antes solo miraba tickets, asi que un tecnico "en atencion" de
 // una Alta o Rutina se veia incorrectamente como "Disponible").
 //
-// "En camino" no es un estado real en las tablas (no hay un paso de
-// "aceptar" separado de "iniciar") — se aproxima como "tiene una orden
-// asignada que todavia no inicio" (ACTIVE_STATUS[jobType] sin 'in_progress':
-// ticket 'open', installation/routine 'pending'/'scheduled'). Si tiene una
-// 'in_progress', eso manda sobre cualquier otra activa.
+// La decision de que estado mostrar (y que orden asociarle) vive en
+// resolveTechDispatchStatus (src/lib/technicianDispatchStatus.ts, con prueba
+// de regresion en __tests__) — corregido por el caso real de Jairo Bernabe /
+// RUT-2026-00071 (2026-10-18): asignar una orden NO la inicia (sigue sin
+// 'in_progress'), asi que esta tarjeta ya no le dice "En camino" (como si el
+// tecnico ya se hubiera desplazado) — le dice "Asignado" hasta que el propio
+// tecnico la inicie de verdad.
 //
 // Fase 135: "En Almuerzo" (Control de Asistencia) manda sobre CUALQUIER
 // orden activa — antes esta tarjeta solo miraba las ordenes asignadas y
-// seguia mostrando "en camino"/"en atención" aunque el tecnico ya hubiera
+// seguia mostrando "asignado"/"en atención" aunque el tecnico ya hubiera
 // marcado "Iniciar Almuerzo" en la App de Campo.
 const props = withDefaults(
   defineProps<{
@@ -54,21 +57,11 @@ const emit = defineEmits<{
   openJob: [job: UnifiedJob];
 }>();
 
-type TechStatus = 'en_almuerzo' | 'en_atencion' | 'en_camino' | 'disponible';
-
-function isNotStarted(job: UnifiedJob): boolean {
-  return ACTIVE_STATUS[job.jobType].includes(job.status) && job.status !== 'in_progress';
-}
-function isCompletedToday(job: UnifiedJob): boolean {
-  if (job.jobType === 'ticket') return job.status === 'resolved' || job.status === 'closed';
-  return job.status === 'completed';
-}
-
 interface TechCard {
   id: string;
   name: string;
   phone: string | null;
-  status: TechStatus;
+  status: TechDispatchStatus;
   job: UnifiedJob | null;
   elapsedMinutes: number | null;
   resolvedToday: number;
@@ -78,10 +71,10 @@ interface TechCard {
   lastPingAt: string | null;
 }
 
-const STATUS_META: Record<TechStatus, { dot: string; label: string }> = {
+const STATUS_META: Record<TechDispatchStatus, { dot: string; label: string }> = {
   en_almuerzo: { dot: 'bg-amber-500', label: '🍲 En Almuerzo' },
   en_atencion: { dot: 'bg-green-500', label: 'En atención' },
-  en_camino: { dot: 'bg-sky-500', label: 'En camino' },
+  asignado: { dot: 'bg-sky-500', label: 'Asignado' },
   disponible: { dot: 'bg-slate-300', label: 'Disponible' },
 };
 
@@ -125,28 +118,18 @@ const cards = computed<TechCard[]>(() =>
     };
     const crew = crewByTech.value.get(tech.id);
     const assigned = props.jobs.filter((j) => j.assignedId === tech.id || crew?.has(`${j.jobType}:${j.id}`));
-    const resolvedToday = assigned.filter((j) => isCompletedToday(j) && isToday(j.finishedAt, props.now)).length;
-    // PRIORIDAD 1 (Fase 135): "En Almuerzo" manda sobre cualquier orden
-    // activa — un tecnico que marco "Iniciar Almuerzo" en la App de Campo
-    // no deberia seguir viendose "en camino"/"en atención" aqui.
+    const resolvedToday = assigned.filter((j) => isJobCompletedToday(j) && isToday(j.finishedAt, props.now)).length;
     const asistenciaHoy = asistenciaByTech.value.get(tech.id);
-    if (asistenciaHoy?.estado === 'En Almuerzo') {
-      const elapsedMinutes = asistenciaHoy.inicio_almuerzo
+    const { status, job } = resolveTechDispatchStatus(asistenciaHoy?.estado === 'En Almuerzo', assigned);
+    let elapsedMinutes: number | null = null;
+    if (status === 'en_almuerzo') {
+      elapsedMinutes = asistenciaHoy?.inicio_almuerzo
         ? Math.max(0, props.now - new Date(asistenciaHoy.inicio_almuerzo).getTime()) / 60000
         : null;
-      return { id: tech.id, name, phone: tech.phone, status: 'en_almuerzo', job: null, elapsedMinutes, resolvedToday, ...telemetry };
+    } else if (status === 'en_atencion' && job) {
+      elapsedMinutes = Math.max(0, props.now - new Date(job.updatedAt).getTime()) / 60000;
     }
-    // PRIORIDAD 2: orden en progreso ("en atención") o ya asignada pero sin
-    // iniciar todavia ("en camino").
-    const inProgress = assigned.find((j) => j.status === 'in_progress');
-    if (inProgress) {
-      const elapsedMinutes = Math.max(0, props.now - new Date(inProgress.updatedAt).getTime()) / 60000;
-      return { id: tech.id, name, phone: tech.phone, status: 'en_atencion', job: inProgress, elapsedMinutes, resolvedToday, ...telemetry };
-    }
-    const notStarted = assigned.find((j) => isNotStarted(j));
-    if (notStarted) return { id: tech.id, name, phone: tech.phone, status: 'en_camino', job: notStarted, elapsedMinutes: null, resolvedToday, ...telemetry };
-    // PRIORIDAD 3: sin almuerzo y sin ninguna orden activa.
-    return { id: tech.id, name, phone: tech.phone, status: 'disponible', job: null, elapsedMinutes: null, resolvedToday, ...telemetry };
+    return { id: tech.id, name, phone: tech.phone, status, job, elapsedMinutes, resolvedToday, ...telemetry };
   }),
 );
 
@@ -271,8 +254,8 @@ onUnmounted(destroyMap);
             <span :class="timerClass(card)">⏱️ {{ formatElapsedTime(card.job.updatedAt, now) }}</span>
             <span v-if="card.elapsedMinutes! > slaThresholdMinutes" class="ml-0.5" title="Demora sobre el umbral configurado">⚠️</span>
           </template>
-          <template v-else-if="card.status === 'en_camino' && card.job">
-            <span class="font-mono">{{ card.job.number ?? card.job.label }}</span> · en camino
+          <template v-else-if="card.status === 'asignado' && card.job">
+            <span class="font-mono">{{ card.job.number ?? card.job.label }}</span> · asignado, sin iniciar
           </template>
           <template v-else>
             <span class="badge text-[10px] bg-green-500/15 text-green-700">✓ {{ STATUS_META.disponible.label }}</span>
