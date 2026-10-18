@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import { matchesEquipmentFilter, UNIT_LOCATION_LABELS } from '@/lib/inventoryPresentation';
 import { useRoute, useRouter } from 'vue-router';
@@ -43,6 +43,10 @@ const canDelete = computed(() => auth.isSuperAdmin);
 
 const productId = computed(() => route.params.id as string);
 const product = computed(() => inventoryStore.products.find((p) => p.id === productId.value));
+const detailLoading = ref(true);
+const detailError = ref<string | null>(null);
+const productMissing = ref(false);
+let detailEpoch = 0;
 
 const movements = ref<InventoryMovement[]>([]);
 const movementsLoading = ref(true);
@@ -63,11 +67,13 @@ const MOVEMENT_CLASS: Record<InventoryMovementType, string> = {
 const isLowStock = computed(() => !!product.value && product.value.current_stock <= product.value.min_stock);
 
 async function loadMovements() {
+  const epoch = detailEpoch, id = productId.value;
   movementsLoading.value = true;
   try {
-    movements.value = await inventoryStore.fetchMovements(productId.value);
+    const result = await inventoryStore.fetchMovements(id);
+    if (epoch === detailEpoch && id === productId.value) movements.value = result;
   } finally {
-    movementsLoading.value = false;
+    if (epoch === detailEpoch) movementsLoading.value = false;
   }
 }
 
@@ -166,12 +172,15 @@ const visibleUnits = computed(() => sortedUnits.value.slice(equipmentPage.value 
 const unitsError = ref<string | null>(null);
 
 async function loadUnits() {
+  const epoch = detailEpoch, id = productId.value;
   unitsLoading.value = true;
   try {
-    units.value = await inventoryUnitsStore.fetchUnitsByProduct(productId.value, { includeCustodyProfile: true });
+    const result = await inventoryUnitsStore.fetchUnitsByProduct(id, { includeCustodyProfile: true });
+    if (epoch !== detailEpoch || id !== productId.value) return;
+    units.value = result;
     equipmentPage.value = Math.min(equipmentPage.value, Math.max(0, Math.ceil(sortedUnits.value.length / 25) - 1));
   } finally {
-    unitsLoading.value = false;
+    if (epoch === detailEpoch) unitsLoading.value = false;
   }
 }
 
@@ -493,17 +502,34 @@ function runUnitAction(action: (unit: InventoryUnit) => void, unit: InventoryUni
   action(unit);
 }
 
-onMounted(async () => {
-  await inventoryStore.fetchProduct(productId.value);
-  if (!inventoryStore.categories.length) await inventoryStore.fetchCategories();
-  await catalogs.fetchStaff();
-  if (product.value?.is_serialized) {
-    await loadUnits();
-    await openLinkedEquipment();
-  } else {
-    await loadMovements();
+async function loadDetail() {
+  const epoch = ++detailEpoch, id = productId.value;
+  detailLoading.value = true;
+  detailError.value = null;
+  productMissing.value = false;
+  try {
+    const loaded = await inventoryStore.fetchProduct(id);
+    if (epoch !== detailEpoch) return;
+    if (!loaded) { productMissing.value = true; return; }
+    await Promise.all([
+      inventoryStore.categories.length ? Promise.resolve() : inventoryStore.fetchCategories(),
+      catalogs.fetchStaff(),
+      loaded.is_serialized ? loadUnits() : loadMovements(),
+    ]);
+    if (epoch === detailEpoch && loaded.is_serialized) await openLinkedEquipment();
+  } catch {
+    if (epoch === detailEpoch) detailError.value = 'No se pudieron actualizar los datos. Comprueba tu conexión y sesión e inténtalo de nuevo.';
+  } finally {
+    if (epoch === detailEpoch) detailLoading.value = false;
   }
-});
+}
+watch([productId, () => auth.user?.id, () => auth.role], () => {
+  units.value = []; movements.value = [];
+  showHistoryModal.value = false; historyEvents.value = [];
+  closeActionsMenu();
+  void loadDetail();
+}, { immediate: true, flush: 'sync' });
+onBeforeUnmount(() => { detailEpoch++; });
 
 // ---- Mover a otro álbum (Fase 44) — solo cambia category_id, no toca inventory_units ni clientes ----
 const showMoveMenu = ref(false);
@@ -604,8 +630,18 @@ async function handleDeleteProduct() {
   <AppLayout>
     <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push(typeof route.query.returnTo === 'string' && /^\/inventario(?:\/custodia|\/conciliacion|\/album\/[a-z0-9_-]+)?(?:\?|$)/.test(route.query.returnTo) ? route.query.returnTo : '/inventario')">← Volver a Inventario</button>
 
-    <div v-if="!product" class="text-slate-500">Producto no encontrado.</div>
-    <template v-else>
+    <p v-if="detailLoading" class="text-slate-500" role="status">Cargando datos del producto...</p>
+    <div v-if="detailError" class="surface p-4 mb-4" role="alert">
+      <p>{{ detailError }}</p>
+      <p v-if="product" class="text-sm text-slate-500">Se muestran los últimos datos cargados.</p>
+      <button class="btn-secondary mt-2" @click="loadDetail">Reintentar</button>
+    </div>
+    <div v-if="!detailLoading && !detailError && productMissing" class="text-slate-500">Producto no encontrado o no disponible para tu sesión.</div>
+    <div v-if="!product && !detailLoading && !detailError && !productMissing" class="surface p-4" role="status">
+      <p>Los datos del producto no están disponibles temporalmente.</p>
+      <button class="btn-secondary mt-2" @click="loadDetail">Reintentar</button>
+    </div>
+    <template v-if="product">
       <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 class="text-2xl font-semibold mb-1">

@@ -22,7 +22,8 @@ export const useInventoryStore = defineStore('inventory', () => {
   const albums = ref<InventoryAlbumSummary[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
-  watch(() => [auth.user?.id, auth.role], () => {
+  // Comparar los valores, no un array nuevo en cada refresco del objeto User.
+  watch([() => auth.user?.id, () => auth.role], () => {
     epoch++; products.value = []; categories.value = []; albums.value = []; error.value = null;
   }, { flush: 'sync' });
   function snapshot() {
@@ -54,9 +55,13 @@ export const useInventoryStore = defineStore('inventory', () => {
   /** Consulta puntual para abrir resultados ajenos al álbum cargado. */
   async function fetchProduct(id: string) {
     const stamp = snapshot();
-    const { data, error: err } = await supabase.from('inventory_products').select(PRODUCT_SELECT).eq('id', id).single();
+    const { data, error: err } = await supabase.from('inventory_products').select(PRODUCT_SELECT).eq('id', id).maybeSingle();
     if (err) throw err;
     verify(stamp);
+    if (!data) {
+      products.value = products.value.filter(p => p.id !== id);
+      return null;
+    }
     const product = data as unknown as InventoryProduct;
     const index = products.value.findIndex((p) => p.id === id);
     if (index < 0) products.value.push(product);
