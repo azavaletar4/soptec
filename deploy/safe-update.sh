@@ -173,4 +173,4 @@ docker image prune -f
 docker compose -f "$COMPOSE_FILE" ps
 echo ""
 echo "Desplegado $TARGET_SHA."
-echo "Rollback si hace falta: git reset --hard $ROLLBACK_TAG && docker compose -f $COMPOSE_FILE up -d --build"
+echo "Rollback si hace falta: bash deploy/rollback.sh $ROLLBACK_TAG"

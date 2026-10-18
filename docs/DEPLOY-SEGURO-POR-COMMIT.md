@@ -46,13 +46,49 @@ repositorio ANTES de tocar nada.
 9. Pide escribir **`si`** para confirmar (salvo `DEPLOY_YES=1`, pensado
    para uso no interactivo ya autorizado de antemano).
 10. Recién ahí: crea un **tag de rollback** (`rollback-<timestamp>`) +
-    `.last_rollback_tag` (mismo formato que ya usa la VM hoy) y **respalda
-    las imágenes Docker actuales** de `frontend`/`backend` con ese mismo
-    tag antes de reconstruir — para que un rollback no dependa de que
-    `docker image prune` no haya borrado la imagen anterior.
+    `.last_rollback_tag` (mismo formato que ya usa la VM hoy, y ahora
+    **ignorado por git** — ver corrección del 18/10/2026 más abajo) y
+    **respalda las imágenes Docker actuales** de `frontend`/`backend` con
+    ese mismo tag antes de reconstruir — para que un rollback no dependa de
+    que `docker image prune` no haya borrado la imagen anterior.
 11. Aplica el *fast-forward* (`git merge --ff-only`) y recién ahí construye
     y levanta los contenedores (`docker compose ... up -d --build`), igual
     que `deploy/update.sh`.
+
+## Corrección del 18/10/2026 — `.last_rollback_tag` se bloqueaba a sí mismo
+
+Una validación de solo lectura contra la VM real encontró que
+`.last_rollback_tag` (el archivo que el propio script escribe en el paso
+10) **no estaba en `.gitignore`** — así que, apenas se usara una segunda
+vez, el paso 3 ("bloquear si hay cambios locales sin commitear") lo vería
+como un cambio sin commitear y se bloquearía a sí mismo. Confirmado contra
+la VM real: tenía exactamente ese archivo suelto desde el despliegue
+anterior.
+
+Corrección aplicada: se agregó `/.last_rollback_tag` a `.gitignore` (local,
+sin tocar la VM). Se agregaron dos pruebas de regresión para confirmar que
+esto no debilita la detección general: un `.last_rollback_tag` suelto ya
+NO bloquea (escenario H), pero cualquier OTRO archivo sin seguimiento que
+no esté en `.gitignore` sigue bloqueando igual que antes (escenario I).
+
+También se agregó `deploy/rollback.sh` (ver sección siguiente) y se
+actualizó el mensaje final de `safe-update.sh` para apuntar a él en vez de
+a un `git reset --hard ... && docker compose up -d --build` manual.
+
+## `deploy/rollback.sh` — prioriza reusar imágenes, no reconstruir
+
+`bash deploy/rollback.sh <rollback-tag>` (o sin argumento, toma el tag más
+reciente de `.last_rollback_tag`):
+
+1. Bloquea igual que `safe-update.sh` si hay cambios locales sin
+   commitear.
+2. Revierte el código (`git reset --hard`) al commit del tag.
+3. Para cada servicio (`frontend`, `backend`): si existe la imagen
+   respaldada `smartrayco-<servicio>:<rollback-tag>`, la reutiliza
+   (`docker tag ... :latest`) y **no reconstruye** (`docker compose up -d
+   --no-build`). Solo reconstruye el/los servicios para los que NO exista
+   una imagen respaldada (por ejemplo, un rollback a un punto anterior a
+   que existiera esta mecánica de respaldo).
 
 ## Uso previsto (cuando se autorice)
 
@@ -92,12 +128,16 @@ hoy: commit local → push → recién ahí se puede desplegar).
   depende de que el servicio ya tenga un contenedor corriendo con esa
   imagen; si un servicio nunca se desplegó antes, no habrá nada que
   retaguear (no rompe el flujo, solo no genera ese respaldo puntual).
-- **No se probó todavía contra la VM real ni contra Docker real** — las 9
-  pruebas (`scripts/tests/deploy-safe-update.test.sh`) corren en un
-  repositorio Git sintético y temporal, con `DEPLOY_SKIP_DOCKER=1` siempre
-  activo. La primera vez que se use de verdad conviene hacerlo con un
-  commit de bajo riesgo y mirar el resultado antes de confiar en él para
-  un cambio sensible.
+- **No se probó todavía contra la VM real ni contra Docker real** — las
+  pruebas corren en repositorios Git sintéticos y temporales, con
+  `DEPLOY_SKIP_DOCKER=1` siempre activo. La primera vez que se use de
+  verdad conviene hacerlo con un commit de bajo riesgo y mirar el
+  resultado antes de confiar en él para un cambio sensible.
+- **`deploy/rollback.sh` no se probó con un daemon Docker real** (mismo
+  motivo: no hay Docker garantizado en este entorno de pruebas) — la
+  lógica de reutilizar `docker image inspect`/`docker tag` se revisó por
+  lectura de código, no ejecutándola. Verificar esto en la primera prueba
+  real contra la VM.
 - **Requiere bash** (ya es el caso de `deploy/update.sh`, sin cambio de
   infraestructura).
 
@@ -110,20 +150,30 @@ autorizado, `C2`/`C3` simulando fases NO autorizadas). Nunca toca el
 repositorio real, la VM de producción, Supabase ni Docker
 (`DEPLOY_SKIP_DOCKER=1` en todas las corridas).
 
-Escenarios cubiertos (9/9 PASS):
+Escenarios cubiertos (11/11 PASS):
 
 | Escenario | Qué prueba | Resultado esperado |
 |---|---|---|
 | A | 1 commit autorizado (`C0→C1`) | se aplica |
 | B | pedir `C3` desde `C0` (3 commits, 2 no autorizados) sin bandera | se bloquea |
 | B2 | mismo caso, con `DEPLOY_ALLOW_MULTI_COMMIT=1` | se aplica (autorización explícita) |
-| C | cambios locales sin commitear | se bloquea |
+| C | cambios locales sin commitear (archivo trackeado modificado) | se bloquea |
 | D | divergencia (commit local nunca pusheado a origin) | se bloquea |
 | E | SHA inválido | se bloquea con mensaje claro |
 | F | pedir retroceder (`C1→C0`) | se bloquea (no es avance) |
 | G | confirmación interactiva: `no` cancela, `si` aplica | ambos casos correctos |
+| H | `.last_rollback_tag` suelto (ignorado) | NO se bloquea |
+| I | archivo ajeno sin seguimiento, NO ignorado | sigue bloqueando |
 
 Ejecutar: `bash scripts/tests/deploy-safe-update.test.sh`
+
+`scripts/tests/deploy-rollback.test.sh` — mismo enfoque aislado, para
+`deploy/rollback.sh` (4/4 PASS): rollback con árbol limpio (vuelve al
+commit del tag), rollback bloqueado por cambios locales sin commitear,
+tag/commit inexistente bloqueado con mensaje claro, y uso sin argumento
+leyendo el tag de `.last_rollback_tag`.
+
+Ejecutar: `bash scripts/tests/deploy-rollback.test.sh`
 
 ## Pendiente
 

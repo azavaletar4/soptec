@@ -38,11 +38,15 @@ git -c init.defaultBranch=main init -q "$DEV"
   # C0..C3) para que clonar + resetear a cualquier commit deje el checkout
   # limpio -- si se copiara por fuera despues de clonar, quedaria como
   # archivo sin commitear y el propio script lo bloquearia (correctamente).
+  # El .gitignore con /.last_rollback_tag tambien va en C0, igual que en
+  # el repo real -- asi un .last_rollback_tag suelto en la VM no cuenta
+  # como "cambio local sin commitear".
   mkdir -p deploy
   cp "$SCRIPT_SRC" deploy/safe-update.sh
   chmod +x deploy/safe-update.sh
+  printf '/.last_rollback_tag\n' >.gitignore
   echo base >file0.txt
-  git add -A && git commit -q -m "C0 base (incluye deploy/safe-update.sh)"
+  git add -A && git commit -q -m "C0 base (incluye deploy/safe-update.sh + .gitignore)"
   git push -q origin main
   echo "$(git rev-parse HEAD)" >"$TMP/C0.sha"
 
@@ -183,6 +187,34 @@ if (cd "$VM" && echo "si" | DEPLOY_SKIP_DOCKER=1 bash deploy/safe-update.sh "$C1
   if [ "$head_now" = "$C1" ]; then ok "'si' confirma y aplica correctamente"; else bad "HEAD quedo en $head_now, esperaba $C1"; fi
 else
   bad "escribir 'si' deberia haber aplicado el despliegue"; cat "$TMP/last_out.txt"
+fi
+
+echo "=== Escenario H: .last_rollback_tag suelto (ignorado) -> NO debe bloquear ==="
+VM="$(make_vm vmH "$C0")"
+printf 'PREV_COMMIT=0000000\nROLLBACK_TAG=rollback-00000000000000\n' >"$VM/.last_rollback_tag"
+if run "$VM" "$C1" DEPLOY_YES=1; then
+  head_now="$(cd "$VM" && git rev-parse HEAD)"
+  if [ "$head_now" = "$C1" ]; then
+    ok ".last_rollback_tag ignorado no bloqueo el despliegue"
+  else
+    bad "HEAD quedo en $head_now, esperaba $C1"
+  fi
+else
+  bad "no debio bloquearse por .last_rollback_tag (deberia estar en .gitignore)"; cat "$TMP/last_out.txt"
+fi
+
+echo "=== Escenario I: archivo ajeno sin seguimiento (NO ignorado) -> debe seguir BLOQUEANDO ==="
+VM="$(make_vm vmI "$C0")"
+echo "archivo de otra sesion, sin relacion" >"$VM/docs-de-otra-fase.md"
+if run "$VM" "$C1" DEPLOY_YES=1; then
+  bad "no debio tener exito con un archivo ajeno sin seguimiento presente -- el gitignore no debe debilitar esta deteccion"
+else
+  head_now="$(cd "$VM" && git rev-parse HEAD)"
+  if [ "$head_now" = "$C0" ] && grep -q "cambios locales sin commitear" "$TMP/last_out.txt" && grep -q "docs-de-otra-fase.md" "$TMP/last_out.txt"; then
+    ok "archivo ajeno no ignorado sigue bloqueando correctamente"
+  else
+    bad "bloqueo con mensaje o estado inesperado"; cat "$TMP/last_out.txt"
+  fi
 fi
 
 echo ""

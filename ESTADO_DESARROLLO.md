@@ -5169,3 +5169,11 @@ Probado en entorno aislado (`scripts/tests/deploy-safe-update.test.sh`, nunca to
 
 **NO activado**: no se desplego, no se toco la VM, Supabase ni Docker reales; `deploy/update.sh` sigue siendo el script en uso hoy. Queda pendiente de autorizacion explicita del usuario para empezar a usar `safe-update.sh`. Detalle completo: `docs/DEPLOY-SEGURO-POR-COMMIT.md`.
 
+## Corregido el bloqueo de `.last_rollback_tag` + nuevo `deploy/rollback.sh` (18/10/2026)
+
+La validacion de solo lectura contra la VM real encontro que `.last_rollback_tag` (el archivo que `safe-update.sh` escribe como respaldo) no estaba en `.gitignore` -- confirmado que la VM ya tenia ese archivo suelto desde el despliegue anterior, lo que habria bloqueado el PROPIO script en su siguiente uso (paso 3, "cambios locales sin commitear"). Corregido agregando `/.last_rollback_tag` a `.gitignore` (solo local, sin tocar la VM). Pruebas de regresion nuevas confirman que esto no debilita la deteccion general: un `.last_rollback_tag` suelto ya no bloquea (escenario H), pero cualquier otro archivo ajeno sin seguimiento sigue bloqueando igual que antes (escenario I) -- 11/11 PASS en `scripts/tests/deploy-safe-update.test.sh`.
+
+Se agrego `deploy/rollback.sh <rollback-tag>` (nuevo, independiente): revierte el codigo al commit del tag y, para cada servicio, reusa la imagen Docker ya respaldada con ese tag (`docker tag ... :latest` + `docker compose up -d --no-build`) en vez de reconstruir -- solo reconstruye el/los servicios sin imagen respaldada. `safe-update.sh` ahora senala este script en su mensaje final en vez de un `git reset --hard && up -d --build` manual. 4/4 PASS en `scripts/tests/deploy-rollback.test.sh` (arbol limpio, cambios locales bloqueando, tag inexistente bloqueado, lectura automatica desde `.last_rollback_tag`) -- la reutilizacion real de imagenes Docker se valido por lectura de codigo, no ejecutada (sin daemon Docker garantizado en este entorno de pruebas).
+
+SHA explicito obligatorio y bloqueo por multiples commits no autorizados siguen intactos (escenarios B/B2/E sin cambios). Sin push, sin tocar la VM, sin migraciones ni escrituras en Supabase, sin tocar `deploy/update.sh` (sigue siendo el script en uso). Commit local unicamente con los archivos de esta correccion. Detalle: `docs/DEPLOY-SEGURO-POR-COMMIT.md`.
+
