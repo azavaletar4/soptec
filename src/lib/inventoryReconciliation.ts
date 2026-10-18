@@ -79,7 +79,16 @@ export function reconcileInventory(
     const ticketVerified = !!ticket && ticket.client_id === unit.client_id && (!ticket.contract_id || !unit.contract_id || ticket.contract_id === unit.contract_id);
     const clientVerified = !!unit.client_id && unit.clients?.id === unit.client_id;
     const contractVerified = !unit.contract_id || (unit.contract?.id === unit.contract_id && unit.contract.client_id === unit.client_id);
-    const orderVerified = !unit.installation_id || (!!installation && installation.client_id === unit.client_id && (!installation.contract_id || installation.contract_id === unit.contract_id));
+    // Si la unidad no tiene contract_id propio todavía (nunca se sincronizó desde
+    // la Alta), el contrato de la orden es la fuente confiable — nunca se trata
+    // como contradicción solo por estar ausente. Si la unidad SÍ declara un
+    // contract_id distinto al de la orden, eso sigue siendo una contradicción real.
+    const orderVerified = !unit.installation_id || (!!installation && installation.client_id === unit.client_id && (!installation.contract_id || !unit.contract_id || installation.contract_id === unit.contract_id));
+    // Un contract_id sin client_id, instalación ni avería vigente casi siempre es
+    // un remanente de un movimiento anterior ya revertido (ver regla: nunca usar
+    // un movimiento anulado por una devolución posterior como evidencia vigente)
+    // — no es un indicio de que el equipo esté instalado en otro lugar.
+    const orphanContract = !!unit.contract_id && !unit.client_id && !unit.installation_id && !unit.ticket_id;
     // ont_serial identifica ONT; no es un campo genérico para TV Box/MAC.
     const isOnt = equipmentCategory(unit) === 'onu';
     const serialMatches = isOnt ? closureSerials.get(serial)?.length ?? 0 : 0;
@@ -91,12 +100,13 @@ export function reconcileInventory(
     } else if (['with_technician', 'pending_return'].includes(unit.status) && unit.custody_technician_id && unit.technician?.id === unit.custody_technician_id && !unit.client_id && !unit.contract_id && !duplicate) {
       classification = 'custody'; reasons.push('Custodia vigente con técnico vinculado explícitamente.');
     } else {
-      if (duplicate || serialMatches || ticketSerialMatches || unit.client_id || unit.contract_id || unit.installation_id || unit.ticket_id || unit.custody_technician_id || unit.status === 'assigned') classification = 'possible';
+      if (duplicate || serialMatches || ticketSerialMatches || unit.client_id || unit.installation_id || unit.ticket_id || unit.custody_technician_id || unit.status === 'assigned' || orphanContract) classification = 'possible';
       if (serialMatches) reasons.push(`Serie exacta en ${serialMatches} cierre(s) de instalación finalizada. Evidencia histórica, no ubicación actual.`);
       if (ticketSerialMatches) reasons.push(`Serie exacta en ${ticketSerialMatches} cierre(s) de avería resuelta o cerrada. Puede ser un reemplazo de equipo o una verificación en sitio; no confirma por sí sola que esta unidad quedó instalada — revisar manualmente.`);
       if (unit.ticket_id && !ticketVerified) reasons.push('El equipo señala una Avería cuyo cliente o contrato registrado no coincide; vínculo documental sin confirmar — revisar manualmente.');
       else if (unit.ticket_id && unit.status === 'pending_approval') reasons.push('Equipo entrante de una Avería, pendiente de aprobación administrativa; no es instalación confirmada todavía.');
-      if (unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id) reasons.push('Revisar coherencia de estado y vínculos registrados; no confirma instalación ni custodia actual.');
+      if (orphanContract) reasons.push(`Tiene el contrato ${unit.contract?.contract_number || unit.contract_id} registrado pero ningún cliente vinculado — probablemente un dato remanente de un movimiento anterior ya revertido (ver estado registrado e historial del equipo); no indica que esté instalado. Revisar y limpiar el vínculo.`);
+      else if (unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id) reasons.push('Revisar coherencia de estado y vínculos registrados; no confirma instalación ni custodia actual.');
       if (!reasons.length) reasons.push('Sin evidencia suficiente de ubicación actual.');
     }
     return { unit, classification, reasons, category: equipmentCategory(unit), installation, serialMatches, ticketSerialMatches, ticket };

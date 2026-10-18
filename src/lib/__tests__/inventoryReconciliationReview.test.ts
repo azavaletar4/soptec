@@ -44,6 +44,14 @@ test('otros vínculos por confirmar (possible fuera de almacén/duplicado) son t
   assert.equal(row!.classification, 'possible'); assert.equal(reviewTier(row!), 4);
 });
 
+test('contrato huérfano en almacén (caso real ZTE) NUNCA es tier 1, con motivo específico', () => {
+  const returned = unit({ status: 'in_stock', contract_id: 'contrato-viejo', contract: { id: 'contrato-viejo', client_id: 'otro-cliente', contract_number: 'CTR-OLD' } });
+  const [row] = reconcileInventory([returned], [], []);
+  assert.equal(row!.classification, 'possible');
+  assert.equal(reviewTier(row!), 4);
+  assert.equal(reviewReasonLabel(row!), 'Contrato registrado sin cliente vinculado — probable dato remanente de un movimiento revertido, no indica instalación');
+});
+
 test('el orden de prioridad nunca reclasifica ni cambia la lista completa, solo reordena lo pendiente', () => {
   const units = [
     unit({ id: 'coherente', status: 'with_technician', custody_technician_id: 'tech', technician: { id: 'tech', full_name: 'Técnico', email: null } }),

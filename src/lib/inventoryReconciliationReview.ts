@@ -19,11 +19,18 @@ export const REVIEW_TIER_LABELS = {
 export type ReviewTier = keyof typeof REVIEW_TIER_LABELS;
 
 const isDuplicate = (row: ReconciliationRow) => row.reasons.some((r) => r.includes('repetida'));
+/** Un contract_id sin client_id/installation_id/ticket_id casi siempre es un
+ * remanente de un movimiento anterior ya revertido (devolución a bodega que no
+ * limpió ese campo) — nunca un indicio de que el equipo esté instalado. */
+const isOrphanContract = (row: ReconciliationRow) => !!row.unit.contract_id && !row.unit.client_id && !row.unit.installation_id && !row.unit.ticket_id;
 
 /** Prioridad visual, en el mismo orden pedido: almacén con indicios > duplicados > sin verificar > otros vínculos por confirmar. */
 export function reviewTier(row: ReconciliationRow): ReviewTier {
   const u = row.unit;
-  const hasLocationSignal = row.serialMatches > 0 || row.ticketSerialMatches > 0 || !!u.client_id || !!u.contract_id || !!u.installation_id || !!u.ticket_id;
+  // contract_id NO cuenta como indicio de ubicación por sí solo: solo es señal
+  // confiable junto con client_id (que ya cubre su propia rama abajo) — un
+  // contract_id huérfano se revisa aparte, en la prioridad más baja.
+  const hasLocationSignal = row.serialMatches > 0 || row.ticketSerialMatches > 0 || !!u.client_id || !!u.installation_id || !!u.ticket_id;
   if (u.status === 'in_stock' && row.classification === 'possible' && hasLocationSignal) return 1;
   if (isDuplicate(row)) return 2;
   if (row.classification === 'unknown') return 3;
@@ -31,6 +38,7 @@ export function reviewTier(row: ReconciliationRow): ReviewTier {
 }
 
 export function reviewReasonLabel(row: ReconciliationRow): string {
+  if (isOrphanContract(row)) return 'Contrato registrado sin cliente vinculado — probable dato remanente de un movimiento revertido, no indica instalación';
   return REVIEW_TIER_LABELS[reviewTier(row)];
 }
 

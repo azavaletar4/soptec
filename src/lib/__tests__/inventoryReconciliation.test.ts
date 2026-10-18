@@ -28,6 +28,31 @@ test('asignación vigente requiere vínculos coherentes y no comparte identidad'
   assert.equal(reconcileInventory([installed, unit({ id: 'duplicate' })], [order], [])[0]!.classification, 'possible');
   assert.equal(reconcileInventory([{ ...installed, custody_technician_id: 'tech' }], [order], [])[0]!.classification, 'possible');
 });
+test('asignado a cliente con orden completada confirma instalación aunque la unidad no tenga contract_id propio (caso real Huawei)', () => {
+  // La Alta ya capturó el contrato (installation.contract_id); la unidad
+  // nunca sincronizó ese campo — no es una contradicción, es un dato ausente.
+  const noContractOnUnit = unit({ status: 'assigned', client_id: 'client', clients: { id: 'client', first_name: 'Marcela', last_name: 'Tomas Rodríguez' }, contract_id: null, contract: null, installation_id: 'order' });
+  assert.equal(reconcileInventory([noContractOnUnit], [order], [])[0]!.classification, 'installed');
+  // Pero si la unidad SÍ declara un contrato distinto al de la orden, sigue
+  // siendo una contradicción real y debe quedarse en revisión.
+  const wrongContractOnUnit = unit({ status: 'assigned', client_id: 'client', clients: { id: 'client', first_name: 'Marcela', last_name: 'Tomas Rodríguez' }, contract_id: 'otro-contrato', contract: { id: 'otro-contrato', client_id: 'client', contract_number: 'C2' }, installation_id: 'order' });
+  assert.equal(reconcileInventory([wrongContractOnUnit], [order], [])[0]!.classification, 'possible');
+});
+test('contrato huérfano (sin cliente, orden ni avería) de un movimiento ya revertido no es indicio de instalación (caso real ZTE)', () => {
+  // Devuelto a bodega: client_id ya se limpió, pero contract_id quedó
+  // remanente de la asignación anterior (ya anulada por la devolución).
+  const returned = unit({ status: 'in_stock', contract_id: 'contrato-viejo', contract: { id: 'contrato-viejo', client_id: 'otro-cliente', contract_number: 'CTR-OLD' } });
+  const row = reconcileInventory([returned], [], [])[0]!;
+  assert.equal(row.classification, 'possible'); // sigue para revisión (dato por limpiar), nunca 'installed'
+  assert(row.reasons.some((r) => r.includes('remanente') && r.includes('revertido')));
+  assert(!row.reasons.some((r) => r.includes('indicios de estar instalado')));
+  // Un equipo devuelto SIN ningún remanente (caso normal) sigue sin evidencia.
+  assert.equal(reconcileInventory([unit({ status: 'in_stock' })], [], [])[0]!.classification, 'unknown');
+  // Si además tiene cliente vinculado, ya no es "huérfano" — sigue el camino normal.
+  const withClient = unit({ status: 'in_stock', client_id: 'client', contract_id: 'contract' });
+  assert.equal(reconcileInventory([withClient], [], [])[0]!.classification, 'possible');
+  assert(!reconcileInventory([withClient], [], [])[0]!.reasons.some((r) => r.includes('remanente')));
+});
 test('custodia se confirma únicamente con estado y técnico verificables', () => {
   const custody = unit({ status: 'with_technician', custody_technician_id: 'tech', technician: { id: 'tech', full_name: 'Técnico', email: null } });
   assert.equal(reconcileInventory([custody], [], [])[0]!.classification, 'custody');
