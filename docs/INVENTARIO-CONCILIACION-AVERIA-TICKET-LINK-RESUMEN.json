@@ -1,0 +1,87 @@
+{
+  "at": "2026-10-18T03:18:13.539051+00:00",
+  "readOnly": true,
+  "source": "Cloud, REPEATABLE READ READ ONLY; candidato ticket_id (Avería vinculada) sobre el mismo snapshot",
+  "counts": {
+    "units": 135,
+    "installations": 30,
+    "closures": 0,
+    "tickets": 29,
+    "ticketClosures": 0
+  },
+  "categories": {
+    "tvbox": {
+      "registered": 36,
+      "warehouse": 15,
+      "assigned": 18,
+      "custody": 1,
+      "contractLinked": 16,
+      "clientLinked": 18,
+      "classifications": {
+        "installed": 18,
+        "custody": 1,
+        "possible": 0,
+        "unknown": 17
+      },
+      "warehouseSignals": 0,
+      "warehouseSerialClosureMatches": 0,
+      "warehouseTicketSerialMatches": 0,
+      "ticketSerialMatchUnits": 0,
+      "ticketLinked": 5,
+      "ticketLinkedVerified": 5,
+      "ticketLinkedMismatched": 0,
+      "ticketLinkedPendingApproval": 0
+    },
+    "onu": {
+      "registered": 95,
+      "warehouse": 28,
+      "assigned": 65,
+      "custody": 1,
+      "contractLinked": 60,
+      "clientLinked": 66,
+      "classifications": {
+        "installed": 63,
+        "custody": 1,
+        "possible": 4,
+        "unknown": 27
+      },
+      "warehouseSignals": 1,
+      "warehouseSerialClosureMatches": 0,
+      "warehouseTicketSerialMatches": 0,
+      "ticketSerialMatchUnits": 0,
+      "ticketLinked": 5,
+      "ticketLinkedVerified": 5,
+      "ticketLinkedMismatched": 0,
+      "ticketLinkedPendingApproval": 0
+    },
+    "mesh": {
+      "registered": 4,
+      "warehouse": 2,
+      "assigned": 2,
+      "custody": 0,
+      "contractLinked": 2,
+      "clientLinked": 2,
+      "classifications": {
+        "installed": 2,
+        "custody": 0,
+        "possible": 0,
+        "unknown": 2
+      },
+      "warehouseSignals": 0,
+      "warehouseSerialClosureMatches": 0,
+      "warehouseTicketSerialMatches": 0,
+      "ticketSerialMatchUnits": 0,
+      "ticketLinked": 0,
+      "ticketLinkedVerified": 0,
+      "ticketLinkedMismatched": 0,
+      "ticketLinkedPendingApproval": 0
+    }
+  },
+  "operationalCounts": {
+    "units": 135,
+    "unit_events": 317,
+    "movements": 287,
+    "material_custody": 0
+  },
+  "limitations": "Señales documentales, no discrepancias físicas; ticket_id vigente solo mientras el equipo siga assigned/pending_approval (el trigger real lo limpia al retirarlo). No se hizo conteo físico ni se consultó OLT/MikroTik."
+}
