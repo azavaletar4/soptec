@@ -5,7 +5,7 @@ import { matchesEquipmentFilter } from '../inventoryPresentation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 function unit(overrides: Partial<ReconciliationUnit> = {}): ReconciliationUnit {
-  return { id: 'unit', product_id: 'product', serial_number: 'ONT-001', mac_address: null, status: 'in_stock', client_id: null, contract_id: null, installation_id: null, custody_technician_id: null,
+  return { id: 'unit', product_id: 'product', serial_number: 'ONT-001', mac_address: null, status: 'in_stock', client_id: null, contract_id: null, installation_id: null, ticket_id: null, custody_technician_id: null,
     product: { name: 'Modelo ONT', is_serialized: true, inventory_categories: { slug: 'onu', name: 'ONUs / ONTs' } }, clients: null, contract: null, technician: null, ...overrides };
 }
 const order: ReconciliationInstallation = { id: 'order', client_id: 'client', contract_id: 'contract', status: 'completed' };
@@ -65,6 +65,39 @@ test('coincidencias de Alta y de Avería se cuentan por separado, sin mezclarse'
   assert(row.reasons.some(r => r.includes('avería')));
   const tv = unit({ product: { name: 'TV Box', is_serialized: true, inventory_categories: { slug: 'tvbox', name: 'TV Box' } } });
   assert.equal(reconcileInventory([tv], [order], [closure], [ticket], [ticketClosure])[0]!.ticketSerialMatches, 0);
+});
+test('inventory_units.ticket_id enlaza la Avería vinculada, sin instalar automáticamente', () => {
+  // ONT entrante de una Avería, pendiente de aprobación, cliente/contrato coherentes.
+  const staged = unit({ status: 'pending_approval', client_id: 'client', clients: { id: 'client', first_name: 'Ana', last_name: 'Prueba' }, contract_id: 'contract', contract: { id: 'contract', client_id: 'client', contract_number: 'C1' }, ticket_id: 'ticket' });
+  const stagedRow = reconcileInventory([staged], [], [], [ticket])[0]!;
+  assert.notEqual(stagedRow.classification, 'installed'); assert.equal(stagedRow.classification, 'possible');
+  assert.deepEqual(stagedRow.ticket, ticket);
+  assert(stagedRow.reasons.some(r => r.includes('pendiente de aprobación')));
+
+  // ONT vinculada a Alta (installation_id), sin ticket — comportamiento existente intacto.
+  const installed = unit({ status: 'assigned', client_id: 'client', clients: { id: 'client', first_name: 'Ana', last_name: 'Prueba' }, contract_id: 'contract', contract: { id: 'contract', client_id: 'client', contract_number: 'C1' }, installation_id: 'order' });
+  const installedRow = reconcileInventory([installed], [order], [])[0]!;
+  assert.equal(installedRow.classification, 'installed'); assert.equal(installedRow.ticket, null);
+
+  // ONT sin ticket vinculado.
+  assert.equal(reconcileInventory([unit()], [], [])[0]!.ticket, null);
+
+  // Ticket de otro cliente: vínculo documental, nunca una coincidencia confirmada.
+  const mismatched = unit({ status: 'pending_approval', client_id: 'other-client', clients: { id: 'other-client', first_name: 'Beto', last_name: 'Otro' }, ticket_id: 'ticket' });
+  const mismatchedRow = reconcileInventory([mismatched], [], [], [ticket])[0]!;
+  assert.notEqual(mismatchedRow.classification, 'installed');
+  assert(mismatchedRow.reasons.some(r => r.includes('no coincide')));
+  assert(!mismatchedRow.reasons.some(r => r.includes('pendiente de aprobación')));
+
+  // ONT retirada (el trigger real limpia ticket_id al volver a in_stock): sin vínculo que mostrar.
+  assert.equal(reconcileInventory([unit({ status: 'in_stock', ticket_id: null })], [], [], [ticket])[0]!.ticket, null);
+});
+test('Avería enlazada no duplica consultas ni altera unidades/conteos (regresión)', () => {
+  const units = [unit({ status: 'pending_approval', client_id: 'client', ticket_id: 'ticket' }), unit({ id: 'two' })];
+  const before = JSON.stringify(units);
+  const rows = reconcileInventory(units, [order], [closure], [ticket], [ticketClosure]);
+  assert.equal(rows.length, 2);
+  assert.equal(JSON.stringify(units), before);
 });
 test('omitir tickets/cierres de avería preserva exactamente el comportamiento anterior (regresión)', () => {
   const withoutTickets = reconcileInventory([unit()], [order], [closure]);

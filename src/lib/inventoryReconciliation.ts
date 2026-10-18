@@ -8,7 +8,7 @@ export const RECONCILIATION_LABELS: Record<ReconciliationClass, string> = {
 };
 export interface ReconciliationUnit {
   id: string; product_id: string; serial_number: string | null; mac_address: string | null; status: string;
-  client_id: string | null; contract_id: string | null; installation_id: string | null; custody_technician_id: string | null;
+  client_id: string | null; contract_id: string | null; installation_id: string | null; ticket_id: string | null; custody_technician_id: string | null;
   product: { name: string; is_serialized: boolean; inventory_categories: { slug: string; name: string } | null } | null;
   clients: { id: string; first_name: string; last_name: string } | null;
   contract: { id: string; client_id: string; contract_number: string | null } | null;
@@ -22,6 +22,8 @@ export interface ReconciliationRow {
   category: string; installation: ReconciliationInstallation | null; serialMatches: number;
   /** Cierres de Averia (job_type='ticket') con la misma serie; evidencia documental de reemplazo/verificacion en sitio, nunca una instalacion confirmada por si sola. */
   ticketSerialMatches: number;
+  /** inventory_units.ticket_id — vinculo directo verificado por FK (stage/return de Fase 164), no una coincidencia por serie. Solo vigente mientras el equipo siga assigned/pending_approval (el trigger lo limpia al retirarlo). */
+  ticket: ReconciliationTicket | null;
 }
 export const normalizeSerial = (value: string | null) => (value ?? '').trim().toUpperCase();
 export function normalizeMac(value: string | null) {
@@ -69,6 +71,12 @@ export function reconcileInventory(
     const serial = normalizeSerial(unit.serial_number), mac = normalizeMac(unit.mac_address);
     const duplicate = !!((serial && (serials.get(serial) ?? 0) > 1) || (mac && (macs.get(mac) ?? 0) > 1));
     const installation = unit.installation_id ? orders.get(unit.installation_id) ?? null : null;
+    // inventory_units.ticket_id: vinculo directo de Fase 164 (stage/return), no una coincidencia
+    // por serie — pero igual puede no corresponder al mismo cliente si hay un dato inconsistente
+    // (ver reglas 8 y 4 de esta ampliación); clientMatches abajo exige coherencia antes de
+    // tratarlo como evidencia, nunca como instalación confirmada por sí solo.
+    const ticket = unit.ticket_id ? ticketsById.get(unit.ticket_id) ?? null : null;
+    const ticketVerified = !!ticket && ticket.client_id === unit.client_id && (!ticket.contract_id || !unit.contract_id || ticket.contract_id === unit.contract_id);
     const clientVerified = !!unit.client_id && unit.clients?.id === unit.client_id;
     const contractVerified = !unit.contract_id || (unit.contract?.id === unit.contract_id && unit.contract.client_id === unit.client_id);
     const orderVerified = !unit.installation_id || (!!installation && installation.client_id === unit.client_id && (!installation.contract_id || installation.contract_id === unit.contract_id));
@@ -83,13 +91,15 @@ export function reconcileInventory(
     } else if (['with_technician', 'pending_return'].includes(unit.status) && unit.custody_technician_id && unit.technician?.id === unit.custody_technician_id && !unit.client_id && !unit.contract_id && !duplicate) {
       classification = 'custody'; reasons.push('Custodia vigente con técnico vinculado explícitamente.');
     } else {
-      if (duplicate || serialMatches || ticketSerialMatches || unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id || unit.status === 'assigned') classification = 'possible';
+      if (duplicate || serialMatches || ticketSerialMatches || unit.client_id || unit.contract_id || unit.installation_id || unit.ticket_id || unit.custody_technician_id || unit.status === 'assigned') classification = 'possible';
       if (serialMatches) reasons.push(`Serie exacta en ${serialMatches} cierre(s) de instalación finalizada. Evidencia histórica, no ubicación actual.`);
       if (ticketSerialMatches) reasons.push(`Serie exacta en ${ticketSerialMatches} cierre(s) de avería resuelta o cerrada. Puede ser un reemplazo de equipo o una verificación en sitio; no confirma por sí sola que esta unidad quedó instalada — revisar manualmente.`);
+      if (unit.ticket_id && !ticketVerified) reasons.push('El equipo señala una Avería cuyo cliente o contrato registrado no coincide; vínculo documental sin confirmar — revisar manualmente.');
+      else if (unit.ticket_id && unit.status === 'pending_approval') reasons.push('Equipo entrante de una Avería, pendiente de aprobación administrativa; no es instalación confirmada todavía.');
       if (unit.client_id || unit.contract_id || unit.installation_id || unit.custody_technician_id) reasons.push('Revisar coherencia de estado y vínculos registrados; no confirma instalación ni custodia actual.');
       if (!reasons.length) reasons.push('Sin evidencia suficiente de ubicación actual.');
     }
-    return { unit, classification, reasons, category: equipmentCategory(unit), installation, serialMatches, ticketSerialMatches };
+    return { unit, classification, reasons, category: equipmentCategory(unit), installation, serialMatches, ticketSerialMatches, ticket };
   });
 }
 
@@ -114,7 +124,7 @@ async function readPages<T>(query: (from: number, to: number) => PromiseLike<{ d
 export async function readInventoryReconciliation(db: SupabaseClient, role: string | null, signal: AbortSignal) {
   assertAdministrativeInventoryAccess(role);
   const [units, installations, closures, tickets, ticketClosures] = await Promise.all([
-    readPages<ReconciliationUnit>((from, to) => db.from('inventory_units').select('id, product_id, serial_number, mac_address, status, client_id, contract_id, installation_id, custody_technician_id, product:inventory_products!inner(name, is_serialized, inventory_categories(slug, name)), clients(id, first_name, last_name), contract:service_contracts!inventory_units_contract_id_fkey(id, client_id, contract_number), technician:profiles!inventory_units_custody_technician_id_fkey(id, full_name, email)', { count: 'exact' }).eq('product.is_serialized', true).order('id').range(from, to).abortSignal(signal)),
+    readPages<ReconciliationUnit>((from, to) => db.from('inventory_units').select('id, product_id, serial_number, mac_address, status, client_id, contract_id, installation_id, ticket_id, custody_technician_id, product:inventory_products!inner(name, is_serialized, inventory_categories(slug, name)), clients(id, first_name, last_name), contract:service_contracts!inventory_units_contract_id_fkey(id, client_id, contract_number), technician:profiles!inventory_units_custody_technician_id_fkey(id, full_name, email)', { count: 'exact' }).eq('product.is_serialized', true).order('id').range(from, to).abortSignal(signal)),
     readPages<ReconciliationInstallation>((from, to) => db.from('installations').select('id, client_id, contract_id, status', { count: 'exact' }).order('id').range(from, to).abortSignal(signal)),
     readPages<ReconciliationClosure>((from, to) => db.from('work_order_closures').select('id, job_id, client_id, ont_serial, created_at', { count: 'exact' }).eq('job_type', 'installation').not('ont_serial', 'is', null).order('id').range(from, to).abortSignal(signal)),
     readPages<ReconciliationTicket>((from, to) => db.from('tickets').select('id, client_id, contract_id, status', { count: 'exact' }).order('id').range(from, to).abortSignal(signal)),

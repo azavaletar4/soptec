@@ -82,6 +82,8 @@ onBeforeUnmount(() => { generation++; controller?.abort(); });
             <router-link v-if="row.unit.client_id && row.unit.clients?.id === row.unit.client_id" :to="`/clientes/${row.unit.client_id}`" class="text-sky-700 underline">Cliente vinculado: {{ row.unit.clients.first_name }} {{ row.unit.clients.last_name }}</router-link>
             <router-link v-if="row.unit.contract?.id === row.unit.contract_id && row.unit.client_id && row.unit.contract?.client_id === row.unit.client_id" :to="`/clientes/${row.unit.client_id}/servicios/${row.unit.contract_id}`" class="text-sky-700 underline">Contrato vinculado: {{ row.unit.contract?.contract_number || row.unit.contract_id }}</router-link>
             <router-link v-if="row.installation && row.installation.client_id === row.unit.client_id" :to="`/soporte/instalaciones/${row.installation.id}`" class="text-sky-700 underline">Orden vinculada: {{ row.installation.id }}</router-link>
+            <router-link v-if="row.ticket && row.ticket.client_id === row.unit.client_id" :to="`/soporte/${row.ticket.id}`" class="text-sky-700 underline">Avería vinculada: {{ row.ticket.id }}</router-link>
+            <span v-else-if="row.unit.ticket_id" class="text-amber-700">Avería vinculada sin confirmar: cliente/contrato no coincide — revisar manualmente.</span>
             <span v-if="row.unit.custody_technician_id && row.unit.technician?.id === row.unit.custody_technician_id">Técnico vinculado: {{ row.unit.technician.full_name || row.unit.technician.email || 'Nombre no disponible' }}</span>
           </div>
         </article>
