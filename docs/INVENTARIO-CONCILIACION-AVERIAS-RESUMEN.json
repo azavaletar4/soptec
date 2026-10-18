@@ -1,0 +1,75 @@
+{
+  "at": "2026-10-18T03:01:33.474393+00:00",
+  "readOnly": true,
+  "source": "Cloud, REPEATABLE READ READ ONLY; candidato defe251 (Alta + Averia) sobre el mismo snapshot",
+  "counts": {
+    "units": 135,
+    "installations": 30,
+    "closures": 0,
+    "tickets": 29,
+    "ticketClosures": 0
+  },
+  "categories": {
+    "tvbox": {
+      "registered": 36,
+      "warehouse": 15,
+      "assigned": 18,
+      "custody": 1,
+      "contractLinked": 16,
+      "clientLinked": 18,
+      "classifications": {
+        "installed": 18,
+        "custody": 1,
+        "possible": 0,
+        "unknown": 17
+      },
+      "warehouseSignals": 0,
+      "warehouseSerialClosureMatches": 0,
+      "warehouseTicketSerialMatches": 0,
+      "ticketSerialMatchUnits": 0
+    },
+    "onu": {
+      "registered": 95,
+      "warehouse": 28,
+      "assigned": 65,
+      "custody": 1,
+      "contractLinked": 60,
+      "clientLinked": 66,
+      "classifications": {
+        "installed": 63,
+        "custody": 1,
+        "possible": 4,
+        "unknown": 27
+      },
+      "warehouseSignals": 1,
+      "warehouseSerialClosureMatches": 0,
+      "warehouseTicketSerialMatches": 0,
+      "ticketSerialMatchUnits": 0
+    },
+    "mesh": {
+      "registered": 4,
+      "warehouse": 2,
+      "assigned": 2,
+      "custody": 0,
+      "contractLinked": 2,
+      "clientLinked": 2,
+      "classifications": {
+        "installed": 2,
+        "custody": 0,
+        "possible": 0,
+        "unknown": 2
+      },
+      "warehouseSignals": 0,
+      "warehouseSerialClosureMatches": 0,
+      "warehouseTicketSerialMatches": 0,
+      "ticketSerialMatchUnits": 0
+    }
+  },
+  "operationalCounts": {
+    "units": 135,
+    "unit_events": 317,
+    "movements": 287,
+    "material_custody": 0
+  },
+  "limitations": "Señales documentales, no discrepancias físicas; una coincidencia por serie en Avería puede ser un reemplazo de equipo o solo una verificación en sitio durante la visita — nunca se clasifica como instalación confirmada por sí sola. No se hizo conteo físico ni se consultó OLT/MikroTik."
+}
