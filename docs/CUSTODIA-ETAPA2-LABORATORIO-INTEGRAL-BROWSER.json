@@ -1,0 +1,51 @@
+{
+  "at": "2026-10-19T20:00:46.341Z",
+  "scope": "REAL_BROWSER_REAL_STORE_REAL_DB_REST_AUTH_STORAGE_NO_SIMULATION",
+  "lab": "smartrayco-custody-integral-1792436479162",
+  "results": [
+    {
+      "name": "login real (GoTrue) como leader dentro del navegador, componente real montado",
+      "status": "PASS"
+    },
+    {
+      "name": "consumo real de material desde la sesion del navegador (leader, 6 unidades)",
+      "status": "PASS"
+    },
+    {
+      "name": "equipo serializado (ONU sintetica) asignado a la Alta antes del cierre, via RPC real",
+      "status": "PASS"
+    },
+    {
+      "name": "cierre real de Alta: campo.submitClosure (componente/store reales) no lo encola, se ejecuta de inmediato",
+      "status": "PASS"
+    },
+    {
+      "name": "persistencia real verificada por SQL: work_order_closures/work_order_photos/client_photos + 6 objetos reales en storage.objects (5 fotos + firma)",
+      "status": "PASS"
+    },
+    {
+      "name": "rechazo real de consumo (sin custodia suficiente) registrado desde la sesion del navegador",
+      "status": "PASS"
+    },
+    {
+      "name": "cierre real de Averia BLOQUEADO (P1651) por material rechazado pendiente, sin dejar evidencia a medio guardar, mensaje real mostrado al tecnico: \"No se puede cerrar la orden: hay material que no se registro por falta de custodia. Solicita la entrega y reintenta la operacion pendiente, o pide a administracion revisar un intento equivocado.\"",
+      "status": "PASS"
+    },
+    {
+      "name": "reintento real con la misma clave, tras entrega adicional, resuelve el rechazo",
+      "status": "PASS"
+    },
+    {
+      "name": "cierre real de Averia una vez resuelto el rechazo: ticket resolved, 2 fotos + firma reales en Storage",
+      "status": "PASS"
+    },
+    {
+      "name": "cierre real de Rutina (consumo real + foto + firma reales en Storage), routine completed",
+      "status": "PASS"
+    },
+    {
+      "name": "sin peticiones externas ni excepciones no controladas durante toda la sesion de navegador",
+      "status": "PASS"
+    }
+  ]
+}

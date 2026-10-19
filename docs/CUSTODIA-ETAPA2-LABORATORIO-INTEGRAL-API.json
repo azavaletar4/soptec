@@ -1,0 +1,83 @@
+{
+  "at": "2026-10-19T19:39:38.194Z",
+  "scope": "REAL_DB_REST_AUTH_NO_SIMULATION",
+  "lab": "smartrayco-custody-integral-1792436479162",
+  "results": [
+    {
+      "name": "entrega administrativa real: 0 -> 30 en technician_material_custody",
+      "status": "PASS"
+    },
+    {
+      "name": "consulta de disponibilidad real: my_inventory_custody refleja la entrega",
+      "status": "PASS"
+    },
+    {
+      "name": "consumo valido real (installation): egreso de 4 registrado via RPC real",
+      "status": "PASS"
+    },
+    {
+      "name": "consumo valido real (ticket): egreso de 4 registrado via RPC real",
+      "status": "PASS"
+    },
+    {
+      "name": "consumo valido real (routine): egreso de 4 registrado via RPC real",
+      "status": "PASS"
+    },
+    {
+      "name": "custodia descontada correctamente tras los 3 consumos (30 -> 18)",
+      "status": "PASS"
+    },
+    {
+      "name": "consumo insuficiente real: rechazo controlado (materialRejected), custodia intacta en 18",
+      "status": "PASS"
+    },
+    {
+      "name": "cierre bloqueado real mientras el rechazo siga pendiente (P1651)",
+      "status": "PASS"
+    },
+    {
+      "name": "reintento con la MISMA clave y la misma carga, tras entrega adicional, resuelve el rechazo y desbloquea el cierre real",
+      "status": "PASS"
+    },
+    {
+      "name": "administracion anula un intento rechazado con motivo; reintento ya no vuelve a ejecutarlo, cierre queda desbloqueado",
+      "status": "PASS"
+    },
+    {
+      "name": "reintento con misma clave/misma carga no duplica consumo ni custodia",
+      "status": "PASS"
+    },
+    {
+      "name": "correccion real: repone 100 y descuenta 2, custodia 8 -> 106, atribuida al tecnico original",
+      "status": "PASS"
+    },
+    {
+      "name": "reversion completa real: custodia repuesta (106 -> 108)",
+      "status": "PASS"
+    },
+    {
+      "name": "consumo historico sin custodia rastreada: la correccion no repone ni bloquea, custodia intacta (108)",
+      "status": "PASS"
+    },
+    {
+      "name": "concurrencia real: dos consumos simultaneos serializados por el lock existente (gano installation), sin saldo negativo",
+      "status": "PASS"
+    },
+    {
+      "name": "devolucion real: solicitud del tecnico + confirmacion de administracion, custodia vuelve a 0",
+      "status": "PASS"
+    },
+    {
+      "name": "rechazo de devolucion real: custodia intacta en 5, solicitud queda \"rejected\"",
+      "status": "PASS"
+    },
+    {
+      "name": "permisos reales: support no ve ni puede devolver la custodia de leader",
+      "status": "PASS"
+    },
+    {
+      "name": "consulta de disponibilidad real via ruta HTTP del backend (inventory_order_read, JWT real)",
+      "status": "PASS"
+    }
+  ]
+}

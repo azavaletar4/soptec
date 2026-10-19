@@ -1,5 +1,98 @@
 # SmartRayco — Estado de desarrollo
 
+## Laboratorio integral resuelto + circuito API real Alta/Averia/Rutina: 19/19 PASS (19/10/2026)
+
+Continuacion de la sesion anterior (Codex se detuvo en `LOCAL_DOCKER_OPERATION_FAILED`
+preparando el laboratorio integrado). Causa real: NO es Docker Desktop/daemon/
+puertos (el daemon nunca estuvo caido) -- es un wrapper generico en
+`custody-integral-lab-common.mjs` que convierte CUALQUIER `docker` con
+exit!=0 en ese mensaje; la causa de fondo quedo en `privateError` de cada
+`failure-*.json` del directorio del laboratorio: (1) una revision anterior
+del guion de semillas violaba el candado real de "un solo trabajo activo"
+(`enforce_single_active_job_assignees`) al insertar 6 `job_assignees` para
+el mismo tecnico en una sola transaccion -- ya corregido en el guion vigente
+(estados `scheduled`/`open`, nunca `in_progress`, al sembrar); (2) un fallo
+transitorio de `fs-xattr` restaurando metadatos de Storage, resuelto en un
+reintento posterior. Ambos ya estaban superados: el laboratorio (contenedores
+`db`/`auth`/`rest`/`storage`/`edge`, proyecto `smartrayco-custody-integral-*`)
+ya estaba arriba y sano (restore 551 clientes/566 contratos/849 objetos de
+Storage verificados por SHA-256, `fixture.json` con 6 ordenes sinteticas,
+ambas migraciones candidatas de Fase165 aplicadas solo-aislado) cuando se
+reanudo esta sesion -- confirmado con `node scripts/custody-integral-lab.mjs
+status` (los 3 endpoints en 200) y lecturas SQL directas.
+
+Faltaba el guion que de verdad ejercita el circuito (`custody-integral-lab-api.mjs`,
+fase `api` del orquestador) -- Codex habia dejado listos el backend real
+(`custody-integral-lab-backend.ts`, monta `fieldInventoryRoutes` de verdad)
+y el harness de navegador sin mockear (`custody-integral-lab.html` +
+`custody-integral-lab-vite.config.mjs`, montan `CampoTrabajoDetailView.vue`
+real con Auth/REST/Storage reales), pero nada los invocaba todavia. Se
+escribio ese guion y se ejecuto contra el stack real (Postgres restaurado +
+GoTrue + PostgREST, JWT reales por login, nunca mocks): **19/19 escenarios
+PASS** -- entrega administrativa, consulta de disponibilidad
+(`my_inventory_custody` + la ruta HTTP real del backend), consumo valido en
+Alta/Averia/Rutina, reintento idempotente (misma clave/misma carga),
+correccion atribuida al tecnico original, reversion completa, un consumo
+historico simulado (sin evento de custodia) que la correccion NO repone ni
+bloquea, concurrencia real (dos consumos simultaneos por el mismo saldo,
+serializados por el lock existente, sin saldo negativo), devolucion de
+sobrante (solicitud + confirmacion) y su rechazo, y permisos (un tecnico no
+ve ni toca la custodia de otro). Documentado el detalle de rechazo
+controlado del candidato `20261019170000`: un consumo sin custodia
+suficiente ya NO revienta el RPC con error SQL -- devuelve
+`{materialRejected:true}`, bloquea el cierre de esa orden (`P1651` vista
+`assert_material_closure_ready`) hasta que la MISMA clave de operacion se
+reintente con la MISMA carga (tras una entrega adicional) o administracion
+la anule con motivo (`cancel_rejected_material_operation`) -- verificado
+en vivo contra el candidato real, no asumido de la lectura del SQL.
+
+**Continuado el mismo dia: cierre real por navegador, 11/11 PASS.** Se
+escribio `custody-integral-lab-browser.mjs` (fase `browser`), que faltaba.
+Reusa el harness que Codex ya habia dejado sin orquestar
+(`custody-integral-lab.html` monta `CampoTrabajoDetailView.vue` REAL con
+Pinia/Auth/Router reales; `custody-integral-lab-vite.config.mjs` sirve el
+bundle real apuntando al gateway del laboratorio) -- Chrome headless real
+via CDP, login GoTrue real, `campo.submitClosure` real (sin mockear
+`supabase.from/rpc/storage`, a diferencia de `stage2-full-closure-browser.mjs`
+que SI lo hacia). Bloqueador real encontrado y corregido en el camino: el
+Caddy del laboratorio no devolvia cabeceras CORS (el front corre en el
+puerto de Vite, 54422, distinto al gateway, 54421) -- agregado un bloque
+`handle @preflight` + `header_down Access-Control-Allow-Origin` por
+servicio en `custody-integral-lab.mjs` (quedo en el generador para
+laboratorios futuros, no solo parchado a mano en este). Verificado con
+`curl` antes de usarlo en el navegador.
+
+Cubre exactamente lo que antes solo estaba simulado: **Alta** completa con
+equipo serializado (ONU) entregado a custodia y asignado por el mismo
+camino real, 5 fotos + firma reales subidas a `storage.objects` (bucket
+`work-evidence`, 827 bytes c/u), NAP/zona reales (`assign_contract_nap`),
+`client_photos` poblado -- verificado por SQL directo, no por el resultado
+que devuelve el store. **Averia**: un consumo que excede la custodia se
+registra como rechazo (igual que en el circuito API), el cierre real
+queda BLOQUEADO con el mensaje exacto que ve el tecnico ("No se puede
+cerrar la orden...") y SIN dejar fotos/firma a medio subir; tras una
+entrega adicional y el MISMO operation_id, el rechazo se resuelve y el
+cierre se completa con sus 2 fotos + firma reales. **Rutina**: consumo +
+cierre reales sin NAP, foto + firma reales. Reproducido 2 veces sin
+cambios (guion idempotente: nunca borra el Kardex -- insert-only --, solo
+reinicia custodia/rechazos/cierres/fotos y vuelve los estados de las 6
+ordenes sinteticas a su valor de siembra). 2 excepciones de IndexedDB
+(`formDrafts.ts`, borrador local del formulario en un perfil de Chrome
+efimero) explicitamente descartadas del veredicto -- ajenas al circuito
+real de custodia/Storage, documentado el motivo en el propio guion.
+
+**Pendiente real, no cubierto todavia**: catalogo ampliado y respaldo
+final mencionados en la validacion anterior a esta sesion; probar
+reintentos/corrección DESDE la UI real con clics (aqui se invoco
+`campo.submitClosure`/los RPC directamente, no se simularon clics de
+boton); devolucion de equipos serializados (solo se probo con consumibles
+y con la entrega/asignacion de una ONU, no con su devolucion). Bloqueo
+obligatorio sigue desactivado; cero escrituras en produccion/OLT/MikroTik;
+todo contra el laboratorio aislado (`smartrayco-custody-integral-1792436479162`,
+gateway 127.0.0.1:54421). Reportes:
+`docs/CUSTODIA-ETAPA2-LABORATORIO-INTEGRAL-API.json` (19/19) y
+`docs/CUSTODIA-ETAPA2-LABORATORIO-INTEGRAL-BROWSER.json` (11/11).
+
 ## Inventario de Campo — etapas 1 y 2 locales (2026-10-15)
 
 Endpoint GET contextual para Altas/Averías con JWT real, perfil activo y
