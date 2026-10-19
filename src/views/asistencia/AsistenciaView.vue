@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useAsistenciaStore } from '@/stores/asistencia';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -12,6 +13,7 @@ import {
   fechaLimaISO,
   formatHora,
   formatMinutos,
+  puntosGpsDe,
 } from '@/lib/asistenciaReglas';
 import type { AsistenciaRegistro, StaffProfile } from '@/types/domain';
 
@@ -85,14 +87,7 @@ const mapRegistro = ref<AsistenciaRegistro | null>(null);
 const mapEl = ref<HTMLDivElement | null>(null);
 let leafletMap: L.Map | null = null;
 
-function puntosDe(r: AsistenciaRegistro) {
-  const puntos: { label: string; lat: number; lng: number; color: string }[] = [];
-  if (r.lat_ingreso != null && r.lng_ingreso != null) puntos.push({ label: `Ingreso ${formatHora(r.hora_ingreso)}`, lat: r.lat_ingreso, lng: r.lng_ingreso, color: '#22c55e' });
-  if (r.lat_fin_almuerzo != null && r.lng_fin_almuerzo != null)
-    puntos.push({ label: `Fin almuerzo ${formatHora(r.fin_almuerzo)}`, lat: r.lat_fin_almuerzo, lng: r.lng_fin_almuerzo, color: '#0ea5e9' });
-  if (r.lat_salida != null && r.lng_salida != null) puntos.push({ label: `Salida ${formatHora(r.hora_salida)}`, lat: r.lat_salida, lng: r.lng_salida, color: '#ef4444' });
-  return puntos;
-}
+const mapPuntos = computed(() => (mapRegistro.value ? puntosGpsDe(mapRegistro.value) : []));
 
 function destroyMap() {
   if (leafletMap) leafletMap.remove();
@@ -106,10 +101,12 @@ function closeMap() {
 }
 watch(mapRegistro, async (r) => {
   destroyMap();
-  if (!r || !mapEl.value) return;
+  if (!r) return;
+  const puntos = puntosGpsDe(r);
+  if (!puntos.length) return; // sin coordenadas guardadas -> se muestra el aviso, nunca un mapa vacio
   await nextTick();
-  const puntos = puntosDe(r);
-  const center: [number, number] = puntos.length ? [puntos[0].lat, puntos[0].lng] : [store.settings?.oficina_lat ?? 0, store.settings?.oficina_lng ?? 0];
+  if (!mapEl.value) return;
+  const center: [number, number] = [puntos[0].lat, puntos[0].lng];
   leafletMap = L.map(mapEl.value, { zoomControl: true }).setView(center, 16);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(leafletMap);
 
@@ -462,8 +459,11 @@ async function handleSaveSettings() {
             <div class="text-sm font-medium text-slate-800">📍 Ubicación de marcación</div>
             <button type="button" class="text-slate-500 hover:text-slate-800" @click="closeMap">✕</button>
           </div>
-          <div ref="mapEl" class="w-full h-80"></div>
-          <div class="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-200">
+          <div v-if="mapPuntos.length" ref="mapEl" class="w-full h-80"></div>
+          <div v-else class="w-full h-80 flex items-center justify-center text-center text-sm text-slate-500 px-6">
+            📍 Ubicación GPS no disponible para esta marcación.
+          </div>
+          <div v-if="mapPuntos.length" class="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-200">
             Círculo celeste = geocerca de oficina. 🟢 Ingreso · 🔵 Fin de almuerzo · 🔴 Salida.
           </div>
         </div>

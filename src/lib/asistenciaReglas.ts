@@ -1,4 +1,4 @@
-import type { AsistenciaEstado, CompanySettings } from '@/types/domain';
+import type { AsistenciaEstado, AsistenciaRegistro, CompanySettings } from '@/types/domain';
 
 /**
  * Helpers de SOLO visualizacion para el modulo de Asistencia (Fase 117) —
@@ -59,6 +59,39 @@ export function diasLaborablesEnRango(desde: string, hasta: string, feriadosSet:
     cursor.setDate(cursor.getDate() + 1);
   }
   return dias;
+}
+
+export interface PuntoGpsAsistencia {
+  label: string;
+  lat: number;
+  lng: number;
+  color: string;
+}
+
+type RegistroConGps = Pick<
+  AsistenciaRegistro,
+  'hora_ingreso' | 'lat_ingreso' | 'lng_ingreso' | 'fin_almuerzo' | 'lat_fin_almuerzo' | 'lng_fin_almuerzo' | 'hora_salida' | 'lat_salida' | 'lng_salida'
+>;
+
+/**
+ * Puntos GPS validos (con lat/lng guardados) de una marcacion, para pintarlos
+ * en el mapa del tablero de asistencia. Nunca inventa un punto que no tiene
+ * coordenadas — si una marcacion no tiene GPS guardado, simplemente no entra
+ * al arreglo (la pantalla debe mostrar "Ubicación GPS no disponible", nunca
+ * un mapa en blanco).
+ */
+export function puntosGpsDe(r: RegistroConGps): PuntoGpsAsistencia[] {
+  const puntos: PuntoGpsAsistencia[] = [];
+  if (r.lat_ingreso != null && r.lng_ingreso != null) {
+    puntos.push({ label: `Ingreso ${formatHora(r.hora_ingreso)}`, lat: Number(r.lat_ingreso), lng: Number(r.lng_ingreso), color: '#22c55e' });
+  }
+  if (r.lat_fin_almuerzo != null && r.lng_fin_almuerzo != null) {
+    puntos.push({ label: `Fin almuerzo ${formatHora(r.fin_almuerzo)}`, lat: Number(r.lat_fin_almuerzo), lng: Number(r.lng_fin_almuerzo), color: '#0ea5e9' });
+  }
+  if (r.lat_salida != null && r.lng_salida != null) {
+    puntos.push({ label: `Salida ${formatHora(r.hora_salida)}`, lat: Number(r.lat_salida), lng: Number(r.lng_salida), color: '#ef4444' });
+  }
+  return puntos;
 }
 
 export function formatMinutos(min: number | null): string {
