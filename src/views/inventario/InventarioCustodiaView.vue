@@ -255,8 +255,11 @@ async function handleMaterialReturnDecision(request: TechnicianMaterialReturnReq
 }
 
 // ---- Pestaña Conciliación: tabla "Almacen vs. custodia vs. instalado" —
-// busqueda + filtro + orden + paginacion, todo local (los datos ya estan
-// cargados por inventory_custody_summary(), sin consulta nueva). ----
+// busqueda + filtro + orden, todo local (los datos ya estan cargados por
+// inventory_custody_summary(), sin consulta nueva). Sin paginacion a
+// proposito: 25 productos reales hoy, se piden todos en una sola tabla
+// con scroll vertical normal de la pagina — nunca mas de un puñado de
+// decenas de productos activos, no justifica paginar. ----
 const reconciliationQuery = ref('');
 type ReconciliationFilter = 'todos' | 'con_custodia' | 'sin_almacen';
 const RECONCILIATION_FILTERS: { value: ReconciliationFilter; label: string }[] = [
@@ -271,7 +274,6 @@ function toggleReconciliationSort(key: ReconciliationSortKey) {
   reconciliationSort.value = reconciliationSort.value.key === key
     ? { key, dir: reconciliationSort.value.dir === 'asc' ? 'desc' : 'asc' }
     : { key, dir: key === 'product_name' ? 'asc' : 'desc' }; // numericas: lo mas grande primero por defecto, mas util para encontrar algo
-  resetReconciliationPage();
 }
 const filteredSummary = computed(() => {
   const q = reconciliationQuery.value.trim().toLowerCase();
@@ -287,14 +289,6 @@ const filteredSummary = computed(() => {
     return cmp * sign;
   });
 });
-const reconciliationPage = ref(1);
-const reconciliationPageSize = ref(10);
-const reconciliationPageCount = computed(() => Math.max(1, Math.ceil(filteredSummary.value.length / reconciliationPageSize.value)));
-const pagedSummary = computed(() => {
-  const start = (reconciliationPage.value - 1) * reconciliationPageSize.value;
-  return filteredSummary.value.slice(start, start + reconciliationPageSize.value);
-});
-function resetReconciliationPage() { reconciliationPage.value = 1; }
 
 // ---- Pestaña Conciliación: advertencias de consumo sin custodia (Fase 165,
 // etapa 1 — solo lectura, nunca bloquea). Se carga junto al resto en loadAll
@@ -734,27 +728,27 @@ onMounted(loadAll);
         </div>
 
         <div class="surface p-4">
-          <h2 class="text-base font-semibold mb-2">Almacén vs. custodia vs. instalado</h2>
+          <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+            <h2 class="text-base font-semibold">Almacén vs. custodia vs. instalado</h2>
+            <span class="text-xs text-slate-500">{{ filteredSummary.length }} producto{{ filteredSummary.length === 1 ? '' : 's' }}</span>
+          </div>
           <div class="flex flex-wrap items-end gap-2 mb-3">
             <input
               v-model="reconciliationQuery"
               placeholder="Buscar producto..."
               class="field-input max-w-[220px]"
-              @input="resetReconciliationPage"
             />
-            <select v-model="reconciliationFilter" class="field-input max-w-[200px]" @change="resetReconciliationPage">
+            <select v-model="reconciliationFilter" class="field-input max-w-[200px]">
               <option v-for="f in RECONCILIATION_FILTERS" :key="f.value" :value="f.value">{{ f.label }}</option>
-            </select>
-            <select v-model.number="reconciliationPageSize" class="field-input max-w-[110px]" @change="resetReconciliationPage">
-              <option :value="10">10 / pág.</option>
-              <option :value="25">25 / pág.</option>
-              <option :value="50">50 / pág.</option>
             </select>
           </div>
 
+          <!-- Sin paginacion a proposito (ver nota en el script): todos los
+               productos filtrados en una sola tabla/lista, con el scroll
+               vertical normal de la pagina. -->
           <div class="flex flex-col gap-2 sm:hidden">
-            <p v-if="!pagedSummary.length" class="text-sm text-slate-500 text-center py-4">Sin productos que coincidan.</p>
-            <div v-for="row in pagedSummary" :key="row.product_id" class="rounded-lg border border-slate-200 p-3">
+            <p v-if="!filteredSummary.length" class="text-sm text-slate-500 text-center py-4">Sin productos que coincidan.</p>
+            <div v-for="row in filteredSummary" :key="row.product_id" class="rounded-lg border border-slate-200 p-3">
               <div class="font-medium text-slate-900 mb-1.5">{{ row.product_name }} <span class="text-slate-400 text-xs">({{ row.unit }})</span></div>
               <div class="grid grid-cols-3 gap-2 text-xs text-slate-600 mb-1.5">
                 <div><span class="text-slate-400 block">Almacén</span>{{ row.warehouse_qty }}</div>
@@ -795,10 +789,10 @@ onMounted(loadAll);
                 </tr>
               </thead>
               <tbody>
-                <tr v-if="!pagedSummary.length">
+                <tr v-if="!filteredSummary.length">
                   <td colspan="5" class="px-3 py-6 text-center text-slate-500">Sin productos que coincidan.</td>
                 </tr>
-                <tr v-for="row in pagedSummary" :key="row.product_id" class="border-t border-slate-200">
+                <tr v-for="row in filteredSummary" :key="row.product_id" class="border-t border-slate-200">
                   <td class="px-3 py-2">{{ row.product_name }} <span class="text-slate-400">({{ row.unit }})</span></td>
                   <td class="px-3 py-2 text-right">{{ row.warehouse_qty }}</td>
                   <td class="px-3 py-2 text-right" :class="row.custody_qty > 0 ? 'font-medium text-indigo-700' : ''">{{ row.custody_qty }}</td>
@@ -812,14 +806,6 @@ onMounted(loadAll);
                 </tr>
               </tbody>
             </table>
-          </div>
-          <div class="flex flex-wrap items-center justify-between gap-2 mt-3 text-xs text-slate-600">
-            <span>{{ filteredSummary.length ? ((reconciliationPage - 1) * reconciliationPageSize + 1) : 0 }}–{{ Math.min(reconciliationPage * reconciliationPageSize, filteredSummary.length) }} de {{ filteredSummary.length }}</span>
-            <div class="flex items-center gap-1.5">
-              <button type="button" class="btn-secondary text-xs" :disabled="reconciliationPage <= 1" @click="reconciliationPage--">← Anterior</button>
-              <span>{{ reconciliationPage }}/{{ reconciliationPageCount }}</span>
-              <button type="button" class="btn-secondary text-xs" :disabled="reconciliationPage >= reconciliationPageCount" @click="reconciliationPage++">Siguiente →</button>
-            </div>
           </div>
         </div>
       </section>
