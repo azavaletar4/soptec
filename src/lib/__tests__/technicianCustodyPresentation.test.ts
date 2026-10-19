@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseCustodyTechnician, currentCustodyDelivery, custodyEquipmentLocation } from '../technicianCustodyPresentation';
+import { chooseCustodyTechnician, currentCustodyDelivery, custodyEquipmentLocation, shortfallReasonLabel } from '../technicianCustodyPresentation';
 import { formatPeruDateTime } from '../oltAlertPresentation';
 import type { InventoryUnitEvent } from '../../types/domain';
 
@@ -31,4 +31,11 @@ test('fecha real en Perú y navegación al Kardex existente', () => {
   assert.match(date, /17/); assert.match(date, /09:30|21:30/);
   assert.equal(formatPeruDateTime('invalid'), 'Fecha no disponible');
   assert.deepEqual(custodyEquipmentLocation('product', 'ont'), { name: 'inventario-detalle', params: { id: 'product' }, query: { unit: 'ont', returnTo: '/inventario/custodia' } });
+});
+
+test('shortfallReasonLabel: sin ninguna entrega -> motivo explicito, nunca generico', () => {
+  assert.equal(shortfallReasonLabel({ quantity: 4, availableBefore: 0, unit: 'unidad' }), 'Sin ninguna entrega registrada antes de este consumo');
+});
+test('shortfallReasonLabel: entrega parcial -> cita los numeros reales', () => {
+  assert.equal(shortfallReasonLabel({ quantity: 4, availableBefore: 1, unit: 'metros' }), 'Tenía 1 metros en custodia, consumió 4');
 });

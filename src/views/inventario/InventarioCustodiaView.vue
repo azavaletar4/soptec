@@ -12,7 +12,7 @@
 // almacen) no se corrige aqui, requiere un ajuste administrativo aparte
 // (ver inventory_custody_summary()).
 import { computed, onMounted, ref, watch } from 'vue';
-import { chooseCustodyTechnician, currentCustodyDelivery, custodyEquipmentLocation } from '@/lib/technicianCustodyPresentation';
+import { chooseCustodyTechnician, currentCustodyDelivery, custodyEquipmentLocation, shortfallReasonLabel } from '@/lib/technicianCustodyPresentation';
 import { classifyShortfallRecency } from '@/lib/materialCustodyShortfall';
 import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -65,6 +65,10 @@ async function loadAll() {
   } finally {
     loading.value = false;
   }
+  // Independiente del resto (su propio loading/error) -- un fallo aqui no debe
+  // tapar el resto de la pantalla, y el conteo debe verse en el resumen
+  // superior sin obligar a entrar a la pestaña Conciliación.
+  void loadShortfalls();
 }
 
 // ---- Indicadores superiores — nunca se suman cantidades de distintas
@@ -250,45 +254,81 @@ async function handleMaterialReturnDecision(request: TechnicianMaterialReturnReq
   }
 }
 
-// ---- Pestaña Conciliación: busqueda + paginacion local ----
+// ---- Pestaña Conciliación: tabla "Almacen vs. custodia vs. instalado" —
+// busqueda + filtro + orden + paginacion, todo local (los datos ya estan
+// cargados por inventory_custody_summary(), sin consulta nueva). ----
 const reconciliationQuery = ref('');
-const reconciliationPage = ref(1);
-const RECONCILIATION_PAGE_SIZE = 10;
+type ReconciliationFilter = 'todos' | 'con_custodia' | 'sin_almacen';
+const RECONCILIATION_FILTERS: { value: ReconciliationFilter; label: string }[] = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'con_custodia', label: 'Con custodia asignada' },
+  { value: 'sin_almacen', label: 'Sin existencias en almacén' },
+];
+const reconciliationFilter = ref<ReconciliationFilter>('todos');
+type ReconciliationSortKey = 'product_name' | 'warehouse_qty' | 'custody_qty' | 'installed_qty';
+const reconciliationSort = ref<{ key: ReconciliationSortKey; dir: 'asc' | 'desc' }>({ key: 'product_name', dir: 'asc' });
+function toggleReconciliationSort(key: ReconciliationSortKey) {
+  reconciliationSort.value = reconciliationSort.value.key === key
+    ? { key, dir: reconciliationSort.value.dir === 'asc' ? 'desc' : 'asc' }
+    : { key, dir: key === 'product_name' ? 'asc' : 'desc' }; // numericas: lo mas grande primero por defecto, mas util para encontrar algo
+  resetReconciliationPage();
+}
 const filteredSummary = computed(() => {
   const q = reconciliationQuery.value.trim().toLowerCase();
-  if (!q) return summary.value;
-  return summary.value.filter((row) => row.product_name.toLowerCase().includes(q));
+  let rows = summary.value;
+  if (q) rows = rows.filter((row) => row.product_name.toLowerCase().includes(q));
+  if (reconciliationFilter.value === 'con_custodia') rows = rows.filter((row) => row.custody_qty > 0);
+  else if (reconciliationFilter.value === 'sin_almacen') rows = rows.filter((row) => row.warehouse_qty <= 0);
+  const { key, dir } = reconciliationSort.value;
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const av = a[key]; const bv = b[key];
+    const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
+    return cmp * sign;
+  });
 });
-const reconciliationPageCount = computed(() => Math.max(1, Math.ceil(filteredSummary.value.length / RECONCILIATION_PAGE_SIZE)));
+const reconciliationPage = ref(1);
+const reconciliationPageSize = ref(10);
+const reconciliationPageCount = computed(() => Math.max(1, Math.ceil(filteredSummary.value.length / reconciliationPageSize.value)));
 const pagedSummary = computed(() => {
-  const start = (reconciliationPage.value - 1) * RECONCILIATION_PAGE_SIZE;
-  return filteredSummary.value.slice(start, start + RECONCILIATION_PAGE_SIZE);
+  const start = (reconciliationPage.value - 1) * reconciliationPageSize.value;
+  return filteredSummary.value.slice(start, start + reconciliationPageSize.value);
 });
 function resetReconciliationPage() { reconciliationPage.value = 1; }
 
 // ---- Pestaña Conciliación: advertencias de consumo sin custodia (Fase 165,
-// etapa 1 — solo lectura, nunca bloquea). Se carga perezoso al entrar a la
-// pestaña (no en cada loadAll) porque recorre todo el Kardex de consumibles. ----
+// etapa 1 — solo lectura, nunca bloquea). Se carga junto al resto en loadAll
+// (dataset chico, confirmado: <300 movimientos en produccion) para que el
+// resumen superior muestre el conteo real sin obligar a entrar a la pestaña. ----
 type MaterialShortfallRow = Awaited<ReturnType<typeof custodyStore.fetchMaterialCustodyShortfalls>>[number];
 const materialShortfalls = ref<MaterialShortfallRow[]>([]);
 const shortfallsLoading = ref(false);
 const shortfallsError = ref<string | null>(null);
-let shortfallsLoaded = false;
+const showShortfallInfo = ref(false);
 async function loadShortfalls() {
   shortfallsLoading.value = true;
   shortfallsError.value = null;
   try {
     materialShortfalls.value = await custodyStore.fetchMaterialCustodyShortfalls();
-    shortfallsLoaded = true;
   } catch (e) {
     shortfallsError.value = getErrorMessage(e, 'No se pudo calcular la conciliación de consumo de material');
   } finally {
     shortfallsLoading.value = false;
   }
 }
-watch(activeTab, (tab) => {
-  if (tab === 'conciliacion' && !shortfallsLoaded && !shortfallsLoading.value) void loadShortfalls();
+// Prioridad visual (punto 2): separados siempre, "Nuevos" primero y nunca
+// paginado (si aparece uno, se espera que se revise ya); "Históricos" es un
+// backlog que puede ser grande (158 casos reales confirmados) y se pagina.
+const shortfallsNuevos = computed(() => materialShortfalls.value.filter((s) => classifyShortfallRecency(s.consumedAt) === 'nuevo'));
+const shortfallsHistoricos = computed(() => materialShortfalls.value.filter((s) => classifyShortfallRecency(s.consumedAt) === 'historico'));
+const historicosPage = ref(1);
+const HISTORICOS_PAGE_SIZE = 10;
+const historicosPageCount = computed(() => Math.max(1, Math.ceil(shortfallsHistoricos.value.length / HISTORICOS_PAGE_SIZE)));
+const pagedHistoricos = computed(() => {
+  const start = (historicosPage.value - 1) * HISTORICOS_PAGE_SIZE;
+  return shortfallsHistoricos.value.slice(start, start + HISTORICOS_PAGE_SIZE);
 });
+function shortfallMotivo(row: MaterialShortfallRow) { return shortfallReasonLabel(row); }
 
 onMounted(loadAll);
 </script>
@@ -327,6 +367,20 @@ onMounted(loadAll);
           <div class="text-2xl font-semibold" :class="kpis.devolucionesPendientes ? 'text-amber-600' : ''">{{ kpis.devolucionesPendientes }}</div>
           <div class="text-xs text-slate-500 mt-1">Devoluciones pendientes</div>
         </div>
+        <button
+          type="button"
+          class="surface p-4 text-left transition-colors hover:bg-slate-50"
+          :class="shortfallsNuevos.length ? 'ring-1 ring-red-200' : ''"
+          @click="activeTab = 'conciliacion'"
+        >
+          <div class="flex items-baseline gap-2">
+            <span class="text-2xl font-semibold" :class="shortfallsNuevos.length ? 'text-red-600' : 'text-slate-900'">
+              {{ shortfallsLoading ? '…' : shortfallsNuevos.length }}
+            </span>
+            <span v-if="!shortfallsLoading && shortfallsHistoricos.length" class="text-xs text-slate-400">+ {{ shortfallsHistoricos.length }} históricos</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-1">Consumos sin custodia suficiente</div>
+        </button>
       </div>
 
       <!-- Pestañas -->
@@ -550,100 +604,223 @@ onMounted(loadAll);
       <!-- ===== Conciliación ===== -->
       <section v-else class="flex flex-col gap-4">
         <div class="surface p-4">
-          <h2 class="text-base font-semibold mb-1">⚠️ Consumo de material sin custodia suficiente</h2>
-          <p class="text-xs text-slate-500 mb-3">
-            Advertencia de solo lectura — no bloquea el cierre de Altas, Averías ni Rutinas, no corrige nada
-            automáticamente. Señala consumos donde el sistema nunca registró una entrega formal suficiente a ese
-            técnico antes de liquidarlo. <strong>No es prueba de pérdida física</strong> — puede deberse simplemente
-            a que la entrega nunca se formalizó en este panel (lo más frecuente hoy).
+          <div class="flex items-start justify-between gap-2 mb-2">
+            <h2 class="text-base font-semibold">⚠️ Consumo sin custodia suficiente</h2>
+          </div>
+          <p class="text-xs text-slate-500 mb-1">
+            Solo lectura, no bloquea ni corrige nada —
+            <button type="button" class="text-sky-700 underline" @click="showShortfallInfo = !showShortfallInfo">{{ showShortfallInfo ? 'ocultar' : 'qué significa' }}</button>
           </p>
+          <p v-if="showShortfallInfo" class="text-xs text-slate-500 mb-3 max-w-2xl">
+            Señala consumos donde el sistema nunca registró una entrega formal suficiente a ese técnico antes de
+            liquidarlo. <strong>No es prueba de pérdida física</strong> — lo más frecuente es que la entrega nunca
+            se formalizó en este panel.
+          </p>
+
           <p v-if="shortfallsLoading" class="text-sm text-slate-500 py-4 text-center">Calculando...</p>
           <p v-else-if="shortfallsError" class="text-sm text-red-600">{{ shortfallsError }} <button class="underline" @click="loadShortfalls">Reintentar</button></p>
-          <p v-else-if="!materialShortfalls.length" class="text-xs text-slate-500">Sin hallazgos — todo el consumo de material registrado tenía saldo de custodia suficiente.</p>
-          <div v-else class="table-shell overflow-x-auto">
-            <table class="w-full text-sm min-w-[760px]">
+
+          <template v-else>
+            <!-- Nuevos: prioridad visual, siempre a la vista, nunca paginado -->
+            <div class="mb-4">
+              <h3 class="text-xs font-semibold uppercase mb-2" :class="shortfallsNuevos.length ? 'text-red-700' : 'text-slate-400'">
+                Nuevos ({{ shortfallsNuevos.length }})
+              </h3>
+              <p v-if="!shortfallsNuevos.length" class="text-xs text-slate-500">Sin consumos nuevos sin custodia desde que se activó esta detección.</p>
+              <template v-else>
+                <div class="flex flex-col gap-2 sm:hidden">
+                  <div v-for="row in shortfallsNuevos" :key="row.movementId" class="rounded-lg border border-red-200 bg-red-50/50 p-3">
+                    <div class="flex items-start justify-between gap-2 mb-1">
+                      <span class="font-medium text-slate-900">{{ row.technicianName }}</span>
+                      <span class="text-xs text-slate-500 whitespace-nowrap">{{ formatPeruDateTime(row.consumedAt) }}</span>
+                    </div>
+                    <div class="text-sm text-slate-700">{{ row.quantity }} {{ row.unit }} de {{ row.productName }}</div>
+                    <div class="text-xs text-slate-600 mt-1">{{ row.reason || 'Sin motivo registrado' }}</div>
+                    <div class="text-xs text-slate-400">{{ shortfallMotivo(row) }}</div>
+                    <router-link v-if="row.jobPath" :to="row.jobPath" class="text-xs text-sky-700 underline">{{ row.jobLabel }}</router-link>
+                    <span v-else class="text-xs text-slate-500">{{ row.jobLabel }}</span>
+                  </div>
+                </div>
+                <div class="table-shell overflow-x-auto hidden sm:block">
+                  <table class="w-full text-sm min-w-[720px]">
+                    <thead class="bg-red-50 text-red-700 text-xs uppercase">
+                      <tr>
+                        <th class="text-left px-3 py-2">Técnico</th>
+                        <th class="text-left px-3 py-2">Material</th>
+                        <th class="text-left px-3 py-2">Motivo</th>
+                        <th class="text-left px-3 py-2">Orden</th>
+                        <th class="text-left px-3 py-2">Fecha (Perú)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in shortfallsNuevos" :key="row.movementId" class="border-t border-red-100">
+                        <td class="px-3 py-2">{{ row.technicianName }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap">{{ row.quantity }} {{ row.unit }} <span class="text-slate-400">de {{ row.productName }}</span></td>
+                        <td class="px-3 py-2 text-xs">
+                          <div>{{ row.reason || 'Sin motivo registrado' }}</div>
+                          <div class="text-slate-400">{{ shortfallMotivo(row) }}</div>
+                        </td>
+                        <td class="px-3 py-2 text-xs">
+                          <router-link v-if="row.jobPath" :to="row.jobPath" class="text-sky-700 underline">{{ row.jobLabel }}</router-link>
+                          <span v-else>{{ row.jobLabel }}</span>
+                        </td>
+                        <td class="px-3 py-2 text-xs whitespace-nowrap">{{ formatPeruDateTime(row.consumedAt) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+
+            <!-- Históricos: backlog grande (158 casos reales confirmados), colapsado y paginado -->
+            <details class="border-t border-slate-100 pt-3">
+              <summary class="cursor-pointer text-xs font-semibold uppercase text-slate-500">
+                Históricos ({{ shortfallsHistoricos.length }})
+              </summary>
+              <p class="text-xs text-slate-500 my-2">Ocurrieron antes de activar esta detección — quedan de referencia, no requieren acción inmediata.</p>
+              <p v-if="!shortfallsHistoricos.length" class="text-xs text-slate-500">Sin hallazgos históricos.</p>
+              <template v-else>
+                <div class="flex flex-col gap-2 sm:hidden">
+                  <div v-for="row in pagedHistoricos" :key="row.movementId" class="rounded-lg border border-slate-200 p-3">
+                    <div class="flex items-start justify-between gap-2 mb-1">
+                      <span class="font-medium text-slate-900">{{ row.technicianName }}</span>
+                      <span class="text-xs text-slate-500 whitespace-nowrap">{{ formatPeruDateTime(row.consumedAt) }}</span>
+                    </div>
+                    <div class="text-sm text-slate-700">{{ row.quantity }} {{ row.unit }} de {{ row.productName }}</div>
+                    <div class="text-xs text-slate-600 mt-1">{{ row.reason || 'Sin motivo registrado' }}</div>
+                    <div class="text-xs text-slate-400">{{ shortfallMotivo(row) }}</div>
+                    <router-link v-if="row.jobPath" :to="row.jobPath" class="text-xs text-sky-700 underline">{{ row.jobLabel }}</router-link>
+                    <span v-else class="text-xs text-slate-500">{{ row.jobLabel }}</span>
+                  </div>
+                </div>
+                <div class="table-shell overflow-x-auto hidden sm:block">
+                  <table class="w-full text-sm min-w-[720px]">
+                    <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+                      <tr>
+                        <th class="text-left px-3 py-2">Técnico</th>
+                        <th class="text-left px-3 py-2">Material</th>
+                        <th class="text-left px-3 py-2">Motivo</th>
+                        <th class="text-left px-3 py-2">Orden</th>
+                        <th class="text-left px-3 py-2">Fecha (Perú)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in pagedHistoricos" :key="row.movementId" class="border-t border-slate-200">
+                        <td class="px-3 py-2">{{ row.technicianName }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap">{{ row.quantity }} {{ row.unit }} <span class="text-slate-400">de {{ row.productName }}</span></td>
+                        <td class="px-3 py-2 text-xs">
+                          <div>{{ row.reason || 'Sin motivo registrado' }}</div>
+                          <div class="text-slate-400">{{ shortfallMotivo(row) }}</div>
+                        </td>
+                        <td class="px-3 py-2 text-xs">
+                          <router-link v-if="row.jobPath" :to="row.jobPath" class="text-sky-700 underline">{{ row.jobLabel }}</router-link>
+                          <span v-else>{{ row.jobLabel }}</span>
+                        </td>
+                        <td class="px-3 py-2 text-xs whitespace-nowrap">{{ formatPeruDateTime(row.consumedAt) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-if="historicosPageCount > 1" class="flex flex-wrap items-center justify-between gap-2 mt-2 text-xs text-slate-600">
+                  <span>{{ (historicosPage - 1) * HISTORICOS_PAGE_SIZE + 1 }}–{{ Math.min(historicosPage * HISTORICOS_PAGE_SIZE, shortfallsHistoricos.length) }} de {{ shortfallsHistoricos.length }}</span>
+                  <div class="flex gap-1.5">
+                    <button type="button" class="btn-secondary text-xs" :disabled="historicosPage <= 1" @click="historicosPage--">← Anterior</button>
+                    <button type="button" class="btn-secondary text-xs" :disabled="historicosPage >= historicosPageCount" @click="historicosPage++">Siguiente →</button>
+                  </div>
+                </div>
+              </template>
+            </details>
+          </template>
+        </div>
+
+        <div class="surface p-4">
+          <h2 class="text-base font-semibold mb-2">Almacén vs. custodia vs. instalado</h2>
+          <div class="flex flex-wrap items-end gap-2 mb-3">
+            <input
+              v-model="reconciliationQuery"
+              placeholder="Buscar producto..."
+              class="field-input max-w-[220px]"
+              @input="resetReconciliationPage"
+            />
+            <select v-model="reconciliationFilter" class="field-input max-w-[200px]" @change="resetReconciliationPage">
+              <option v-for="f in RECONCILIATION_FILTERS" :key="f.value" :value="f.value">{{ f.label }}</option>
+            </select>
+            <select v-model.number="reconciliationPageSize" class="field-input max-w-[110px]" @change="resetReconciliationPage">
+              <option :value="10">10 / pág.</option>
+              <option :value="25">25 / pág.</option>
+              <option :value="50">50 / pág.</option>
+            </select>
+          </div>
+
+          <div class="flex flex-col gap-2 sm:hidden">
+            <p v-if="!pagedSummary.length" class="text-sm text-slate-500 text-center py-4">Sin productos que coincidan.</p>
+            <div v-for="row in pagedSummary" :key="row.product_id" class="rounded-lg border border-slate-200 p-3">
+              <div class="font-medium text-slate-900 mb-1.5">{{ row.product_name }} <span class="text-slate-400 text-xs">({{ row.unit }})</span></div>
+              <div class="grid grid-cols-3 gap-2 text-xs text-slate-600 mb-1.5">
+                <div><span class="text-slate-400 block">Almacén</span>{{ row.warehouse_qty }}</div>
+                <div><span class="text-slate-400 block">Custodia</span>{{ row.custody_qty }}</div>
+                <div><span class="text-slate-400 block">Instalado</span>{{ row.installed_qty ?? '—' }}</div>
+              </div>
+              <div v-if="Object.keys(row.custody_by_technician).length" class="text-xs text-slate-500">
+                <span v-for="(qty, name) in row.custody_by_technician" :key="name" class="mr-2">{{ name }}: {{ qty }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-shell overflow-x-auto hidden sm:block">
+            <table class="w-full text-sm min-w-[720px]">
               <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
                 <tr>
-                  <th class="text-left px-3 py-2">Técnico</th>
-                  <th class="text-left px-3 py-2">Material</th>
-                  <th class="text-left px-3 py-2">Orden</th>
-                  <th class="text-right px-3 py-2">Consumido</th>
-                  <th class="text-right px-3 py-2">Disponible antes</th>
-                  <th class="text-left px-3 py-2">Fecha (Perú)</th>
-                  <th class="text-left px-3 py-2"></th>
+                  <th class="text-left px-3 py-2">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleReconciliationSort('product_name')">
+                      Producto <span v-if="reconciliationSort.key === 'product_name'">{{ reconciliationSort.dir === 'asc' ? '↑' : '↓' }}</span>
+                    </button>
+                  </th>
+                  <th class="text-right px-3 py-2">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleReconciliationSort('warehouse_qty')">
+                      En almacén <span v-if="reconciliationSort.key === 'warehouse_qty'">{{ reconciliationSort.dir === 'asc' ? '↑' : '↓' }}</span>
+                    </button>
+                  </th>
+                  <th class="text-right px-3 py-2">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleReconciliationSort('custody_qty')">
+                      En custodia <span v-if="reconciliationSort.key === 'custody_qty'">{{ reconciliationSort.dir === 'asc' ? '↑' : '↓' }}</span>
+                    </button>
+                  </th>
+                  <th class="text-right px-3 py-2">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleReconciliationSort('installed_qty')">
+                      Instalado <span v-if="reconciliationSort.key === 'installed_qty'">{{ reconciliationSort.dir === 'asc' ? '↑' : '↓' }}</span>
+                    </button>
+                  </th>
+                  <th class="text-left px-3 py-2">Custodia por técnico</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in materialShortfalls" :key="row.movementId" class="border-t border-slate-200">
-                  <td class="px-3 py-2">{{ row.technicianName }}</td>
-                  <td class="px-3 py-2">{{ row.productName }} <span class="text-slate-400">({{ row.unit }})</span></td>
-                  <td class="px-3 py-2 text-xs">
-                    <router-link v-if="row.jobPath" :to="row.jobPath" class="text-sky-700 underline">{{ row.jobLabel }}</router-link>
-                    <span v-else>{{ row.jobLabel }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-right font-mono">{{ row.quantity }}</td>
-                  <td class="px-3 py-2 text-right font-mono" :class="row.availableBefore === 0 ? 'text-red-600' : 'text-amber-700'">{{ row.availableBefore }}</td>
-                  <td class="px-3 py-2 text-xs">{{ formatPeruDateTime(row.consumedAt) }}</td>
-                  <td class="px-3 py-2">
-                    <span class="badge text-[10px]" :class="classifyShortfallRecency(row.consumedAt) === 'nuevo' ? 'bg-amber-500/15 text-amber-700' : 'bg-slate-500/15 text-slate-600'">
-                      {{ classifyShortfallRecency(row.consumedAt) === 'nuevo' ? 'Nuevo' : 'Histórico' }}
+                <tr v-if="!pagedSummary.length">
+                  <td colspan="5" class="px-3 py-6 text-center text-slate-500">Sin productos que coincidan.</td>
+                </tr>
+                <tr v-for="row in pagedSummary" :key="row.product_id" class="border-t border-slate-200">
+                  <td class="px-3 py-2">{{ row.product_name }} <span class="text-slate-400">({{ row.unit }})</span></td>
+                  <td class="px-3 py-2 text-right">{{ row.warehouse_qty }}</td>
+                  <td class="px-3 py-2 text-right" :class="row.custody_qty > 0 ? 'font-medium text-indigo-700' : ''">{{ row.custody_qty }}</td>
+                  <td class="px-3 py-2 text-right">{{ row.installed_qty ?? '—' }}</td>
+                  <td class="px-3 py-2 text-xs text-slate-600">
+                    <span v-if="!Object.keys(row.custody_by_technician).length">—</span>
+                    <span v-else>
+                      <span v-for="(qty, name) in row.custody_by_technician" :key="name" class="mr-2">{{ name }}: {{ qty }}</span>
                     </span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div class="surface p-4">
-        <h2 class="text-base font-semibold mb-1">Almacén vs. custodia vs. instalado</h2>
-        <p class="text-xs text-slate-500 mb-3">
-          Conteos reales del sistema. Si el físico no coincide con "En almacén", corrígelo con un ajuste administrativo aparte —
-          esta tabla no inventa ni descuenta diferencias automáticamente.
-        </p>
-        <input
-          v-model="reconciliationQuery"
-          placeholder="Buscar producto..."
-          class="field-input mb-3 max-w-sm"
-          @input="resetReconciliationPage"
-        />
-        <div class="table-shell overflow-x-auto">
-          <table class="w-full text-sm min-w-[720px]">
-            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
-              <tr>
-                <th class="text-left px-3 py-2">Producto</th>
-                <th class="text-right px-3 py-2">En almacén</th>
-                <th class="text-right px-3 py-2">En custodia</th>
-                <th class="text-right px-3 py-2">Instalado</th>
-                <th class="text-left px-3 py-2">Custodia por técnico</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="!pagedSummary.length">
-                <td colspan="5" class="px-3 py-6 text-center text-slate-500">Sin productos que coincidan.</td>
-              </tr>
-              <tr v-for="row in pagedSummary" :key="row.product_id" class="border-t border-slate-200">
-                <td class="px-3 py-2">{{ row.product_name }} <span class="text-slate-400">({{ row.unit }})</span></td>
-                <td class="px-3 py-2 text-right">{{ row.warehouse_qty }}</td>
-                <td class="px-3 py-2 text-right">{{ row.custody_qty }}</td>
-                <td class="px-3 py-2 text-right">{{ row.installed_qty ?? '—' }}</td>
-                <td class="px-3 py-2 text-xs text-slate-600">
-                  <span v-if="!Object.keys(row.custody_by_technician).length">—</span>
-                  <span v-else>
-                    <span v-for="(qty, name) in row.custody_by_technician" :key="name" class="mr-2">{{ name }}: {{ qty }}</span>
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-if="reconciliationPageCount > 1" class="flex items-center justify-between mt-3 text-xs text-slate-600">
-          <span>Página {{ reconciliationPage }} de {{ reconciliationPageCount }} · {{ filteredSummary.length }} productos</span>
-          <div class="flex gap-1.5">
-            <button type="button" class="btn-secondary text-xs" :disabled="reconciliationPage <= 1" @click="reconciliationPage--">← Anterior</button>
-            <button type="button" class="btn-secondary text-xs" :disabled="reconciliationPage >= reconciliationPageCount" @click="reconciliationPage++">Siguiente →</button>
+          <div class="flex flex-wrap items-center justify-between gap-2 mt-3 text-xs text-slate-600">
+            <span>{{ filteredSummary.length ? ((reconciliationPage - 1) * reconciliationPageSize + 1) : 0 }}–{{ Math.min(reconciliationPage * reconciliationPageSize, filteredSummary.length) }} de {{ filteredSummary.length }}</span>
+            <div class="flex items-center gap-1.5">
+              <button type="button" class="btn-secondary text-xs" :disabled="reconciliationPage <= 1" @click="reconciliationPage--">← Anterior</button>
+              <span>{{ reconciliationPage }}/{{ reconciliationPageCount }}</span>
+              <button type="button" class="btn-secondary text-xs" :disabled="reconciliationPage >= reconciliationPageCount" @click="reconciliationPage++">Siguiente →</button>
+            </div>
           </div>
-        </div>
         </div>
       </section>
     </template>

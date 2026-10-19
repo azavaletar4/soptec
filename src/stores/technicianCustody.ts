@@ -58,7 +58,7 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
       supabase.from('technician_material_custody_events').select('technician_id, product_id, event_type, quantity, created_at'),
       supabase
         .from('inventory_movements')
-        .select('id, product_id, movement_type, quantity, created_by, created_at, reverses_movement_id, installation_id, ticket_id, routine_id, product:inventory_products!inner(id, name, unit, is_serialized)')
+        .select('id, product_id, movement_type, quantity, reason, created_by, created_at, reverses_movement_id, installation_id, ticket_id, routine_id, product:inventory_products!inner(id, name, unit, is_serialized)')
         .eq('product.is_serialized', false)
         .in('movement_type', ['egreso', 'ingreso']),
     ]);
@@ -74,7 +74,7 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     }));
 
     type MovementRow = {
-      id: string; product_id: string; movement_type: 'ingreso' | 'egreso'; quantity: number;
+      id: string; product_id: string; movement_type: 'ingreso' | 'egreso'; quantity: number; reason: string | null;
       created_by: string | null; created_at: string; reverses_movement_id: string | null;
       installation_id: string | null; ticket_id: string | null; routine_id: string | null;
       product: { id: string; name: string; unit: string; is_serialized: boolean } | null;
@@ -90,6 +90,7 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
       jobType: m.installation_id ? 'installation' : m.ticket_id ? 'ticket' : m.routine_id ? 'routine' : null,
       jobId: m.installation_id ?? m.ticket_id ?? m.routine_id ?? null,
       reversesMovementId: m.reverses_movement_id,
+      reason: m.reason,
     }));
 
     const shortfalls = detectMaterialCustodyShortfalls(custodyEvents, movements);

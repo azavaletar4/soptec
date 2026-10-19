@@ -19,3 +19,14 @@ export function currentCustodyDelivery(unit: Pick<InventoryUnit, 'id' | 'status'
 export function custodyEquipmentLocation(productId: string, unitId: string) {
   return { name: 'inventario-detalle', params: { id: productId }, query: { unit: unitId, returnTo: '/inventario/custodia' } };
 }
+
+/**
+ * Explicacion concreta y verificable de por que un consumo quedo marcado
+ * sin custodia suficiente — a partir de los mismos numeros ya calculados
+ * (nunca una suposicion nueva): sin ninguna entrega, o una entrega que no
+ * alcanzaba. Fase 165, etapa 1 — presentacion de Custodia -> Conciliacion.
+ */
+export function shortfallReasonLabel(row: { quantity: number; availableBefore: number; unit: string }): string {
+  if (row.availableBefore <= 0) return 'Sin ninguna entrega registrada antes de este consumo';
+  return `Tenía ${row.availableBefore} ${row.unit} en custodia, consumió ${row.quantity}`;
+}

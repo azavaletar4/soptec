@@ -38,6 +38,8 @@ export interface MaterialConsumptionMovementInput {
   jobId: string | null;
   /** Si es un 'ingreso' que revierte un 'egreso' anterior (correct/reverse) — repone el saldo simulado de ese tecnico. */
   reversesMovementId: string | null;
+  /** Motivo real que el tecnico/sistema registro para el consumo (inventory_movements.reason) — nunca se inventa uno. */
+  reason: string | null;
 }
 
 export interface MaterialCustodyShortfall {
@@ -52,6 +54,8 @@ export interface MaterialCustodyShortfall {
   jobType: MaterialCustodyJobType;
   jobId: string;
   consumedAt: string;
+  /** Motivo real registrado en el Kardex para este consumo (puede ser null si nunca se escribio uno). */
+  reason: string | null;
 }
 
 /**
@@ -147,6 +151,7 @@ export function detectMaterialCustodyShortfalls(
             jobType: movement.jobType!,
             jobId: movement.jobId!,
             consumedAt: movement.createdAt,
+            reason: movement.reason,
           });
         }
         balance = Math.max(0, balance - ev.quantity);

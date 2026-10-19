@@ -21,6 +21,7 @@ function movement(partial: Partial<MaterialConsumptionMovementInput> & { id: str
     jobType: 'installation',
     jobId: 'job-1',
     reversesMovementId: null,
+    reason: null,
     ...partial,
   };
 }
@@ -36,6 +37,13 @@ test('detectMaterialCustodyShortfalls: sin ninguna entrega previa -> todo el con
   assert.equal(found[0].productId, PRODUCT);
   assert.equal(found[0].jobType, 'installation');
   assert.equal(found[0].jobId, 'job-1');
+});
+
+test('detectMaterialCustodyShortfalls: expone el motivo real del Kardex, nunca inventa uno', () => {
+  const found = detectMaterialCustodyShortfalls([], [movement({ id: 'm1', reason: 'Kit base de Alta desde Campo' })]);
+  assert.equal(found[0].reason, 'Kit base de Alta desde Campo');
+  const sinMotivo = detectMaterialCustodyShortfalls([], [movement({ id: 'm2', reason: null })]);
+  assert.equal(sinMotivo[0].reason, null);
 });
 
 test('detectMaterialCustodyShortfalls: con entrega suficiente antes del consumo -> no hay hallazgo', () => {
