@@ -2,6 +2,13 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { InventoryCustodySummaryRow, MyInventoryCustody, TechnicianMaterialReturnRequest } from '@/types/domain';
+import {
+  detectMaterialCustodyShortfalls,
+  type MaterialCustodyEventInput,
+  type MaterialCustodyJobType,
+  type MaterialCustodyShortfall,
+  type MaterialConsumptionMovementInput,
+} from '@/lib/materialCustodyShortfall';
 
 /**
  * Fase 164: entrega/devolucion/conciliacion de equipos y materiales en
@@ -27,6 +34,102 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
       .gt('quantity', 0);
     if (err) throw err;
     return (data ?? []) as unknown as Array<{ technician_id: string; product_id: string; quantity: number; updated_at: string; product: { id: string; name: string; unit: string } | null; technician: { id: string; full_name: string | null; email: string | null } | null }>;
+  }
+
+  /**
+   * Fase 165 (etapa 1 — advertencia, sin bloqueo): consumos de material
+   * registrados (campo_inventory_operation 'kit'/'consume',
+   * routine_inventory_operation 'consume') sin saldo suficiente en
+   * technician_material_custody al momento de consumirlos — ver
+   * src/lib/materialCustodyShortfall.ts. Solo lectura: no toca
+   * inventory_movements, technician_material_custody ni ninguna orden.
+   * Resuelve nombres de tecnico/producto y una referencia breve de la
+   * orden para mostrarlos en "Custodia de técnicos → Conciliación".
+   */
+  async function fetchMaterialCustodyShortfalls(): Promise<Array<MaterialCustodyShortfall & {
+    technicianName: string;
+    productName: string;
+    unit: string;
+    jobLabel: string;
+  }>> {
+    const [eventsRes, movementsRes] = await Promise.all([
+      supabase.from('technician_material_custody_events').select('technician_id, product_id, event_type, quantity, created_at'),
+      supabase
+        .from('inventory_movements')
+        .select('id, product_id, movement_type, quantity, created_by, created_at, reverses_movement_id, installation_id, ticket_id, routine_id, product:inventory_products!inner(id, name, unit, is_serialized)')
+        .eq('product.is_serialized', false)
+        .in('movement_type', ['egreso', 'ingreso']),
+    ]);
+    if (eventsRes.error) throw eventsRes.error;
+    if (movementsRes.error) throw movementsRes.error;
+
+    const custodyEvents: MaterialCustodyEventInput[] = (eventsRes.data ?? []).map((e) => ({
+      technicianId: e.technician_id,
+      productId: e.product_id,
+      eventType: e.event_type as 'delivery' | 'return',
+      quantity: Number(e.quantity),
+      createdAt: e.created_at,
+    }));
+
+    type MovementRow = {
+      id: string; product_id: string; movement_type: 'ingreso' | 'egreso'; quantity: number;
+      created_by: string | null; created_at: string; reverses_movement_id: string | null;
+      installation_id: string | null; ticket_id: string | null; routine_id: string | null;
+      product: { id: string; name: string; unit: string; is_serialized: boolean } | null;
+    };
+    const movementRows = (movementsRes.data ?? []) as unknown as MovementRow[];
+    const movements: MaterialConsumptionMovementInput[] = movementRows.map((m) => ({
+      id: m.id,
+      technicianId: m.created_by,
+      productId: m.product_id,
+      movementType: m.movement_type,
+      quantity: Number(m.quantity),
+      createdAt: m.created_at,
+      jobType: m.installation_id ? 'installation' : m.ticket_id ? 'ticket' : m.routine_id ? 'routine' : null,
+      jobId: m.installation_id ?? m.ticket_id ?? m.routine_id ?? null,
+      reversesMovementId: m.reverses_movement_id,
+    }));
+
+    const shortfalls = detectMaterialCustodyShortfalls(custodyEvents, movements);
+    if (!shortfalls.length) return [];
+
+    const productById = new Map(movementRows.map((m) => [m.product_id, m.product]));
+    const technicianIds = Array.from(new Set(shortfalls.map((s) => s.technicianId)));
+    const { data: technicianRows, error: techErr } = await supabase
+      .from('profiles').select('id, full_name, email').in('id', technicianIds);
+    if (techErr) throw techErr;
+    const technicianById = new Map((technicianRows ?? []).map((t) => [t.id, t.full_name || t.email || t.id]));
+
+    const jobIdsByType: Record<MaterialCustodyJobType, string[]> = {
+      installation: Array.from(new Set(shortfalls.filter((s) => s.jobType === 'installation').map((s) => s.jobId))),
+      ticket: Array.from(new Set(shortfalls.filter((s) => s.jobType === 'ticket').map((s) => s.jobId))),
+      routine: Array.from(new Set(shortfalls.filter((s) => s.jobType === 'routine').map((s) => s.jobId))),
+    };
+    const jobLabelById = new Map<string, string>();
+    const [installRows, ticketRows, routineRows] = await Promise.all([
+      jobIdsByType.installation.length
+        ? supabase.from('installations').select('id, client:clients(first_name, last_name)').in('id', jobIdsByType.installation)
+        : Promise.resolve({ data: [], error: null }),
+      jobIdsByType.ticket.length
+        ? supabase.from('tickets').select('id, client:clients(first_name, last_name)').in('id', jobIdsByType.ticket)
+        : Promise.resolve({ data: [], error: null }),
+      jobIdsByType.routine.length
+        ? supabase.from('routines').select('id, client:clients(first_name, last_name)').in('id', jobIdsByType.routine)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    type JobRow = { id: string; client: { first_name: string; last_name: string } | null };
+    const label = (row: JobRow, prefix: string) => `${prefix} — ${row.client ? `${row.client.first_name} ${row.client.last_name}` : 'cliente no disponible'}`;
+    for (const row of (installRows.data ?? []) as unknown as JobRow[]) jobLabelById.set(row.id, label(row, 'Alta'));
+    for (const row of (ticketRows.data ?? []) as unknown as JobRow[]) jobLabelById.set(row.id, label(row, 'Avería'));
+    for (const row of (routineRows.data ?? []) as unknown as JobRow[]) jobLabelById.set(row.id, label(row, 'Rutina'));
+
+    return shortfalls.map((s) => ({
+      ...s,
+      technicianName: technicianById.get(s.technicianId) ?? s.technicianId,
+      productName: productById.get(s.productId)?.name ?? s.productId,
+      unit: productById.get(s.productId)?.unit ?? '',
+      jobLabel: jobLabelById.get(s.jobId) ?? `${s.jobType} ${s.jobId}`,
+    }));
   }
 
   async function deliverUnitToTechnician(unitId: string, technicianId: string, reason?: string) {
@@ -97,6 +200,7 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     error,
     fetchCustodySummary,
     fetchAllMaterialCustody,
+    fetchMaterialCustodyShortfalls,
     fetchTechnicianHistory,
     deliverUnitToTechnician,
     receiveUnitReturn,

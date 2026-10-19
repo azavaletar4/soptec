@@ -13,6 +13,7 @@
 // (ver inventory_custody_summary()).
 import { computed, onMounted, ref, watch } from 'vue';
 import { chooseCustodyTechnician, currentCustodyDelivery, custodyEquipmentLocation } from '@/lib/technicianCustodyPresentation';
+import { classifyShortfallRecency } from '@/lib/materialCustodyShortfall';
 import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInventoryStore } from '@/stores/inventory';
@@ -264,6 +265,30 @@ const pagedSummary = computed(() => {
   return filteredSummary.value.slice(start, start + RECONCILIATION_PAGE_SIZE);
 });
 function resetReconciliationPage() { reconciliationPage.value = 1; }
+
+// ---- Pestaña Conciliación: advertencias de consumo sin custodia (Fase 165,
+// etapa 1 — solo lectura, nunca bloquea). Se carga perezoso al entrar a la
+// pestaña (no en cada loadAll) porque recorre todo el Kardex de consumibles. ----
+type MaterialShortfallRow = Awaited<ReturnType<typeof custodyStore.fetchMaterialCustodyShortfalls>>[number];
+const materialShortfalls = ref<MaterialShortfallRow[]>([]);
+const shortfallsLoading = ref(false);
+const shortfallsError = ref<string | null>(null);
+let shortfallsLoaded = false;
+async function loadShortfalls() {
+  shortfallsLoading.value = true;
+  shortfallsError.value = null;
+  try {
+    materialShortfalls.value = await custodyStore.fetchMaterialCustodyShortfalls();
+    shortfallsLoaded = true;
+  } catch (e) {
+    shortfallsError.value = getErrorMessage(e, 'No se pudo calcular la conciliación de consumo de material');
+  } finally {
+    shortfallsLoading.value = false;
+  }
+}
+watch(activeTab, (tab) => {
+  if (tab === 'conciliacion' && !shortfallsLoaded && !shortfallsLoading.value) void loadShortfalls();
+});
 
 onMounted(loadAll);
 </script>
@@ -523,7 +548,51 @@ onMounted(loadAll);
       </section>
 
       <!-- ===== Conciliación ===== -->
-      <section v-else class="surface p-4">
+      <section v-else class="flex flex-col gap-4">
+        <div class="surface p-4">
+          <h2 class="text-base font-semibold mb-1">⚠️ Consumo de material sin custodia suficiente</h2>
+          <p class="text-xs text-slate-500 mb-3">
+            Advertencia de solo lectura — no bloquea el cierre de Altas, Averías ni Rutinas, no corrige nada
+            automáticamente. Señala consumos donde el sistema nunca registró una entrega formal suficiente a ese
+            técnico antes de liquidarlo. <strong>No es prueba de pérdida física</strong> — puede deberse simplemente
+            a que la entrega nunca se formalizó en este panel (lo más frecuente hoy).
+          </p>
+          <p v-if="shortfallsLoading" class="text-sm text-slate-500 py-4 text-center">Calculando...</p>
+          <p v-else-if="shortfallsError" class="text-sm text-red-600">{{ shortfallsError }} <button class="underline" @click="loadShortfalls">Reintentar</button></p>
+          <p v-else-if="!materialShortfalls.length" class="text-xs text-slate-500">Sin hallazgos — todo el consumo de material registrado tenía saldo de custodia suficiente.</p>
+          <div v-else class="table-shell overflow-x-auto">
+            <table class="w-full text-sm min-w-[760px]">
+              <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+                <tr>
+                  <th class="text-left px-3 py-2">Técnico</th>
+                  <th class="text-left px-3 py-2">Material</th>
+                  <th class="text-left px-3 py-2">Orden</th>
+                  <th class="text-right px-3 py-2">Consumido</th>
+                  <th class="text-right px-3 py-2">Disponible antes</th>
+                  <th class="text-left px-3 py-2">Fecha (Perú)</th>
+                  <th class="text-left px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in materialShortfalls" :key="row.movementId" class="border-t border-slate-200">
+                  <td class="px-3 py-2">{{ row.technicianName }}</td>
+                  <td class="px-3 py-2">{{ row.productName }} <span class="text-slate-400">({{ row.unit }})</span></td>
+                  <td class="px-3 py-2 text-xs">{{ row.jobLabel }}</td>
+                  <td class="px-3 py-2 text-right font-mono">{{ row.quantity }}</td>
+                  <td class="px-3 py-2 text-right font-mono" :class="row.availableBefore === 0 ? 'text-red-600' : 'text-amber-700'">{{ row.availableBefore }}</td>
+                  <td class="px-3 py-2 text-xs">{{ formatPeruDateTime(row.consumedAt) }}</td>
+                  <td class="px-3 py-2">
+                    <span class="badge text-[10px]" :class="classifyShortfallRecency(row.consumedAt) === 'nuevo' ? 'bg-amber-500/15 text-amber-700' : 'bg-slate-500/15 text-slate-600'">
+                      {{ classifyShortfallRecency(row.consumedAt) === 'nuevo' ? 'Nuevo' : 'Histórico' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="surface p-4">
         <h2 class="text-base font-semibold mb-1">Almacén vs. custodia vs. instalado</h2>
         <p class="text-xs text-slate-500 mb-3">
           Conteos reales del sistema. Si el físico no coincide con "En almacén", corrígelo con un ajuste administrativo aparte —
@@ -571,6 +640,7 @@ onMounted(loadAll);
             <button type="button" class="btn-secondary text-xs" :disabled="reconciliationPage <= 1" @click="reconciliationPage--">← Anterior</button>
             <button type="button" class="btn-secondary text-xs" :disabled="reconciliationPage >= reconciliationPageCount" @click="reconciliationPage++">Siguiente →</button>
           </div>
+        </div>
         </div>
       </section>
     </template>
