@@ -54,12 +54,30 @@ export interface MaterialCustodyShortfall {
   consumedAt: string;
 }
 
-/** Cuando esta deteccion pase a ejecutarse en vivo (desplegada), fijar aqui la fecha/hora de activacion — mientras sea null, TODO hallazgo es "historico" por definicion (la deteccion todavia no existia). */
-export const MATERIAL_CUSTODY_DETECTION_LIVE_SINCE: string | null = null;
+/**
+ * Fecha/hora (ISO, UTC) en que esta deteccion pasa a ejecutarse en vivo —
+ * un valor unico, fijado en el momento real de activacion, el mismo para
+ * todos los administradores (nunca el reloj del navegador de quien mira
+ * la pantalla). Se inyecta en tiempo de build via VITE_MATERIAL_CUSTODY_LIVE_SINCE
+ * (mismo mecanismo ya usado para VITE_SUPABASE_URL — ver deploy/Dockerfile.frontend
+ * y docker-compose.onprem.yml) — queda horneada en el bundle, no se lee en
+ * cada carga de pagina. Sin configurar (deploy actual), vale null y TODO
+ * hallazgo es "historico" por definicion (la deteccion todavia no corria).
+ *
+ * `import.meta.env` no existe al correr las pruebas con tsx/node (no es un
+ * build de Vite) — el encadenado opcional evita que eso rompa los tests.
+ */
+function readLiveSinceFromBuildEnv(): string | null {
+  const raw = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_MATERIAL_CUSTODY_LIVE_SINCE;
+  if (!raw || !raw.trim()) return null;
+  return Number.isNaN(Date.parse(raw)) ? null : raw.trim();
+}
 
-export function classifyShortfallRecency(consumedAt: string): 'historico' | 'nuevo' {
-  if (MATERIAL_CUSTODY_DETECTION_LIVE_SINCE === null) return 'historico';
-  return consumedAt >= MATERIAL_CUSTODY_DETECTION_LIVE_SINCE ? 'nuevo' : 'historico';
+export const MATERIAL_CUSTODY_DETECTION_LIVE_SINCE: string | null = readLiveSinceFromBuildEnv();
+
+export function classifyShortfallRecency(consumedAt: string, liveSince: string | null = MATERIAL_CUSTODY_DETECTION_LIVE_SINCE): 'historico' | 'nuevo' {
+  if (liveSince === null) return 'historico';
+  return consumedAt >= liveSince ? 'nuevo' : 'historico';
 }
 
 /**

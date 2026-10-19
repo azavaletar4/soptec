@@ -577,7 +577,10 @@ onMounted(loadAll);
                 <tr v-for="row in materialShortfalls" :key="row.movementId" class="border-t border-slate-200">
                   <td class="px-3 py-2">{{ row.technicianName }}</td>
                   <td class="px-3 py-2">{{ row.productName }} <span class="text-slate-400">({{ row.unit }})</span></td>
-                  <td class="px-3 py-2 text-xs">{{ row.jobLabel }}</td>
+                  <td class="px-3 py-2 text-xs">
+                    <router-link v-if="row.jobPath" :to="row.jobPath" class="text-sky-700 underline">{{ row.jobLabel }}</router-link>
+                    <span v-else>{{ row.jobLabel }}</span>
+                  </td>
                   <td class="px-3 py-2 text-right font-mono">{{ row.quantity }}</td>
                   <td class="px-3 py-2 text-right font-mono" :class="row.availableBefore === 0 ? 'text-red-600' : 'text-amber-700'">{{ row.availableBefore }}</td>
                   <td class="px-3 py-2 text-xs">{{ formatPeruDateTime(row.consumedAt) }}</td>

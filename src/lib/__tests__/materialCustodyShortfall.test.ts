@@ -117,8 +117,28 @@ test('detectMaterialCustodyShortfalls: el saldo nunca queda negativo para el sig
 
 // ---- classifyShortfallRecency ----
 
-test('classifyShortfallRecency: mientras la deteccion no este activada (LIVE_SINCE null), todo es historico', () => {
+test('classifyShortfallRecency: mientras la deteccion no este activada (LIVE_SINCE null por defecto, sin VITE_MATERIAL_CUSTODY_LIVE_SINCE configurado), todo es historico', () => {
   assert.equal(MATERIAL_CUSTODY_DETECTION_LIVE_SINCE, null);
   assert.equal(classifyShortfallRecency('2026-10-18T20:00:00.000Z'), 'historico');
   assert.equal(classifyShortfallRecency('2099-01-01T00:00:00.000Z'), 'historico');
+});
+
+// ---- classifyShortfallRecency con un cutoff explicito (mismo mecanismo que
+// usara MATERIAL_CUSTODY_DETECTION_LIVE_SINCE una vez fijado por build-env) ----
+
+test('classifyShortfallRecency: consumo ANTES del cutoff de activacion -> historico', () => {
+  assert.equal(classifyShortfallRecency('2026-10-18T23:59:59.999Z', '2026-10-19T00:00:00.000Z'), 'historico');
+});
+
+test('classifyShortfallRecency: consumo EN o DESPUES del cutoff de activacion -> nuevo', () => {
+  assert.equal(classifyShortfallRecency('2026-10-19T00:00:00.000Z', '2026-10-19T00:00:00.000Z'), 'nuevo');
+  assert.equal(classifyShortfallRecency('2026-10-20T00:00:00.000Z', '2026-10-19T00:00:00.000Z'), 'nuevo');
+});
+
+test('classifyShortfallRecency: el cutoff es el mismo valor para cualquier llamada -- no depende de Date.now() ni del reloj local', () => {
+  const cutoff = '2026-10-19T00:00:00.000Z';
+  const a = classifyShortfallRecency('2026-10-18T10:00:00.000Z', cutoff);
+  const b = classifyShortfallRecency('2026-10-18T10:00:00.000Z', cutoff);
+  assert.equal(a, b);
+  assert.equal(a, 'historico');
 });

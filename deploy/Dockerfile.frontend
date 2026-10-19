@@ -13,6 +13,13 @@ ARG VITE_SUPABASE_ANON_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 
+# Fecha/hora ISO (UTC) de activacion de la deteccion de consumo de material
+# sin custodia (ver src/lib/materialCustodyShortfall.ts) — opcional, vacio
+# por defecto (= "todavia no activada", todo hallazgo queda como historico).
+# Se fija una sola vez, el dia que se decida activar el aviso en vivo.
+ARG VITE_MATERIAL_CUSTODY_LIVE_SINCE=""
+ENV VITE_MATERIAL_CUSTODY_LIVE_SINCE=$VITE_MATERIAL_CUSTODY_LIVE_SINCE
+
 RUN npx vite build
 
 FROM nginx:alpine

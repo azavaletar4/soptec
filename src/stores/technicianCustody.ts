@@ -51,6 +51,8 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     productName: string;
     unit: string;
     jobLabel: string;
+    /** Ruta real a la orden (Alta/Avería/Rutina) solo cuando esa orden todavia existe — null -> la vista conserva el texto plano, nunca un enlace roto. */
+    jobPath: string | null;
   }>> {
     const [eventsRes, movementsRes] = await Promise.all([
       supabase.from('technician_material_custody_events').select('technician_id, product_id, event_type, quantity, created_at'),
@@ -119,9 +121,20 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     ]);
     type JobRow = { id: string; client: { first_name: string; last_name: string } | null };
     const label = (row: JobRow, prefix: string) => `${prefix} — ${row.client ? `${row.client.first_name} ${row.client.last_name}` : 'cliente no disponible'}`;
-    for (const row of (installRows.data ?? []) as unknown as JobRow[]) jobLabelById.set(row.id, label(row, 'Alta'));
-    for (const row of (ticketRows.data ?? []) as unknown as JobRow[]) jobLabelById.set(row.id, label(row, 'Avería'));
-    for (const row of (routineRows.data ?? []) as unknown as JobRow[]) jobLabelById.set(row.id, label(row, 'Rutina'));
+    // Ruta real de cada tipo de orden (verificada en src/router/index.ts) — solo
+    // se ofrece el enlace para una orden que la consulta de arriba SI encontro
+    // (existe de verdad), nunca a partir de jobId/jobType solos; si el id ya
+    // no existe (orden eliminada), jobPathById.get(...) queda sin entrada y la
+    // vista conserva el texto plano en vez de un enlace roto.
+    const JOB_PATH_PREFIX: Record<MaterialCustodyJobType, string> = {
+      installation: '/soporte/instalaciones/',
+      ticket: '/soporte/',
+      routine: '/soporte/rutinas/',
+    };
+    const jobPathById = new Map<string, string>();
+    for (const row of (installRows.data ?? []) as unknown as JobRow[]) { jobLabelById.set(row.id, label(row, 'Alta')); jobPathById.set(row.id, JOB_PATH_PREFIX.installation + row.id); }
+    for (const row of (ticketRows.data ?? []) as unknown as JobRow[]) { jobLabelById.set(row.id, label(row, 'Avería')); jobPathById.set(row.id, JOB_PATH_PREFIX.ticket + row.id); }
+    for (const row of (routineRows.data ?? []) as unknown as JobRow[]) { jobLabelById.set(row.id, label(row, 'Rutina')); jobPathById.set(row.id, JOB_PATH_PREFIX.routine + row.id); }
 
     return shortfalls.map((s) => ({
       ...s,
@@ -129,6 +142,7 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
       productName: productById.get(s.productId)?.name ?? s.productId,
       unit: productById.get(s.productId)?.unit ?? '',
       jobLabel: jobLabelById.get(s.jobId) ?? `${s.jobType} ${s.jobId}`,
+      jobPath: jobPathById.get(s.jobId) ?? null,
     }));
   }
 
