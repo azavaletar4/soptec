@@ -29,3 +29,21 @@ export function materialCustodyLabel(quantity: number | undefined, unit: string,
 export function availableMaterialQuantity(materials: MaterialCustodyBalance[], productId: string): number {
   return materials.find((m) => m.product.id === productId)?.quantity ?? 0;
 }
+
+/**
+ * Retira del selector de consumo los productos sin custodia confirmada >0
+ * para el tecnico autenticado (Averias/Rutinas: Fase 165, etapa 2 — selector
+ * por custodia). Mientras la custodia no esta 'ready' (cargando/error/no
+ * disponible) nunca se oculta el catalogo -- un error de consulta jamas debe
+ * leerse como "custodia confirmada en cero" (requisito explicito del pedido).
+ * El filtro visual no sustituye el control real del servidor.
+ */
+export function withAvailableCustody<P>(
+  products: P[],
+  available: (productId: string) => number | undefined,
+  productId: (p: P) => string,
+  state: MaterialCustodyLoadState,
+): P[] {
+  if (state !== 'ready') return products;
+  return products.filter((p) => (available(productId(p)) ?? 0) > 0);
+}

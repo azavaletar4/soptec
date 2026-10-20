@@ -10,7 +10,7 @@ import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { executeRoutineInventory, pendingRoutineInventory, type RoutineInventoryAction, type RoutineInventoryRequest } from '@/lib/routineInventoryRequest';
 import type { InventoryMovement, InventoryUnit, Routine } from '@/types/domain';
-import type { MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
+import { withAvailableCustody, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
 
 const props = defineProps<{ routine: Routine; canWrite?: boolean;
   materialAvailability?: (id: string) => number | undefined;
@@ -52,7 +52,16 @@ const writable = computed(() => props.canWrite && auth.role === 'TECNICO_RED' &&
 // mismo criterio que Altas/Averias (CampoTrabajoDetailView.vue), que nunca
 // deshabilitan su formulario por una operacion pendiente.
 const blocked = computed(() => busy.value || loading.value);
-const consumables = computed(() => products.value.filter(p => p.is_active && !p.is_serialized));
+// Fase 165, etapa 2 — Rutinas: solo consumibles con custodia confirmada >0
+// del tecnico autenticado (mismo criterio que Averias). Mientras la custodia
+// no esta 'ready' (cargando/error) se muestra el catalogo completo: un error
+// de consulta nunca debe leerse como "custodia confirmada en cero".
+const consumables = computed(() => withAvailableCustody(
+  products.value.filter(p => p.is_active && !p.is_serialized),
+  (id) => props.materialAvailability?.(id),
+  (p) => p.id,
+  props.materialCustodyState ?? 'unavailable',
+));
 const serialized = computed(() => products.value.filter(p => p.is_active && p.is_serialized));
 const activeMaterials = computed(() => {
   const reversed = new Set(materials.value.map(m => m.reverses_movement_id).filter(Boolean));

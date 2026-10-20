@@ -22,7 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
 import { createInstallationCustodySelector, isInstallableOwnCustody, installableEquipmentModelIds } from '@/lib/installationCustodySelector';
-import { confirmedMaterialQuantity, materialCustodyLabel, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
+import { confirmedMaterialQuantity, materialCustodyLabel, withAvailableCustody, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
 import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
 import type { MyInventoryCustody } from '@/types/domain';
 import { createInventoryRefresh } from '@/lib/inventoryRefresh';
@@ -567,6 +567,7 @@ async function handleAddMaterial() {
     });
     materialForm.value = { productId: '', quantity: 1 };
     await loadMaterials();
+    void loadMyMaterialCustody(); // Fase 165 etapa 2: el selector de Averias depende de la custodia fresca.
   } catch (e) {
     materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa tu custodia disponible)');
   } finally {
@@ -592,6 +593,7 @@ async function handleSaveMaterialQty(m: FieldInventoryMovement) {
       reason: 'Corrección de cantidad desde Campo',
     });
     await loadMaterials();
+    void loadMyMaterialCustody();
   } catch (e) {
     materialError.value = getErrorMessage(e, 'Error al corregir la cantidad');
   } finally {
@@ -605,6 +607,7 @@ async function handleRemoveMaterial(m: FieldInventoryMovement) {
   try {
     await writeFieldInventory('reverse', { movementId: m.id });
     await loadMaterials();
+    void loadMyMaterialCustody();
   } catch (e) {
     materialError.value = getErrorMessage(e, 'Error al quitar el material');
   } finally {
@@ -693,9 +696,14 @@ const kitCoveredProductIds = computed(() => {
 // Fase 143: "Materiales usados" (Paso 3) es para CONSUMIBLES — excluye
 // equipos serializados (ONT/Mesh/TV Box, ya se asignan por serie/MAC en el
 // Paso 2) y lo que ya se registra desde el Kit base de arriba.
-const materialSelectableProducts = computed(() =>
-  fieldProducts.value.filter((p) => p.is_active && !p.is_serialized && !kitCoveredProductIds.value.has(p.id)),
-);
+// Averias (ticket): Fase 165, etapa 2 — este selector tambien se retira a
+// solo custodia disponible >0 del tecnico, igual que el resto de Campo. Las
+// Altas conservan el catalogo completo tal como ya funciona (el Kit base
+// cubre su flujo de custodia con su propio aviso visual por fila).
+const materialSelectableProducts = computed(() => {
+  const base = fieldProducts.value.filter((p) => p.is_active && !p.is_serialized && !kitCoveredProductIds.value.has(p.id));
+  return jobType === 'ticket' ? withAvailableCustody(base, availableOf, (p) => p.id, materialCustodyState.value) : base;
+});
 
 function resetKitQuantities() {
   kitQuantities.value = Object.fromEntries(KIT_ALTA.map((l) => [l.key, l.defaultQty]));
