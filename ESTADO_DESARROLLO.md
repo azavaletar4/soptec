@@ -1,5 +1,175 @@
 # SmartRayco — Estado de desarrollo
 
+## DESPLEGADO: Fase 165 etapa 2 activa en produccion — custodia obligatoria de materiales (20/10/2026, sesion posterior a la preparacion de abajo)
+
+Las 3 migraciones candidatas descritas en la seccion siguiente ("preparacion
+final de activacion") SI se aplicaron, en este orden exacto, con
+autorizacion explicita por turno: `fase165_etapa2_custodia_obligatoria`
+(20261020120729), `fase165_cierre_consumos_rechazados` (20261020120845),
+`fase165_entrega_material_validada` (20261020121113). Frontend desplegado
+antes de las migraciones (mismo criterio documentado abajo). Respaldo
+verificado, rollback preparado y NO usado. El candado real de custodia
+(`assert_no_rejected_materials`/`guard_rejected_material_closure`) esta
+ACTIVO en produccion desde entonces -- cualquier consumo sin custodia
+suficiente en Alta/Averia/Rutina rechaza y bloquea el cierre hasta
+corregir o anular.
+
+Ademas, commit `1ac50de` (selector de equipos filtrado por custodia, SOLO
+en Altas -- Averias/Rutinas son intencionalmente por stock de almacen, no
+por custodia, confirmado por inspeccion de la RPC real) desplegado y
+verificado por health-check; **pendiente de confirmacion visual del
+usuario con un tecnico real en la App de Campo** (no declarado cerrado).
+
+## DESPLEGADO: corregido el bloqueo permanente tras un rechazo por custodia insuficiente (20/10/2026)
+
+Caso real: tecnico Alex Prueba intento un Alta con 2 conectores contra 1
+disponible -- la App de Campo quedo bloqueada indefinidamente mostrando
+"Hay una operación de inventario pendiente de confirmar", sin forma de
+corregir la cantidad ni de continuar. Causa raiz en 2 partes:
+
+1. **Cliente** (`src/lib/fieldInventoryOperation.ts`,
+   `src/lib/routineInventoryRequest.ts`, `src/lib/materialInventoryOutcome.ts`
+   -- commit `60fd3b4`): un rechazo DEFINITIVO del servidor
+   (`materialRejected:true`, respuesta real sin ambiguedad) se trataba
+   exactamente igual que una operacion REALMENTE incierta (respuesta
+   perdida por caida de red) -- ambos casos bloqueaban cualquier intento
+   posterior con otra cantidad. Se agrego una clave `:rejected` en
+   localStorage para distinguir un rechazo CONFIRMADO (admite corregir la
+   cantidad con la MISMA clave) de una duda real de comunicacion (sigue
+   exigiendo el payload original).
+
+2. **Servidor** (migracion candidata `20261020130000_fase165_correccion_rechazo_definitivo.sql`,
+   commit `3bef581`): aun corrigiendo del lado cliente, la fila de
+   `material_inventory_rejections` quedaba `pending` PARA SIEMPRE (el
+   guard de cierre solo mira `status='pending'`) porque
+   `execute_tracked_material_inventory` exigia payload IDENTICO para
+   reusar cualquier `operation_id` ya visto. Se relajo esa UNICA condicion:
+   un rechazo `pending` (certeza total, cero movimientos aplicados) admite
+   un payload distinto con la MISMA clave; `resolved`/`cancelled` siguen
+   exigiendo payload identico. No se inventaron estados ni relaciones
+   nuevas -- misma maquina de idempotencia/custodia/cierre reusada.
+
+Verificado con 15 pruebas SQL aisladas (`server/tests/materialRejectionCorrection.sql.test.ts`,
+Docker efimero, migraciones reales cargadas tal cual) cubriendo: rechazo
+confirmado vs. operacion realmente incierta, correccion con la misma
+clave, Alta con varios materiales (uno rechazado + otros validos, el
+cierre bloquea solo por el rechazado), cierre liberado solo por correccion
+o anulacion administrativa (nunca solo), aislamiento de rechazos
+historicos de otras ordenes, y el mismo criterio para Avería (ticket) y
+Rutina. Rollback probado byte a byte
+(`scripts/rollback-material-rejection-correction.sql`). **Desplegado**:
+frontend commit `60fd3b4`→`3bef581`→`c946dbd`, migracion
+`20261020134011_fase165_correccion_rechazo_definitivo` aplicada. MD5 de
+`execute_tracked_material_inventory` post-migracion confirmado
+`489ac54e4a248fb191605274d683d452` (coincide exacto con lo esperado).
+
+**Incidente real resuelto el mismo dia**: el Alta de Alex Prueba seguia
+bloqueada tras la correccion -- diagnostico de solo lectura encontro que
+el rechazo bloqueante NO era del tecnico, sino un rechazo huerfano de la
+propia cuenta SUPERADMIN (`alex raico`, sin custodia real, probo el mismo
+flujo desde la App de Campo sin ser el asignado) para los MISMOS 3
+productos. Los 4 materiales del tecnico (Roseta/Patchcord/Conector/Drop
+50m) ya estaban correctamente aplicados y confirmados en Kardex. Resuelto
+con `cancel_rejected_material_operation` (autorizado explicitamente, motivo
+registrado) -- sin tocar custodia/movimientos del tecnico, sin cerrar la
+orden (queda para que el tecnico la cierre el mismo).
+
+## DESPLEGADO: validacion funcional de Averias/Rutinas + bloqueo de correccion en Rutinas (20/10/2026)
+
+Revision read-only confirmo que el backend (`execute_tracked_material_inventory`,
+atribucion de consumo por `auth.uid()` en cuadrillas, guard de cierre) ya
+es 100% compartido y uniforme entre Alta/Averia/Rutina -- sin diferencias
+de backend. **Defecto encontrado (solo en Rutinas)**: `RoutineInventory.vue`
+deshabilitaba el formulario completo mientras hubiera CUALQUIER operacion
+pendiente, dejando como unica salida "Reintentar" (reenvia la MISMA
+cantidad ya rechazada) -- a diferencia de Alta/Averia
+(`CampoTrabajoDetailView.vue`, que nunca bloquea su formulario asi).
+Corregido quitando `pending.value` de `blocked` (commit `72890df`) --
+mismo criterio que Alta/Averia; el servidor sigue decidiendo si el payload
+nuevo corrige o exige resolver algo incierto. Se agrego cobertura de
+Averia (faltaba) al mismo archivo de pruebas SQL (15/15 PASS). Desplegado,
+verificado SHA/salud; **pendiente confirmacion visual real del usuario**.
+
+## DESPLEGADO: selector de materiales por custodia en Averias y Rutinas (20/10/2026)
+
+Pedido asumia que Altas ya filtraba su selector de materiales por
+custodia -- **falso**: solo el selector de EQUIPOS serializados de Alta
+filtraba por custodia (fase anterior); el selector de "materiales extra"
+de Alta (compartido con Averia en el mismo componente) y el de Rutinas
+mostraban TODO el catalogo activo sin filtrar. Nueva funcion pura
+`withAvailableCustody()` (`src/lib/materialCustodyAvailability.ts`):
+retira del selector los productos en custodia confirmada 0; mientras la
+custodia no esta `ready` (cargando/error) nunca oculta el catalogo (un
+error de consulta no es un "cero confirmado"). Aplicada SOLO cuando
+`jobType==='ticket'` en `CampoTrabajoDetailView.vue` (Altas conserva su
+comportamiento exacto, sin alterarlo, por pedido explicito) y sin
+condicion en `RoutineInventory.vue`. Se corrigio tambien que el refresco
+de custodia tras registrar/corregir/quitar un material en ese componente
+compartido solo recargaba el historial, no la custodia mostrada. 9/9
+pruebas nuevas + 358/358 suite completa `src/lib`, sin regresion. Commit
+`40cd396`, desplegado y verificado (SHA, salud, migraciones/rechazos sin
+cambio). **Pendiente**: confirmacion visual real (material agotado
+desaparece del selector, cuadrilla con custodias distintas ve listas
+distintas).
+
+## PENDIENTE TRANSVERSAL: pruebas supervisadas reales desde la App de Campo (20/10/2026)
+
+Tres confirmaciones visuales reales siguen sin hacerse (todo lo demas de
+Fase 165 etapa 2 esta verificado por SQL aislado/lectura de produccion/SHA,
+no por clic real de un tecnico): (1) selector de equipos por custodia en
+Altas (`1ac50de`), (2) correccion de cantidad tras un rechazo en Rutinas
+(`72890df`), (3) selector de materiales filtrado por custodia en
+Averias/Rutinas, incluido el caso de cuadrilla (`40cd396`). No declarar
+ninguna de las 3 como "validacion funcional completa" hasta que el usuario
+las compruebe el mismo.
+
+## Fase 165 etapa 2 — preparacion final de activacion (20/10/2026)
+
+Ventana real sin trabajos de campo (administracion confirmo: tecnicos
+terminaron la jornada y devolvieron materiales). Verificado en produccion,
+solo lectura: **0 ordenes `in_progress`** (Alta/Averia/Rutina), 0
+transacciones abiertas largas, 0 locks en espera, 0 devoluciones de
+material pendientes, 0 equipos `pending_approval`/`pending_return`.
+
+**Custodia real vs. lo reportado por administracion: SIN discrepancias.**
+De los 6 tecnicos TECNICO_RED activos, solo Jadir Zavaleta (9 unidades de
+4 consumibles + 4 equipos serializados) y Ruber Pizango (10 brazos + 2
+equipos) tienen algo en custodia -- coincide exactamente con lo indicado;
+los otros 4 (Alex Prueba, Jairo Bernabe, Jhordanno Zavaleta, Vicente
+Valdez) en 0, igual que antes de esta sesion. No se creo ninguna entrega
+retroactiva ni se modifico ningun consumo historico (sesion de solo
+lectura en produccion).
+
+**Rollback ya preparado (`scripts/rollback-material-custody-stage2.sql`,
+de una sesion anterior) verificado byte a byte ahora mismo**: las 3
+funciones que restaura producen md5 IDENTICO a las 3 funciones vigentes
+en produccion hoy (confirma que revierte exactamente al estado actual);
+sus propias guardas de activacion (deben coincidir con el estado
+POST-migracion) tambien coinciden exactamente con lo que migracion 2
+realmente produce. Las guardas de las 2 migraciones candidatas (deben
+coincidir con el estado PRE-migracion, esto es produccion ahora) tambien
+se reverificaron: siguen sin drift.
+
+**Historicos**: los 158+ consumos anteriores a esta fase nunca pasaron por
+`execute_tracked_material_inventory` (no existe todavia), asi que
+`material_inventory_rejections` arranca vacia y ninguna orden antigua
+(3 Altas / 2 Averias / 8 Rutinas pendientes-sin-empezar hoy) puede quedar
+bloqueada por un rechazo que nunca se creo -- su cierre legitimo no se ve
+afectado, por diseño (ver comentarios de la propia migracion). Confirmado
+que `afdb4e6` (fix de `RoutineInventory.vue`) sigue en la rama, sin
+regresiones nuevas desde su commit.
+
+Procedimiento completo de activacion/verificacion/rollback (Postgres,
+Storage, frontend/backend) preparado y NO ejecutado:
+`docs/FASE165-ETAPA2-PROCEDIMIENTO-ACTIVACION.md`. Riesgos reales que
+quedan: 28 pares tecnico/producto sin custodia real (bloquearian su
+primer uso), catalogo ampliado/respaldo final de la validacion previa sin
+completar, cierre completo nunca probado contra produccion real, accion
+'kit' no probada por separado (mismo mecanismo que 'consume'), y el push
+pendiente de los 9 archivos de `src/` + 2 migraciones antes de poder
+desplegar. Sin escrituras en produccion, sin migraciones aplicadas, sin
+activar el bloqueo, sin push ni deploy.
+
 ## Corregido: RoutineInventory.vue podia mostrar materiales vacios (20/10/2026)
 
 Continuacion directa del hallazgo real documentado en la sesion anterior.
@@ -239,6 +409,150 @@ todo contra el laboratorio aislado (`smartrayco-custody-integral-1792436479162`,
 gateway 127.0.0.1:54421). Reportes:
 `docs/CUSTODIA-ETAPA2-LABORATORIO-INTEGRAL-API.json` (19/19) y
 `docs/CUSTODIA-ETAPA2-LABORATORIO-INTEGRAL-BROWSER.json` (11/11).
+
+## Respaldo integral y ensayo aislado completados — actividad concurrente (19/10/2026)
+
+Informe: docs/CUSTODIA-ETAPA2-RESPALDO-INTEGRAL-ENSAYO.md.
+Respaldo privado nuevo custodia_etapa2_integral_20261019_182951_05783296 fuera del repo.
+Snapshot 18:30 UTC: dump 38.547.326 bytes; 113 tablas/583.019 filas y 2 secuencias
+restauradas/verificadas en PostgreSQL sin red; roles/ACL/RLS/funciones/relaciones.
+Storage 849 objetos/99.186.551 bytes, descargados y restaurados en filesystem
+aislado, hashes verificados. API Storage/JWT y cierre integrado siguen pendientes.
+Ambas candidatas juntas: exito con rol postgres restaurado y rollback completo
+ante fallo inducido antes del commit. Sin descuentos ni cambios de datos existentes.
+No se repitieron las 47 SQL. No se modificaron candidatas ni logica funcional.
+Se observaron 12 tablas cambiadas por actividad concurrente entre lecturas
+(clientes 551->552, contratos 566->568); NO certificar produccion inmovil.
+Manifiesto deja productionOperationalFingerprintsUnchanged=false. No hubo escrituras
+del respaldo: SQL READ ONLY y HTTPS GET/HEAD. No se detuvieron servicios/equipos.
+Lectura final 18:51:03 UTC: ambas versiones ausentes, bloqueo candidato apagado.
+Sin migraciones/rollback en produccion, push/deploy ni operaciones OLT/MikroTik.
+
+## Preparacion inmediata piloto — NO activar todavia (19/10/2026)
+
+Procedimiento/comandos para revision: docs/CUSTODIA-ETAPA2-PILOTO-REVISION.md.
+Lectura 18:19:23 UTC: 12 ordenes no finales, ninguna in_progress; cero recibos
+sin resultado, devoluciones materiales, transacciones abiertas/preparadas.
+Pendientes offline no visibles en servidor: revisar dispositivos sin borrar colas.
+Ambas candidatas ausentes y hashes base coincidentes. Bloqueo sigue apagado.
+Ultimo dump local encontrado 17/10: hash confirmado, restauracion previa documentada,
+sin Storage y anterior a operaciones actuales. Falta respaldo integral actualizado.
+Generador LOCAL prepara ambas candidatas en una sola transaccion con historial;
+no conecta a BD. Envoltorio nuevo pendiente de ensayo aislado exito/fallo.
+Sin repetir 47 SQL, sin migraciones, inventario/ordenes reales ni despliegues.
+
+## Preparacion final etapa 2 — pendientes sin activar (19/10/2026)
+
+Informe: docs/CUSTODIA-ETAPA2-PREPARACION-FINAL.md. Snapshot READ ONLY
+18:11:21 UTC: ambas candidatas ausentes, bloqueo candidato desactivado.
+Solo Jadir tiene custodia registrada (2 conectores, 1 drop100, 2 rosetas).
+Lista fisica de 72 combinaciones en docs/CUSTODIA-ETAPA2-CONCILIACION-FISICA.csv;
+conteos fisicos y cantidades necesarias pendientes, sin entregas automaticas.
+Cierre integrado y restauracion DB+Storage pendientes: laboratorio detenido,
+esquema parcial y sin Storage equivalente. No se repitieron las 47 SQL aprobadas.
+Sin cambios funcionales, migraciones ni escrituras operativas en esta preparacion.
+
+## Certificacion parcial etapa 2 — sin activacion inmediata (19/10/2026)
+
+Catalogo Cloud completo READ ONLY: 16 materiales (12 activos/4 inactivos), unidades
+unidad/metros, categorias activas compatibles; sin stocks negativos ni fracciones
+en el snapshot. Solo 3 productos con custodia: falta confirmar entregas suficientes.
+Ultimo snapshot 16:55:09 UTC; ambas versiones ausentes del historial, columna/tabla/
+triggers nuevos ausentes, tres hashes base coinciden. No se aplicaron migraciones.
+47/47 SQL aisladas: orden correcto/inverso, ambas migraciones juntas, rechazos,
+cierres validos/sin materiales, rutina sin cliente, decimales metros, no doble
+descuento y dump/restauracion a segundo contenedor con 19 tablas/ACL/guardas.
+Incluye unidad serializada/historial y referencias de adjuntos; no blobs reales.
+6/6 cierres del store real con fotos/firma binarios y estados finales, pero con
+Supabase/Storage/NAP SIMULADOS; NO certifican cierre E2E contra pila real.
+Informe `docs/CUSTODIA-ETAPA2-CERTIFICACION.md`; procedimiento de respaldo y
+recuperacion preparado/verificado con datos sinteticos en
+`docs/CUSTODIA-ETAPA2-RESPALDO-RECUPERACION.md`. Pendientes bloqueantes: E2E con
+Storage/roles de pruebas, respaldo integral real restaurado y cobertura de entregas.
+Este turno no modifico codigo funcional ni candidatos SQL, solo validaciones/docs.
+Cambios ajenos del working tree preservados. Sin escrituras de produccion,
+activacion, push, deploy, rollback remoto ni OLT/MikroTik.
+
+## Fase 165 etapa 2 — conciliacion y cierre corregidos LOCALMENTE (19/10/2026)
+
+Se conservaron todos los cambios previos. Conciliacion ahora resuelve tecnico
+responsable con eventos/recibos verificables, incluso historicos y correcciones
+sucesivas por admin/cuadrilla, sin doble conteo ni reposicion simulada ficticia.
+Se explico antes de implementar el alcance adicional del cierre: candidato nuevo
+`20261019170000_fase165_cierre_consumos_rechazados.sql`, posterior al candidato
+de custodia existente. Guarda rechazo P1650 fuera de la subtransaccion revertida;
+triggers de estado/work_order_closures bloquean cierre hasta reintento confirmado
+con el mismo UUID o anulacion administrativa motivada. Sin rechazo no exige
+materiales; no genera pendientes retroactivos. Serializados independientes.
+App Campo prevalida antes de efectos; Custodia muestra intentos equivocados para
+revision administrativa. 41/41 pruebas puras, 43/43 SQL aisladas, 16/16 navegador
+sintetico y tipado frontend correctos. Rollback actualizado y probado SOLO en
+contenedor sintetico, preserva Kardex/saldos/eventos/rechazos.
+Detalle, archivos y limites: `docs/CUSTODIA-ETAPA2-CONCILIACION-CIERRE.md`.
+Produccion SIN CAMBIOS ni activacion. Antes de activar: revalidar catalogo ampliado,
+respaldo integral, pausa coordinada y actualizacion conjunta de dos migraciones,
+frontend/cache/clientes; confirmar entregas y validacion operativa de kit/cierre.
+Sin escrituras reales, migraciones de produccion, rollback remoto, push o deploy.
+
+## Validacion final Fase 165 etapa 2 — NO LISTA PARA ACTIVAR (19/10/2026)
+
+Sin cambios funcionales en esta revision. Chrome local con datos sinteticos:
+12/12 escenarios Altas/Averias/Rutinas (carga, positivo, cero, error y recuperacion),
+capturas revisadas. Entrega/devolucion y serializados previos al bloqueo: 18/18
+SQL en Docker efimero sin red. No se repitieron las 34/34 y 28/28 anteriores.
+Catalogo Cloud TLS READ ONLY (16:09:27 UTC): tres hashes de guarda coinciden,
+columna nueva ausente, circuito de entrega/devolucion existente; 3 entregas,
+0 devoluciones y 3 saldos positivos (el comentario viejo de cero ya no es vigente).
+**Bloqueo reproducido:** conciliacion atribuye la correccion al administrador
+por created_by, aunque el candidato SQL descuenta al tecnico original.
+No se corrigio durante esta validacion: propuesta y reproduccion sintetica en
+`docs/CONTROL-MATERIALES-ETAPA2-VALIDACION-FINAL.md`. Incluye limites visuales,
+riesgo de consumo omitido al cerrar sin entrega formal y plan de activacion global
+(no hay feature flag por tecnico), respaldo y rollback de funciones conservando datos.
+Rollback preparado `scripts/rollback-material-custody-stage2.sql`, sin ejecutar
+ni validar su ejecucion. Falta corregir conciliacion y cerrar esos prerrequisitos.
+Sin migraciones de produccion, escrituras operativas, activacion, push ni deploy.
+
+## Control de materiales — Fase 165 etapa 2 corregida LOCALMENTE (19/10/2026)
+
+Se conservaron los cambios locales anteriores. Candidato sin aplicar:
+`supabase/migrations/20261019160000_fase165_etapa2_custodia_obligatoria.sql`.
+Las correcciones encadenadas ahora resuelven al responsable por el evento
+`consumption.source_movement_id`, nunca por la firma del editor en el Kardex.
+Si el movimiento no tiene consumo de custodia rastreado, tanto la correccion
+como sus sucesoras y reversiones siguen sin exigir/descontar/reponer custodia;
+el Kardex y los recibos existentes conservan la trazabilidad de la operacion.
+Indice unico por movimiento/tipo impide duplicar consumo o reposicion.
+El trigger crea primero el saldo cero con ON CONFLICT DO NOTHING y despues
+bloquea la fila: cubre tambien las primeras entregas simultaneas sin saldo previo.
+
+App Campo y su componente separado `RoutineInventory.vue` distinguen consulta
+en curso, saldo confirmado (incluido cero), fallo con reintento y perfil sin
+consulta personal. Se descartan respuestas antiguas y se recarga tras escrituras
+confirmadas. Equipos serializados conservan su control independiente.
+
+Validacion final: 34/34 pruebas puras localizadas; 28/28 en Node test runner
+(27 escenarios SQL + prueba contenedora); vue-tsc --noEmit correcto.
+SQL ejecutado exclusivamente contra PostgreSQL 17 efimero Docker, sin red,
+sin puertos publicados ni volumen persistente, con datos sinteticos; eliminado
+al terminar. Se cargaron las migraciones/funciones reales versionadas, incluido
+el candidato anterior de Campo; las guardas de hashes del candidato pasaron.
+Concurrencia acreditada con procesos psql independientes y observacion en
+pg_stat_activity de dos transacciones solapadas (una esperando Lock), para
+dos consumos y para dos primeras entregas. Reintentos, rollback de correccion
+insuficiente, historicos y correcciones encadenadas en Alta/Averia/Rutina,
+cuadrilla y regresion serializada correctos. Rama de equipos de Campo identica
+literalmente a la del candidato anterior. No se repite ni certifica el 310/310
+informado por Claude: no se encontro evidencia guardada de esa corrida.
+
+Pendientes antes de activar: comprobar visualmente carga/error/cero/reintento
+en navegador con sesiones sinteticas; verificar bajo autorizacion que el
+catalogo desplegado siga coincidiendo (no se consulto Cloud en esta sesion),
+revisar conciliacion de etapa 1 con correcciones por otro actor y preparar
+entregas formales de material antes del bloqueo. La compatibilidad se valido
+con las definiciones versionadas y el esquema aislado, no contra produccion.
+**NO ACTIVADA ni certificada para activacion inmediata**: sin escrituras
+operativas, migraciones de produccion, OLT/MikroTik, push ni deploy.
 
 ## Inventario de Campo — etapas 1 y 2 locales (2026-10-15)
 
