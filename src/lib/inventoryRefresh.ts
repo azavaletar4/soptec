@@ -7,7 +7,14 @@ export function createInventoryRefresh<C, T>(options: {
 }) {
  let generation = 0, current: C | null = null, blocked = false, online = true, visible = true;
  let abort: AbortController | null = null, flight: Promise<void> | null = null, dirty = false;
- const reset = () => { generation++; abort?.abort(); abort = null; flight = null; dirty = false; options.clear(); };
+ // Corta cualquier lectura en curso (nueva "generacion", invalida su resultado
+ // si llega tarde) SIN borrar lo que ya esta en pantalla. Pasar a oculto/sin
+ // red es un pase pasajero -- no implica que el contexto (orden/tecnico) haya
+ // cambiado, asi que los materiales/equipos ya cargados deben seguir visibles.
+ const abortFlight = () => { generation++; abort?.abort(); abort = null; flight = null; dirty = false; };
+ // Solo el contexto (otra orden, otro tecnico) o recuperarse de un bloqueo
+ // justifican borrar lo ya mostrado: ahi si puede corresponder a otra cosa.
+ const reset = () => { abortFlight(); options.clear(); };
  function refresh(afterWrite = false): Promise<void> {
   if (!current || blocked || !online || !visible) return Promise.resolve();
   if (flight) { if (afterWrite) dirty = true; return flight; }
@@ -40,8 +47,8 @@ export function createInventoryRefresh<C, T>(options: {
   refresh,
   retry() { blocked = false; reset(); return refresh(); },
   deny() { blocked = true; reset(); options.state('blocked'); },
-  setOnline(value: boolean) { if (online === value) return; online = value; if (!value) { reset(); options.state(blocked ? 'blocked' : 'offline'); } },
-  setVisible(value: boolean) { if (visible === value) return; visible = value; if (!value) reset(); else void refresh(); },
+  setOnline(value: boolean) { if (online === value) return; online = value; if (!value) { abortFlight(); options.state(blocked ? 'blocked' : 'offline'); } },
+  setVisible(value: boolean) { if (visible === value) return; visible = value; if (!value) abortFlight(); else void refresh(); },
   dispose() { reset(); current = null; blocked = true; },
  };
 }

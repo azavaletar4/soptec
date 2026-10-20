@@ -1,0 +1,75 @@
+{
+  "at": "2026-10-20T01:25:37.205Z",
+  "scope": "REAL_BROWSER_REAL_CLICKS_REAL_DB_REST_AUTH_NO_SIMULATION",
+  "lab": "smartrayco-custody-integral-1792436479162",
+  "results": [
+    {
+      "name": "login real (GoTrue) como leader dentro del navegador",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"+\" con una cantidad dentro del máximo desactualizado en pantalla pero por encima de la custodia real (installation): error real en pantalla y operación pendiente real",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real en \"Confirmar operación de inventario pendiente\" (installation): reintento real con la MISMA clave resuelve el rechazo",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real ✏️ \"Corregir cantidad\" + \"Guardar\" (installation): corrección real, custodia repuesta y re-descontada",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real 🗑️ \"Quitar material\" (installation): reversión real completa, custodia de vuelta a 28",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"+\" con una cantidad dentro del máximo desactualizado en pantalla pero por encima de la custodia real (ticket): error real en pantalla y operación pendiente real",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real en \"Confirmar operación de inventario pendiente\" (ticket): reintento real con la MISMA clave resuelve el rechazo",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real ✏️ \"Corregir cantidad\" + \"Guardar\" (ticket): corrección real, custodia repuesta y re-descontada",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real 🗑️ \"Quitar material\" (ticket): reversión real completa, custodia de vuelta a 56",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Registrar material utilizado\" con una cantidad dentro del máximo desactualizado pero por encima de la custodia real (Rutina): rechazo real, botón de reintento real visible",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Reintentar operación pendiente\" (Rutina): reintento real con la MISMA clave resuelve el rechazo",
+      "status": "PASS"
+    },
+    {
+      "name": "la lista real \"Materiales utilizados\" refleja el consumo real sin recargar la pantalla (hallazgo corregido)",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Corregir\" + \"Guardar corrección\" (Rutina): corrección real aplicada y reflejada en pantalla sin recargar",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Quitar registro\" (Rutina): reversión real completa y reflejada en pantalla, custodia de vuelta a 84",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Devolver\" + motivo + \"Confirmar solicitud de devolución\" (CampoCustodiaView): request_unit_return real, equipo en pending_return",
+      "status": "PASS"
+    },
+    {
+      "name": "recepción administrativa real (receive_unit_return, circuito independiente sin modificar): equipo de vuelta a in_stock, sin custodia de ningún técnico",
+      "status": "PASS"
+    },
+    {
+      "name": "sin peticiones externas ni excepciones no controladas durante toda la sesion de navegador",
+      "status": "PASS"
+    }
+  ]
+}

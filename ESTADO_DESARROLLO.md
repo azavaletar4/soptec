@@ -1,5 +1,152 @@
 # SmartRayco — Estado de desarrollo
 
+## Corregido: RoutineInventory.vue podia mostrar materiales vacios (20/10/2026)
+
+Continuacion directa del hallazgo real documentado en la sesion anterior.
+**Causa raiz exacta** (confirmada con instrumentacion temporal, removida
+antes de este commit): `src/lib/inventoryRefresh.ts` -- compartido por
+`CampoTrabajoDetailView.vue` y `RoutineInventory.vue` -- usaba la MISMA
+funcion `reset()` (borra lo ya mostrado) tanto para un cambio de contexto
+real (otra orden) como para los avisos pasajeros de "pestaña oculta" /
+"sin conexion" de `startInventorySignals` (visibilitychange,
+online/offline). En un WebView/pestaña que todavia no se marca visible al
+montar (confirmado real: el propio aviso inicial de `startInventorySignals`
+dispara esto en el mismo instante en que la carga real resuelve), ese
+aviso de "oculto" llamaba `reset()` justo despues de publicar los
+materiales recien cargados, borrandolos sin que nada los volviera a pedir
+-- `RoutineInventory.vue` no tiene (a diferencia de `CampoTrabajoDetailView.vue`,
+que si tiene `loadMaterials()`/`loadInstallEquipos()`/`loadEquipos()`
+aparte) ninguna otra via para repoblar la lista, por eso el sintoma solo
+se via ahi. Se confirmo tambien, aparte, que el laboratorio aislado no
+tenia montada la ruta real `/api/inventory-signals` (SSE publico, sin
+Auth/SQL) -- sin ella el `EventSource` del propio navegador reintentaba
+sin parar contra un 503 generico, abortando cualquier lectura de
+inventario antes de que terminara; nunca ocurre en produccion (la ruta
+real existe ahi), pero sin montarla en el laboratorio no se podia probar
+el circuito completo de punta a punta.
+
+**Correccion minima** (`src/lib/inventoryRefresh.ts`, unico archivo de
+presentacion/sincronizacion tocado, 2 funciones, sin tablas/RPC/migraciones):
+se separa `abortFlight()` (corta la lectura en curso, invalida una
+respuesta tardia) de `reset()` (ademas borra lo mostrado). `setContext`/
+`retry` siguen usando `reset()` completo -- un cambio de orden/tecnico real
+si debe borrar lo anterior. `setOnline(false)`/`setVisible(false)` ahora
+usan solo `abortFlight()` -- un pase pasajero a oculto/sin red ya NO borra
+los materiales/equipos ya cargados; volver a estar visible sigue pidiendo
+una lectura nueva igual que antes. Ningun movimiento, evento ni registro
+real se toco ni se recalculo: es puramente de que se muestra en pantalla.
+
+**Verificado mediante clics reales** (`custody-integral-lab-clicks.mjs`,
+fase `clicks`, **17/17 PASS**, reproducido 2 veces): el flujo completo de
+Rutina (antes bloqueado por este hallazgo) ya funciona de punta a punta
+por clic real -- "Registrar material utilizado" con el mismo patron real
+de "max desactualizado" que Alta/Averia, "Reintentar operación pendiente",
+"Corregir"+"Guardar corrección" y "Quitar registro" -- **la lista en
+pantalla refleja cada cambio sin necesidad de recargar**, que es
+exactamente el sintoma reportado. Alta y Averia (que ya certificaban
+9/9 antes de este cambio) se reconfirmaron EN LA MISMA corrida, sin
+ninguna regresion. Prueba de regresion nueva y aislada
+`src/lib/__tests__/inventoryRefresh.test.ts` (4 casos: un aviso de
+"oculto" justo despues de publicar no borra nada; un aviso de "oculto"
+mientras la carga esta en vuelo descarta esa respuesta sin borrar lo
+anterior; volver a ser visible si dispara una lectura nueva; un cambio de
+contexto real si sigue limpiando) -- **4/4 PASS**, y la suite completa de
+`src/lib/__tests__/*.test.ts` (`npm run test:fetch-timeout`) sigue en
+**327/327 PASS** (323 ya existentes + 4 nuevos, cero regresiones). `vue-tsc
+-p tsconfig.app.json`: limpio.
+
+**Archivos modificados en este commit:** `src/lib/inventoryRefresh.ts`
+(el fix), `src/lib/__tests__/inventoryRefresh.test.ts` (prueba nueva),
+`scripts/custody-integral-lab-backend.ts` (monta `inventorySignalRoutes`
+real en el laboratorio, mismo motivo explicado arriba),
+`scripts/custody-integral-lab-clicks.mjs` (ya no rodea el hallazgo: prueba
+el flujo real de Rutina de punta a punta). Sin tocar inventario real,
+entregas, RLS, migraciones ni RPC. Sin push, deploy ni activacion del
+bloqueo. Reporte actualizado:
+`docs/CUSTODIA-ETAPA2-LABORATORIO-INTEGRAL-CLICKS.json`.
+
+## Fase 165 etapa 2 — validaciones finales: clics reales, equipo serializado, catalogo/custodia real (20/10/2026)
+
+Continuacion de la sesion anterior (commit local `effd4ba`). Nuevo
+`custody-integral-lab-clicks.mjs` (fase `clicks`): **15/15 PASS**, reproducido
+2 veces. Reintentos/correcciones/reversiones de materiales en Alta y Averia
+mediante CLICS REALES (boton "+", lapiz "Corregir cantidad", "Guardar",
+papelera "Quitar material", "Confirmar operación de inventario pendiente")
+contra el stack real del laboratorio -- el escenario de rechazo se construyo
+de forma realista (el input de cantidad tiene `max`=custodia cargada, una
+cantidad por encima del max queda bloqueada por el propio navegador antes de
+llegar a Vue; el rechazo real ocurre cuando la custodia cambia DESPUES de
+cargar la pantalla, con el max todavia desactualizado -- caso real de
+"otra correccion concurrente", no un bug de esta prueba). Devolucion real de
+un equipo serializado por clic en `CampoCustodiaView.vue` ("Devolver" +
+motivo + "Confirmar solicitud de devolución") + recepcion administrativa real
+(`receive_unit_return`, su circuito independiente, sin modificar su codigo).
+
+**Hallazgo real (no corregido, fuera de alcance sin autorizacion):**
+`RoutineInventory.vue` puede mostrar el catalogo de productos y la lista
+"Materiales utilizados" vacios en pantalla (`<ul>` real sin `<li>`) incluso
+con remontaje real del componente (navegar a otra ruta y volver) y con
+`auth.role`/`routine.status` ya correctos -- confirmado reproducible (3-4/4
+intentos) mientras una llamada manual a la MISMA ruta real del backend
+(`apiFetch`) devuelve los datos correctos de inmediato en la misma sesion.
+No se toco `RoutineInventory.vue`. Para seguir probando reintento/correccion
+en Rutina pese a esto: el primer consumo rechazado se registro con la MISMA
+funcion real que usa el boton (`executeRoutineInventory` + RPC real, sin
+pasar por el selector de producto afectado) -- el reintento por CLIC real
+("Reintentar operación pendiente") SI funciono y quedo certificado; la
+correccion/reversion de ese caso se verifico a nivel RPC real (mismo
+mecanismo ya certificado en `custody-integral-lab-api.mjs`) en vez de por
+clic, dejando la rutina sin consumo pendiente.
+
+**Catalogo y custodia real en produccion (Supabase Cloud, solo lectura,
+proyecto `mzupdnjegfwmpajywckd`), 20/10/2026 01:0x UTC:** 26 materiales/
+equipos activos (13 consumibles, 13 serializados), 7 inactivos, sin stock
+negativo. Primeras entregas de custodia REALES del sistema (nunca hubo
+ninguna antes de hoy): 5 eventos `delivery` entre 14:05 y 22:01 UTC de ayer,
+solo a 2 de los 6 tecnicos TECNICO_RED activos (Jadir Zavaleta: Roseta
+Óptica/Conector Optico/drop de 100 metros/CONECTOR RJ45; Ruber Pizango:
+brazos) -- y solo para ESOS productos puntuales, no su repertorio completo.
+**28 de 34 pares (tecnico, producto consumido en los ultimos 30 dias) tienen
+custodia real = 0 ahora mismo** -- si el bloqueo se activa hoy sin entregar
+antes, esos 28 casos (Vicente Valdez, Jhordanno Zavaleta, Jairo Bernabe,
+Alex Prueba/alex raico -- estas 2 ultimas cuentas parecen de prueba por su
+correo, no se asumio mas alla de eso -- y el propio Jadir/Ruber para
+productos que SI usan pero NUNCA se les entrego, ej. Patchcord/drop/cable
+UTP) quedarian bloqueados en su primer intento de registrar ese material.
+Nota de catalogo: "cable UTP" y "Cable UTP" aparecen como 2 productos
+distintos (mismo tecnico los usa) -- posible duplicado por mayusculas, sin
+confirmar ni corregir (fuera de alcance de esta revision). 1 Alta
+`in_progress` en este momento; 0 solicitudes de devolucion de material
+pendientes. Las 2 migraciones candidatas SIGUEN sin aplicar (confirmado:
+`material_inventory_rejections` no existe, `source_movement_id` no existe,
+`apply_technician_material_custody_event()` no tiene manejo de P1650 en
+produccion). Guardas MD5 de la migracion 1 (`campo_inventory_operation`,
+`routine_inventory_operation`, `apply_technician_material_custody_event`)
+**verificadas contra produccion ahora mismo: coinciden exactamente** (sin
+drift desde que se escribio la migracion).
+
+**Separacion de archivos confirmada:** los cambios de esta sesion
+(`custody-integral-lab-clicks.mjs` nuevo, `custody-integral-lab.mjs`/
+`custody-integral-lab.html` modificados para la fase `clicks` y la ruta de
+`CampoCustodiaView`) quedan aparte de los cambios funcionales pendientes de
+Fase165 etapa2 (9 archivos en `src/`, 2 migraciones candidatas, `package.json`,
+2 pruebas nuevas) y de los 2 documentos ajenos ya detectados antes
+(`docs/DEVOLVER-RUTINAS.md`/`FASE162-DEADLOCK-CORREGIDO.md`, Fase 161/162,
+sin relacion). No se repitieron las pruebas ya certificadas (41/41 puras,
+43/43 SQL, 19/19 API, 11/11 navegador) -- solo se sumaron las de clics.
+
+**Riesgos que impiden activar el bloqueo hoy:** (1) el hallazgo de
+`RoutineInventory.vue` sin diagnosticar a fondo (impacto real en campo
+desconocido: si el tecnico simplemente recarga la app nativa -- no solo la
+ruta del SPA -- el catalogo podria cargar bien; no se probo en la APK real);
+(2) 28 pares tecnico/producto sin custodia real -- bloquearian el primer
+uso de ese material en cualquier Alta/Averia/Rutina en curso; (3) catalogo
+ampliado y respaldo final de la validacion previa a esta sesion, sin
+completar; (4) nunca se probo un reintento/correccion real mediante clics
+contra la APK nativa (solo contra el SPA web en el laboratorio). Sin
+escrituras en produccion, sin migraciones, sin push, sin deploy, sin
+activar el bloqueo. Reporte: `docs/CUSTODIA-ETAPA2-LABORATORIO-INTEGRAL-CLICKS.json`.
+
 ## Laboratorio integral resuelto + circuito API real Alta/Averia/Rutina: 19/19 PASS (19/10/2026)
 
 Continuacion de la sesion anterior (Codex se detuvo en `LOCAL_DOCKER_OPERATION_FAILED`

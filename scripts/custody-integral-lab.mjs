@@ -71,6 +71,7 @@ if(phase==='prepare'){
  }else if(phase==='seed')await import('./custody-integral-lab-seed.mjs');
  else if(phase==='api')await import('./custody-integral-lab-api.mjs');
  else if(phase==='browser')await import('./custody-integral-lab-browser.mjs');
+ else if(phase==='clicks')await import('./custody-integral-lab-clicks.mjs');
  else if(phase==='stop'){compose(c,['stop']);console.log('OWN_LAB_STOPPED; volumes and evidence preserved');}
  else if(phase==='status'){
   console.log(compose(c,['ps','-a','--format','{{.Name}} {{.State}}']));
