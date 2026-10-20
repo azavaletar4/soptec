@@ -6,6 +6,15 @@ const linked = (over: Partial<LinkedPosition> = {}): LinkedPosition => ({
   frame: 1, slot: 2, port: 4, ontId: 26, serial: 'HWTCABD21CB4', clientId: 'client-violeta', ...over,
 });
 
+test('MSTC8CCE647E / HWTC5C94DB6 y serial real HWTCE5C94DB6: posición reutilizada nunca sustituye identidad', () => {
+  const previous = linked({port:8,ontId:3,serial:'MSTC8CCE647E',clientId:null});
+  for (const serial of ['HWTC5C94DB6','HWTCE5C94DB6']) {
+    const result = classifyImportCandidates([{frame:1,slot:2,port:8,ontId:3,serial}], [previous]);
+    assert.equal(result.conflicts.length,1); assert.equal(result.fullRefresh.length,0); assert.equal(result.keepDescription.length,0);
+    assert.equal(previous.serial,'MSTC8CCE647E');
+  }
+});
+
 test('positionKey: formato estable frame/slot/port:ontId', () => {
   assert.equal(positionKey(1, 2, 4, 26), '1/2/4:26');
 });

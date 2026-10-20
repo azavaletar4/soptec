@@ -192,6 +192,7 @@ async function performFullSync(
   // cada "row" se sobreescriba abajo todavia representa lo YA persistido,
   // asi que es el "before" correcto para detectar una transicion real.
   const alerts: OltAlertEvent[] = [];
+  const signalReadings: { row: KnownOnt; evidence: ReturnType<typeof evaluateOntEvidence> }[] = [];
   function pushAlert(row: KnownOnt, kind: ReturnType<typeof detectStatusAlert>, detail: string) {
     if (!kind) return;
     alerts.push({ oltDeviceId: device.id, ontDbId: row.id, kind, message: `ONT ${detail}`, at: now });
@@ -212,14 +213,16 @@ async function performFullSync(
     pushAlert(row, statusAlert, `posición ${evidence.position} ${statusAlert === 'offline' ? 'se desconectó' : 'volvió a estar en línea'}`);
     if (evidence.signalOutcome === 'valid') {
       update.rx_power = evidence.rxPower!; update.tx_power = evidence.txPower!;
-      const signalAlert = detectSignalAlert(previous.rx_power, update.rx_power, LOW_SIGNAL_THRESHOLD_DBM);
+      const signalAlert = detectSignalAlert(ontTelemetry.signalReference(row), update.rx_power, LOW_SIGNAL_THRESHOLD_DBM);
       pushAlert(row, signalAlert, `posición ${evidence.position} señal ${update.rx_power} dBm`);
+      signalReadings.push({ row, evidence });
     }
     if (row.status !== update.status || row.admin_state !== update.admin_state || (update.rx_power !== undefined && row.rx_power !== update.rx_power) || (update.tx_power !== undefined && row.tx_power !== update.tx_power)) updatesById.set(row.id, update);
   }
   // Conditional writes close the database identity race; unchanged historical values are not rewritten.
   const updates = [...updatesById.values()];
-  if (updates.length) {
+  // Alerts may be valid even when the DB already holds the observed value (e.g. manual reading).
+  if (updates.length || alerts.length) {
     let error: { message: string } | null = null;
     for (const update of updates) {
       try { await persistOntMeasurement(knownById.get(update.id)!, update); }
@@ -229,6 +232,7 @@ async function performFullSync(
       // eslint-disable-next-line no-console
       console.error(`[olt-sync] ${device.name}: fallo la escritura protegida de olt_onts:`, error.message);
     } else {
+      for (const { row, evidence } of signalReadings) ontTelemetry.rememberSignal(row, evidence);
       for (const u of updates) {
         oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: ontTelemetry.project({ ...knownById.get(u.id)!, ...u }) });
       }
@@ -259,6 +263,9 @@ async function performFullSync(
       }
       for (const a of alerts) oltEvents.emitOltAlert(a);
     }
+  }
+  if (!updates.length && !alerts.length) {
+    for (const { row, evidence } of signalReadings) ontTelemetry.rememberSignal(row, evidence);
   }
 
   // 5) Salud del chasis: uptime, temperatura y CPU/RAM por tarjeta.

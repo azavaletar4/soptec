@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useOntEvidenceClock } from '@/composables/useOntEvidenceClock';
+import { enforceOntEvidence } from '@/lib/ontTelemetryEvidence';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientSectionCard from '@/components/clientes/ClientSectionCard.vue';
@@ -550,8 +552,10 @@ async function loadUnits() {
   loadingUnits.value = false;
 }
 
-const contractOnts = computed(() => clientOnts.value.filter((o) => o.contract_id === contract.value?.id));
-const contractOtherOnts = computed(() => clientOnts.value.filter((o) => o.contract_id !== contract.value?.id));
+const ontEvidenceNow = useOntEvidenceClock();
+const presentedClientOnts = computed(() => clientOnts.value.map(o => enforceOntEvidence(o, ontEvidenceNow.value)));
+const contractOnts = computed(() => presentedClientOnts.value.filter((o) => o.contract_id === contract.value?.id));
+const contractOtherOnts = computed(() => presentedClientOnts.value.filter((o) => o.contract_id !== contract.value?.id));
 const contractUnits = computed(() => assignedUnits.value.filter((u) => u.contract_id === contract.value?.id));
 // Maximo 1 Modem/ONT/Router principal (categoria 'onu') por CONTRATO/linea
 // (Fase 71 lo hizo por instalacion; Fase 72 extiende lo mismo aca) — un
@@ -1769,9 +1773,10 @@ onMounted(async () => {
               <span class="text-slate-500 text-xs ml-2">{{ ontPlanName(ont) || 'Sin plan asignado' }}</span>
               <span
                 class="badge ml-2"
+                :title="ont.telemetry?.outcome === 'expired' ? 'Lectura vencida; estado no confirmado' : ont.status === 'unknown' ? 'Sin evidencia vigente del serial' : 'Estado verificado por serial'"
                 :class="ont.status === 'online' ? 'bg-green-500/15 text-green-600' : ont.status === 'offline' ? 'bg-red-500/15 text-red-600' : 'bg-slate-500/15 text-slate-600'"
               >
-                {{ ont.status === 'online' ? 'En linea' : ont.status === 'offline' ? 'Desconectada' : 'Desconocido' }}
+                {{ ont.status === 'online' ? 'En linea' : ont.status === 'offline' ? 'Desconectada' : 'No confirmado' }}
               </span>
             </div>
             <div class="flex items-center gap-2">

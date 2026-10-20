@@ -725,8 +725,11 @@ oltRoutes.get('/onts/status', requireRole(...STAFF_READ), async (c) => {
   const { data, error } = await supabaseAdmin.from('olt_onts').select('id, olt_device_id, serial, frame, slot, port, ont_id, status, description, rx_power, tx_power, last_synced_at').in('serial', serials);
   if (error) return c.json({ error: error.message }, 500);
 
-  const byserial: Record<string, { status: string; description: string | null }> = {};
-  for (const row of data ?? []) byserial[row.serial] = { status: ontTelemetry.project(row).status, description: row.description };
+  const byserial: Record<string, unknown> = {};
+  for (const row of data ?? []) {
+    const projected = ontTelemetry.project(row);
+    byserial[row.serial] = { status: projected.status, description: row.description, telemetry: projected.telemetry, rx_power: projected.rx_power, tx_power: projected.tx_power };
+  }
   return c.json(byserial);
 });
 
@@ -747,10 +750,14 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
   const ports = new Set(globalOnts.map(o => `${o.frame}/${o.slot}/${o.port}`));
   const failedPorts = scan.failedPorts;
   // Preserve every existing identity, linked or unlinked, when a position is reused.
-  const { data: linkedRows } = await supabaseAdmin
+  const { data: linkedRows, error: identityError, count: identityCount } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, frame, slot, port, ont_id, serial, client_id')
+    .select('id, frame, slot, port, ont_id, serial, client_id', { count: 'exact' })
     .eq('olt_device_id', device.id);
+  // Fail closed on transport/RLS errors AND truncated inventories. No mutation before this gate.
+  if (identityError || !linkedRows || identityCount === null || linkedRows.length !== identityCount) {
+    return c.json({ error: 'No se pudo obtener el inventario completo de identidades; no se importó nada.' }, 503);
+  }
   const linkedPositions: LinkedPosition[] = (linkedRows ?? []).map((r) => ({
     frame: r.frame, slot: r.slot, port: r.port, ontId: r.ont_id, serial: r.serial, clientId: r.client_id as string | null,
   }));
@@ -787,21 +794,28 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
   const { fullRefresh, keepDescription, conflicts } = classifyImportCandidates(candidates, linkedPositions);
-  for (const row of linkedRows ?? []) ontTelemetry.invalidate(row.id);
-  // Una posicion en "keepDescription" por definicion ya existe en olt_onts
-  // (vino de esa misma tabla arriba) — nunca es un alta nueva, asi que
-  // omitir "description" aca siempre cae en la rama UPDATE del upsert
-  // (deja la columna intacta), nunca en un INSERT que la dejaria en null.
-  // Los conflictos NO entran a ningun upsert — esa fila queda intacta.
+  // Linked descriptions remain application-owned. Conflicts never reach a write.
   const rowsWithoutDescription = keepDescription.map((c) => c.base);
   const rowsWithDescription = fullRefresh.map((c) => ({ ...c.base, description: c.name }));
 
-  for (const rows of [rowsWithDescription, rowsWithoutDescription]) {
-    if (!rows.length) continue;
-    const { error } = await supabaseAdmin
-      .from('olt_onts')
-      .upsert(rows, { onConflict: 'olt_device_id,frame,slot,port,ont_id' });
-    if (error) return c.json({ error: error.message }, 400);
+  let imported = 0;
+  for (const metadata of [...rowsWithDescription, ...rowsWithoutDescription]) {
+    const existing = linkedRows.find(r => r.frame === metadata.frame && r.slot === metadata.slot && r.port === metadata.port && r.ont_id === metadata.ont_id);
+    if (existing) {
+      // Never update identity fields. Atomic predicates protect against a concurrent replacement/link.
+      const { olt_device_id, frame, slot, port, ont_id, serial, ...patch } = metadata;
+      let query = supabaseAdmin.from('olt_onts').update(patch)
+        .eq('id', existing.id).eq('olt_device_id', olt_device_id).eq('serial', existing.serial)
+        .eq('frame', frame).eq('slot', slot).eq('port', port).eq('ont_id', ont_id);
+      query = existing.client_id === null ? query.is('client_id', null) : query.eq('client_id', existing.client_id);
+      const { data, error } = await query.select('id').maybeSingle();
+      if (error || !data) return c.json({ error: 'Identidad o vínculo cambiado; importación detenida.', imported }, 409);
+    } else {
+      // Plain INSERT: a concurrently occupied position must fail, never take the UPDATE branch.
+      const { error } = await supabaseAdmin.from('olt_onts').insert(metadata);
+      if (error) return c.json({ error: 'No se pudo insertar la identidad sin sobrescribir registros.', imported }, 409);
+    }
+    imported++;
   }
 
   if (conflicts.length) {
@@ -812,7 +826,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
   return c.json({
     ok: true,
     scanned: globalOnts.length,
-    imported: rowsWithDescription.length + rowsWithoutDescription.length,
+    imported,
     ports: ports.size,
     failedPorts,
     conflicts,

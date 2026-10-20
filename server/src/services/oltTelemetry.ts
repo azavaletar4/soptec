@@ -90,9 +90,31 @@ export function evaluateOntEvidence(row: OntIdentity, scan: TelemetryScan): OntE
 /** Ephemeral evidence: restart/expiry/failure never upgrades historical database values to live. */
 export class OntTelemetryEvidence {
   private evidence = new Map<string, OntEvidence>();
+  // Alert comparison only: never exposed as current optical power or read from legacy DB values.
+  private signalReferences = new Map<string, { identity: string; rx: number; at: number }>();
+  private identity(row: OntIdentity) { return `${row.olt_device_id}|${serialKey(row.serial)}|${ontPosition(row)}`; }
   constructor(private now: () => number = Date.now) {}
-  remember(row: OntIdentity, evidence: OntEvidence) { this.evidence.set(row.id, evidence); }
-  invalidate(id: string) { this.evidence.delete(id); }
+  remember(row: OntIdentity, evidence: OntEvidence) {
+    if (['absent', 'moved', 'conflict', 'ambiguous'].includes(evidence.outcome)) this.signalReferences.delete(row.id);
+    this.evidence.set(row.id, evidence);
+  }
+  signalReference(row: OntIdentity): number | null {
+    const saved = this.signalReferences.get(row.id);
+    const interval = Number(process.env.OLT_SYNC_INTERVAL_MINUTES ?? 20);
+    const every = Number(process.env.OLT_SYNC_SIGNAL_EVERY_N_RUNS ?? 1);
+    // Allow one missed optical cycle; bounded independently of display freshness.
+    const minutes = Math.min(1440, Math.max(10, 2 * (Number.isFinite(interval) ? interval : 20) * (Number.isFinite(every) ? every : 1) + 5));
+    if (!saved || saved.identity !== this.identity(row) || this.now() < saved.at || this.now() - saved.at > minutes * 60000) {
+      this.signalReferences.delete(row.id); return null;
+    }
+    return saved.rx;
+  }
+  rememberSignal(row: OntIdentity, evidence: OntEvidence) {
+    if (evidence.outcome !== 'valid' || evidence.signalOutcome !== 'valid' || evidence.rxPower === null || !evidence.signalReadAt) return;
+    const at = Date.parse(evidence.signalReadAt);
+    if (Number.isFinite(at)) this.signalReferences.set(row.id, { identity: this.identity(row), rx: evidence.rxPower, at });
+  }
+  invalidate(id: string) { this.evidence.delete(id); this.signalReferences.delete(id); }
   project<T extends { id: string; olt_device_id?: string; serial?: string; frame?: number; slot?: number; port?: number; ont_id?: number; status?: unknown; rx_power?: unknown; tx_power?: unknown; last_synced_at?: unknown }>(row: T) {
     const saved = this.evidence.get(row.id);
     const valid = saved && row.olt_device_id === saved.oltDeviceId && serialKey(row.serial ?? '') === serialKey(saved.serial) && ontPosition(row as unknown as OntIdentity) === saved.position && this.now() <= Date.parse(saved.validUntil);

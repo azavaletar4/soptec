@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import { useOntEvidenceClock } from '@/composables/useOntEvidenceClock';
+import { enforceOntEvidence } from '@/lib/ontTelemetryEvidence';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useTr069Store } from '@/stores/tr069';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
-import { useOltStore, type OltOnt } from '@/stores/olt';
+import { useOltStore, type OltSerialStatus } from '@/stores/olt';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import type { ServiceContract, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
@@ -19,13 +21,16 @@ const { confirmDialog } = useConfirm();
 // Estado online/offline real de la ONU (olt_onts.status), por numero de
 // serie del CPE — distinto del "ultimo reporte" de GenieACS (ese es TR-069,
 // esto es lo que ve la OLT por GPON).
-const ontStatusBySerial = ref<Record<string, { status: OltOnt['status']; description: string | null }>>({});
+const loadedOntStatuses = ref<Record<string, OltSerialStatus>>({});
+const ontEvidenceNow = useOntEvidenceClock();
+const ontStatusBySerial = computed(() => Object.fromEntries(Object.entries(loadedOntStatuses.value)
+  .map(([serial, row]) => [serial, enforceOntEvidence(row, ontEvidenceNow.value)])));
 
 async function loadOntStatuses() {
   const serials = tr069Store.devices.map((d) => d.cpe_serial).filter(Boolean);
   if (!serials.length) return;
   try {
-    ontStatusBySerial.value = await oltStore.fetchOntStatusBySerials(serials);
+    loadedOntStatuses.value = await oltStore.fetchOntStatusBySerials(serials);
   } catch {
     // Sin acceso a la OLT desde este rol: la columna simplemente queda vacia.
   }
@@ -339,6 +344,7 @@ async function handleUnlink() {
                 <span
                   v-if="ontStatusBySerial[device.cpe_serial]"
                   class="badge"
+                  :title="ontStatusBySerial[device.cpe_serial].telemetry?.outcome === 'expired' ? 'Lectura vencida; estado no confirmado' : ontStatusBySerial[device.cpe_serial].status === 'unknown' ? 'Sin evidencia vigente del serial' : 'Estado verificado por serial'"
                   :class="
                     ontStatusBySerial[device.cpe_serial].status === 'online'
                       ? 'bg-green-500/15 text-green-600'
@@ -352,7 +358,7 @@ async function handleUnlink() {
                       ? 'En linea'
                       : ontStatusBySerial[device.cpe_serial].status === 'offline'
                         ? 'Desconectada'
-                        : 'Desconocido'
+                        : 'No confirmado'
                   }}
                 </span>
                 <span v-else class="text-slate-500 text-xs">Sin dato de OLT</span>

@@ -1,0 +1,15 @@
+{
+  "baseCommit": "6aea8b5c99085eff0ff074eab054f09ec57cac8d",
+  "branch": "fix/olt-identidad-bloqueos-20261020",
+  "productionAccess": false,
+  "oltConfigurationCommands": false,
+  "productionWrites": false,
+  "migration": false,
+  "focused": { "pass": 130, "fail": 0 },
+  "originalReproductions": { "importFailure": "PASS", "signalGap": "PASS" },
+  "frontendTypes": "PASS",
+  "frontendBuild": "PASS_LOCAL_DUMMY_ENV",
+  "backendTypes": { "result": "UNCHANGED_BASELINE_ERRORS", "existingErrors": 5, "newErrors": 0, "baseline": "e679d9c" },
+  "protectedLocalFiles": { "total": 216, "changedHashes": 0 },
+  "result": "PASS_LOCAL_PENDING_PRODUCTION_VALIDATION_AND_AUTHORIZATION"
+}

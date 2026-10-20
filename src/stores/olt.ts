@@ -19,6 +19,8 @@ export interface OltDevice {
   lng: number | null;
 }
 
+export type OltSerialStatus = Pick<OltOnt, 'status' | 'description' | 'rx_power' | 'tx_power' | 'telemetry'>;
+
 export interface OltOnt {
   telemetry?: OntTelemetryPresentation;
   id: string;
@@ -650,8 +652,8 @@ export const useOltStore = defineStore('olt', () => {
   // Estado online/offline por numero de serie, sin filtrar por cliente
   // vinculado (a diferencia de searchUnlinkedOnts) — usado desde /tr069.
   function fetchOntStatusBySerials(serials: string[]) {
-    if (!serials.length) return Promise.resolve({} as Record<string, { status: OltOnt['status']; description: string | null }>);
-    return apiFetch<Record<string, { status: OltOnt['status']; description: string | null }>>(
+    if (!serials.length) return Promise.resolve({} as Record<string, OltSerialStatus>);
+    return apiFetch<Record<string, OltSerialStatus>>(
       `/api/olt-devices/onts/status?serials=${encodeURIComponent(serials.join(','))}`,
     );
   }
