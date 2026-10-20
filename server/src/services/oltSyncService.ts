@@ -5,18 +5,15 @@ import { oltEvents, type OltAlertEvent } from './oltEvents';
 import { detectStatusAlert, detectSignalAlert } from './oltAlerts';
 import { buildOltAlertLogRows } from './oltAlertLog';
 import { type OltDeviceRow, telnetTargetFor } from '../lib/oltDevice';
+import { persistOntMeasurement } from './oltTelemetryPersistence';
+import { collectOltTelemetry, evaluateOntEvidence, rememberOntEvidence, ontTelemetry } from './oltTelemetry';
 import {
   listUnconfiguredOntsCommands,
-  listAllOntsCommands,
-  bulkOnuRxCommands,
-  bulkOnuTxCommands,
   oltHealthCommands,
   type ZteInterfaceRef,
 } from '../ssh/zteCommands';
 import {
   parseUnconfiguredOnts,
-  parseGlobalOntState,
-  parseBulkPower,
   parseUptime,
   parseCardTemperatures,
   parseProcessorLoad,
@@ -121,6 +118,8 @@ function uniquePorts(onts: GlobalOnt[]): ZteInterfaceRef[] {
 
 interface KnownOnt {
   id: string;
+  serial: string;
+  olt_device_id: string;
   frame: number;
   slot: number;
   port: number;
@@ -173,28 +172,18 @@ async function performFullSync(
     console.error(`[olt-sync] ${device.name}: fallo el escaneo de ONUs sin autorizar:`, e);
   }
 
-  // 2) Estado online/offline de TODAS las ONUs de una sola vez.
-  let globalOnts: GlobalOnt[] = [];
-  let scanComplete = false;
-  try {
-    const outputs = await withOltLock(
-      device.id,
-      () => runTelnetCommands(target, listAllOntsCommands(), { timeoutMs: 45000 }),
-      { priority },
-    );
-    globalOnts = parseGlobalOntState(outputs.join('\n'));
-    scanComplete = true;
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error(`[olt-sync] ${device.name}: fallo el escaneo global de estado:`, e);
-  }
-
+  // Identity brackets cover state and all power reads; each session still yields the OLT lock.
+  const scan = await collectOltTelemetry(
+    (commands, timeoutMs) => withOltLock(device.id, () => runTelnetCommands(target, commands, { timeoutMs }), { priority }),
+    { includeSignal },
+  );
+  const scanComplete = !!scan.before && !!scan.after && !!scan.states;
+  const globalOnts = scan.states ?? [];
   const { data: knownRows } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power, client_id, contract_id')
+    .select('id, serial, olt_device_id, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power, client_id, contract_id')
     .eq('olt_device_id', device.id);
   const known = (knownRows ?? []) as KnownOnt[];
-  const byPos = new Map(known.map((r) => [`${r.frame}/${r.slot}/${r.port}:${r.ont_id}`, r]));
   // Fase 4 OLT — historial de alertas: mapa por id para resolver el
   // snapshot de vinculo de cada alerta sin volver a consultar nada.
   const knownById = new Map(known.map((r) => [r.id, r]));
@@ -208,104 +197,40 @@ async function performFullSync(
     alerts.push({ oltDeviceId: device.id, ontDbId: row.id, kind, message: `ONT ${detail}`, at: now });
   }
 
-  let online = 0;
-  let offline = 0;
-  let disabledCount = 0;
-  if (scanComplete) {
-    online = globalOnts.filter((o) => o.runState === 'working').length;
-    offline = globalOnts.length - online;
-    disabledCount = globalOnts.filter((o) => o.adminState === 'disable').length;
-
-    for (const o of globalOnts) {
-      const row = byPos.get(`${o.frame}/${o.slot}/${o.port}:${o.onuId}`);
-      if (!row) continue;
-      const newStatus = o.runState === 'working' ? 'online' : 'offline';
-      const update: PendingUpdate = { id: row.id, last_synced_at: now };
-      let changed = false;
-      if (newStatus !== row.status) {
-        update.status = newStatus;
-        changed = true;
-      }
-      if (o.adminState !== row.admin_state) {
-        update.admin_state = o.adminState;
-        changed = true;
-      }
-      if (changed) updatesById.set(row.id, update);
-      const statusAlert = detectStatusAlert(
-        { status: row.status, adminState: row.admin_state },
-        { status: newStatus, adminState: o.adminState },
-      );
-      pushAlert(row, statusAlert, `slot ${o.slot}/puerto ${o.port}/onu-id ${o.onuId} ${statusAlert === 'offline' ? 'se desconectó' : 'volvió a estar en línea'}`);
-    }
-  } else {
-    // Respaldo: si el escaneo global falla (timeout, etc.), reportar lo ya
-    // sincronizado localmente en vez de dejar el resumen en cero.
-    const rows = known;
-    online = rows.filter((r) => r.status === 'online').length;
-    offline = rows.filter((r) => r.status === 'offline').length;
-    disabledCount = rows.filter((r) => r.admin_state === 'disable').length;
-  }
-
-  // 3) Potencia optica Rx/Tx por puerto PON (solo si tenemos la lista de
-  // puertos reales del escaneo global). Secuencial y NUNCA rx+tx en la misma
-  // conexion: el equipo real se cuelga sin devolver el prompt si se
-  // encadenan (ver advertencia en zteCommands.ts). Es la parte mas cara del
-  // sync (~2 comandos por puerto) — se salta entera cuando includeSignal es
-  // false (ver OLT_SYNC_SIGNAL_EVERY_N_RUNS), dejando online/offline (ya
-  // resuelto arriba) como lo unico que se actualiza ese ciclo.
+  const online = scanComplete ? globalOnts.filter(o => o.runState === 'working').length : 0;
+  const offline = scanComplete ? globalOnts.filter(o => ['offline', 'los', 'dyinggasp'].includes(o.runState)).length : 0;
+  const disabledCount = scanComplete ? globalOnts.filter(o => o.adminState === 'disable').length : 0;
   const ports = scanComplete ? uniquePorts(globalOnts) : [];
-  const failedPorts: string[] = [];
-  for (const ref of includeSignal ? ports : []) {
-    const portKey = `${ref.shelf}/${ref.slot}/${ref.port}`;
-    try {
-      // rx+tx de ESTE puerto quedan bajo UN solo turno de lock (son dos
-      // comandos chicos y seguidos para el mismo puerto) — el punto de cesion
-      // real para una accion 'interactive' en espera es ENTRE puertos, no
-      // en medio de este par.
-      const [rxOut, txOut] = await withOltLock(
-        device.id,
-        async () => {
-          const rx = await runTelnetCommands(target, bulkOnuRxCommands(ref), { timeoutMs: 30000 });
-          const tx = await runTelnetCommands(target, bulkOnuTxCommands(ref), { timeoutMs: 30000 });
-          return [rx, tx] as const;
-        },
-        { priority },
-      );
-      const rxByOnu = parseBulkPower(rxOut[1] ?? '');
-      const txByOnu = parseBulkPower(txOut[1] ?? '');
-
-      const portRows = known.filter((r) => r.frame === ref.shelf && r.slot === ref.slot && r.port === ref.port);
-      for (const row of portRows) {
-        const rx = rxByOnu.get(row.ont_id);
-        const tx = txByOnu.get(row.ont_id);
-        const signalAlert = detectSignalAlert(row.rx_power, rx, LOW_SIGNAL_THRESHOLD_DBM);
-        pushAlert(row, signalAlert, `slot ${ref.slot}/puerto ${ref.port}/onu-id ${row.ont_id} ${signalAlert === 'lowSignal' ? `señal óptica bajo el umbral (${rx} dBm)` : `señal óptica se normalizó (${rx} dBm)`}`);
-        if (rx === undefined && tx === undefined) continue;
-        if (rx === row.rx_power && tx === row.tx_power) continue;
-
-        const existing = updatesById.get(row.id) ?? { id: row.id, last_synced_at: now };
-        if (rx !== undefined) existing.rx_power = rx;
-        if (tx !== undefined) existing.tx_power = tx;
-        updatesById.set(row.id, existing);
-      }
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(`[olt-sync] ${device.name}: fallo el puerto ${portKey}:`, e);
-      failedPorts.push(portKey);
+  const failedPorts = scan.failedPorts;
+  for (const row of known) {
+    const previous = ontTelemetry.project(row);
+    const evidence = evaluateOntEvidence(row, scan);
+    rememberOntEvidence(row, evidence);
+    if (evidence.outcome !== 'valid') continue; // historical row stays intact
+    const update: PendingUpdate = { id: row.id, status: evidence.status as 'online' | 'offline', admin_state: evidence.adminState, last_synced_at: scan.checkedAt };
+    const statusAlert = detectStatusAlert({ status: previous.status, adminState: row.admin_state }, { status: update.status!, adminState: update.admin_state! });
+    pushAlert(row, statusAlert, `posición ${evidence.position} ${statusAlert === 'offline' ? 'se desconectó' : 'volvió a estar en línea'}`);
+    if (evidence.signalOutcome === 'valid') {
+      update.rx_power = evidence.rxPower!; update.tx_power = evidence.txPower!;
+      const signalAlert = detectSignalAlert(previous.rx_power, update.rx_power, LOW_SIGNAL_THRESHOLD_DBM);
+      pushAlert(row, signalAlert, `posición ${evidence.position} señal ${update.rx_power} dBm`);
     }
+    if (row.status !== update.status || row.admin_state !== update.admin_state || (update.rx_power !== undefined && row.rx_power !== update.rx_power) || (update.tx_power !== undefined && row.tx_power !== update.tx_power)) updatesById.set(row.id, update);
   }
-
-  // 4) Bulk upsert de TODO lo que realmente cambio, en una sola llamada
-  // (ver bulk_update_ont_status_power en la migracion de la Fase 40).
+  // Conditional writes close the database identity race; unchanged historical values are not rewritten.
   const updates = [...updatesById.values()];
   if (updates.length) {
-    const { error } = await supabaseAdmin.rpc('bulk_update_ont_status_power', { updates });
+    let error: { message: string } | null = null;
+    for (const update of updates) {
+      try { await persistOntMeasurement(knownById.get(update.id)!, update); }
+      catch (failure) { error = { message: failure instanceof Error ? failure.message : 'No se pudo guardar telemetría' }; break; }
+    }
     if (error) {
       // eslint-disable-next-line no-console
-      console.error(`[olt-sync] ${device.name}: fallo el bulk update de olt_onts:`, error.message);
+      console.error(`[olt-sync] ${device.name}: fallo la escritura protegida de olt_onts:`, error.message);
     } else {
       for (const u of updates) {
-        oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: u });
+        oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: ontTelemetry.project({ ...knownById.get(u.id)!, ...u }) });
       }
       // Solo tras confirmar que el cambio que la originó quedo persistido
       // (si el bulk update fallo, no hay nada confirmado que alertar).
@@ -353,13 +278,7 @@ async function performFullSync(
     console.error(`[olt-sync] ${device.name}: fallo la lectura de salud del chasis:`, e);
   }
 
-  // 6) Senal baja: sobre el estado de rx_power YA actualizado arriba.
-  const { data: signalRows } = await supabaseAdmin
-    .from('olt_onts')
-    .select('rx_power')
-    .eq('olt_device_id', device.id)
-    .not('rx_power', 'is', null);
-  const lowSignal = (signalRows ?? []).filter((r) => (r.rx_power as number) < LOW_SIGNAL_THRESHOLD_DBM).length;
+  const lowSignal = known.map(row => ontTelemetry.project(row)).filter(row => typeof row.rx_power === 'number' && row.rx_power < LOW_SIGNAL_THRESHOLD_DBM).length;
 
   await supabaseAdmin.from('olt_sync_cache').upsert({
     olt_device_id: device.id,

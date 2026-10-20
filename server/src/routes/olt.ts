@@ -1,3 +1,6 @@
+import { collectOltTelemetry, evaluateOntEvidence, rememberOntEvidence, ontTelemetry, presentOntData } from '../services/oltTelemetry';
+import { persistOntMeasurement } from '../services/oltTelemetryPersistence';
+import { readVerifiedOntSignal } from '../services/oltVerifiedRead';
 import { validateProvisioningContract } from '../services/provisioningContract';
 import { createOltProvisioningRoutes } from './oltProvisioning';
 import { Hono, type Context } from 'hono';
@@ -18,17 +21,12 @@ import { computeRecoveryDurations } from '../services/oltAlertLog';
 import { resolveDisabledReason } from '../services/oltDisabledReason';
 import {
   testConnectionCommands,
-  listOntsCommands,
-  listAllOntsCommands,
   listUnconfiguredOntsCommands,
   configureWanPppoeCommands,
   changeOntProfileCommands,
   setAdminStateCommands,
   deleteOntCommands,
   runningConfigCommands,
-  fullRunningConfigCommand,
-  bulkOnuRxCommands,
-  bulkOnuTxCommands,
   listTcontProfilesCommands,
   listTrafficProfilesCommands,
   setTr069AcsCommands,
@@ -36,10 +34,6 @@ import {
   type ZteInterfaceRef,
 } from '../ssh/zteCommands';
 import {
-  parseOntList,
-  parseGlobalOntState,
-  parseBulkPower,
-  parseFullRunningConfig,
   parseUnconfiguredOnts,
   parseProfileNames,
 } from '../ssh/zteParsers';
@@ -81,26 +75,6 @@ async function getDeviceOrNull(id: string | undefined): Promise<OltDeviceRow | n
   const { data, error } = await supabaseAdmin.from('olt_devices').select('*').eq('id', id).single();
   if (error || !data) return null;
   return data as OltDeviceRow;
-}
-
-/**
- * Potencia optica de UNA ONU puntual. "show pon power attenuation
- * gpon-onu_S/L/P:ID" (por ONU individual) NO existe en este firmware real
- * — confirmado contra el equipo (10.15.15.2): "%Error 20202: Invalid input
- * detected". Se usa en su lugar el comando bulk por puerto ya validado
- * (bulkOnuRxCommands/bulkOnuTxCommands, el mismo que usa el sync en
- * background) y se extrae solo esta ONU del resultado.
- *
- * OJO: no adquiere su propio withOltLock — el caller (endpoint /signal o el
- * registro de una ONT) ya debe estar corriendo dentro de uno. Adquirirlo
- * aqui tambien causaria un deadlock si el caller ya tiene el turno tomado.
- */
-async function readOntSignal(device: OltDeviceRow, ref: ZteInterfaceRef, onuId: number) {
-  const rxOut = await runTelnetCommands(telnetTargetFor(device), bulkOnuRxCommands(ref), { timeoutMs: 30000 });
-  const txOut = await runTelnetCommands(telnetTargetFor(device), bulkOnuTxCommands(ref), { timeoutMs: 30000 });
-  const rxPower = parseBulkPower(rxOut[1] ?? '').get(onuId) ?? null;
-  const txPower = parseBulkPower(txOut[1] ?? '').get(onuId) ?? null;
-  return { rxPower, txPower };
 }
 
 // ---- CRUD olt_devices ----
@@ -244,9 +218,9 @@ oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
   // mientras tanto, contar lo que ya haya en olt_onts en vez de puros ceros.
   const { data: onts } = await supabaseAdmin
     .from('olt_onts')
-    .select('status, admin_state, rx_power')
+    .select('id, olt_device_id, serial, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power, last_synced_at')
     .eq('olt_device_id', device.id);
-  const rows = onts ?? [];
+  const rows = (onts ?? []).map(row => ontTelemetry.project(row));
   return c.json({
     unconfigured: 0,
     online: rows.filter((r) => r.status === 'online').length,
@@ -333,7 +307,7 @@ oltRoutes.get('/:id/events', requireRole(...STAFF_READ), async (c) => {
   return streamSSE(c, async (stream) => {
     const onOntChanged = (payload: OntChangedEvent) => {
       if (payload.oltDeviceId !== deviceId) return;
-      void stream.writeSSE({ event: 'ontChanged', data: JSON.stringify(payload.ont) });
+      void stream.writeSSE({ event: 'ontChanged', data: JSON.stringify(presentOntData(payload.ont)) });
     };
     const onSummaryChanged = (payload: SummaryChangedEvent) => {
       if (payload.oltDeviceId !== deviceId) return;
@@ -677,7 +651,7 @@ oltRoutes.get('/:id/onts/disabled', requireRole(...STAFF_READ), async (c) => {
   const items: Record<string, unknown>[] = [];
   for (const r of onts ?? []) {
     const reason = resolveDisabledReason({ admin_state: r.admin_state, contract_id: r.contract_id }, suspendedContractIds);
-    if (reason) items.push({ ...r, reason });
+    if (reason) items.push({ ...ontTelemetry.project(r), reason });
   }
 
   return c.json({ items, checkedAt: new Date().toISOString() });
@@ -697,7 +671,7 @@ oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
     .order('port')
     .order('ont_id');
   if (error) return c.json({ error: error.message }, 500);
-  return c.json(data);
+  return c.json(presentOntData(data));
 });
 
 /**
@@ -712,7 +686,7 @@ oltRoutes.get('/onts/by-client/:clientId', requireRole(...STAFF_READ), async (c)
     .eq('client_id', c.req.param('clientId'))
     .order('created_at', { ascending: false });
   if (error) return c.json({ error: error.message }, 500);
-  return c.json(data);
+  return c.json(presentOntData(data));
 });
 
 /**
@@ -728,12 +702,12 @@ oltRoutes.get('/onts/search', requireRole(...STAFF_READ), async (c) => {
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, olt_device_id, serial, description, ont_id, slot, port, status, olt_devices(id, name)')
+    .select('id, olt_device_id, serial, description, ont_id, frame, slot, port, status, olt_devices(id, name)')
     .is('client_id', null)
     .ilike('serial', `%${serial}%`)
     .limit(20);
   if (error) return c.json({ error: error.message }, 500);
-  return c.json(data);
+  return c.json(presentOntData(data));
 });
 
 /**
@@ -748,111 +722,37 @@ oltRoutes.get('/onts/status', requireRole(...STAFF_READ), async (c) => {
   const serials = raw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 200);
   if (!serials.length) return c.json({});
 
-  const { data, error } = await supabaseAdmin.from('olt_onts').select('serial, status, description').in('serial', serials);
+  const { data, error } = await supabaseAdmin.from('olt_onts').select('id, olt_device_id, serial, frame, slot, port, ont_id, status, description, rx_power, tx_power, last_synced_at').in('serial', serials);
   if (error) return c.json({ error: error.message }, 500);
 
   const byserial: Record<string, { status: string; description: string | null }> = {};
-  for (const row of data ?? []) byserial[row.serial] = { status: row.status, description: row.description };
+  for (const row of data ?? []) byserial[row.serial] = { status: ontTelemetry.project(row).status, description: row.description };
   return c.json(byserial);
 });
 
-/**
- * Importa TODAS las ONTs ya configuradas en la OLT (heredadas de SmartOLT u
- * otra herramienta, nunca registradas via esta app) hacia olt_onts, con su
- * nombre/plan/VLAN/senal. Solo lectura contra la OLT (no toca la config
- * real):
- *   1. "show gpon onu state" global -> frame/slot/port/onuId/runState de
- *      TODAS las ONUs de una sola vez (mismo comando que usa el sync).
- *   2. "show running-config" (TODO el equipo, sin filtro) -> UN SOLO
- *      comando (~10s con 675 ONUs, validado) trae serial/tipo/nombre/
- *      descripcion/plan/VLAN de TODAS las ONUs a la vez. Mucho mas barato
- *      que pedir el running-config de cada ONU por separado (675 comandos).
- *   3. Por cada puerto PON unico, 2 comandos que traen la senal optica de
- *      TODAS sus ONUs de una vez (bulkOnuRxCommands/bulkOnuTxCommands) — la
- *      senal es telemetria en vivo, no config, asi que no sale del dump
- *      anterior. Secuencial, NO en paralelo: 3 conexiones Telnet
- *      simultaneas al mismo equipo causaron timeouts reales en los puertos
- *      con mas ONUs (ver incidente 2026-09-11 — 8 de 19 puertos fallaron).
- *      OJO: rx y tx tampoco se pueden combinar en una sola conexion — se
- *      probo (2026-09-22) y el equipo real se cuelga sin dar el prompt al
- *      encadenar "onu-tx" justo despues de "onu-rx" en la misma sesion.
- *   4. Upsert en bloque. Nunca pisa client_id (esa vinculacion es decision
- *      de esta app, no de la OLT) — el resto (tipo/VLAN/perfiles/senal/
- *      estado) se sincroniza desde la OLT en cada import, que es su fuente
- *      de verdad, con UNA excepcion: "description" NO se pisa en una ONT
- *      ya vinculada a un cliente (client_id no nulo) — una vez administrada
- *      desde el panel ("Editar informacion"), ese nombre deja de seguir al
- *      texto crudo de la OLT (ver ESTADO_DESARROLLO.md, incidentes
- *      Violeta/Clara/Mayco). Una ONT SIN vincular si sigue tomando el
- *      nombre de la OLT en cada import, como siempre.
- *
- * Todo el paso 1-3 corre dentro de UN SOLO turno de withOltLock (el sync en
- * background espera a que termine antes de tomar su turno).
- */
+/** Explicit metadata import; telemetry is published only by the shared serial-verified reader. */
 oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
-  let scanResult: {
-    globalOnts: ReturnType<typeof parseGlobalOntState>;
-    fullConfig: ReturnType<typeof parseFullRunningConfig>;
-    ports: Map<string, { shelf: number; slot: number; port: number }>;
-    rxByPort: Map<string, Map<number, number>>;
-    txByPort: Map<string, Map<number, number>>;
-    failedPorts: string[];
-  };
+  // Explicit import remains metadata-only: measurements use the shared serial-verified reader.
+  let scan: Awaited<ReturnType<typeof collectOltTelemetry>>;
   try {
-    scanResult = await withOltLock(device.id, async () => {
-      const stateOut = await runTelnetCommands(telnetTargetFor(device), listAllOntsCommands(), { timeoutMs: 60000 });
-      const globalOnts = parseGlobalOntState(stateOut.join('\n'));
-      const configOut = await runTelnetCommands(telnetTargetFor(device), fullRunningConfigCommand(), { timeoutMs: 120000 });
-      const fullConfig = parseFullRunningConfig(configOut[1] ?? '');
-
-      const ports = new Map<string, { shelf: number; slot: number; port: number }>();
-      for (const o of globalOnts) {
-        const key = `${o.frame}/${o.slot}/${o.port}`;
-        if (!ports.has(key)) ports.set(key, { shelf: o.frame, slot: o.slot, port: o.port });
-      }
-
-      const rxByPort = new Map<string, Map<number, number>>();
-      const txByPort = new Map<string, Map<number, number>>();
-      const failedPorts: string[] = [];
-      for (const ref of ports.values()) {
-        const key = `${ref.shelf}/${ref.slot}/${ref.port}`;
-        try {
-          const rxOut = await runTelnetCommands(telnetTargetFor(device), bulkOnuRxCommands(ref), { timeoutMs: 30000 });
-          const txOut = await runTelnetCommands(telnetTargetFor(device), bulkOnuTxCommands(ref), { timeoutMs: 30000 });
-          rxByPort.set(key, parseBulkPower(rxOut[1] ?? ''));
-          txByPort.set(key, parseBulkPower(txOut[1] ?? ''));
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.error(`[olt/import] fallo el puerto ${key}:`, e);
-          failedPorts.push(key);
-        }
-      }
-
-      return { globalOnts, fullConfig, ports, rxByPort, txByPort, failedPorts };
-    });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : 'Error al escanear la OLT' }, 502);
-  }
-
-  const { globalOnts, fullConfig, ports, rxByPort, txByPort, failedPorts } = scanResult;
-  const now = new Date().toISOString();
-
-  // Posiciones ya vinculadas a un cliente — su "description" ya es un dato
-  // administrado por esta app (ver oltImportDescriptionGuard.ts), no un
-  // texto crudo de la OLT; el import no debe volver a pisarlo. Se trae
-  // tambien el serial YA registrado: si la OLT ahora reporta OTRO serial en
-  // esa misma posicion, la ONT fisica cambio (reemplazo/traslado) — esa
-  // fila no se toca en absoluto, se reporta como conflicto.
+    scan = await collectOltTelemetry((commands, timeoutMs) => withOltLock(device.id,
+      () => runTelnetCommands(telnetTargetFor(device), commands, { timeoutMs })), { includeSignal: false });
+    if (!scan.before || !scan.after || !scan.states) throw Error('Identidad o estado no confirmados; no se importó nada.');
+  } catch { return c.json({ error: 'No se pudo verificar el inventario de seriales de la OLT.' }, 502); }
+  const globalOnts = scan.states!;
+  const fullConfig = scan.after!;
+  const ports = new Set(globalOnts.map(o => `${o.frame}/${o.slot}/${o.port}`));
+  const failedPorts = scan.failedPorts;
+  // Preserve every existing identity, linked or unlinked, when a position is reused.
   const { data: linkedRows } = await supabaseAdmin
     .from('olt_onts')
-    .select('frame, slot, port, ont_id, serial, client_id')
-    .eq('olt_device_id', device.id)
-    .not('client_id', 'is', null);
+    .select('id, frame, slot, port, ont_id, serial, client_id')
+    .eq('olt_device_id', device.id);
   const linkedPositions: LinkedPosition[] = (linkedRows ?? []).map((r) => ({
-    frame: r.frame, slot: r.slot, port: r.port, ontId: r.ont_id, serial: r.serial, clientId: r.client_id as string,
+    frame: r.frame, slot: r.slot, port: r.port, ontId: r.ont_id, serial: r.serial, clientId: r.client_id as string | null,
   }));
 
   const candidates = globalOnts
@@ -860,6 +760,8 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
       const key = `${o.frame}/${o.slot}/${o.port}`;
       const b = fullConfig.get(`${key}:${o.onuId}`);
       if (!b || !b.serial) return null;
+      const evidence = evaluateOntEvidence({ id: "candidate", olt_device_id: device.id, frame: o.frame, slot: o.slot, port: o.port, ont_id: o.onuId, serial: b.serial }, scan);
+      if (evidence.outcome !== 'valid') return null;
       return {
         frame: o.frame,
         slot: o.slot,
@@ -877,10 +779,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
           tcont_profile: b.tcontProfile,
           traffic_profile: b.trafficProfile,
           vlan: b.vlan,
-          status: o.runState === 'working' ? 'online' : 'offline',
-          rx_power: rxByPort.get(key)?.get(o.onuId) ?? null,
-          tx_power: txByPort.get(key)?.get(o.onuId) ?? null,
-          last_synced_at: now,
+          // No telemetry fields: import cannot make a historical value appear current.
         },
         name: b.name,
       };
@@ -888,6 +787,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
   const { fullRefresh, keepDescription, conflicts } = classifyImportCandidates(candidates, linkedPositions);
+  for (const row of linkedRows ?? []) ontTelemetry.invalidate(row.id);
   // Una posicion en "keepDescription" por definicion ya existe en olt_onts
   // (vino de esa misma tabla arriba) — nunca es un alta nueva, asi que
   // omitir "description" aca siempre cae en la rama UPDATE del upsert
@@ -906,7 +806,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
 
   if (conflicts.length) {
     // eslint-disable-next-line no-console
-    console.warn(`[olt/import] ${conflicts.length} conflicto(s) de identidad (ONT reemplazada/trasladada), requieren revision manual:`, conflicts);
+    console.warn(`[olt/import] ${conflicts.length} conflicto(s) de identidad (ONT reemplazada/trasladada), requieren revision manual:`, conflicts.map(c => ({ position: c.position, expectedSerial: c.previousSerial, observedSerial: c.scannedSerial })));
   }
 
   return c.json({
@@ -929,52 +829,21 @@ oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) =
   if (slot == null || port == null) return c.json({ error: 'slot y port son requeridos' }, 400);
 
   try {
-    const outputs = await withOltLock(device.id, () =>
-      runTelnetCommands(telnetTargetFor(device), listOntsCommands({ shelf, slot, port })),
-    );
-    const raw = outputs.join('\n');
-    const parsed = parseOntList(raw);
-
-    // "show gpon onu state" (validado contra el equipo real) no trae numero
-    // de serie, solo el estado por onu-id. Por eso solo actualizamos el
-    // estado de ONTs que ya conocemos (registradas por esta app, que si
-    // tienen serial); las que aparecen en la OLT pero no en nuestra BD se
-    // reportan aparte (para registrarlas manualmente con su serial real,
-    // ej. via "show gpon onu uncfg" si aun no estan configuradas).
+    const scan = await collectOltTelemetry((commands, timeoutMs) => withOltLock(device.id,
+      () => runTelnetCommands(telnetTargetFor(device), commands, { timeoutMs })), { includeSignal: false });
+    const { data: rows, error } = await supabaseAdmin.from('olt_onts').select('*')
+      .eq('olt_device_id', device.id).eq('frame', shelf).eq('slot', slot).eq('port', port);
+    if (error) throw Error('No se pudo consultar la identidad de las ONT.');
     let updated = 0;
-    const notInDb: number[] = [];
-
-    for (const ont of parsed) {
-      const { data: existing } = await supabaseAdmin
-        .from('olt_onts')
-        .select('id')
-        .eq('olt_device_id', device.id)
-        .eq('frame', shelf)
-        .eq('slot', slot)
-        .eq('port', port)
-        .eq('ont_id', ont.onuId)
-        .maybeSingle();
-
-      if (!existing) {
-        notInDb.push(ont.onuId);
-        continue;
-      }
-
-      const { data: updatedRow } = await supabaseAdmin
-        .from('olt_onts')
-        .update({
-          status: ont.runState === 'working' ? 'online' : 'offline',
-          admin_state: ont.adminState,
-          last_synced_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id)
-        .select()
-        .single();
-      if (updatedRow) oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: updatedRow });
-      updated += 1;
+    const conflicts: object[] = [];
+    for (const row of rows ?? []) {
+      const e = evaluateOntEvidence(row, scan); rememberOntEvidence(row, e);
+      if (e.outcome !== 'valid') { conflicts.push({ serial: row.serial, position: e.position, observedSerial: e.observedSerial, outcome: e.outcome }); continue; }
+      await persistOntMeasurement(row, { status: e.status as 'online' | 'offline', admin_state: e.adminState, last_synced_at: e.checkedAt });
+      updated++;
     }
-
-    return c.json({ synced: updated, foundInOlt: parsed.length, notInDb, raw });
+    const found = (scan.states ?? []).filter(o => o.frame === shelf && o.slot === slot && o.port === port);
+    return c.json({ synced: updated, foundInOlt: found.length, notInDb: found.filter(o => !(rows ?? []).some(r => r.ont_id === o.onuId)).map(o => o.onuId), identityConflicts: conflicts, raw: '' });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al sincronizar con la OLT' }, 502);
   }
@@ -1114,15 +983,16 @@ async function toggleActivation(c: Context, activate: boolean) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al cambiar estado en la OLT' }, 502);
   }
 
+  ontTelemetry.invalidate(ont.id);
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update({ status: activate ? 'online' : 'offline', admin_state: activate ? 'enable' : 'disable' })
+    .update({ status: 'unknown', admin_state: activate ? 'enable' : 'disable' })
     .eq('id', ont.id)
     .select()
     .single();
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
-  return c.json(data);
+  return c.json(presentOntData(data));
 }
 
 /**
@@ -1163,7 +1033,7 @@ oltRoutes.put('/:id/onts/:ontDbId/plan', requireRole(...ONT_WRITE), async (c) =>
     .single();
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
-  return c.json(data);
+  return c.json(presentOntData(data));
 });
 
 /**
@@ -1218,7 +1088,7 @@ oltRoutes.post('/:id/onts/:ontDbId/wan-pppoe', requireRole(...ONT_WRITE), async 
     .single();
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
-  return c.json(data);
+  return c.json(presentOntData(data));
 });
 
 /**
@@ -1262,7 +1132,7 @@ oltRoutes.put('/:id/onts/:ontDbId/meta', requireRole(...ONT_WRITE), async (c) =>
     .single();
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: ont.olt_device_id, ont: data });
-  return c.json(data);
+  return c.json(presentOntData(data));
 });
 
 oltRoutes.delete('/:id/onts/:ontDbId', requireRole(...ONT_WRITE), async (c) => {
@@ -1295,16 +1165,8 @@ oltRoutes.get('/:id/onts/:ontDbId/signal', requireRole(...STAFF_READ), async (c)
   if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
 
   try {
-    const info = await withOltLock(device.id, () =>
-      readOntSignal(device, { shelf: ont.frame, slot: ont.slot, port: ont.port }, ont.ont_id),
-    );
-    const { data } = await supabaseAdmin
-      .from('olt_onts')
-      .update({ rx_power: info.rxPower, tx_power: info.txPower })
-      .eq('id', ont.id)
-      .select()
-      .single();
-    if (data) oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
+    const info = await readVerifiedOntSignal(device, ont);
+    oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: info.ont });
     return c.json(info);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al leer la senal optica' }, 502);
@@ -1368,7 +1230,7 @@ oltRoutes.post('/:id/onts/:ontDbId/tr069', requireRole(...ONT_WRITE), async (c) 
     .single();
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
-  return c.json(data);
+  return c.json(presentOntData(data));
 });
 
 oltRoutes.delete('/:id/onts/:ontDbId/tr069', requireRole(...ONT_WRITE), async (c) => {
@@ -1397,5 +1259,5 @@ oltRoutes.delete('/:id/onts/:ontDbId/tr069', requireRole(...ONT_WRITE), async (c
     .single();
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
-  return c.json(data);
+  return c.json(presentOntData(data));
 });

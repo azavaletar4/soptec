@@ -1,5 +1,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, onScopeDispose } from 'vue';
+import { enforceOntEvidence, type OntTelemetryPresentation } from '@/lib/ontTelemetryEvidence';
 import { apiFetch } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import type { OltAlertLogEntryRaw } from '@/lib/oltAlertPresentation';
@@ -19,6 +20,7 @@ export interface OltDevice {
 }
 
 export interface OltOnt {
+  telemetry?: OntTelemetryPresentation;
   id: string;
   olt_device_id: string;
   client_id: string | null;
@@ -257,6 +259,11 @@ const MAX_ALERTS = 20;
 export const useOltStore = defineStore('olt', () => {
   const devices = ref<OltDevice[]>([]);
   const onts = ref<OltOnt[]>([]);
+  // Expire evidence even when the user leaves the same screen open without another request.
+  if (typeof window !== 'undefined') {
+    const expiryTimer = setInterval(() => { onts.value = onts.value.map(row => enforceOntEvidence(row)); }, 1000);
+    onScopeDispose(() => clearInterval(expiryTimer));
+  }
   const alerts = ref<OltAlert[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -323,7 +330,7 @@ export const useOltStore = defineStore('olt', () => {
   }
 
   async function fetchOnts(deviceId: string) {
-    onts.value = await apiFetch<OltOnt[]>(`/api/olt-devices/${deviceId}/onts`);
+    onts.value = (await apiFetch<OltOnt[]>(`/api/olt-devices/${deviceId}/onts`)).map(row => enforceOntEvidence(row));
   }
 
   function importExistingOnts(deviceId: string) {
@@ -420,11 +427,14 @@ export const useOltStore = defineStore('olt', () => {
   const SIGNAL_TIMEOUT_MS = 90_000;
 
   async function getSignal(deviceId: string, ontDbId: string) {
-    return apiFetch<{ rxPower: number | null; txPower: number | null }>(
+    const result = await apiFetch<{ rxPower: number | null; txPower: number | null; ont: OltOnt }>(
       `/api/olt-devices/${deviceId}/onts/${ontDbId}/signal`,
       {},
       SIGNAL_TIMEOUT_MS,
     );
+    const idx = onts.value.findIndex(o => o.id === ontDbId);
+    if (idx !== -1) onts.value[idx] = enforceOntEvidence({ ...onts.value[idx]!, ...result.ont });
+    return result;
   }
 
   /**
@@ -444,7 +454,7 @@ export const useOltStore = defineStore('olt', () => {
    */
   function patchOntSignal(ontDbId: string, rxPower: number | null, txPower: number | null) {
     const ont = onts.value.find((o) => o.id === ontDbId);
-    if (ont) {
+    if (ont && enforceOntEvidence(ont).status !== 'unknown' && ont.telemetry?.signalOutcome === 'valid') {
       ont.rx_power = rxPower;
       ont.tx_power = txPower;
     }
@@ -567,7 +577,7 @@ export const useOltStore = defineStore('olt', () => {
                 onts.value = onts.value.filter((o) => o.id !== patch.id);
               } else {
                 const idx = onts.value.findIndex((o) => o.id === patch.id);
-                if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...patch };
+                if (idx !== -1) onts.value[idx] = enforceOntEvidence({ ...onts.value[idx]!, ...patch });
               }
             } catch {
               // ignorar payloads malformados
@@ -617,7 +627,7 @@ export const useOltStore = defineStore('olt', () => {
       body: JSON.stringify({ acsUrl, veip }),
     });
     const idx = onts.value.findIndex((o) => o.id === ontDbId);
-    if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...updated };
+    if (idx !== -1) onts.value[idx] = enforceOntEvidence({ ...onts.value[idx]!, ...updated });
     return updated;
   }
 
@@ -670,7 +680,7 @@ export const useOltStore = defineStore('olt', () => {
       body: JSON.stringify(payload),
     });
     const idx = onts.value.findIndex((o) => o.id === ontDbId);
-    if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...updated };
+    if (idx !== -1) onts.value[idx] = enforceOntEvidence({ ...onts.value[idx]!, ...updated });
     return updated;
   }
 
@@ -680,7 +690,7 @@ export const useOltStore = defineStore('olt', () => {
       body: JSON.stringify(payload),
     });
     const idx = onts.value.findIndex((o) => o.id === ontDbId);
-    if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...updated };
+    if (idx !== -1) onts.value[idx] = enforceOntEvidence({ ...onts.value[idx]!, ...updated });
     return updated;
   }
 
@@ -689,7 +699,7 @@ export const useOltStore = defineStore('olt', () => {
       method: 'DELETE',
     });
     const idx = onts.value.findIndex((o) => o.id === ontDbId);
-    if (idx !== -1) onts.value[idx] = { ...onts.value[idx], ...updated };
+    if (idx !== -1) onts.value[idx] = enforceOntEvidence({ ...onts.value[idx]!, ...updated });
     return updated;
   }
 

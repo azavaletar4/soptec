@@ -1,0 +1,28 @@
+{
+  "productionAccess": false,
+  "checks": [
+    {
+      "name": "focused tests",
+      "result": "PASS",
+      "passed": 93
+    },
+    {
+      "name": "changed backend strict",
+      "result": "PASS"
+    },
+    {
+      "name": "frontend-types",
+      "result": "PASS"
+    },
+    {
+      "name": "build",
+      "result": "PASS"
+    }
+  ],
+  "backendTypecheck": {
+    "result": "UNCHANGED_BASELINE_ERRORS",
+    "preexistingErrors": 5,
+    "newErrors": 0
+  },
+  "largeChunksWarning": true
+}

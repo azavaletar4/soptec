@@ -1,24 +1,11 @@
 /**
- * Fase 3 comercial OLT (2026-10-13, incidentes Violeta/Clara/Mayco) —
- * "Importar ONTs desde la OLT" trae serial/tipo/VLAN/perfiles/señal/estado
- * directo de la OLT en cada corrida (es su fuente de verdad) — pero
- * "description" es el ÚNICO de esos campos que también se edita a mano
- * desde el panel ("Editar información"). Sin esta guardia, cada import
- * volvía a pisar ese nombre con el texto crudo de la OLT.
- *
- * Riesgo encontrado en la primera versión (solo miraba la posición, nunca
- * el serial): si una ONT vinculada se REEMPLAZA físicamente (otro equipo
- * en el mismo frame/slot/port/ont_id — cable reconectado, ONT nueva tras
- * una falla, etc.), la fila seguía protegida por posición aunque el serial
- * real ya fuera otro — dejaba el `client_id`/`description` del cliente
- * VIEJO pegados a un equipo que ya no es suyo. Esta version compara
- * también el serial: solo protege `description` cuando la posición Y el
- * serial siguen siendo los mismos que ya estaban vinculados. Si cambia el
- * serial en una posición ya vinculada, esa fila NO se toca en absoluto
- * (ni description, ni los campos tecnicos) — se reporta como conflicto
- * para revisión administrativa, nunca se resuelve sola.
+ * Identity guard for explicit metadata import. All existing positions, including
+ * unlinked historical rows, must be supplied. A different serial at an occupied
+ * position or an existing serial at a new position is a reviewable conflict;
+ * neither a replacement nor a move is automatically reconciled here.
+ * Linked descriptions remain owned by the application. Telemetry is handled
+ * separately by oltTelemetry, never by this metadata classifier.
  */
-
 export function positionKey(frame: number, slot: number, port: number, ontId: number): string {
   return `${frame}/${slot}/${port}:${ontId}`;
 }
@@ -31,32 +18,32 @@ export interface ImportCandidate {
   serial: string;
 }
 
-/** Lo que ya sabemos de una posición vinculada a un cliente, antes de este import. */
+/** Inventario previo de posiciones; incluye filas sin cliente para conservar su historia. */
 export interface LinkedPosition {
   frame: number;
   slot: number;
   port: number;
   ontId: number;
   serial: string;
-  clientId: string;
+  clientId: string | null;
 }
 
 export interface ImportConflict {
   position: string;
   previousSerial: string;
-  previousClientId: string;
+  previousClientId: string | null;
   scannedSerial: string;
   reason: string;
 }
 
 /**
  * Clasifica cada candidato del escaneo en 3 grupos:
- *  - `fullRefresh`: posición sin vincular (Situación A) — se actualiza todo,
+ *  - `fullRefresh`: posición nueva o sin vincular con mismo serial — refresca metadatos,
  *    incluida `description`, igual que siempre.
  *  - `keepDescription`: posición vinculada Y mismo serial — es la MISMA
- *    ONT de siempre, se actualiza todo salvo `description` (dato
+ *    ONT de siempre, refresca metadatos salvo `description` (dato
  *    administrado desde el panel).
- *  - `conflicts`: posición vinculada pero con OTRO serial — la identidad
+ *  - `conflicts`: posición existente con OTRO serial o serial trasladado — la identidad
  *    física cambió; NO se toca client_id/contract_id/description/historial
  *    ni ningún campo técnico de esa fila. Se reporta aparte, con los datos
  *    necesarios para que un administrador lo revise manualmente.
@@ -71,6 +58,7 @@ export function classifyImportCandidates<T extends ImportCandidate>(
   const linkedByPosition = new Map(
     linkedPositions.map((p) => [positionKey(p.frame, p.slot, p.port, p.ontId), p]),
   );
+  const existingBySerial = new Map(linkedPositions.map(p => [p.serial.toUpperCase(), p]));
 
   const fullRefresh: T[] = [];
   const keepDescription: T[] = [];
@@ -80,11 +68,16 @@ export function classifyImportCandidates<T extends ImportCandidate>(
     const key = positionKey(c.frame, c.slot, c.port, c.ontId);
     const existing = linkedByPosition.get(key);
     if (!existing) {
+      const previous = existingBySerial.get(c.serial.toUpperCase());
+      if (previous) {
+        conflicts.push({ position: key, previousSerial: previous.serial, previousClientId: previous.clientId, scannedSerial: c.serial, reason: 'Serial trasladado; conservar registro y vínculos hasta revisión manual.' });
+        continue;
+      }
       fullRefresh.push(c);
       continue;
     }
     if (existing.serial.toUpperCase() === c.serial.toUpperCase()) {
-      keepDescription.push(c);
+      (existing.clientId ? keepDescription : fullRefresh).push(c);
       continue;
     }
     conflicts.push({

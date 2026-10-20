@@ -145,7 +145,7 @@ const STATUS_CLASS: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   online: 'En línea',
   offline: 'Sin conexión',
-  unknown: 'Desconocido',
+  unknown: 'No confirmado',
 };
 
 interface OltSummary {

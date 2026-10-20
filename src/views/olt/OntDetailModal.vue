@@ -53,8 +53,9 @@ const clientName = computed(() => {
   return props.ont.description ? `${props.ont.description} (de la OLT, sin vincular)` : 'Sin asignar';
 });
 
-const STATUS_LABEL: Record<OltOnt['status'], string> = { online: 'En línea', offline: 'Desconectada', unknown: 'Desconocido' };
+const STATUS_LABEL: Record<OltOnt['status'], string> = { online: 'En línea', offline: 'Desconectada', unknown: 'No confirmado' };
 const STATUS_DOT: Record<OltOnt['status'], string> = { online: 'bg-emerald-400', offline: 'bg-red-400', unknown: 'bg-slate-500' };
+const EVIDENCE_LABEL: Record<string, string> = { failed: 'Consulta fallida', absent: 'Serial no encontrado en la OLT', moved: 'Serial detectado en otra posición', conflict: 'La posición corresponde a otro serial', ambiguous: 'Identidad ambigua', unconfirmed: 'Pendiente de verificación', expired: 'Lectura vencida' };
 
 function relativeTime(value: string | null): string {
   if (!value) return 'nunca';
@@ -186,13 +187,23 @@ async function toggleConfig() {
                 <span class="flex items-center gap-1.5">
                   <span class="w-2 h-2 rounded-full" :class="STATUS_DOT[ont.status]"></span>
                   {{ STATUS_LABEL[ont.status] }}
-                  <span class="text-xs text-slate-500">({{ relativeTime(ont.last_synced_at) }})</span>
+                  <span v-if="ont.telemetry?.stateReadAt" class="text-xs text-slate-500">({{ relativeTime(ont.telemetry.stateReadAt) }})</span>
                 </span>
               </div>
               <div class="flex justify-between">
                 <span class="text-slate-500">Señal Rx / Tx</span>
                 <span>{{ ont.rx_power ?? '—' }} / {{ ont.tx_power ?? '—' }} dBm</span>
               </div>
+              <p v-if="ont.telemetry?.signalReadAt" class="text-xs text-slate-500">Señal consultada: {{ relativeTime(ont.telemetry.signalReadAt) }}.</p>
+              <p v-if="ont.telemetry?.outcome !== 'valid'" class="text-xs text-amber-700">
+                Sin lectura vigente atribuible a este serial. {{ EVIDENCE_LABEL[ont.telemetry?.outcome ?? 'unconfirmed'] }}.
+                <template v-if="ont.telemetry?.observedSerial">Serial observado: {{ ont.telemetry.observedSerial }}.</template>
+              </p>
+              <p v-if="ont.telemetry?.historical" class="text-xs text-slate-500">
+                Registro guardado, sin validar como señal actual:
+                {{ ont.telemetry.historical.rxPower ?? '—' }} / {{ ont.telemetry.historical.txPower ?? '—' }} dBm.
+                <template v-if="ont.telemetry.historical.at">Registro: {{ ont.telemetry.historical.at }}.</template>
+              </p>
               <div class="flex justify-between items-center">
                 <span class="text-slate-500">Perfil TR-069</span>
                 <span class="badge" :class="ont.tr069_enabled ? 'bg-emerald-500/15 text-emerald-700' : 'bg-slate-200 text-slate-600'">

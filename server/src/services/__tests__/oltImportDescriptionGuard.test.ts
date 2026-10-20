@@ -51,11 +51,19 @@ test('REEMPLAZO: misma posicion, serial distinto -> conflicto, NO se toca nada (
 test('TRASLADO: la ONT vinculada desaparece de su posicion vieja (no esta en el escaneo) y aparece en una NUEVA posicion sin vincular todavia', () => {
   // La posicion vieja simplemente no aparece entre los candidatos (la OLT ya no la reporta ahi) —
   // esa fila vieja no se toca por este import en absoluto (el loop del caller nunca la visita).
-  // La posicion nueva es Situacion A pura: sin vinculo, se refresca normal.
+  // Un traslado requiere revisión: no crear otra fila para el mismo serial.
   const candidates = [{ frame: 1, slot: 2, port: 9, ontId: 4, serial: 'HWTCABD21CB4' }]; // nueva posicion, mismo serial que antes
   const r = classifyImportCandidates(candidates, [linked({ frame: 1, slot: 2, port: 4, ontId: 26 })]); // vinculo viejo sigue en OTRA posicion
-  assert.deepEqual(r.fullRefresh, candidates); // la posicion nueva no esta vinculada -> refresco normal
-  assert.deepEqual(r.conflicts, []); // no hay conflicto: son posiciones distintas, no compiten
+  assert.deepEqual(r.fullRefresh, []); // no crea otra fila para un serial trasladado
+  assert.equal(r.conflicts.length, 1);
+  assert.match(r.conflicts[0]!.reason, /trasladado/);
+});
+
+test('posición sin vínculo reutilizada: tampoco sobrescribe la fila histórica ni su serial', () => {
+  const candidates = [{ frame: 1, slot: 2, port: 4, ontId: 26, serial: 'HWTCE5C94DB6' }];
+  const result = classifyImportCandidates(candidates, [linked({ clientId: null, serial: 'MSTC8CCE647E' })]);
+  assert.deepEqual(result.fullRefresh, []); assert.equal(result.conflicts.length, 1);
+  assert.equal(result.conflicts[0]!.previousSerial, 'MSTC8CCE647E');
 });
 
 test('fila heredada sin vinculo en la MISMA posicion que una ONT que SI cambio de serial: cada posicion se evalua independiente', () => {
