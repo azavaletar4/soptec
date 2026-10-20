@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useInstallationsStore } from '@/stores/installations';
 import { useTicketsStore } from '@/stores/tickets';
 import { useRoutinesStore } from '@/stores/routines';
+import { checkMaterialClosure } from '@/lib/materialInventoryOutcome';
 import { useContractsStore } from '@/stores/contracts';
 import { useClientsStore } from '@/stores/clients';
 import { useClientPhotosStore } from '@/stores/clientPhotos';
@@ -475,6 +476,7 @@ export const useCampoStore = defineStore('campo', () => {
   }
 
   async function performClosureSubmitInner(input: ClosureInput): Promise<{ ontZoneWarning: string | null }> {
+    await checkMaterialClosure(() => supabase.rpc('assert_material_closure_ready', { p_job_type: input.jobType, p_job_id: input.jobId }));
     // Codigo de cliente / cintillo Drop (Fase 139) — PRIMERO, antes de subir
     // cualquier foto/firma: si el codigo ya pertenece a OTRO contrato (UNIQUE
     // real en service_contracts.client_code, Fase 39 — nunca se toca), que

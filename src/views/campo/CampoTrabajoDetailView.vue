@@ -22,6 +22,9 @@ import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
 import { createInstallationCustodySelector, isInstallableOwnCustody } from '@/lib/installationCustodySelector';
+import { confirmedMaterialQuantity, materialCustodyLabel, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
+import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
+import type { MyInventoryCustody } from '@/types/domain';
 import { createInventoryRefresh } from '@/lib/inventoryRefresh';
 import { startInventorySignals } from '@/lib/inventorySignals';
 import { executeFieldInventory, pendingFieldInventory, type FieldInventoryAction } from '@/lib/fieldInventoryOperation';
@@ -69,6 +72,7 @@ const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 const jobAssigneesStore = useJobAssigneesStore();
 const catalogs = useCatalogsStore();
+const technicianCustodyStore = useTechnicianCustodyStore();
 const { confirmDialog } = useConfirm();
 const toast = useToast();
 
@@ -361,6 +365,7 @@ onMounted(async () => {
   if (!inventoryViewAlive) return;
   oltStore.fetchDevices().catch(() => {});
   catalogs.fetchStaff().catch(() => {});
+  void loadMyMaterialCustody();
   setupRealtimeSync();
   // Pre-carga del Diagnostico express: se dispara apenas el tecnico ABRE
   // esta orden puntual (una sola, la que esta viendo — no todo su listado),
@@ -489,7 +494,41 @@ const materialForm = ref({ productId: '', quantity: 1 });
 const savingMaterial = ref(false);
 const materialError = ref<string | null>(null);
 
-async function loadMaterials() { if (jobType !== 'routine') await refreshInventory(true); }
+async function loadMaterials() {
+  if (jobType !== 'routine') await refreshInventory(true);
+  await loadMyMaterialCustody();
+}
+
+// ---- Fase 165 etapa 2: custodia de materiales del tecnico logueado — solo
+// UX (mostrar "Disponible: X" y topar el input), la proteccion real esta
+// en el servidor. my_inventory_custody() es exclusivo de TECNICO_RED —
+// ADMIN/SUPERADMIN tambien abren esta pantalla, por eso se guarda el rol
+// antes de llamarla; un fallo aca nunca debe tapar el resto de la pantalla.
+const myMaterialCustody = ref<MyInventoryCustody['materials']>([]);
+const materialCustodyState = ref<MaterialCustodyLoadState>('loading');
+let materialCustodyRequest = 0;
+async function loadMyMaterialCustody() {
+  const request = ++materialCustodyRequest;
+  const actorId = auth.user?.id;
+  myMaterialCustody.value = [];
+  if (auth.role !== 'TECNICO_RED') { materialCustodyState.value = 'unavailable'; return; }
+  materialCustodyState.value = 'loading';
+  try {
+    const result = await technicianCustodyStore.fetchMyCustody();
+    if (!inventoryViewAlive || request !== materialCustodyRequest || auth.user?.id !== actorId || auth.role !== 'TECNICO_RED') return;
+    myMaterialCustody.value = result.materials;
+    materialCustodyState.value = 'ready';
+  } catch {
+    if (request === materialCustodyRequest) materialCustodyState.value = 'error';
+  }
+}
+function availableOf(productId: string | null | undefined): number | undefined {
+  return productId ? confirmedMaterialQuantity(myMaterialCustody.value, productId, materialCustodyState.value) : undefined;
+}
+function custodyLabel(productId: string, unit: string) {
+  return materialCustodyLabel(availableOf(productId), unit, materialCustodyState.value);
+}
+watch(() => [auth.user?.id, auth.role], () => { void loadMyMaterialCustody(); });
 
 // El Kardex es insert-only (Fase 58, no se borra ninguna fila) — "quitar" o
 // "corregir" un material ya registrado significa revertirlo (movimiento
@@ -518,7 +557,7 @@ async function handleAddMaterial() {
     materialForm.value = { productId: '', quantity: 1 };
     await loadMaterials();
   } catch (e) {
-    materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa el stock disponible)');
+    materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa tu custodia disponible)');
   } finally {
     savingMaterial.value = false;
   }
@@ -2162,7 +2201,9 @@ async function handleCloseSubmit() {
       </div>
 
       <!-- Materiales -->
-      <RoutineInventory v-if="jobType === 'routine'" :key="jobId" :routine="trabajo.raw as Routine" :can-write="canReturnRoutine" />
+      <RoutineInventory v-if="jobType === 'routine'" :key="jobId" :routine="trabajo.raw as Routine" :can-write="canReturnRoutine"
+        :material-availability="availableOf" :material-custody-label="custodyLabel" :material-custody-state="materialCustodyState"
+        @inventory-changed="loadMyMaterialCustody" @retry-custody="loadMyMaterialCustody" />
       <section v-if="isLockedForTecnico" class="surface p-3.5 mb-3 bg-slate-50">
         <h2 class="text-sm font-semibold mb-1">✅ {{ jobType === 'routine' ? 'Rutina completada' : 'Instalación completada' }}</h2>
         <p class="text-xs text-slate-500">
@@ -2226,9 +2267,12 @@ async function handleCloseSubmit() {
                 </select>
                 <div v-if="row.product" class="flex items-center gap-2 mt-1.5">
                   <span class="flex-1 text-[11px] text-slate-400">Cantidad</span>
-                  <input v-model.number="kitQuantities[row.key]" type="number" min="0" step="1" class="field-input w-20 py-1 text-xs" />
+                  <input v-model.number="kitQuantities[row.key]" type="number" min="0" :max="availableOf(row.product.id)" step="1" class="field-input w-20 py-1 text-xs" />
                   <span class="text-[11px] text-slate-400 w-16">{{ row.product.unit }}</span>
                 </div>
+                <p v-if="row.product" class="text-[11px] mt-1" :class="(availableOf(row.product.id) ?? 0) > 0 ? 'text-slate-400' : 'text-amber-700'">
+                  {{ custodyLabel(row.product.id, row.product.unit) }}
+                </p>
                 <p v-else-if="!row.matches.length" class="text-[11px] text-amber-700 mt-1">Falta crear "{{ row.label }}" en Inventario.</p>
               </template>
               <p v-else class="text-[11px] text-slate-400 mt-1">Excluido (reconexión).</p>
@@ -2244,12 +2288,12 @@ async function handleCloseSubmit() {
               <div class="flex items-center gap-2 mt-1.5">
                 <select v-model="dropPrefabProductId" class="field-input w-full py-1 text-xs">
                   <option value="">Selecciona el largo prefabricado...</option>
-                  <option v-for="p in dropPrefabProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ p.current_stock }} {{ p.unit }})</option>
+                  <option v-for="p in dropPrefabProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ custodyLabel(p.id, p.unit) }})</option>
                 </select>
               </div>
               <div v-if="dropPrefabProductId" class="flex items-center gap-2 mt-1.5">
                 <span class="flex-1 text-[11px] text-slate-400">Tramos usados</span>
-                <input v-model.number="dropPrefabTramos" type="number" min="1" step="1" class="field-input w-20 py-1 text-xs" />
+                <input v-model.number="dropPrefabTramos" type="number" min="1" :max="availableOf(dropPrefabProductId)" step="1" class="field-input w-20 py-1 text-xs" />
               </div>
               <p v-if="!dropPrefabProducts.length" class="text-[11px] text-amber-700 mt-1">No hay Drop prefabricado en Inventario.</p>
 
@@ -2264,11 +2308,11 @@ async function handleCloseSubmit() {
               <template v-else>
                 <div class="mt-2 pt-2 border-t border-dashed border-slate-200">
                   <p class="text-[11px] text-slate-500 mb-1">
-                    Bobina suelta ({{ dropBobinaProduct ? `${dropBobinaProduct.current_stock} ${dropBobinaProduct.unit} disponibles` : 'sin stock en Inventario' }})
+                    Bobina suelta ({{ dropBobinaProduct ? custodyLabel(dropBobinaProduct.id, dropBobinaProduct.unit) : 'producto no encontrado en Inventario' }})
                   </p>
                   <div class="flex items-center gap-2">
                     <span class="flex-1 text-[11px] text-slate-400">Metros usados</span>
-                    <input v-model.number="dropBobinaMetros" type="number" min="0" step="1" class="field-input w-24 py-1 text-xs" placeholder="0" />
+                    <input v-model.number="dropBobinaMetros" type="number" min="0" :max="dropBobinaProduct ? availableOf(dropBobinaProduct.id) : undefined" step="1" class="field-input w-24 py-1 text-xs" placeholder="0" />
                   </div>
                   <button type="button" class="text-[11px] text-sky-700 mt-1.5 underline" @click="dropMode = 'prefab'; dropBobinaMetros = null">
                     Volver a Drop prefabricado
@@ -2336,11 +2380,17 @@ async function handleCloseSubmit() {
           <form class="flex gap-2" @submit.prevent="handleAddMaterial">
             <select v-model="materialForm.productId" required class="field-input text-sm flex-1">
               <option value="" disabled>Producto...</option>
-              <option v-for="p in materialSelectableProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ p.current_stock }} {{ p.unit }})</option>
+              <option v-for="p in materialSelectableProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ custodyLabel(p.id, p.unit) }})</option>
             </select>
-            <input v-model.number="materialForm.quantity" type="number" min="1" class="field-input text-sm w-16" />
+            <input v-model.number="materialForm.quantity" type="number" min="1" :max="availableOf(materialForm.productId)" class="field-input text-sm w-16" />
             <button type="submit" :disabled="savingMaterial" class="btn-secondary text-xs shrink-0">+</button>
           </form>
+          <p v-if="materialForm.productId && availableOf(materialForm.productId) === 0" class="text-[11px] text-amber-700 mt-1">
+            No tienes este material en custodia — pide la entrega a un administrador.
+          </p>
+          <p v-if="materialCustodyState === 'error'" class="text-xs text-amber-700 mt-1">
+            No se pudo consultar tu custodia. <button type="button" class="underline" @click="loadMyMaterialCustody">Reintentar</button>
+          </p>
           <p v-if="materialError" class="text-xs text-red-600 mt-1.5">{{ materialError }}</p>
         </section>
         </div>

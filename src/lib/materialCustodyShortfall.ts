@@ -21,14 +21,15 @@ export type MaterialCustodyJobType = 'installation' | 'ticket' | 'routine';
 export interface MaterialCustodyEventInput {
   technicianId: string;
   productId: string;
-  eventType: 'delivery' | 'return';
+  eventType: 'delivery' | 'return' | 'consumption' | 'consumption_reversal';
+  sourceMovementId?: string | null;
   quantity: number;
   createdAt: string;
 }
 
 export interface MaterialConsumptionMovementInput {
   id: string;
-  /** inventory_movements.created_by — null (p.ej. edicion administrativa directa) se ignora, nunca se le atribuye a un tecnico. */
+  /** Autor tecnico verificado; un editor administrativo puede ser null y heredar responsable por evento/recibo. */
   technicianId: string | null;
   productId: string;
   movementType: 'ingreso' | 'egreso';
@@ -38,6 +39,9 @@ export interface MaterialConsumptionMovementInput {
   jobId: string | null;
   /** Si es un 'ingreso' que revierte un 'egreso' anterior (correct/reverse) — repone el saldo simulado de ese tecnico. */
   reversesMovementId: string | null;
+  /** Vinculo verificable del recibo de correccion, nunca inferido por hora/motivo. */
+  correctsMovementId?: string | null;
+  operationId?: string | null;
   /** Motivo real que el tecnico/sistema registro para el consumo (inventory_movements.reason) — nunca se inventa uno. */
   reason: string | null;
 }
@@ -56,6 +60,28 @@ export interface MaterialCustodyShortfall {
   consumedAt: string;
   /** Motivo real registrado en el Kardex para este consumo (puede ser null si nunca se escribio uno). */
   reason: string | null;
+}
+
+export interface MaterialCorrectionReceipt {
+  action: string;
+  payload: { movementId?: string };
+  result: { ids?: string[] } | null;
+}
+/** Campo enlaza por recibo; Rutinas enlaza ambos movimientos por operation_id. */
+export function linkMaterialCorrections(movements: MaterialConsumptionMovementInput[], receipts: MaterialCorrectionReceipt[]): MaterialConsumptionMovementInput[] {
+  const byId = new Map(movements.map(m => [m.id, m]));
+  const parents = new Map<string, string>();
+  for (const receipt of receipts) {
+    const ids = receipt.result?.ids;
+    if (receipt.action === 'correct' && ids?.length === 2 && receipt.payload.movementId &&
+      byId.get(ids[0])?.reversesMovementId === receipt.payload.movementId)
+      parents.set(ids[1], receipt.payload.movementId);
+  }
+  const routines = new Map(movements.filter(m => m.jobType === 'routine' && m.operationId && m.reversesMovementId)
+    .map(m => [m.operationId!, m.reversesMovementId!]));
+  return movements.map(m => ({ ...m, correctsMovementId: m.movementType === 'egreso'
+    ? parents.get(m.id) ?? (m.jobType === 'routine' && m.operationId ? routines.get(m.operationId) : null) ?? m.correctsMovementId
+    : m.correctsMovementId }));
 }
 
 /**
@@ -107,34 +133,68 @@ export function detectMaterialCustodyShortfalls(
 
   const byKey = new Map<string, Timeline[]>();
   const key = (technicianId: string, productId: string) => `${technicianId}::${productId}`;
+  const byId = new Map(movements.map(m => [m.id, m]));
+  const tracked = new Map(custodyEvents.filter(e => e.eventType === 'consumption' && e.sourceMovementId && byId.get(e.sourceMovementId)?.productId === e.productId)
+    .map(e => [e.sourceMovementId!, e.technicianId]));
+  function responsible(m: MaterialConsumptionMovementInput, seen = new Set<string>()): string | null {
+    if (seen.has(m.id)) return null;
+    seen.add(m.id);
+    if (tracked.has(m.id)) return tracked.get(m.id)!;
+    const parentId = m.reversesMovementId ?? m.correctsMovementId;
+    if (parentId) {
+      const parent = byId.get(parentId);
+      if (!parent || parent.movementType !== 'egreso' || parent.productId !== m.productId || parent.jobType !== m.jobType || parent.jobId !== m.jobId) return null;
+      return responsible(parent, seen);
+    }
+    return m.technicianId;
+  }
 
   for (const e of custodyEvents) {
+    // Consumo y reposicion ya se representan en Kardex: nunca contarlos dos veces.
+    if (e.eventType !== 'delivery' && e.eventType !== 'return') continue;
     const k = key(e.technicianId, e.productId);
     if (!byKey.has(k)) byKey.set(k, []);
     byKey.get(k)!.push({ at: e.createdAt, kind: e.eventType, quantity: e.quantity });
   }
 
   for (const m of movements) {
-    if (!m.technicianId || !m.jobType || !m.jobId) continue; // sin tecnico u orden atribuible -> fuera de alcance de esta simulacion
+    const technicianId = responsible(m);
+    if (!technicianId || !m.jobType || !m.jobId) continue;
     if (m.movementType === 'egreso') {
-      const k = key(m.technicianId, m.productId);
+      const k = key(technicianId, m.productId);
       if (!byKey.has(k)) byKey.set(k, []);
       byKey.get(k)!.push({ at: m.createdAt, kind: 'consume', quantity: m.quantity, movement: m });
     } else if (m.movementType === 'ingreso' && m.reversesMovementId) {
-      const k = key(m.technicianId, m.productId);
+      const k = key(technicianId, m.productId);
       if (!byKey.has(k)) byKey.set(k, []);
       byKey.get(k)!.push({ at: m.createdAt, kind: 'restore', quantity: m.quantity, movement: m });
     }
   }
 
   const shortfalls: MaterialCustodyShortfall[] = [];
+  function sequence(m: MaterialConsumptionMovementInput, seen = new Set<string>()): number {
+    if (seen.has(m.id)) return 0;
+    seen.add(m.id);
+    const parent = byId.get(m.reversesMovementId ?? m.correctsMovementId ?? '');
+    return parent ? sequence(parent, seen) + (m.reversesMovementId ? 1 : 2) : 0;
+  }
   for (const [k, events] of byKey) {
     const [technicianId, productId] = k.split('::');
-    events.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    events.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 :
+      (a.movement ? sequence(a.movement) : -1) - (b.movement ? sequence(b.movement) : -1)));
     let balance = 0;
+    const debited = new Map<string, number>();
+    const restored = new Set<string>();
     for (const ev of events) {
-      if (ev.kind === 'delivery' || ev.kind === 'restore') {
+      if (ev.kind === 'delivery') {
         balance += ev.quantity;
+      } else if (ev.kind === 'restore') {
+        const original = ev.movement!.reversesMovementId!;
+        if (!restored.has(original)) {
+          // Historico con deficit: solo puede reponerse lo que realmente se simulo descontado.
+          balance += Math.min(ev.quantity, debited.get(original) ?? 0);
+          restored.add(original);
+        }
       } else if (ev.kind === 'return') {
         balance = Math.max(0, balance - ev.quantity);
       } else if (ev.kind === 'consume') {
@@ -154,6 +214,7 @@ export function detectMaterialCustodyShortfalls(
             reason: movement.reason,
           });
         }
+        debited.set(movement.id, Math.min(balance, ev.quantity));
         balance = Math.max(0, balance - ev.quantity);
       }
     }

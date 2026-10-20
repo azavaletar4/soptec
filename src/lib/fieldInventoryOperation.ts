@@ -1,4 +1,5 @@
 import type { FieldInventoryContext } from '../types/fieldInventory';
+import { checkMaterialInventoryOutcome } from './materialInventoryOutcome';
 
 export type FieldInventoryAction = 'consume' | 'kit' | 'correct' | 'reverse' | 'assign' | 'unassign' | 'stage' | 'return' | 'unlink' | 'approve' | 'reject';
 export interface FieldInventoryRequest {
@@ -44,6 +45,7 @@ export async function executeFieldInventory(storage: Store, context: FieldInvent
     }
     throw Error(error.message);
   }
+  checkMaterialInventoryOutcome(data, () => storage.removeItem(key), request.p_operation_id);
   const receipt = data as FieldInventoryReceipt;
   if (!receipt || receipt.operationId !== request.p_operation_id || receipt.jobType !== context.jobType ||
       receipt.jobId !== context.jobId || receipt.action !== action || !Array.isArray(receipt.ids) || !receipt.at) {

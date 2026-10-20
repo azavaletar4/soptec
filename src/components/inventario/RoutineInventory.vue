@@ -10,8 +10,14 @@ import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { executeRoutineInventory, pendingRoutineInventory, type RoutineInventoryAction, type RoutineInventoryRequest } from '@/lib/routineInventoryRequest';
 import type { InventoryMovement, InventoryUnit, Routine } from '@/types/domain';
+import type { MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
 
-const props = defineProps<{ routine: Routine; canWrite?: boolean }>();
+const props = defineProps<{ routine: Routine; canWrite?: boolean;
+  materialAvailability?: (id: string) => number | undefined;
+  materialCustodyLabel?: (id: string, unit: string) => string;
+  materialCustodyState?: MaterialCustodyLoadState;
+}>();
+const emit = defineEmits<{ inventoryChanged: []; retryCustody: [] }>();
 const auth = useAuthStore();
 const products = ref<FieldInventoryProduct[]>([]);
 type RoutineUnit = InventoryUnit & { routine_id: string | null };
@@ -86,6 +92,7 @@ async function mutate(action: RoutineInventoryAction, payload: Record<string, un
   try {
     await executeRoutineInventory(localStorage, auth.user.id, props.routine.id, action, payload,
       async request => await supabase.rpc('routine_inventory_operation', request));
+    emit('inventoryChanged');
     // Clear forms before reads: a failed refresh must not repeat a committed write.
     productId.value = ''; quantity.value = 1; incoming.value = ''; outgoing.value = ''; correction.value = ''; reason.value = '';
     await load();
@@ -107,7 +114,7 @@ onUnmounted(()=>{stopSignals?.();refresh.dispose();});
 <template>
   <section class="surface p-3.5 mb-3 space-y-3">
     <h2 class="text-sm font-semibold">Materiales y equipos de la rutina</h2>
-    <p class="text-xs text-slate-500">Bodega central. Los registros se conservan al devolver o reasignar la rutina.</p>
+    <p class="text-xs text-slate-500">Los registros se conservan al devolver o reasignar la rutina.</p>
     <p v-if="error" role="alert" class="text-xs text-red-600">{{ error }}</p>
     <div v-if="pending" class="text-xs text-amber-700 space-y-2">
       <p>Hay una operación sin respuesta confirmada. Resuélvela antes de registrar otra.</p>
@@ -131,9 +138,12 @@ onUnmounted(()=>{stopSignals?.();refresh.dispose();});
     <div v-if="writable" class="space-y-2">
       <select v-model="productId" aria-label="Material de bodega" class="field-input">
         <option value="">Selecciona material...</option>
-        <option v-for="p in consumables" :key="p.id" :value="p.id">{{ p.name }} — {{ p.current_stock }} {{ p.unit }}</option>
+        <option v-for="p in consumables" :key="p.id" :value="p.id">{{ p.name }} — {{ materialCustodyLabel ? materialCustodyLabel(p.id, p.unit) : `${p.current_stock} ${p.unit}` }}</option>
       </select>
-      <input v-model.number="quantity" aria-label="Cantidad utilizada" type="number" min="0.01" step="0.01" class="field-input" />
+      <input v-model.number="quantity" aria-label="Cantidad utilizada" type="number" min="0.01" :max="materialAvailability?.(productId)" step="0.01" class="field-input" />
+      <p v-if="materialCustodyState === 'error'" class="text-xs text-amber-700">
+        No se pudo consultar tu custodia. <button type="button" class="underline" @click="emit('retryCustody')">Reintentar</button>
+      </p>
       <button type="button" :disabled="blocked || !productId" class="btn-secondary text-xs" @click="mutate('consume', { product_id: productId, quantity })">Registrar material utilizado</button>
     </div>
     <template v-if="writable && routine.client_id">

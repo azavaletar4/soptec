@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   detectMaterialCustodyShortfalls,
+  linkMaterialCorrections,
   classifyShortfallRecency,
   MATERIAL_CUSTODY_DETECTION_LIVE_SINCE,
   type MaterialCustodyEventInput,
@@ -85,12 +86,10 @@ test('detectMaterialCustodyShortfalls: una reversion (ingreso que corrige un egr
     movement({ id: 'm3', quantity: 2, createdAt: '2026-10-18T10:10:00.000Z' }),
   ];
   const found = detectMaterialCustodyShortfalls([], movements);
-  // m1 queda marcado (en ese momento no habia custodia); la reversion de m1
-  // repone el saldo simulado a 0, asi que m3 (misma cantidad que se repuso)
-  // ya no excede el saldo disponible — mismo efecto neto que una correccion
-  // real de cantidad (accion 'correct' de campo_inventory_operation).
-  assert.equal(found.length, 1);
-  assert.equal(found[0].movementId, 'm1');
+  // Ninguno tuvo entrega. La reversion NO puede inventar 2 de custodia.
+  assert.equal(found.length, 2);
+  assert.equal(found[0].movementId, 'm3');
+  assert.equal(found[1].movementId, 'm1');
 });
 
 test('detectMaterialCustodyShortfalls: consumo sin tecnico atribuible (edicion administrativa directa) se ignora', () => {
@@ -121,6 +120,49 @@ test('detectMaterialCustodyShortfalls: el saldo nunca queda negativo para el sig
   assert.equal(found[0].availableBefore, 0); // no -5
   assert.equal(found[1].movementId, 'm1');
   assert.equal(found[1].availableBefore, 0);
+});
+
+for (const jobType of ['installation','ticket','routine'] as const) {
+  test(`${jobType}: correcciones sucesivas por admin y cuadrilla mantienen responsable verificable`, () => {
+    const events: MaterialCustodyEventInput[]=[{technicianId:TECH,productId:PRODUCT,eventType:'delivery',quantity:50,createdAt:'2026-10-18T09:00:00Z'}];
+    const rows=[
+      movement({id:'m1',jobType,quantity:20}),
+      movement({id:'r1',jobType,technicianId:'admin',quantity:20,movementType:'ingreso',reversesMovementId:'m1'}),
+      movement({id:'m2',jobType,technicianId:'admin',quantity:40,correctsMovementId:'m1'}),
+      movement({id:'r2',jobType,technicianId:'support',quantity:40,movementType:'ingreso',reversesMovementId:'m2'}),
+      movement({id:'m3',jobType,technicianId:'support',quantity:45,correctsMovementId:'m2'}),
+    ];
+    assert.deepEqual(detectMaterialCustodyShortfalls(events, rows.reverse()),[]); // mismo timestamp, orden de BD no garantizado
+    const deficit=detectMaterialCustodyShortfalls(events,rows.map(m=>m.id==='m3'?{...m,quantity:55}:m));
+    assert.equal(deficit.length,1);assert.equal(deficit[0].technicianId,TECH);assert.equal(deficit[0].shortfall,5);
+  });
+}
+
+test('eventos rastreados resuelven responsable sin contar consumo y reversion por duplicado', () => {
+  const events: MaterialCustodyEventInput[]=[
+    {technicianId:TECH,productId:PRODUCT,eventType:'delivery',quantity:50,createdAt:'2026-10-18T09:00:00Z'},
+    {technicianId:TECH,productId:PRODUCT,eventType:'consumption',quantity:20,sourceMovementId:'m1',createdAt:'2026-10-18T10:00:00Z'},
+    {technicianId:TECH,productId:PRODUCT,eventType:'consumption_reversal',quantity:20,sourceMovementId:'m1',createdAt:'2026-10-18T11:00:00Z'},
+    {technicianId:TECH,productId:PRODUCT,eventType:'consumption',quantity:40,sourceMovementId:'m2',createdAt:'2026-10-18T11:00:00Z'},
+  ];
+  const rows=[movement({id:'m1',quantity:20,createdAt:'2026-10-18T10:00:00Z'}),
+    movement({id:'r',quantity:20,technicianId:'admin',movementType:'ingreso',reversesMovementId:'m1',createdAt:'2026-10-18T11:00:00Z'}),
+    movement({id:'m2',quantity:40,technicianId:'admin',createdAt:'2026-10-18T11:00:01Z'})];
+  assert.deepEqual(detectMaterialCustodyShortfalls(events,rows),[]);
+});
+
+test('vinculo corrupto entre ordenes y ciclos no inventan responsable ni faltantes', () => {
+  assert.deepEqual(detectMaterialCustodyShortfalls([], [movement({id:'a',correctsMovementId:'b'}),movement({id:'b',correctsMovementId:'a'})]),[]);
+  assert.deepEqual(detectMaterialCustodyShortfalls([], [movement({id:'a',correctsMovementId:'ausente',technicianId:'admin'})]),[]);
+});
+
+test('recibos Campo y operation_id de Rutinas reconstruyen parentesco sin inferir por autor/hora', () => {
+  const rows=[movement({id:'original'}),movement({id:'rev',movementType:'ingreso',reversesMovementId:'original'}),movement({id:'nuevo',technicianId:'admin'})];
+  const linked=linkMaterialCorrections(rows,[{action:'correct',payload:{movementId:'original'},result:{ids:['rev','nuevo']}}]);
+  assert.equal(linked[2].correctsMovementId,'original');
+  assert.equal(linkMaterialCorrections(rows,[])[2].correctsMovementId,undefined);
+  const routines=rows.map(m=>({...m,jobType:'routine' as const,operationId:m.id==='original'?'op-original':'op-correct'}));
+  assert.equal(linkMaterialCorrections(routines,[])[2].correctsMovementId,'original');
 });
 
 // ---- classifyShortfallRecency ----

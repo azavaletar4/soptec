@@ -1,3 +1,4 @@
+import { checkMaterialInventoryOutcome } from './materialInventoryOutcome';
 export type RoutineInventoryAction = 'consume' | 'correct' | 'remove' | 'install' | 'withdraw' | 'unlink' | 'approve' | 'reject' | 'receive';
 export interface RoutineInventoryRequest {
   p_routine_id: string;
@@ -40,6 +41,7 @@ export async function executeRoutineInventory(
     if (!pending && error.code && /^[0-9A-Z]{5}$/.test(error.code)) storage.removeItem(key);
     throw new Error(error.message);
   }
+  checkMaterialInventoryOutcome(data, () => storage.removeItem(key), request.p_operation_id);
   storage.removeItem(key);
   return data;
 }
