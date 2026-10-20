@@ -96,6 +96,56 @@ test('Fase 165 etapa 2 (cierre, parte 2): corregir un rechazo confirmado reutili
     // ---- La migracion candidata bajo prueba ----
     sql(file('../../supabase/migrations/20261020130000_fase165_correccion_rechazo_definitivo.sql'));
 
+    await t.test('Alta: kit con un conector, edición a dos, custodia cero y corrección/reintento sin duplicar', () => {
+      const connector = '50000000-0000-0000-0000-000000000015';
+      const roseta = '50000000-0000-0000-0000-000000000016';
+      reset();
+      sql(`insert into inventory_products(id,name,unit,is_serialized,category_id,current_stock) values
+        ('${connector}','Conector Óptico','unidad',false,null,100),
+        ('${roseta}','Roseta Óptica','unidad',false,null,100);`);
+      const kit = (quantity: number) => ({ items: [
+        { productId: connector, quantity }, { productId: roseta, quantity: 1 },
+        { productId: patchcord, quantity: 1 },
+      ], reason: 'Kit de Alta de prueba' });
+      for (const product of [connector, roseta, patchcord]) deliver(tech, product, 1);
+      const first = randomUUID();
+      campoOp('kit', kit(1), first);
+      assert.equal(custody(tech, connector), '0');
+      assert.equal(sql(`select quantity from inventory_movements where product_id='${connector}';`), '1.00');
+      assert.equal(sql('select count(*) from inventory_movements;'), '3');
+      campoOp('kit', kit(1), first); // recibo confirmado al reintentar
+      assert.equal(sql('select count(*) from inventory_movements;'), '3');
+
+      reset();
+      deliver(tech, roseta, 1); deliver(tech, patchcord, 1);
+      const rejected = randomUUID();
+      assert.throws(() => campoOp('kit', kit(1), rejected), /No tienes suficiente material en custodia/);
+      assert.equal(rejectionStatus(rejected), 'pending');
+      assert.equal(sql('select count(*) from inventory_movements;'), '0');
+      assert.equal(custody(tech, roseta), '1');
+      deliver(tech, connector, 1);
+      campoOp('kit', kit(1), rejected);
+      assert.equal(rejectionStatus(rejected), 'resolved');
+      campoOp('kit', kit(1), rejected);
+      assert.equal(sql('select count(*) from inventory_movements;'), '3');
+
+      reset();
+      deliver(tech, connector, 2); deliver(tech, roseta, 1); deliver(tech, patchcord, 1);
+      campoOp('kit', kit(2), randomUUID());
+      assert.equal(custody(tech, connector), '0');
+      assert.equal(sql(`select quantity from inventory_movements where product_id='${connector}';`), '2.00');
+
+      reset();
+      for (const product of [connector, roseta, patchcord]) deliver(tech, product, 1);
+      const corrected = randomUUID();
+      assert.throws(() => campoOp('kit', kit(2), corrected), /No tienes suficiente material en custodia/);
+      assert.equal(sql('select count(*) from inventory_movements;'), '0');
+      campoOp('kit', kit(1), corrected);
+      assert.equal(rejectionStatus(corrected), 'resolved');
+      campoOp('kit', kit(1), corrected);
+      assert.equal(sql('select count(*) from inventory_movements;'), '3');
+    });
+
     await t.test('rechazo 2 contra 1: custodia insuficiente deja la fila pending, sin movimientos (confirmado, nunca incierto)', () => {
       reset();
       deliver(tech, cable, 1);

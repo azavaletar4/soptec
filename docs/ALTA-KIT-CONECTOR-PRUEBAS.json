@@ -1,0 +1,24 @@
+﻿{
+    "productionAccess":  false,
+    "build":  {
+                  "checks":  [
+                                 {
+                                     "name":  "TypeScript",
+                                     "result":  "PASS"
+                                 },
+                                 {
+                                     "name":  "build",
+                                     "result":  "PASS"
+                                 }
+                             ],
+                  "largeChunksWarning":  true
+              },
+    "focusedTests":  {
+                         "result":  "PASS",
+                         "passed":  48,
+                         "failed":  0,
+                         "command":  "node --import tsx --test server/tests/materialRejectionCorrection.sql.test.ts src/lib/__tests__/fieldInventoryOperation.test.ts src/lib/__tests__/materialInventoryOutcome.test.ts",
+                         "database":  "Docker local postgres:17 --network none; datos ficticios",
+                         "newCase":  "Alta: kit con un conector, edición a dos, custodia cero y corrección/reintento sin duplicar"
+                     }
+}

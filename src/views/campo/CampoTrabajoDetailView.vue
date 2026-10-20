@@ -636,7 +636,7 @@ interface KitLine {
 const KIT_ALTA: KitLine[] = [
   { key: 'patchcord', label: 'Patchcord', match: /patchcord|patch\s*cord/i, defaultQty: 1 },
   { key: 'roseta', label: 'Roseta Óptica', match: /roseta/i, defaultQty: 1 },
-  { key: 'conector', label: 'Conector Óptico', match: /conector.*ptic/i, defaultQty: 2 },
+  { key: 'conector', label: 'Conector Óptico', match: /conector.*ptic/i, defaultQty: 1 },
 ];
 // "Cliente vuelve / Reconexión": conserva la acometida ya tendida — no tiene
 // sentido descontar Drop ni Roseta de nuevo.

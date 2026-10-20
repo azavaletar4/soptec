@@ -1,0 +1,33 @@
+{
+  "result": "PASS",
+  "synthetic": true,
+  "productionAccess": false,
+  "physicalAndroid": false,
+  "defaults": [
+    {
+      "label": "Patchcord",
+      "value": 1,
+      "max": "1"
+    },
+    {
+      "label": "Roseta Óptica",
+      "value": 1,
+      "max": "1"
+    },
+    {
+      "label": "Conector Óptico",
+      "value": 1,
+      "max": "1"
+    }
+  ],
+  "checks": [
+    "DEFAULTS_1_1_1_AND_ONE_CONNECTOR_CONSUMED",
+    "REOPEN_PRESERVES_CONSUMED_MATERIALS_WITHOUT_NEW_WRITE",
+    "ZERO_CUSTODY_REJECTED",
+    "RETRY_AFTER_DELIVERY_SAME_UUID_ONCE",
+    "MANUAL_TWO_WITH_SUFFICIENT_CUSTODY",
+    "CONFIRMED_REJECTION_CORRECTED_WITH_SAME_UUID",
+    "LOST_RESPONSE_REOPEN_RETRY_NO_DUPLICATE"
+  ],
+  "exceptions": 0
+}
