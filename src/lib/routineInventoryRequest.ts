@@ -25,13 +25,19 @@ export async function executeRoutineInventory(
 ) {
   const key = routineInventoryKey(actor, routine), rejectedKey = rejectedKeyFor(key);
   const pending = pendingRoutineInventory(storage, actor, routine);
+  const isConfirmedRejection = !!pending && storage.getItem(rejectedKey) === pending.p_operation_id;
   const samePending = !!pending && pending.p_action === action && JSON.stringify(pending.p_payload) === JSON.stringify(payload);
-  // Un rechazo YA CONFIRMADO (nunca una duda de red) no bloquea una intención
-  // distinta -- solo lo hace una pendiente todavía incierta.
-  if (pending && !samePending && storage.getItem(rejectedKey) !== pending.p_operation_id) {
+  // Un rechazo YA CONFIRMADO (nunca una duda de red) admite corregir la
+  // cantidad con la MISMA clave -- el servidor lo acepta porque la
+  // operacion original jamas aplico nada. Solo una pendiente todavia
+  // incierta sigue bloqueando una intencion distinta.
+  const canCorrect = !!pending && isConfirmedRejection && pending.p_action === action;
+  if (pending && !samePending && !canCorrect) {
     throw new Error('Resuelve primero la operación pendiente; no se puede cambiar su contenido.');
   }
-  const request = samePending ? pending : { p_routine_id: routine, p_operation_id: uuid(), p_action: action, p_payload: payload };
+  const request = samePending ? pending
+    : canCorrect ? { ...pending, p_payload: payload }
+    : { p_routine_id: routine, p_operation_id: uuid(), p_action: action, p_payload: payload };
   storage.setItem(key, JSON.stringify(request));
   if (!samePending) storage.removeItem(rejectedKey);
   const { data, error } = await invoke(request);

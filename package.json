@@ -35,7 +35,8 @@
     "test:olt-alert-log-sql": "node --import tsx --test server/tests/oltAlertLog.sql.test.ts",
     "test:technician-custody-sql": "node --import tsx --test server/tests/technicianCustody.sql.test.ts",
     "test:custody-required-materials-sql": "node --import tsx --test server/tests/custodyRequiredMaterials.sql.test.ts",
-    "test:material-delivery-validated-sql": "node --import tsx --test server/tests/materialDeliveryValidated.sql.test.ts"
+    "test:material-delivery-validated-sql": "node --import tsx --test server/tests/materialDeliveryValidated.sql.test.ts",
+    "test:material-rejection-correction-sql": "node --import tsx --test server/tests/materialRejectionCorrection.sql.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.1",

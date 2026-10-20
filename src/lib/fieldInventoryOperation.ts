@@ -32,15 +32,22 @@ export async function executeFieldInventory(storage: Store, context: FieldInvent
 ) {
   const key = keyFor(context, namespace), rejectedKey = rejectedKeyFor(key);
   const pending = pendingFieldInventory(storage, context, namespace);
+  const isConfirmedRejection = !!pending && storage.getItem(rejectedKey) === pending.p_operation_id;
   const samePending = !!pending && pending.p_action === action && JSON.stringify(pending.p_payload) === JSON.stringify(payload);
   // Un rechazo YA CONFIRMADO (nunca una duda de red, ver materialInventoryOutcome.ts)
-  // no bloquea una intención distinta -- solo lo hace una pendiente todavía incierta.
-  if (pending && !samePending && storage.getItem(rejectedKey) !== pending.p_operation_id) {
+  // admite corregir la cantidad/items con la MISMA clave -- el servidor
+  // (execute_tracked_material_inventory) acepta ese cambio puntual porque
+  // la operacion original jamas aplico nada. Solo una pendiente todavia
+  // incierta sigue bloqueando una intencion distinta.
+  const canCorrect = !!pending && isConfirmedRejection && pending.p_action === action;
+  if (pending && !samePending && !canCorrect) {
     throw Error('Hay una operación pendiente. Confírmala antes de registrar otra.');
   }
-  const request = samePending ? pending : { p_operation_id: uuid(), p_job_type: context.jobType, p_job_id: context.jobId, p_action: action, p_payload: payload };
+  const request = samePending ? pending
+    : canCorrect ? { ...pending, p_payload: payload }
+    : { p_operation_id: uuid(), p_job_type: context.jobType, p_job_id: context.jobId, p_action: action, p_payload: payload };
   storage.setItem(key, JSON.stringify(request));
-  if (!samePending) storage.removeItem(rejectedKey); // la intención nueva no hereda el rechazo de otra distinta
+  if (!samePending) storage.removeItem(rejectedKey); // se reintenta (igual o corregido): el resultado vuelve a estar por confirmar
   const { data, error } = await invoke(request);
   if (error) {
     // Un primer intento con SQLSTATE confirma rollback. Un intento ya incierto

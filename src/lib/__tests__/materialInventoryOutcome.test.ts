@@ -39,15 +39,15 @@ for (const kind of ['installation', 'ticket', 'routine'] as const) {
   });
 
   // ---- Requisito 3: corrección a 1 — editar la cantidad y reintentar con una operación NUEVA ----
-  test(`${kind}: corrección a 1 tras el rechazo — una cantidad distinta ya NO queda bloqueada por la operación rechazada`, async () => {
+  test(`${kind}: corrección a 1 tras el rechazo — una cantidad distinta ya NO queda bloqueada, y viaja con la MISMA clave (el servidor la deja resuelta, nunca huérfana)`, async () => {
     const f = fixture(kind);
     await assert.rejects(f.run({ quantity: 2 }));
     f.setMode('ok');
-    const result = await f.run({ quantity: 1 }); // misma intención corregida, operation_id NUEVO (op-1, no op-0)
+    const result = await f.run({ quantity: 1 }); // misma intención corregida, MISMO operation_id (op-0): el rechazo confirmado admite el cambio de cantidad
     assert.ok(result);
     assert.equal(f.calls.length, 2);
     assert.deepEqual(f.calls[1]!.payload, { quantity: 1 });
-    assert.notEqual(f.calls[1]!.id, f.calls[0]!.id, 'la corrección debe viajar con un operation_id distinto al rechazado, nunca reutilizarlo con otros datos');
+    assert.equal(f.calls[1]!.id, f.calls[0]!.id, 'la corrección debe reutilizar la MISMA clave del rechazo confirmado (execute_tracked_material_inventory la admite y la deja resuelta, no huérfana bloqueando el cierre)');
     assert.equal(f.pending(), null); // la corrección se confirmó: sin nada pendiente
   });
 
