@@ -2,10 +2,16 @@
 <script type="module">
 // Real component, real stores, real Auth/REST/Storage. No mocked business responses.
 import{createApp,h}from'vue';import{createPinia,setActivePinia}from'pinia';import{createRouter,createMemoryHistory,RouterView}from'vue-router';
-import'/src/style.css';import Campo from'/src/views/campo/CampoTrabajoDetailView.vue';import CampoCustodia from'/src/views/campo/CampoCustodiaView.vue';import ConfirmHost from'/src/components/ConfirmHost.vue';import ToastHost from'/src/components/ToastHost.vue';
+import'/src/style.css';import Campo from'/src/views/campo/CampoTrabajoDetailView.vue';import CampoCustodia from'/src/views/campo/CampoCustodiaView.vue';import InventarioCustodia from'/src/views/inventario/InventarioCustodiaView.vue';import ConfirmHost from'/src/components/ConfirmHost.vue';import ToastHost from'/src/components/ToastHost.vue';
 import{useAuthStore}from'/src/stores/auth';import{useCampoStore}from'/src/stores/campo';import{useInstallationsStore}from'/src/stores/installations';import{useTicketsStore}from'/src/stores/tickets';import{useRoutinesStore}from'/src/stores/routines';import{useTechnicianCustodyStore}from'/src/stores/technicianCustody';
 const lab=await(await fetch('/lab/config')).json();const pinia=createPinia();setActivePinia(pinia);const auth=useAuthStore();
-const router=createRouter({history:createMemoryHistory(),routes:[{path:'/campo/custodia',component:CampoCustodia},{path:'/campo/:tipo/:id',component:Campo},{path:'/:pathMatch(.*)*',component:{template:'<p>Laboratorio aislado de custodia.</p>'}}]});
+// 'inventario-detalle' es un stub de solo resolucion de ruta (nunca se
+// navega a el en el laboratorio) -- custodyEquipmentLocation() en
+// technicianCustodyPresentation.ts construye un router-link con ese
+// nombre para las filas de equipo serializado de InventarioCustodiaView;
+// sin la ruta registrada, Vue Router revienta al resolverlo ("No match
+// for") y tumba el render de TODA la pantalla, no solo ese enlace.
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/campo/custodia',component:CampoCustodia},{path:'/campo/:tipo/:id',component:Campo},{path:'/inventario/custodia',component:InventarioCustodia},{path:'/inventario/:id',name:'inventario-detalle',component:{template:'<p>stub</p>'}},{path:'/:pathMatch(.*)*',component:{template:'<p>Laboratorio aislado de custodia.</p>'}}]});
 const app=createApp({render:()=>h('div',[h(RouterView,{key:router.currentRoute.value.fullPath}),h(ConfirmHost),h(ToastHost)])});app.use(pinia);app.use(router);await router.isReady();app.mount('#app');
 window.__fixture=lab.fixture;window.__auth=auth;window.__router=router;
 window.__login=async role=>{const account=lab.accounts.find(a=>a.role===role);if(!account||!account.email.endsWith('@custody-integral.invalid'))throw Error('Synthetic login only');await auth.signOut();await auth.signIn(account.email,account.password);};
@@ -17,5 +23,6 @@ window.__component=()=>{for(const el of document.querySelectorAll('#app *')){let
 window.__routineComponent=()=>{for(const el of document.querySelectorAll('#app *')){let p=el.__vueParentComponent;while(p){if(p.type.__file?.endsWith('RoutineInventory.vue'))return p.setupState;p=p.parent;}}return null;};
 window.__custodyStore=useTechnicianCustodyStore();window.__campoStore=useCampoStore();
 window.__openMyCustody=async()=>{await router.push('/campo/custodia');};
+window.__openInventarioCustodia=async()=>{await router.push('/inventario/custodia');};
 window.__ready=true;
 </script></body></html>

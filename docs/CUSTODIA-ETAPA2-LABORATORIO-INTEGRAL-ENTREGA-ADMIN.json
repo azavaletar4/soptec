@@ -1,0 +1,39 @@
+{
+  "at": "2026-10-20T05:58:14.724Z",
+  "scope": "REAL_BROWSER_REAL_CLICKS_REAL_DB_REST_AUTH_NO_SIMULATION_ENTREGA_ADMINISTRATIVA",
+  "lab": "smartrayco-custody-integral-1792436479162",
+  "results": [
+    {
+      "name": "login real (GoTrue) como admin dentro del navegador",
+      "status": "PASS"
+    },
+    {
+      "name": "navegación real a /inventario/custodia (InventarioCustodiaView, nueva ruta agregada al laboratorio): pantalla y catálogo real cargados",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Entregar material\" + modal real \"Confirmar\" (InventarioCustodiaView): entrega válida registrada, custodia del técnico incrementada exactamente en 5",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real con cantidad (149) mayor al stock central real (99) de Drop 100m: SIN bloqueo -- comportamiento real confirmado por diseño (la entrega a custodia es independiente del stock central), no es un error",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real del botón deshabilitado mientras la entrega está en curso (protección anti doble-clic accidental) + repetir la MISMA entrega real dos veces de forma secuencial: ambas se registran íntegras (reposición administrativa, no requiere clave de idempotencia)",
+      "status": "PASS"
+    },
+    {
+      "name": "el material entregado por administración (clic real) queda disponible para consumir en App de Campo con la cantidad real correcta, sin recargar manualmente ni intervención adicional",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real con cantidad inválida (2.345, más de 2 decimales): el RPC real la rechaza, sin movimiento ni custodia parcial",
+      "status": "PASS"
+    },
+    {
+      "name": "sin peticiones externas ni excepciones no controladas durante toda la sesión de navegador (entrega administrativa)",
+      "status": "PASS"
+    }
+  ]
+}

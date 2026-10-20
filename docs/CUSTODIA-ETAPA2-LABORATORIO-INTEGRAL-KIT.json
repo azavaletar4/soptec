@@ -1,0 +1,35 @@
+{
+  "at": "2026-10-20T05:37:39.921Z",
+  "scope": "REAL_BROWSER_REAL_CLICKS_REAL_DB_REST_AUTH_NO_SIMULATION_KIT_ALTA",
+  "lab": "smartrayco-custody-integral-1792436479162",
+  "results": [
+    {
+      "name": "login real (GoTrue) como leader dentro del navegador",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Registrar kit base\" con custodia suficiente en los 4 productos reales: éxito, custodia descontada exacta en los 4, 4 movimientos reales (Patchcord/Roseta/Conector/Drop)",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Registrar kit base\" con custodia insuficiente SOLO en Conector: rechazo todo-o-nada real -- Patchcord/Roseta/Drop (con custodia suficiente) NO se descontaron, ningún movimiento parcial",
+      "status": "PASS"
+    },
+    {
+      "name": "candado real de cierre (P1651): bloquea completar la orden real mientras el rechazo de Kit sigue pendiente (riesgo #3 del procedimiento de activación, antes nunca probado)",
+      "status": "PASS"
+    },
+    {
+      "name": "clic real \"Confirmar operación de inventario pendiente\" (Kit): reintento real con la MISMA clave resuelve el rechazo, descuenta los 4 productos correctamente",
+      "status": "PASS"
+    },
+    {
+      "name": "con el rechazo de Kit ya resuelto, el candado real de cierre por material (P1651) ya no bloquea -- cualquier otro bloqueo de cierre que persista (equipo serializado, ajeno a Fase 165) no es parte de este control",
+      "status": "PASS"
+    },
+    {
+      "name": "sin peticiones externas ni excepciones no controladas durante toda la sesión de navegador (Kit)",
+      "status": "PASS"
+    }
+  ]
+}
