@@ -1,0 +1,233 @@
+{
+  "at": "2026-10-20T15:16:23.103669+00:00",
+  "readOnly": true,
+  "connectionTimezone": "UTC",
+  "functions": [
+    {
+      "schema": "auth",
+      "name": "uid",
+      "identityArgs": "",
+      "owner": "supabase_auth_admin",
+      "md5": "cdef18c69c4f4cbbced2eaf81e628b49",
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      }
+    },
+    {
+      "schema": "public",
+      "name": "current_user_role",
+      "identityArgs": "",
+      "owner": "postgres",
+      "md5": "97d2107b1b061b27ea358e9fc80eee0f",
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      }
+    },
+    {
+      "schema": "public",
+      "name": "get_technician_ranking",
+      "identityArgs": "p_month integer, p_year integer",
+      "owner": "postgres",
+      "md5": "e1a53bc89358018536db151da721c908",
+      "execute": {
+        "anon": true,
+        "service_role": true,
+        "authenticated": true
+      }
+    },
+    {
+      "schema": "public",
+      "name": "my_inventory_custody",
+      "identityArgs": "",
+      "owner": "postgres",
+      "md5": "c2f433b3c4d2ed628ce07ad114b98530",
+      "execute": {
+        "anon": false,
+        "service_role": false,
+        "authenticated": true
+      }
+    }
+  ],
+  "rankMatchesCandidateGuard": true,
+  "volumes": {
+    "tickets": 32,
+    "routines": 64,
+    "crewSizes": {
+      "1": 98,
+      "2": 36,
+      "3": 1,
+      "4": 1
+    },
+    "assignments": 177,
+    "installations": 35,
+    "resolvedTickets": 29,
+    "activeTechnicians": 6,
+    "completedRoutines": 60,
+    "completedInstallations": 30
+  },
+  "access": [
+    {
+      "case": 1,
+      "kind": "custody",
+      "read_only": "on",
+      "unitsMatch": true,
+      "foreignUnits": 0,
+      "requestsMatch": true,
+      "materialsMatch": true,
+      "foreignRequests": 0,
+      "foreignMaterials": 0,
+      "directForeignMaterialRows": 0,
+      "installedForeignRankingRows": 5
+    },
+    {
+      "case": 2,
+      "kind": "custody",
+      "read_only": "on",
+      "unitsMatch": true,
+      "foreignUnits": 0,
+      "requestsMatch": true,
+      "materialsMatch": true,
+      "foreignRequests": 0,
+      "foreignMaterials": 0,
+      "directForeignMaterialRows": 0,
+      "installedForeignRankingRows": 5
+    },
+    {
+      "case": 3,
+      "kind": "custody",
+      "read_only": "on",
+      "unitsMatch": true,
+      "foreignUnits": 0,
+      "requestsMatch": true,
+      "materialsMatch": true,
+      "foreignRequests": 0,
+      "foreignMaterials": 0,
+      "directForeignMaterialRows": 0,
+      "installedForeignRankingRows": 5
+    },
+    {
+      "case": 4,
+      "kind": "custody",
+      "read_only": "on",
+      "unitsMatch": true,
+      "foreignUnits": 0,
+      "requestsMatch": true,
+      "materialsMatch": true,
+      "foreignRequests": 0,
+      "foreignMaterials": 0,
+      "directForeignMaterialRows": 0,
+      "installedForeignRankingRows": 5
+    },
+    {
+      "case": 5,
+      "kind": "custody",
+      "read_only": "on",
+      "unitsMatch": true,
+      "foreignUnits": 0,
+      "requestsMatch": true,
+      "materialsMatch": true,
+      "foreignRequests": 0,
+      "foreignMaterials": 0,
+      "directForeignMaterialRows": 0,
+      "installedForeignRankingRows": 5
+    },
+    {
+      "case": 6,
+      "kind": "custody",
+      "read_only": "on",
+      "unitsMatch": true,
+      "foreignUnits": 0,
+      "requestsMatch": true,
+      "materialsMatch": true,
+      "foreignRequests": 0,
+      "foreignMaterials": 0,
+      "directForeignMaterialRows": 0,
+      "installedForeignRankingRows": 5
+    },
+    {
+      "kind": "installed_anon_ranking",
+      "rows": 6,
+      "read_only": "on"
+    },
+    {
+      "kind": "signature_checks",
+      "read_only": "on",
+      "newRpcsAbsent": true,
+      "custodyHasNoActorArgument": true
+    }
+  ],
+  "calendar": {
+    "at": "2026-10-20T10:27:36.320365-05:00",
+    "periods": {
+      "peruWeekStart": "2026-10-19T00:00:00-05:00",
+      "utcMonthStart": "2026-10-01 00:00:00+00",
+      "peruMonthStart": "2026-10-01 05:00:00+00",
+      "peruTodayStart": "2026-10-20T00:00:00-05:00",
+      "weekStartIsMonday": true
+    },
+    "read_only": "on",
+    "jobsAtDifferentMonthBoundaries": 0,
+    "techniciansWithDifferentMonthlyPoints": 0
+  },
+  "performance": {
+    "header": {
+      "at": "2026-10-20T15:22:29.281438+00:00",
+      "read_only": "on",
+      "timezones": "UTC",
+      "ticketCategories": [
+        "no_service",
+        "slow_speed",
+        "billing",
+        "installation",
+        "equipment",
+        "other",
+        "reconnection_relocation"
+      ],
+      "periodStartHoursUTC": {
+        "day": 5,
+        "week": 5,
+        "month": 5
+      },
+      "ticketPointColumnType": "int4",
+      "candidateRankingEqualsInstalled": true
+    },
+    "plans": [
+      {
+        "name": "installed_ranking",
+        "planningMs": 0.051,
+        "executionMs": 5.542,
+        "sharedHitBlocks": 327,
+        "sharedReadBlocks": 0
+      },
+      {
+        "name": "candidate_ranking",
+        "planningMs": 5.975,
+        "executionMs": 2.308,
+        "sharedHitBlocks": 291,
+        "sharedReadBlocks": 0
+      },
+      {
+        "name": "candidate_progress",
+        "planningMs": 6.052,
+        "executionMs": 2.087,
+        "sharedHitBlocks": 296,
+        "sharedReadBlocks": 0
+      },
+      {
+        "name": "installed_custody",
+        "planningMs": 0.029,
+        "executionMs": 15.167,
+        "sharedHitBlocks": 621,
+        "sharedReadBlocks": 0
+      }
+    ]
+  },
+  "notes": [
+    "Plans are SELECT expressions extracted mechanically from candidate; new RPCs are not installed.",
+    "SQL role/claim tests validate installed policies, not signed-JWT or APK sessions."
+  ]
+}

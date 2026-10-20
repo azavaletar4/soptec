@@ -17,11 +17,34 @@ import { PRIORITY_CLASS, PRIORITY_ICON, PRIORITY_LABEL } from '@/lib/ticketPrior
 import { activeJobMessage, campoJobPath, parseActiveJobHint, type ActiveJobRef } from '@/lib/singleActiveJob';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import type { Installation, Routine, Ticket } from '@/types/domain';
+import CampoAvance from '@/components/campo/CampoAvance.vue';
+import { supabase } from '@/lib/supabase';
+import { usePersonalRead } from '@/composables/usePersonalRead';
+import { pointNumber, type FieldProgress } from '@/lib/fieldProgress';
 
 const router = useRouter();
 const campoStore = useCampoStore();
 const auth = useAuthStore();
+const progressIdentity = computed(() => auth.role === 'TECNICO_RED' ? auth.user?.id ?? null : null);
+const progress = usePersonalRead<FieldProgress>(progressIdentity, async () => {
+  const { data, error } = await supabase.rpc('my_field_progress');
+  if (error) throw error;
+  if (!data) throw new Error('Sin respuesta de puntos');
+  return data as unknown as FieldProgress;
+});
+function jobPoints(t: TrabajoItem) {
+  const entries = progress.data.value?.contributions.filter(e => e.jobId === t.id && e.jobType === t.jobType);
+  if (!entries?.length) return t.estadoUi === 'completado' ? 'Sin aporte en los períodos consultados · abrir detalle' : 'Aún no aporta puntos';
+  const work = entries.find(e => e.kind === 'work');
+  const penalty = entries.find(e => e.kind === 'recurrence');
+  return `${pointNumber(work?.points ?? 0)} pts${penalty ? ` · reincidencia ${pointNumber(penalty.points)} pts` : ''}`;
+}
 const asistenciaStore = useAsistenciaStore();
+function jobReference(t: TrabajoItem) {
+  if (t.jobType === 'ticket') return (t.raw as Ticket).ticket_number || t.id.slice(0, 8);
+  if (t.jobType === 'routine') return (t.raw as Routine).routine_number || t.id.slice(0, 8);
+  return t.id.slice(0, 8);
+}
 const ticketsStore = useTicketsStore();
 const installationsStore = useInstallationsStore();
 const routinesStore = useRoutinesStore();
@@ -48,10 +71,10 @@ type TabValue = 'pendiente' | 'completado' | 'disponible';
 const PENDIENTE_ESTADOS: TrabajoEstadoUi[] = ['pendiente', 'en_proceso'];
 const tabs = computed<{ value: TabValue; label: string }[]>(() => {
   const base: { value: TabValue; label: string }[] = [
-    { value: 'pendiente', label: '🙋 Mis Pendientes de Hoy' },
-    { value: 'completado', label: '📁 Histórico de Atendidos' },
+    { value: 'pendiente', label: 'Pendientes' },
+    { value: 'completado', label: 'Atendidos' },
   ];
-  if (auth.role === 'TECNICO_RED') base.push({ value: 'disponible', label: '🙋 Disponibles' });
+  if (auth.role === 'TECNICO_RED') base.push({ value: 'disponible', label: 'Disponibles' });
   return base;
 });
 const activeTab = ref<TabValue>('pendiente');
@@ -262,8 +285,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <CampoLayout title="Mis trabajos">
-    <AsistenciaPanel class="mb-3" />
+  <CampoLayout :title="progressIdentity ? 'Mi Avance' : 'Mis trabajos'">
+    <CampoAvance v-if="progressIdentity" :data="progress.data.value" :loading="progress.loading.value" :error="progress.error.value" @refresh="progress.load">
+      <p v-if="campoStore.loading" class="text-xs text-slate-500 mt-2">Consultando avance de órdenes…</p>
+      <p v-else class="text-xs text-slate-600 mt-2">{{ counts.pendiente }} órdenes pendientes · {{ campoStore.myActiveJob ? '1 en atención' : 'Ninguna en atención' }}</p>
+    </CampoAvance>
+    <router-link v-if="progressIdentity" to="/campo/mi-custodia" class="surface flex items-center justify-between gap-2 p-3 mb-3 text-sm">
+      <span class="font-semibold">Mi custodia</span><span class="text-xs text-slate-500">Solo consulta →</span>
+    </router-link>
+    <h2 class="text-sm font-semibold mb-2">Mis órdenes</h2>
     <input v-model="search" placeholder="Buscar cliente o dirección..." class="field-input mb-3" />
 
     <div class="grid gap-2 mb-3" :class="tabs.length > 2 ? 'grid-cols-3' : 'grid-cols-2'">
@@ -327,7 +357,11 @@ onUnmounted(() => {
           <span class="text-[11px] text-slate-500">{{ formatFecha(t.fecha) }}</span>
         </div>
         <p class="font-semibold text-sm text-slate-900">{{ t.clienteNombre }}</p>
+        <p class="text-xs text-slate-600 break-all">Orden {{ jobReference(t) }}</p>
         <p v-if="t.direccion" class="text-xs text-slate-500 mt-0.5">{{ t.direccion }}</p>
+        <p v-if="progressIdentity && activeTab !== 'disponible'" class="text-xs text-slate-600 mt-1">
+          {{ progress.loading.value ? 'Consultando puntos…' : progress.error.value ? 'Puntos no disponibles' : jobPoints(t) }}
+        </p>
 
         <div v-if="canStart(t) || isInProgress(t)" class="mt-3" @click.stop>
           <button
@@ -367,6 +401,11 @@ onUnmounted(() => {
         </div>
       </li>
     </ul>
+
+    <details class="surface p-3 mt-3">
+      <summary class="text-sm font-medium cursor-pointer">Asistencia y accesos secundarios</summary>
+      <AsistenciaPanel class="mt-3" />
+    </details>
 
     <ConfirmModal
       :open="!!activeJobAlert"

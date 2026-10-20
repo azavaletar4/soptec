@@ -1,0 +1,263 @@
+{
+  "synthetic": true,
+  "network": "none",
+  "postgresImage": "postgres:17",
+  "realRowsCopied": 0,
+  "cloudFunctionMd5": "e1a53bc89358018536db151da721c908",
+  "cases": [
+    {
+      "name": "current_volume",
+      "tickets": 32,
+      "installations": 35,
+      "routines": 64,
+      "technicians": 6,
+      "assignmentRows": 184,
+      "rankEquivalent": true,
+      "responseBytes": 2554,
+      "benchmarks": [
+        {
+          "name": "original_ranking",
+          "samples": [
+            {
+              "executionMs": 5.403,
+              "planningMs": 0.054,
+              "sharedHitBlocks": 2050,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 5.918,
+              "planningMs": 0.055,
+              "sharedHitBlocks": 2050,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 5.958,
+              "planningMs": 0.054,
+              "sharedHitBlocks": 2050,
+              "sharedReadBlocks": 0
+            }
+          ]
+        },
+        {
+          "name": "candidate_ranking",
+          "samples": [
+            {
+              "executionMs": 6.358,
+              "planningMs": 0.061,
+              "sharedHitBlocks": 2106,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 8.218,
+              "planningMs": 0.104,
+              "sharedHitBlocks": 2106,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 7.479,
+              "planningMs": 0.081,
+              "sharedHitBlocks": 2106,
+              "sharedReadBlocks": 0
+            }
+          ]
+        },
+        {
+          "name": "progress",
+          "samples": [
+            {
+              "executionMs": 26.523,
+              "planningMs": 0.056,
+              "sharedHitBlocks": 2043,
+              "sharedReadBlocks": 2
+            },
+            {
+              "executionMs": 22.343,
+              "planningMs": 0.087,
+              "sharedHitBlocks": 2045,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 7.572,
+              "planningMs": 0.039,
+              "sharedHitBlocks": 2045,
+              "sharedReadBlocks": 0
+            }
+          ]
+        },
+        {
+          "name": "period_ranking",
+          "samples": [
+            {
+              "executionMs": 11.591,
+              "planningMs": 0.086,
+              "sharedHitBlocks": 2265,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 7.885,
+              "planningMs": 0.042,
+              "sharedHitBlocks": 2265,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 8.583,
+              "planningMs": 0.049,
+              "sharedHitBlocks": 2265,
+              "sharedReadBlocks": 0
+            }
+          ]
+        },
+        {
+          "name": "job_detail",
+          "samples": [
+            {
+              "executionMs": 4.919,
+              "planningMs": 0.493,
+              "sharedHitBlocks": 1329,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 6.574,
+              "planningMs": 0.433,
+              "sharedHitBlocks": 1329,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 4.705,
+              "planningMs": 0.344,
+              "sharedHitBlocks": 1329,
+              "sharedReadBlocks": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "growth_100k",
+      "tickets": 50000,
+      "installations": 30000,
+      "routines": 20000,
+      "technicians": 60,
+      "assignmentRows": 137606,
+      "rankEquivalent": true,
+      "responseBytes": 13785,
+      "benchmarks": [
+        {
+          "name": "original_ranking",
+          "samples": [
+            {
+              "executionMs": 67.142,
+              "planningMs": 0.053,
+              "sharedHitBlocks": 28540,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 58.397,
+              "planningMs": 0.054,
+              "sharedHitBlocks": 28540,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 64.616,
+              "planningMs": 0.054,
+              "sharedHitBlocks": 28540,
+              "sharedReadBlocks": 0
+            }
+          ]
+        },
+        {
+          "name": "candidate_ranking",
+          "samples": [
+            {
+              "executionMs": 64.258,
+              "planningMs": 0.059,
+              "sharedHitBlocks": 28591,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 69.898,
+              "planningMs": 0.059,
+              "sharedHitBlocks": 28591,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 63.851,
+              "planningMs": 0.061,
+              "sharedHitBlocks": 28591,
+              "sharedReadBlocks": 0
+            }
+          ]
+        },
+        {
+          "name": "progress",
+          "samples": [
+            {
+              "executionMs": 60.195,
+              "planningMs": 0.038,
+              "sharedHitBlocks": 27641,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 58.717,
+              "planningMs": 0.04,
+              "sharedHitBlocks": 27637,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 58.714,
+              "planningMs": 0.035,
+              "sharedHitBlocks": 27637,
+              "sharedReadBlocks": 0
+            }
+          ]
+        },
+        {
+          "name": "period_ranking",
+          "samples": [
+            {
+              "executionMs": 72.744,
+              "planningMs": 0.038,
+              "sharedHitBlocks": 27558,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 63.773,
+              "planningMs": 0.04,
+              "sharedHitBlocks": 27558,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 66.551,
+              "planningMs": 0.039,
+              "sharedHitBlocks": 27558,
+              "sharedReadBlocks": 0
+            }
+          ]
+        },
+        {
+          "name": "job_detail",
+          "samples": [
+            {
+              "executionMs": 5.215,
+              "planningMs": 0.347,
+              "sharedHitBlocks": 1000,
+              "sharedReadBlocks": 1
+            },
+            {
+              "executionMs": 5.529,
+              "planningMs": 0.379,
+              "sharedHitBlocks": 1001,
+              "sharedReadBlocks": 0
+            },
+            {
+              "executionMs": 5.01,
+              "planningMs": 0.355,
+              "sharedHitBlocks": 1001,
+              "sharedReadBlocks": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

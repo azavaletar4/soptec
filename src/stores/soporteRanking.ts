@@ -13,6 +13,15 @@ export interface TechnicianRankingRow {
   total_points: number;
   ranking: number;
 }
+export type RankingPeriod = 'day' | 'week' | 'month';
+export interface RankingPeriodResult {
+  period: RankingPeriod;
+  start: string;
+  end: string;
+  timezone: string;
+  asOf: string;
+  ranking: TechnicianRankingRow[];
+}
 
 // Ranking mensual de tecnicos de campo (Fase 27) — todo se calcula fresco
 // en la funcion SQL get_technician_ranking via el backend, no se guarda
@@ -21,6 +30,25 @@ export const useSoporteRankingStore = defineStore('soporteRanking', () => {
   const ranking = ref<TechnicianRankingRow[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const periodResult = ref<RankingPeriodResult | null>(null);
+  let requestId = 0;
+
+  async function fetchPeriodRanking(period: RankingPeriod, date: string) {
+    const request = ++requestId;
+    loading.value = true;
+    error.value = null;
+    ranking.value = [];
+    periodResult.value = null;
+    try {
+      const params = new URLSearchParams({ periodo: period, fecha: date });
+      const res = await apiFetch<RankingPeriodResult>(`/api/soporte/ranking-tecnicos?${params}`);
+      if (request === requestId) { ranking.value = res.ranking; periodResult.value = res; }
+    } catch (e) {
+      if (request === requestId) error.value = e instanceof Error ? e.message : 'No se pudo consultar el ranking';
+    } finally {
+      if (request === requestId) loading.value = false;
+    }
+  }
 
   async function fetchRanking(mes: number, anio: number) {
     loading.value = true;
@@ -39,5 +67,5 @@ export const useSoporteRankingStore = defineStore('soporteRanking', () => {
     }
   }
 
-  return { ranking, loading, error, fetchRanking };
+  return { ranking, loading, error, periodResult, fetchRanking, fetchPeriodRanking };
 });

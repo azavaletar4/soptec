@@ -92,7 +92,8 @@ onBeforeUnmount(() => {
         </svg>
       </router-link>
       <router-link
-        to="/campo/custodia"
+        v-if="auth.role !== 'TECNICO_RED' || (router.currentRoute.value.name !== 'campo' && router.currentRoute.value.name !== 'campo-mi-custodia')"
+        :to="auth.role === 'TECNICO_RED' ? '/campo/mi-custodia' : '/campo/custodia'"
         class="p-2 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
         aria-label="Mis equipos y materiales"
         title="Mis equipos y materiales"

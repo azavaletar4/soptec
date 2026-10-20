@@ -196,6 +196,12 @@ const router = createRouter({
         breadcrumb: [{ label: 'App de Campo', to: '/campo' }, { label: 'Mis equipos y materiales' }],
       },
     },
+    {
+      path: '/campo/mi-custodia',
+      name: 'campo-mi-custodia',
+      component: () => import('@/views/campo/CampoMiCustodiaView.vue'),
+      meta: { requiresAuth: true, roles: ['TECNICO_RED'], breadcrumb: [{ label: 'Mi custodia' }] },
+    },
     { path: '/mapa', redirect: '/mapa/red' },
     {
       path: '/mapa/red',
@@ -405,6 +411,10 @@ router.beforeEach(async (to) => {
   // porque /cambiar-password no tiene roles y debe ganarle a todo lo demas.
   if (auth.user && auth.mustChangePassword && to.name !== 'cambiar-password') {
     return { name: 'cambiar-password' };
+  }
+  // Keep the administrative component intact; technicians share one field home.
+  if (auth.role === 'TECNICO_RED' && to.name === 'soporte') {
+    return { name: 'campo' };
   }
   const roles = to.meta.roles as string[] | undefined;
   if (roles && !roles.includes(auth.role ?? '')) {

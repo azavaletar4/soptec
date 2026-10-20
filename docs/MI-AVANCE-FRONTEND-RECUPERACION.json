@@ -1,0 +1,31 @@
+﻿{
+    "result":  "PASS",
+    "image":  "sha256:21e9c2944a25660abb5611114b875d207e98e0ab779d2cfb0af759d1978b2e0c",
+    "exactBackedImage":  true,
+    "productionAccess":  false,
+    "network":  "none",
+    "httpClient":  "wget inside isolated container",
+    "capabilities":  [
+                         "CHOWN",
+                         "SETUID",
+                         "SETGID",
+                         "NET_BIND_SERVICE"
+                     ],
+    "route":  "/campo",
+    "routeStatus":  200,
+    "routeMatchesBackedIndex":  true,
+    "responses":  [
+                      {
+                          "path":  "/index.html",
+                          "status":  200,
+                          "sha256":  "fb7ec7372704c72dbedd0535498c7dd28c1cd0c45fcec155f69e5cfd48968ad4",
+                          "matchesBackup":  true
+                      },
+                      {
+                          "path":  "/assets/index-BrygMn_O.js",
+                          "status":  200,
+                          "sha256":  "d829a0610375cb0e92a0c8a670a44f87508daa4d86a6671e142ae10cdfc6321b",
+                          "matchesBackup":  true
+                      }
+                  ]
+}

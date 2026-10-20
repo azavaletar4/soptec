@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
+import CampoJobPoints from '@/components/campo/CampoJobPoints.vue';
 import SignaturePad from '@/components/campo/SignaturePad.vue';
 import RoutineInventory from '@/components/inventario/RoutineInventory.vue';
 import AuthorizeOnuModal from '@/views/olt/AuthorizeOnuModal.vue';
@@ -1808,6 +1809,7 @@ async function handleCloseSubmit() {
     </template>
 
     <template v-else>
+      <CampoJobPoints :job-type="jobType" :job-id="jobId" />
       <section v-if="jobType !== 'routine'" class="surface p-3 mb-3">
         <p v-if="inventoryPendingNotice" class="text-sm text-amber-700">{{ inventoryPendingNotice }}</p>
         <button class="text-sm text-blue-700" :disabled="inventoryWriteBusy" @click="retryPendingInventory">

@@ -1,0 +1,21 @@
+﻿{
+    "image":  "sha256:0ee2ed7441fb08b66ecf437b3c1189c569449fac95a1842b692a43b4892f4466",
+    "productionAccess":  false,
+    "responses":  [
+                      {
+                          "path":  "/api/health",
+                          "status":  200
+                      },
+                      {
+                          "path":  "/api/soporte/ranking-tecnicos",
+                          "status":  401
+                      }
+                  ],
+    "postgresRestoreEvidenceAvailable":  true,
+    "postgresBackupAvailable":  true,
+    "frontendBackupAvailable":  true,
+    "schedulers":  "all disabled in lab",
+    "network":  "none",
+    "result":  "PASS",
+    "backendBackupAvailable":  true
+}

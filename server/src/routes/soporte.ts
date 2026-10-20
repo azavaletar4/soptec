@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { createTechnicianRankingHandler, RANKING_READ_ROLES } from '../services/technicianRanking';
 
-// Ranking mensual de tecnicos de campo (Fase 27) — la logica de puntaje
-// vive entera en la funcion SQL get_technician_ranking (ver migracion), acá
-// solo se valida el rol y se parsean mes/anio.
+// Authenticated staff share aggregate productivity. Scoring stays in SQL;
+// the handler validates periods and projects only the public ranking fields.
 export const soporteRoutes = new Hono();
 
-const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
+const STAFF_READ = RANKING_READ_ROLES;
 
 soporteRoutes.use('*', requireAuth, requireRole(...STAFF_READ));
 
@@ -23,18 +23,4 @@ export interface TechnicianRankingRow {
   ranking: number;
 }
 
-soporteRoutes.get('/ranking-tecnicos', async (c) => {
-  const mesRaw = c.req.query('mes');
-  const anioRaw = c.req.query('anio');
-  const now = new Date();
-  const mes = mesRaw ? Number(mesRaw) : now.getMonth() + 1;
-  const anio = anioRaw ? Number(anioRaw) : now.getFullYear();
-
-  if (!Number.isInteger(mes) || mes < 1 || mes > 12) return c.json({ error: 'mes invalido (1-12)' }, 400);
-  if (!Number.isInteger(anio) || anio < 2000 || anio > 2100) return c.json({ error: 'anio invalido' }, 400);
-
-  const { data, error } = await supabaseAdmin.rpc('get_technician_ranking', { p_month: mes, p_year: anio });
-  if (error) return c.json({ error: error.message }, 400);
-
-  return c.json({ mes, anio, ranking: (data ?? []) as TechnicianRankingRow[] });
-});
+soporteRoutes.get('/ranking-tecnicos', createTechnicianRankingHandler((name, args) => supabaseAdmin.rpc(name, args)));

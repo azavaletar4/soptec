@@ -1,5 +1,19 @@
 # SmartRayco — Estado de desarrollo
 
+## Mi Avance y ranking compartido: entrega autorizada (20/10/2026)
+
+Candidato validado: /campo ofrece puntos personales Hoy/Semana/Mes, ranking
+autenticado compartido, custodia de consulta y órdenes. SQL conserva las reglas
+existentes, calendario Perú y detalle personal privado; revoca ranking anónimo.
+Migración 20261020170000, idéntica al candidato aprobado. Entrega aislada desde
+40cd396; no incorpora cambios ajenos ni el commit documental pendiente.
+Respaldo PostgreSQL restaurado en aislamiento, frontend recuperado con HTTP y
+bundle exacto, backend recuperado con salud HTTP 200 y rechazo anónimo 401.
+Capturas móviles aprobadas; Android físico pendiente. Huellas y alcance en
+docs/MI-AVANCE-RELEASE-MANIFEST.json. Resultado de activación se informará tras
+las comprobaciones de producción; esta sección registra la preparación.
+
+
 ## Corregido: RoutineInventory.vue podia mostrar materiales vacios (20/10/2026)
 
 Continuacion directa del hallazgo real documentado en la sesion anterior.
