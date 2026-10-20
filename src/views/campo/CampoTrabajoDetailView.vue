@@ -21,7 +21,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
-import { createInstallationCustodySelector, isInstallableOwnCustody } from '@/lib/installationCustodySelector';
+import { createInstallationCustodySelector, isInstallableOwnCustody, installableEquipmentModelIds } from '@/lib/installationCustodySelector';
 import { confirmedMaterialQuantity, materialCustodyLabel, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
 import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
 import type { MyInventoryCustody } from '@/types/domain';
@@ -505,18 +505,21 @@ async function loadMaterials() {
 // ADMIN/SUPERADMIN tambien abren esta pantalla, por eso se guarda el rol
 // antes de llamarla; un fallo aca nunca debe tapar el resto de la pantalla.
 const myMaterialCustody = ref<MyInventoryCustody['materials']>([]);
+const myEquipmentCustody = ref<MyInventoryCustody['units']>([]);
 const materialCustodyState = ref<MaterialCustodyLoadState>('loading');
 let materialCustodyRequest = 0;
 async function loadMyMaterialCustody() {
   const request = ++materialCustodyRequest;
   const actorId = auth.user?.id;
   myMaterialCustody.value = [];
+  myEquipmentCustody.value = [];
   if (auth.role !== 'TECNICO_RED') { materialCustodyState.value = 'unavailable'; return; }
   materialCustodyState.value = 'loading';
   try {
     const result = await technicianCustodyStore.fetchMyCustody();
     if (!inventoryViewAlive || request !== materialCustodyRequest || auth.user?.id !== actorId || auth.role !== 'TECNICO_RED') return;
     myMaterialCustody.value = result.materials;
+    myEquipmentCustody.value = result.units;
     materialCustodyState.value = 'ready';
   } catch {
     if (request === materialCustodyRequest) materialCustodyState.value = 'error';
@@ -528,6 +531,14 @@ function availableOf(productId: string | null | undefined): number | undefined {
 function custodyLabel(productId: string, unit: string) {
   return materialCustodyLabel(availableOf(productId), unit, materialCustodyState.value);
 }
+// Altas: solo modelos serializados con al menos una unidad real disponible
+// en la custodia del tecnico autenticado (mismo criterio que el servidor
+// exige en 'available' para instalaciones) -- antes mostraba el catalogo
+// completo de equipos, aunque ninguno estuviera disponible para ese tecnico.
+const installableEquipmentProductIds = computed(() => installableEquipmentModelIds(myEquipmentCustody.value));
+const installableEquipmentProducts = computed(() =>
+  fieldProducts.value.filter((p) => p.is_serialized && installableEquipmentProductIds.value.has(p.id)),
+);
 watch(() => [auth.user?.id, auth.role], () => { void loadMyMaterialCustody(); });
 
 // El Kardex es insert-only (Fase 58, no se borra ninguna fila) — "quitar" o
@@ -2418,26 +2429,39 @@ async function handleCloseSubmit() {
             <p v-else class="text-xs text-amber-600 mb-3">Sin equipos asignados a esta instalación todavía.</p>
 
             <form v-if="installationCustodyEditable && !isLockedForTecnico" class="space-y-1.5" @submit.prevent="handleAssignInstallUnit">
-              <select v-model="installUnitForm.productId" required class="field-input text-sm" @change="onInstallUnitProductChange">
-                <option value="" disabled>Producto (Modem/ONT, TV Box, Mesh)...</option>
-                <option v-for="p in fieldProducts.filter((p) => p.is_serialized)" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
-              <select
-                v-model="installUnitForm.unitId"
-                required
-                class="field-input text-sm"
-                :disabled="!installUnitForm.productId || loadingInstallAvailableUnits"
-              >
-                <option value="" disabled>{{ loadingInstallAvailableUnits ? 'Cargando...' : 'Selecciona la serie/MAC...' }}</option>
-                <option v-for="u in installAvailableUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
-              </select>
-              <p v-if="installUnitForm.productId && !loadingInstallAvailableUnits && !installAvailableUnits.length" class="text-[11px] text-amber-700">
-                No tienes equipos disponibles bajo tu custodia para este producto.
-              </p>
-              <button type="button" class="btn-secondary text-xs w-full" :disabled="!installUnitForm.productId || loadingInstallAvailableUnits || savingInstallUnit" @click="onInstallUnitProductChange">Actualizar mis series</button>
-              <button type="submit" :disabled="savingInstallUnit || loadingInstallAvailableUnits || !installUnitForm.unitId" class="btn-secondary text-xs w-full">
-                {{ savingInstallUnit ? 'Asignando...' : '+ Asignar equipo' }}
-              </button>
+              <template v-if="materialCustodyState === 'loading'">
+                <p class="text-[11px] text-slate-400">Consultando tu custodia…</p>
+              </template>
+              <template v-else-if="materialCustodyState === 'error'">
+                <p class="text-[11px] text-amber-700">
+                  No se pudo consultar tu custodia. <button type="button" class="underline" @click="loadMyMaterialCustody">Reintentar</button>
+                </p>
+              </template>
+              <template v-else-if="!installableEquipmentProducts.length">
+                <p class="text-[11px] text-amber-700">No tienes equipos en tu custodia. Solicita la entrega a un administrador en Inventario.</p>
+              </template>
+              <template v-else>
+                <select v-model="installUnitForm.productId" required class="field-input text-sm" @change="onInstallUnitProductChange">
+                  <option value="" disabled>Producto (Modem/ONT, TV Box, Mesh)...</option>
+                  <option v-for="p in installableEquipmentProducts" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+                <select
+                  v-model="installUnitForm.unitId"
+                  required
+                  class="field-input text-sm"
+                  :disabled="!installUnitForm.productId || loadingInstallAvailableUnits"
+                >
+                  <option value="" disabled>{{ loadingInstallAvailableUnits ? 'Cargando...' : 'Selecciona la serie/MAC...' }}</option>
+                  <option v-for="u in installAvailableUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
+                </select>
+                <p v-if="installUnitForm.productId && !loadingInstallAvailableUnits && !installAvailableUnits.length" class="text-[11px] text-amber-700">
+                  No tienes equipos disponibles bajo tu custodia para este producto.
+                </p>
+                <button type="button" class="btn-secondary text-xs w-full" :disabled="!installUnitForm.productId || loadingInstallAvailableUnits || savingInstallUnit" @click="onInstallUnitProductChange">Actualizar mis series</button>
+                <button type="submit" :disabled="savingInstallUnit || loadingInstallAvailableUnits || !installUnitForm.unitId" class="btn-secondary text-xs w-full">
+                  {{ savingInstallUnit ? 'Asignando...' : '+ Asignar equipo' }}
+                </button>
+              </template>
             </form>
             <p v-if="installUnitError" class="text-xs text-red-600 mt-2">{{ installUnitError }}</p>
           </template>

@@ -1,0 +1,39 @@
+{
+  "at": "2026-10-20T12:37:04.093Z",
+  "scope": "REAL_BROWSER_REAL_CLICKS_REAL_DB_REST_AUTH_NO_SIMULATION_EQUIPOS_ALTAS",
+  "lab": "smartrayco-custody-integral-1792436479162",
+  "results": [
+    {
+      "name": "técnico con CERO modelos en custodia: mensaje real \"Solicita la entrega a un administrador\" visible, sin selector de modelos",
+      "status": "PASS"
+    },
+    {
+      "name": "técnico con UN modelo en custodia (LAB ONU): el selector real de modelos muestra exactamente ese modelo, ninguno más",
+      "status": "PASS"
+    },
+    {
+      "name": "al elegir el modelo real (LAB ONU), el selector real de serie/MAC ofrece únicamente su única unidad disponible",
+      "status": "PASS"
+    },
+    {
+      "name": "técnico con VARIOS modelos en custodia (LAB ONU + HUAWEI EG8145V5): el selector real muestra exactamente esos dos modelos",
+      "status": "PASS"
+    },
+    {
+      "name": "equipo real sin disponibilidad (único ejemplar pendiente de devolución): su modelo NO aparece en el selector real, los otros dos siguen intactos",
+      "status": "PASS"
+    },
+    {
+      "name": "cambio de técnico real (leader → support): la lista se recalcula para el nuevo técnico, sin residuos del anterior (support, sin custodia, ve el mensaje de cero equipos)",
+      "status": "PASS"
+    },
+    {
+      "name": "cambio de técnico real (support → leader): al volver, la lista real de leader se recalcula correctamente, sin residuos de support",
+      "status": "PASS"
+    },
+    {
+      "name": "sin peticiones externas ni excepciones no controladas durante toda la sesión de navegador (selector de modelos de equipos)",
+      "status": "PASS"
+    }
+  ]
+}
