@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
       </router-link>
       <button v-if="isNativeApp" class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-600 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-sky-600" aria-label="Recargar" title="Recargar" @click="handleRefresh">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 7A7 7 0 0 1 18 5l2 2M4 17l2 2a7 7 0 0 0 11.9-2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        <svg class="block w-5 h-5 shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 4v5h5M20 20v-5h-5M4.6 9a8 8 0 0 1 14.03-3.36M19.4 15a8 8 0 0 1-14.03 3.36" stroke-linecap="round" stroke-linejoin="round" /></svg>
       </button>
       <details ref="accountMenu" class="relative shrink-0" @toggle="accountOpen = accountMenu?.open ?? false" @keydown.esc.stop.prevent="closeAccount(true)">
         <summary class="list-none min-h-11 min-w-11 px-2 flex items-center justify-center gap-1 rounded-lg text-slate-700 bg-slate-100 cursor-pointer text-xs font-medium focus-visible:outline-2 focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden" aria-controls="campo-account-actions" :aria-expanded="accountOpen">
