@@ -11,7 +11,9 @@ const other = '00000000-0000-0000-0000-000000000005';
 const client = '30000000-0000-0000-0000-000000000001';
 const contract = '31000000-0000-0000-0000-000000000001';
 const install = '20000000-0000-0000-0000-000000000001';
+const otherInstall = '20000000-0000-0000-0000-000000000099';
 const cable = '50000000-0000-0000-0000-000000000012';
+const patchcord = '50000000-0000-0000-0000-000000000014';
 
 test('Fase 165 etapa 2 (cierre, parte 2): corregir un rechazo confirmado reutiliza la clave y deja de bloquear el cierre', { timeout: 180000 }, async t => {
   const container = `smartrayco-f165r-${process.pid}-${Date.now()}`;
@@ -58,7 +60,7 @@ test('Fase 165 etapa 2 (cierre, parte 2): corregir un rechazo confirmado reutili
       insert into profiles values('${other}','TECNICO_RED',true);
       insert into service_contracts values('${contract}','${client}');
       insert into inventory_products(id,name,unit,is_serialized,category_id) values
-        ('${cable}','Cable Drop','metros',false,null);
+        ('${cable}','Cable Drop','metros',false,null),('${patchcord}','Patchcord','unidad',false,null);
       alter table inventory_movements enable row level security;
       alter table inventory_unit_events enable row level security;
       create policy movements_test on inventory_movements for all to authenticated using(true) with check(true);
@@ -192,6 +194,101 @@ test('Fase 165 etapa 2 (cierre, parte 2): corregir un rechazo confirmado reutili
       routineOp(1); // corrección real, misma clave
       assert.equal(rejectionStatus(id), 'resolved');
       assert.equal(custody(tech, cable), '0');
+    });
+
+    await t.test('Alta con varios materiales: uno rechazado por custodia insuficiente, otros consumos válidos en la MISMA orden — el cierre bloquea solo por el rechazado, los válidos quedan intactos; al corregir, cierra conservando todo', () => {
+      reset();
+      deliver(tech, cable, 5); // suficiente
+      deliver(tech, patchcord, 1); // insuficiente para la cantidad que se intentará
+      // Dos consumos VALIDOS, en operaciones separadas (no es el mismo kit que el rechazado).
+      const idCable = randomUUID();
+      const validCable = JSON.parse(campoOp('consume', { productId: cable, quantity: 3 }, idCable));
+      assert.ok(validCable.ids?.length);
+      // El material rechazado: patchcord, 2 contra 1 disponible.
+      const idPatchcord = randomUUID();
+      assert.throws(() => campoOp('consume', { productId: patchcord, quantity: 2 }, idPatchcord), /No tienes suficiente material en custodia/);
+      assert.equal(rejectionStatus(idPatchcord), 'pending');
+      // Los consumos validos no se tocan por el rechazo de otro material en la misma orden.
+      assert.equal(custody(tech, cable), '2');
+      assert.equal(custody(tech, patchcord), '1'); // intacto: el rechazo no aplicó nada
+      assert.equal(sql('select count(*) from inventory_movements;'), '1'); // solo el de cable, nunca el de patchcord
+      // El cierre esta bloqueado SOLO por el rechazo pendiente, no por los consumos validos.
+      assert.throws(close, /No se puede cerrar la orden/);
+      // Corregir el material rechazado (misma clave) a la cantidad real disponible.
+      const corrected = JSON.parse(campoOp('consume', { productId: patchcord, quantity: 1 }, idPatchcord));
+      assert.ok(corrected.ids?.length);
+      assert.equal(rejectionStatus(idPatchcord), 'resolved');
+      assert.equal(custody(tech, patchcord), '0');
+      assert.equal(custody(tech, cable), '2'); // el consumo valido anterior sigue exactamente igual
+      assert.equal(sql('select count(*) from inventory_movements;'), '2'); // cable + patchcord corregido, nada duplicado
+      close(); // ahora si, sin intervencion administrativa
+      assert.equal(sql(`select status from installations where id='${install}';`), 'completed');
+      // Ambos movimientos (el valido original y el corregido) sobreviven el cierre, intactos.
+      assert.equal(sql(`select coalesce(sum(quantity),0) from inventory_movements where product_id='${cable}' and movement_type='egreso';`), '3.00');
+      assert.equal(sql(`select coalesce(sum(quantity),0) from inventory_movements where product_id='${patchcord}' and movement_type='egreso';`), '1.00');
+    });
+
+    await t.test('el cierre sigue bloqueado mientras el material rechazado de la MISMA orden no se corrija ni se anule, aunque otros materiales ya se registraron válidamente', () => {
+      reset();
+      deliver(tech, cable, 5);
+      deliver(tech, patchcord, 1);
+      campoOp('consume', { productId: cable, quantity: 3 }, randomUUID()); // valido, aplicado
+      const idPatchcord = randomUUID();
+      assert.throws(() => campoOp('consume', { productId: patchcord, quantity: 2 }, idPatchcord)); // rechazado, sigue pending
+      assert.throws(close, /No se puede cerrar la orden/);
+      assert.throws(close, /No se puede cerrar la orden/); // reintentar cerrar sin corregir nada: sigue bloqueado, no se "cansa" ni se libera solo
+      assert.equal(rejectionStatus(idPatchcord), 'pending');
+      assert.equal(sql(`select status from installations where id='${install}';`), 'in_progress');
+      // Se libera SOLO cuando corresponde: anulación administrativa explícita (alternativa a corregir).
+      as(`select cancel_rejected_material_operation('${idPatchcord}','Se confirmó que no se usó ese material');`, admin);
+      assert.equal(rejectionStatus(idPatchcord), 'cancelled');
+      close();
+      assert.equal(sql(`select status from installations where id='${install}';`), 'completed');
+      assert.equal(custody(tech, patchcord), '1'); // la anulación no repuso ni tocó nada: nunca se había aplicado
+    });
+
+    await t.test('una respuesta incierta (excepción distinta de P1650) NUNCA se guarda como rechazo definitivo', () => {
+      reset();
+      deliver(tech, cable, 5);
+      const id = randomUUID();
+      // Un payload realmente invalido (producto inexistente) dispara una excepcion de
+      // la implementacion que NO es P1650 -- debe propagarse como error real, sin
+      // crear ninguna fila en material_inventory_rejections (no es un rechazo por
+      // custodia, es un fallo distinto; tratarlo como 'materialRejected' inventaria
+      // una certeza que el servidor nunca confirmo).
+      assert.throws(() => campoOp('consume', { productId: '00000000-0000-0000-0000-000000000000', quantity: 1 }, id), /Producto no admite consumo de material/);
+      assert.equal(rejectionStatus(id), ''); // ninguna fila: la incertidumbre/el error real nunca se confunde con un rechazo confirmado
+      assert.equal(sql('select count(*) from material_inventory_rejections;'), '0');
+      // La MISMA clave, ahora con un payload valido, no esta bloqueada por nada (no hubo rechazo que proteger).
+      const ok = JSON.parse(campoOp('consume', { productId: cable, quantity: 2 }, id));
+      assert.ok(ok.ids?.length);
+      assert.equal(custody(tech, cable), '3');
+    });
+
+    await t.test('el SQL no afecta rechazos históricos de OTRAS órdenes ni los mezcla con la corrección de esta', () => {
+      reset();
+      // Orden historica, ajena, con su propio rechazo pendiente -- simula datos
+      // ya existentes antes de aplicar este candidato.
+      sql(`insert into installations(id,status,client_id,contract_id) values('${otherInstall}','in_progress','${client}','${contract}');
+        insert into job_assignees values('installation','${otherInstall}','${other}','leader');`);
+      deliver(other, cable, 1);
+      const historicId = randomUUID();
+      try { as(`select public.campo_inventory_operation('${historicId}','installation','${otherInstall}','consume','${JSON.stringify({ productId: cable, quantity: 5 }).replaceAll("'", "''")}'::jsonb);`, other); } catch { /* rechazo real, queda pending a propósito */ }
+      const historicBefore = sql(`select status,payload::text from material_inventory_rejections where operation_id='${historicId}';`);
+      assert.equal(historicBefore.split('|')[0], 'pending');
+
+      // Ahora, en ESTA orden (distinta), se rechaza y luego se corrige un material.
+      deliver(tech, patchcord, 1);
+      const id = randomUUID();
+      assert.throws(() => campoOp('consume', { productId: patchcord, quantity: 2 }, id));
+      campoOp('consume', { productId: patchcord, quantity: 1 }, id);
+      assert.equal(rejectionStatus(id), 'resolved');
+      close();
+
+      // La orden historica ajena sigue exactamente igual: pending, mismo payload, sin tocar.
+      assert.equal(sql(`select status,payload::text from material_inventory_rejections where operation_id='${historicId}';`), historicBefore);
+      assert.equal(sql(`select status from installations where id='${otherInstall}';`), 'in_progress'); // sigue sin poder cerrarse, ajena a lo que pasó en la otra orden
+      assert.throws(() => sql(`update installations set status='completed' where id='${otherInstall}';`), /No se puede cerrar la orden/);
     });
 
     await t.test('rollback propuesto restaura la version anterior sin tocar las filas ya resueltas/pendientes', () => {
