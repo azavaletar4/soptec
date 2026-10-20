@@ -44,7 +44,14 @@ const correctionQty = ref(1);
 const condition = ref<'in_stock' | 'damaged' | 'in_repair'>('in_stock');
 const office = computed(() => ['SUPERADMIN', 'ADMIN', 'SOPORTE'].includes(auth.role ?? ''));
 const writable = computed(() => props.canWrite && auth.role === 'TECNICO_RED' && props.routine.status === 'in_progress');
-const blocked = computed(() => busy.value || loading.value || !!pending.value);
+// Un rechazo CONFIRMADO (pending.value) nunca debe trabar el formulario: la
+// correccion de cantidad se envia como un 'consume' normal con el mismo
+// producto, y executeRoutineInventory reutiliza la clave pendiente sola.
+// Bloquear aqui por `pending` obligaba a reintentar SIEMPRE la misma
+// cantidad ya rechazada (boton "Reintentar"), sin forma de corregirla --
+// mismo criterio que Altas/Averias (CampoTrabajoDetailView.vue), que nunca
+// deshabilitan su formulario por una operacion pendiente.
+const blocked = computed(() => busy.value || loading.value);
 const consumables = computed(() => products.value.filter(p => p.is_active && !p.is_serialized));
 const serialized = computed(() => products.value.filter(p => p.is_active && p.is_serialized));
 const activeMaterials = computed(() => {

@@ -12,6 +12,7 @@ const client = '30000000-0000-0000-0000-000000000001';
 const contract = '31000000-0000-0000-0000-000000000001';
 const install = '20000000-0000-0000-0000-000000000001';
 const otherInstall = '20000000-0000-0000-0000-000000000099';
+const ticket = '40000000-0000-0000-0000-000000000001';
 const cable = '50000000-0000-0000-0000-000000000012';
 const patchcord = '50000000-0000-0000-0000-000000000014';
 
@@ -27,6 +28,9 @@ test('Fase 165 etapa 2 (cierre, parte 2): corregir un rechazo confirmado reutili
   };
   const campoOp = (action: string, payload: object, id: string, uid = tech) =>
     as(`select public.campo_inventory_operation('${id}','installation','${install}','${action}','${JSON.stringify(payload).replaceAll("'", "''")}'::jsonb);`, uid);
+  const ticketOp = (action: string, payload: object, id: string, uid = tech) =>
+    as(`select public.campo_inventory_operation('${id}','ticket','${ticket}','${action}','${JSON.stringify(payload).replaceAll("'", "''")}'::jsonb);`, uid);
+  const closeTicket = () => sql(`update tickets set status='resolved' where id='${ticket}';`);
   const custody = (technicianId: string, productId: string) =>
     sql(`select coalesce((select quantity from technician_material_custody where technician_id='${technicianId}' and product_id='${productId}'),0);`);
   const deliver = (technicianId: string, productId: string, qty: number) =>
@@ -37,10 +41,12 @@ test('Fase 165 etapa 2 (cierre, parte 2): corregir un rechazo confirmado reutili
 
   const reset = () => sql(`truncate public.material_inventory_rejections,public.work_order_photos,public.work_order_closures,public.inventory_unit_events,public.inventory_movements,public.inventory_units,
       public.campo_inventory_operations,public.technician_material_custody,public.technician_material_custody_events,
-      public.technician_material_return_requests,public.job_assignees,public.installations;
+      public.technician_material_return_requests,public.job_assignees,public.installations,public.tickets;
     update inventory_products set current_stock=100;
     insert into installations(id,status,client_id,contract_id) values('${install}','in_progress','${client}','${contract}');
-    insert into job_assignees values('installation','${install}','${tech}','leader');`);
+    insert into job_assignees values('installation','${install}','${tech}','leader');
+    insert into tickets(id,status,client_id,contract_id) values('${ticket}','in_progress','${client}','${contract}');
+    insert into job_assignees values('ticket','${ticket}','${tech}','leader');`);
 
   try {
     docker(['run', '--pull=never', '--rm', '-d', '--name', container, '--network', 'none', '--tmpfs', '/var/lib/postgresql/data', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', 'postgres:17']);
@@ -194,6 +200,21 @@ test('Fase 165 etapa 2 (cierre, parte 2): corregir un rechazo confirmado reutili
       routineOp(1); // corrección real, misma clave
       assert.equal(rejectionStatus(id), 'resolved');
       assert.equal(custody(tech, cable), '0');
+    });
+
+    await t.test('corrección real desde una Avería (ticket): mismo criterio, misma función compartida — rechazo, corrección y cierre', () => {
+      reset();
+      deliver(tech, cable, 1);
+      const id = randomUUID();
+      assert.throws(() => ticketOp('consume', { productId: cable, quantity: 2 }, id), /No tienes suficiente material en custodia/);
+      assert.equal(rejectionStatus(id), 'pending');
+      assert.throws(closeTicket, /No se puede cerrar la orden/); // Averías usan el mismo guard que Altas/Rutinas
+      const corrected = JSON.parse(ticketOp('consume', { productId: cable, quantity: 1 }, id)); // MISMA clave, cantidad corregida
+      assert.ok(corrected.ids?.length);
+      assert.equal(rejectionStatus(id), 'resolved');
+      assert.equal(custody(tech, cable), '0');
+      closeTicket(); // ya NO bloqueado -- sin anulación ni intervención administrativa
+      assert.equal(sql(`select status from tickets where id='${ticket}';`), 'resolved');
     });
 
     await t.test('Alta con varios materiales: uno rechazado por custodia insuficiente, otros consumos válidos en la MISMA orden — el cierre bloquea solo por el rechazado, los válidos quedan intactos; al corregir, cierra conservando todo', () => {
