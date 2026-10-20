@@ -12,6 +12,7 @@ export interface FieldInventoryReceipt {
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 type Invoke = (request: FieldInventoryRequest) => Promise<{ data: unknown; error: { code?: string; message: string } | null }>;
 const keyFor = (c: FieldInventoryContext, namespace: string) => `${namespace}:${c.actorId}:${c.jobType}:${c.jobId}`;
+const rejectedKeyFor = (key: string) => `${key}:rejected`;
 const actions = ['consume','kit','correct','reverse','assign','unassign','stage','return','unlink','approve','reject'];
 export function pendingFieldInventory(storage: Store, context: FieldInventoryContext, namespace = 'campo-inventory:v1'): FieldInventoryRequest | null {
   const raw = storage.getItem(keyFor(context, namespace));
@@ -29,12 +30,17 @@ export async function executeFieldInventory(storage: Store, context: FieldInvent
   uuid: () => string = () => crypto.randomUUID(),
   namespace = 'campo-inventory:v1',
 ) {
-  const key = keyFor(context, namespace), pending = pendingFieldInventory(storage, context, namespace);
-  if (pending && (pending.p_action !== action || JSON.stringify(pending.p_payload) !== JSON.stringify(payload))) {
+  const key = keyFor(context, namespace), rejectedKey = rejectedKeyFor(key);
+  const pending = pendingFieldInventory(storage, context, namespace);
+  const samePending = !!pending && pending.p_action === action && JSON.stringify(pending.p_payload) === JSON.stringify(payload);
+  // Un rechazo YA CONFIRMADO (nunca una duda de red, ver materialInventoryOutcome.ts)
+  // no bloquea una intención distinta -- solo lo hace una pendiente todavía incierta.
+  if (pending && !samePending && storage.getItem(rejectedKey) !== pending.p_operation_id) {
     throw Error('Hay una operación pendiente. Confírmala antes de registrar otra.');
   }
-  const request = pending ?? { p_operation_id: uuid(), p_job_type: context.jobType, p_job_id: context.jobId, p_action: action, p_payload: payload };
+  const request = samePending ? pending : { p_operation_id: uuid(), p_job_type: context.jobType, p_job_id: context.jobId, p_action: action, p_payload: payload };
   storage.setItem(key, JSON.stringify(request));
+  if (!samePending) storage.removeItem(rejectedKey); // la intención nueva no hereda el rechazo de otra distinta
   const { data, error } = await invoke(request);
   if (error) {
     // Un primer intento con SQLSTATE confirma rollback. Un intento ya incierto
@@ -45,12 +51,15 @@ export async function executeFieldInventory(storage: Store, context: FieldInvent
     }
     throw Error(error.message);
   }
-  checkMaterialInventoryOutcome(data, () => storage.removeItem(key), request.p_operation_id);
+  checkMaterialInventoryOutcome(data, {
+    onCancelled: () => { storage.removeItem(key); storage.removeItem(rejectedKey); },
+    onRejected: () => { if (storage.getItem(key) === JSON.stringify(request)) storage.setItem(rejectedKey, request.p_operation_id); },
+  }, request.p_operation_id);
   const receipt = data as FieldInventoryReceipt;
   if (!receipt || receipt.operationId !== request.p_operation_id || receipt.jobType !== context.jobType ||
       receipt.jobId !== context.jobId || receipt.action !== action || !Array.isArray(receipt.ids) || !receipt.at) {
     throw Error('No se pudo confirmar el resultado; conserva la operación pendiente.');
   }
-  if (storage.getItem(key) === JSON.stringify(request)) storage.removeItem(key);
+  if (storage.getItem(key) === JSON.stringify(request)) { storage.removeItem(key); storage.removeItem(rejectedKey); }
   return receipt;
 }

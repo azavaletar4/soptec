@@ -8,6 +8,7 @@ export interface RoutineInventoryRequest {
 }
 type RequestStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 export const routineInventoryKey = (actor: string, routine: string) => `routine-inventory:v1:${actor}:${routine}`;
+const rejectedKeyFor = (key: string) => `${key}:rejected`;
 export function pendingRoutineInventory(storage: RequestStorage, actor: string, routine: string): RoutineInventoryRequest | null {
   const raw = storage.getItem(routineInventoryKey(actor, routine));
   if (!raw) return null;
@@ -22,13 +23,17 @@ export async function executeRoutineInventory(
   invoke: (request: RoutineInventoryRequest) => Promise<{ data: unknown; error: { code?: string; message: string } | null }>,
   uuid: () => string = () => crypto.randomUUID(),
 ) {
-  const key = routineInventoryKey(actor, routine);
+  const key = routineInventoryKey(actor, routine), rejectedKey = rejectedKeyFor(key);
   const pending = pendingRoutineInventory(storage, actor, routine);
-  if (pending && (pending.p_action !== action || JSON.stringify(pending.p_payload) !== JSON.stringify(payload))) {
+  const samePending = !!pending && pending.p_action === action && JSON.stringify(pending.p_payload) === JSON.stringify(payload);
+  // Un rechazo YA CONFIRMADO (nunca una duda de red) no bloquea una intención
+  // distinta -- solo lo hace una pendiente todavía incierta.
+  if (pending && !samePending && storage.getItem(rejectedKey) !== pending.p_operation_id) {
     throw new Error('Resuelve primero la operación pendiente; no se puede cambiar su contenido.');
   }
-  const request = pending ?? { p_routine_id: routine, p_operation_id: uuid(), p_action: action, p_payload: payload };
+  const request = samePending ? pending : { p_routine_id: routine, p_operation_id: uuid(), p_action: action, p_payload: payload };
   storage.setItem(key, JSON.stringify(request));
+  if (!samePending) storage.removeItem(rejectedKey);
   const { data, error } = await invoke(request);
   if (error) {
     // Puede ser la recuperación de una respuesta ya confirmada y perdida.
@@ -41,7 +46,10 @@ export async function executeRoutineInventory(
     if (!pending && error.code && /^[0-9A-Z]{5}$/.test(error.code)) storage.removeItem(key);
     throw new Error(error.message);
   }
-  checkMaterialInventoryOutcome(data, () => storage.removeItem(key), request.p_operation_id);
-  storage.removeItem(key);
+  checkMaterialInventoryOutcome(data, {
+    onCancelled: () => { storage.removeItem(key); storage.removeItem(rejectedKey); },
+    onRejected: () => { if (storage.getItem(key) === JSON.stringify(request)) storage.setItem(rejectedKey, request.p_operation_id); },
+  }, request.p_operation_id);
+  storage.removeItem(key); storage.removeItem(rejectedKey);
   return data;
 }
