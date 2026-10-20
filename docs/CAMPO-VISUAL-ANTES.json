@@ -1,0 +1,400 @@
+{
+  "stage": "ANTES",
+  "synthetic": true,
+  "productionAccess": false,
+  "androidUA": true,
+  "physicalAndroid": false,
+  "widths": [
+    {
+      "width": 320,
+      "viewport": 320,
+      "scrollWidth": 320,
+      "firstOrder": 614.984375,
+      "orders": 3,
+      "clipped": [],
+      "headerTargets": [
+        {
+          "label": "Inicio",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cambiar contraseña",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cerrar sesión",
+          "height": 36,
+          "width": 36
+        }
+      ],
+      "pointValues": [
+        "12.5 pts",
+        "12.5 pts",
+        "12.5 pts"
+      ],
+      "adminControls": false
+    },
+    {
+      "width": 360,
+      "viewport": 360,
+      "scrollWidth": 360,
+      "firstOrder": 583.484375,
+      "orders": 3,
+      "clipped": [],
+      "headerTargets": [
+        {
+          "label": "Inicio",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cambiar contraseña",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cerrar sesión",
+          "height": 36,
+          "width": 36
+        }
+      ],
+      "pointValues": [
+        "12.5 pts",
+        "12.5 pts",
+        "12.5 pts"
+      ],
+      "adminControls": false
+    },
+    {
+      "width": 390,
+      "viewport": 390,
+      "scrollWidth": 390,
+      "firstOrder": 583.484375,
+      "orders": 3,
+      "clipped": [],
+      "headerTargets": [
+        {
+          "label": "Inicio",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cambiar contraseña",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cerrar sesión",
+          "height": 36,
+          "width": 36
+        }
+      ],
+      "pointValues": [
+        "12.5 pts",
+        "12.5 pts",
+        "12.5 pts"
+      ],
+      "adminControls": false
+    },
+    {
+      "width": 412,
+      "viewport": 412,
+      "scrollWidth": 412,
+      "firstOrder": 583.484375,
+      "orders": 3,
+      "clipped": [],
+      "headerTargets": [
+        {
+          "label": "Inicio",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cambiar contraseña",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cerrar sesión",
+          "height": 36,
+          "width": 36
+        }
+      ],
+      "pointValues": [
+        "12.5 pts",
+        "12.5 pts",
+        "12.5 pts"
+      ],
+      "adminControls": false
+    },
+    {
+      "width": 1280,
+      "viewport": 1280,
+      "scrollWidth": 1270,
+      "firstOrder": 583.484375,
+      "orders": 3,
+      "clipped": [],
+      "headerTargets": [
+        {
+          "label": "Inicio",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cambiar contraseña",
+          "height": 36,
+          "width": 36
+        },
+        {
+          "label": "Cerrar sesión",
+          "height": 36,
+          "width": 36
+        }
+      ],
+      "pointValues": [
+        "12.5 pts",
+        "12.5 pts",
+        "12.5 pts"
+      ],
+      "adminControls": false
+    }
+  ],
+  "payloads": {
+    "my_field_progress": {
+      "asOf": "2026-10-20T20:00:00Z",
+      "timezone": "America/Lima",
+      "periods": {
+        "today": {
+          "start": "2026-10-20T05:00:00Z",
+          "end": "2026-10-21T05:00:00Z",
+          "points": 12.5
+        },
+        "week": {
+          "start": "2026-10-19T05:00:00Z",
+          "end": "2026-10-26T05:00:00Z",
+          "points": 12.5
+        },
+        "month": {
+          "start": "2026-10-01T05:00:00Z",
+          "end": "2026-11-01T05:00:00Z",
+          "points": 12.5
+        }
+      },
+      "contributions": [
+        {
+          "jobType": "routine",
+          "jobId": "10000000-0000-4000-8000-000000000001",
+          "occurredAt": "2026-10-20T18:00:00Z",
+          "kind": "work",
+          "crewSize": 2,
+          "points": 12.5
+        }
+      ]
+    },
+    "installations": [
+      {
+        "id": "10000000-0000-4000-8000-000000000003",
+        "routine_number": "RUT-LOCAL",
+        "status": "scheduled",
+        "assigned_to": "00000000-0000-4000-8000-000000000003",
+        "title": "Mantenimiento de caja NAP con nombre largo para comprobar el ajuste móvil",
+        "completed_at": "2026-10-20T18:00:00Z",
+        "created_at": "2026-10-20T12:00:00Z",
+        "points": 10,
+        "priority": "medium",
+        "client_id": null,
+        "contract_id": null,
+        "scheduled_date": "2026-10-20",
+        "tipo_rutina": "mantenimiento_preventivo",
+        "subtipo": null,
+        "routine_returns": [],
+        "clients": {
+          "first_name": "Cliente ficticio con nombre extenso",
+          "last_name": "para validar lectura en pantalla móvil",
+          "phone": "999000000",
+          "address": "Avenida de prueba, referencia extensa para comprobar el ajuste de texto en móvil"
+        }
+      }
+    ],
+    "tickets": [
+      {
+        "id": "10000000-0000-4000-8000-000000000002",
+        "routine_number": "RUT-LOCAL",
+        "status": "open",
+        "assigned_to": "00000000-0000-4000-8000-000000000003",
+        "title": "Avería ficticia asignada",
+        "completed_at": "2026-10-20T18:00:00Z",
+        "created_at": "2026-10-20T12:00:00Z",
+        "points": null,
+        "priority": "medium",
+        "client_id": null,
+        "contract_id": null,
+        "scheduled_date": "2026-10-20",
+        "tipo_rutina": "mantenimiento_preventivo",
+        "subtipo": null,
+        "routine_returns": [],
+        "ticket_number": "AV-LOCAL",
+        "category": "averia",
+        "clients": {
+          "first_name": "Cliente ficticio con nombre extenso",
+          "last_name": "para validar lectura en pantalla móvil",
+          "phone": "999000000",
+          "address": "Avenida de prueba, referencia extensa para comprobar el ajuste de texto en móvil"
+        }
+      }
+    ],
+    "routines": [
+      {
+        "id": "10000000-0000-4000-8000-000000000001",
+        "routine_number": "RUT-LOCAL",
+        "status": "completed",
+        "assigned_to": "00000000-0000-4000-8000-000000000003",
+        "title": "Mantenimiento de caja NAP con nombre largo para comprobar el ajuste móvil",
+        "completed_at": "2026-10-20T18:00:00Z",
+        "created_at": "2026-10-20T12:00:00Z",
+        "points": 10,
+        "priority": "medium",
+        "client_id": null,
+        "contract_id": null,
+        "scheduled_date": "2026-10-20",
+        "tipo_rutina": "mantenimiento_preventivo",
+        "subtipo": null,
+        "routine_returns": []
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000004",
+        "routine_number": "RUT-PENDIENTE",
+        "status": "pending",
+        "assigned_to": "00000000-0000-4000-8000-000000000003",
+        "title": "Rutina ficticia asignada con referencia extensa para verificar lectura móvil",
+        "completed_at": "2026-10-20T18:00:00Z",
+        "created_at": "2026-10-20T12:00:00Z",
+        "points": 10,
+        "priority": "medium",
+        "client_id": null,
+        "contract_id": null,
+        "scheduled_date": "2026-10-20",
+        "tipo_rutina": "mantenimiento_preventivo",
+        "subtipo": null,
+        "routine_returns": []
+      }
+    ],
+    "ranking-tecnicos": {
+      "period": "month",
+      "start": "2026-10-01T05:00:00Z",
+      "end": "2026-11-01T05:00:00Z",
+      "timezone": "America/Lima",
+      "asOf": "2026-10-20T20:00:00Z",
+      "ranking": [
+        {
+          "installations_count": 1,
+          "averias_count": 1,
+          "reconexiones_count": 0,
+          "rutinas_count": 2,
+          "reincidencias_count": 0,
+          "total_points": 12.5,
+          "ranking": 1,
+          "technician_id": "00000000-0000-4000-8000-000000000003",
+          "technician_name": "Técnico local"
+        },
+        {
+          "installations_count": 1,
+          "averias_count": 1,
+          "reconexiones_count": 0,
+          "rutinas_count": 2,
+          "reincidencias_count": 0,
+          "total_points": 12.5,
+          "ranking": 1,
+          "technician_id": "tech-other",
+          "technician_name": "Compañero de prueba"
+        }
+      ]
+    },
+    "my_inventory_custody": {
+      "units": [
+        {
+          "id": "unit",
+          "product": {
+            "id": "ont",
+            "name": "ONT de prueba"
+          },
+          "serial_number": "SERIE-LARGA-123456789012345678901234567890",
+          "mac_address": "00:11:22:33:44:55",
+          "status": "with_technician"
+        },
+        {
+          "id": "unit-2",
+          "product": {
+            "id": "ont",
+            "name": "ONT de prueba"
+          },
+          "serial_number": "SERIE-2",
+          "mac_address": null,
+          "status": "with_technician"
+        },
+        {
+          "id": "unit-3",
+          "product": {
+            "id": "ont",
+            "name": "ONT en devolución"
+          },
+          "serial_number": "SERIE-3",
+          "mac_address": null,
+          "status": "pending_return"
+        }
+      ],
+      "materials": [
+        {
+          "product": {
+            "id": "drop",
+            "name": "Cable Drop",
+            "unit": "metros"
+          },
+          "quantity": 120.5
+        },
+        {
+          "product": {
+            "id": "utp",
+            "name": "Cable UTP",
+            "unit": "metros"
+          },
+          "quantity": 30
+        },
+        {
+          "product": {
+            "id": "connector",
+            "name": "Conector",
+            "unit": "unidades"
+          },
+          "quantity": 4
+        },
+        {
+          "product": {
+            "id": "clamps",
+            "name": "Grapas",
+            "unit": "unidades"
+          },
+          "quantity": 3
+        },
+        {
+          "product": {
+            "id": "other",
+            "name": "Otro material",
+            "unit": "rollos"
+          },
+          "quantity": 2.25
+        }
+      ],
+      "pendingReturnRequests": []
+    }
+  },
+  "checks": [],
+  "outputs": {
+    "INICIO": "docs/CAMPO-VISUAL-ANTES-INICIO.png",
+    "RANKING": "docs/CAMPO-VISUAL-ANTES-RANKING.png",
+    "CUSTODIA": "docs/CAMPO-VISUAL-ANTES-CUSTODIA.png"
+  },
+  "exceptions": 0
+}

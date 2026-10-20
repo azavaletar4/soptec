@@ -1,0 +1,51 @@
+{
+  "result": "PASS",
+  "productionAccess": false,
+  "identicalInputs": [
+    "installations",
+    "my_field_progress",
+    "my_inventory_custody",
+    "ranking-tecnicos",
+    "routines",
+    "tickets"
+  ],
+  "firstOrderPositions": [
+    {
+      "width": 320,
+      "before": 614.984375,
+      "after": 581
+    },
+    {
+      "width": 360,
+      "before": 583.484375,
+      "after": 577
+    },
+    {
+      "width": 390,
+      "before": 583.484375,
+      "after": 577
+    },
+    {
+      "width": 412,
+      "before": 583.484375,
+      "after": 577
+    },
+    {
+      "width": 1280,
+      "before": 583.484375,
+      "after": 577
+    }
+  ],
+  "sourceSemantics": "unchanged; same points/ranking/own custody/order payloads",
+  "checks": [
+    "ACCOUNT_ESCAPE_OUTSIDE_PASSWORD_ROUTE",
+    "PERIOD_VALUES_UNCHANGED",
+    "INFO_AND_HISTORY_DISCLOSURES",
+    "PENDING_COMPLETED_AVAILABLE_FILTERS",
+    "OFFLINE_HEADER_NO_OVERFLOW",
+    "CUSTODY_LOADING_ERROR_RETRY",
+    "WEBVIEW_RELOAD_WITH_CONFIRMATION",
+    "LOGOUT_RPC_AND_LOCAL_SESSION_CLEARED",
+    "DESKTOP_NON_NATIVE_HEADER"
+  ]
+}

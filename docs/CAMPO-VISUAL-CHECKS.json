@@ -1,0 +1,19 @@
+{
+  "productionAccess": false,
+  "checks": [
+    {
+      "name": "TypeScript",
+      "result": "PASS"
+    },
+    {
+      "name": "6 focused unit tests",
+      "result": "PASS"
+    },
+    {
+      "name": "build",
+      "result": "PASS"
+    }
+  ],
+  "buildLargeChunkWarning": true,
+  "protectedFilesUnchanged": true
+}

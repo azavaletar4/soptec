@@ -18,6 +18,7 @@ import { activeJobMessage, campoJobPath, parseActiveJobHint, type ActiveJobRef }
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import type { Installation, Routine, Ticket } from '@/types/domain';
 import CampoAvance from '@/components/campo/CampoAvance.vue';
+import CampoCustodiaResumen from '@/components/campo/CampoCustodiaResumen.vue';
 import { supabase } from '@/lib/supabase';
 import { usePersonalRead } from '@/composables/usePersonalRead';
 import { pointNumber, type FieldProgress } from '@/lib/fieldProgress';
@@ -287,25 +288,25 @@ onUnmounted(() => {
 <template>
   <CampoLayout :title="progressIdentity ? 'Mi Avance' : 'Mis trabajos'">
     <CampoAvance v-if="progressIdentity" :data="progress.data.value" :loading="progress.loading.value" :error="progress.error.value" @refresh="progress.load">
-      <p v-if="campoStore.loading" class="text-xs text-slate-500 mt-2">Consultando avance de órdenes…</p>
-      <p v-else class="text-xs text-slate-600 mt-2">{{ counts.pendiente }} órdenes pendientes · {{ campoStore.myActiveJob ? '1 en atención' : 'Ninguna en atención' }}</p>
+      <p v-if="campoStore.loading" class="text-xs text-slate-500 mt-1">Consultando avance de órdenes…</p>
+      <p v-else class="text-xs text-slate-600 mt-1">{{ counts.pendiente }} órdenes pendientes · {{ campoStore.myActiveJob ? '1 en atención' : 'Ninguna en atención' }}</p>
     </CampoAvance>
-    <router-link v-if="progressIdentity" to="/campo/mi-custodia" class="surface flex items-center justify-between gap-2 p-3 mb-3 text-sm">
-      <span class="font-semibold">Mi custodia</span><span class="text-xs text-slate-500">Solo consulta →</span>
-    </router-link>
+    <CampoCustodiaResumen v-if="progressIdentity" />
     <h2 class="text-sm font-semibold mb-2">Mis órdenes</h2>
-    <input v-model="search" placeholder="Buscar cliente o dirección..." class="field-input mb-3" />
+    <label for="campo-search" class="sr-only">Buscar mis órdenes por cliente o dirección</label>
+    <input id="campo-search" v-model="search" type="search" placeholder="Buscar cliente o dirección..." class="field-input mb-2 min-h-11" />
 
-    <div class="grid gap-2 mb-3" :class="tabs.length > 2 ? 'grid-cols-3' : 'grid-cols-2'">
+    <div class="grid gap-1 mb-3 rounded-xl bg-slate-100 p-1" role="group" aria-label="Filtrar órdenes" :class="tabs.length > 2 ? 'grid-cols-3' : 'grid-cols-2'">
       <button
         v-for="tab in tabs"
         :key="tab.value"
-        class="rounded-xl py-2.5 text-xs font-semibold text-center transition-colors"
-        :class="activeTab === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-white border border-slate-200 text-slate-600'"
+        class="min-h-11 rounded-lg px-1 py-2 text-xs font-semibold text-center transition-colors focus-visible:outline-2 focus-visible:outline-sky-600"
+        :aria-pressed="activeTab === tab.value"
+        :class="activeTab === tab.value ? 'bg-white text-sky-800 shadow-sm' : 'text-slate-600 hover:bg-white/60'"
         @click="activeTab = tab.value"
       >
         {{ tab.label }}
-        <span class="block text-[15px] font-bold mt-0.5">{{ counts[tab.value] }}</span>
+        <span class="inline-flex items-center justify-center min-w-5 ml-1 rounded-md bg-slate-100 px-1 text-xs font-bold">{{ counts[tab.value] }}</span>
       </button>
     </div>
 

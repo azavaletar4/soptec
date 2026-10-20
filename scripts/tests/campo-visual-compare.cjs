@@ -1,0 +1,10 @@
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const before=JSON.parse(fs.readFileSync('docs/CAMPO-VISUAL-ANTES.json','utf8'));
+const after=JSON.parse(fs.readFileSync('docs/CAMPO-VISUAL-DESPUES.json','utf8'));
+assert.deepEqual(after.payloads,before.payloads,'point/ranking/custody/order payloads must stay identical');
+const positions=after.widths.map(a=>({width:a.width,before:before.widths.find(b=>b.width===a.width).firstOrder,after:a.firstOrder}));
+assert(positions.every(p=>p.after<=p.before),'added summary must not push orders further down');
+assert.equal(after.exceptions,0);
+const report={result:'PASS',productionAccess:false,identicalInputs:Object.keys(after.payloads).sort(),firstOrderPositions:positions,sourceSemantics:'unchanged; same points/ranking/own custody/order payloads',checks:after.checks};
+fs.writeFileSync('docs/CAMPO-VISUAL-COMPARACION.json',JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify(report));
