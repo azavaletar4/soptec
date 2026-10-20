@@ -4,11 +4,19 @@ import { supabase } from '@/lib/supabase';
 import type { InventoryCustodySummaryRow, MyInventoryCustody, TechnicianMaterialReturnRequest } from '@/types/domain';
 import {
   detectMaterialCustodyShortfalls,
+  linkMaterialCorrections,
+  type MaterialCorrectionReceipt,
   type MaterialCustodyEventInput,
   type MaterialCustodyJobType,
   type MaterialCustodyShortfall,
   type MaterialConsumptionMovementInput,
 } from '@/lib/materialCustodyShortfall';
+
+export interface RejectedMaterialOperation {
+  operation_id: string; job_type: 'installation' | 'ticket' | 'routine'; job_id: string;
+  action: string; payload: Record<string, unknown>; message: string; created_at: string;
+  actor: { full_name: string | null; email: string | null } | null;
+}
 
 /**
  * Fase 164: entrega/devolucion/conciliacion de equipos y materiales en
@@ -54,21 +62,25 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     /** Ruta real a la orden (Alta/Avería/Rutina) solo cuando esa orden todavia existe — null -> la vista conserva el texto plano, nunca un enlace roto. */
     jobPath: string | null;
   }>> {
-    const [eventsRes, movementsRes] = await Promise.all([
-      supabase.from('technician_material_custody_events').select('technician_id, product_id, event_type, quantity, created_at'),
+    const [eventsRes, movementsRes, receiptsRes] = await Promise.all([
+      // * conserva compatibilidad antes de que exista source_movement_id.
+      supabase.from('technician_material_custody_events').select('*'),
       supabase
         .from('inventory_movements')
-        .select('id, product_id, movement_type, quantity, reason, created_by, created_at, reverses_movement_id, installation_id, ticket_id, routine_id, product:inventory_products!inner(id, name, unit, is_serialized)')
+        .select('id, product_id, movement_type, quantity, reason, created_by, created_at, reverses_movement_id, installation_id, ticket_id, routine_id, operation_id, product:inventory_products!inner(id, name, unit, is_serialized)')
         .eq('product.is_serialized', false)
         .in('movement_type', ['egreso', 'ingreso']),
+      supabase.from('campo_inventory_operations').select('action, payload, result').eq('action', 'correct'),
     ]);
     if (eventsRes.error) throw eventsRes.error;
     if (movementsRes.error) throw movementsRes.error;
+    if (receiptsRes.error) throw receiptsRes.error;
 
     const custodyEvents: MaterialCustodyEventInput[] = (eventsRes.data ?? []).map((e) => ({
       technicianId: e.technician_id,
       productId: e.product_id,
-      eventType: e.event_type as 'delivery' | 'return',
+      eventType: e.event_type as MaterialCustodyEventInput['eventType'],
+      sourceMovementId: (e as unknown as { source_movement_id?: string }).source_movement_id,
       quantity: Number(e.quantity),
       createdAt: e.created_at,
     }));
@@ -77,12 +89,20 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
       id: string; product_id: string; movement_type: 'ingreso' | 'egreso'; quantity: number; reason: string | null;
       created_by: string | null; created_at: string; reverses_movement_id: string | null;
       installation_id: string | null; ticket_id: string | null; routine_id: string | null;
+      operation_id: string | null;
       product: { id: string; name: string; unit: string; is_serialized: boolean } | null;
     };
     const movementRows = (movementsRes.data ?? []) as unknown as MovementRow[];
-    const movements: MaterialConsumptionMovementInput[] = movementRows.map((m) => ({
+    // Solo autores realmente tecnicos, sin atribuir un faltante a un admin sin vinculo verificable.
+    const authorIds = [...new Set(movementRows.map(m => m.created_by).filter((id): id is string => !!id))];
+    const { data: authors, error: authorError } = authorIds.length
+      ? await supabase.from('profiles').select('id, role').in('id', authorIds)
+      : { data: [], error: null };
+    if (authorError) throw authorError;
+    const technicianAuthors = new Set((authors ?? []).filter(a => a.role === 'TECNICO_RED').map(a => a.id));
+    const movements: MaterialConsumptionMovementInput[] = linkMaterialCorrections(movementRows.map((m) => ({
       id: m.id,
-      technicianId: m.created_by,
+      technicianId: m.created_by && technicianAuthors.has(m.created_by) ? m.created_by : null,
       productId: m.product_id,
       movementType: m.movement_type,
       quantity: Number(m.quantity),
@@ -90,8 +110,9 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
       jobType: m.installation_id ? 'installation' : m.ticket_id ? 'ticket' : m.routine_id ? 'routine' : null,
       jobId: m.installation_id ?? m.ticket_id ?? m.routine_id ?? null,
       reversesMovementId: m.reverses_movement_id,
+      operationId: m.operation_id,
       reason: m.reason,
-    }));
+    })), (receiptsRes.data ?? []) as unknown as MaterialCorrectionReceipt[]);
 
     const shortfalls = detectMaterialCustodyShortfalls(custodyEvents, movements);
     if (!shortfalls.length) return [];
@@ -173,8 +194,16 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     if (err) throw err;
   }
 
-  async function deliverMaterialToTechnician(technicianId: string, productId: string, quantity: number, reason?: string) {
-    const { error: err } = await supabase.rpc('deliver_material_to_technician', { p_technician_id: technicianId, p_product_id: productId, p_quantity: quantity, p_reason: reason ?? null });
+  /**
+   * Fase 165, etapa 2 (cierre): p_operation_id distingue un reintento real de
+   * la MISMA entrega (red inestable, doble envío accidental) de una segunda
+   * entrega legítima — el llamador debe reutilizar el mismo id solo mientras
+   * reintenta exactamente la misma intención (ver handleDeliverMaterial en
+   * InventarioCustodiaView.vue). El RPC también valida contra el stock de
+   * almacén de forma transaccional (antes no lo hacía).
+   */
+  async function deliverMaterialToTechnician(operationId: string, technicianId: string, productId: string, quantity: number, reason?: string) {
+    const { error: err } = await supabase.rpc('deliver_material_to_technician', { p_operation_id: operationId, p_technician_id: technicianId, p_product_id: productId, p_quantity: quantity, p_reason: reason ?? null });
     if (err) throw err;
   }
 
@@ -210,6 +239,18 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     if (err) throw err;
   }
 
+  async function fetchRejectedMaterialOperations(): Promise<RejectedMaterialOperation[]> {
+    const { data, error: err } = await supabase.from('material_inventory_rejections')
+      .select('*, actor:profiles!material_inventory_rejections_actor_id_fkey(full_name,email)').eq('status', 'pending').order('created_at');
+    if (err && ['42P01', 'PGRST205'].includes(err.code)) return []; // antes de activar el candidato
+    if (err) throw err;
+    return (data ?? []) as unknown as RejectedMaterialOperation[];
+  }
+  async function cancelRejectedMaterialOperation(operationId: string, reason: string) {
+    const { error: err } = await supabase.rpc('cancel_rejected_material_operation', { p_operation_id: operationId, p_reason: reason });
+    if (err) throw err;
+  }
+
   return {
     loading,
     error,
@@ -225,5 +266,7 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     fetchMyCustody,
     requestUnitReturn,
     requestMaterialReturn,
+    fetchRejectedMaterialOperations,
+    cancelRejectedMaterialOperation,
   };
 });

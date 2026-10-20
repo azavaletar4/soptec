@@ -19,7 +19,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useCatalogsStore } from '@/stores/catalogs';
-import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
+import { useTechnicianCustodyStore, type RejectedMaterialOperation } from '@/stores/technicianCustody';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
@@ -39,6 +39,27 @@ const pendingMaterialRequests = ref<TechnicianMaterialReturnRequest[]>([]);
 const custodyUnits = ref<InventoryUnit[]>([]); // status with_technician O pending_return, de TODOS los tecnicos
 type MaterialCustodyRow = { technician_id: string; product_id: string; quantity: number; product: { id: string; name: string; unit: string } | null; technician: { id: string; full_name: string | null; email: string | null } | null };
 const materialCustody = ref<MaterialCustodyRow[]>([]);
+const rejectedMaterials = ref<RejectedMaterialOperation[]>([]);
+const rejectionNotes = ref<Record<string, string>>({});
+const rejectionError = ref('');
+const resolvingRejection = ref(false);
+async function loadRejections() {
+  rejectionError.value = '';
+  try { rejectedMaterials.value = await custodyStore.fetchRejectedMaterialOperations(); }
+  catch (e) { rejectionError.value = getErrorMessage(e, 'No se pudieron consultar los consumos pendientes.'); }
+}
+async function cancelRejection(row: RejectedMaterialOperation) {
+  const reason = rejectionNotes.value[row.operation_id]?.trim();
+  if (!reason) { toast.error('Escribe por qué este intento fue un error.'); return; }
+  if (!await confirmDialog({ title: 'Anular intento equivocado', message: 'Esto permite cerrar la orden sin registrar este intento. Si el material se utilizó realmente, formaliza la entrega y pide al técnico reintentar; no lo anules.', confirmLabel: 'Anular con motivo' })) return;
+  resolvingRejection.value = true;
+  try {
+    await custodyStore.cancelRejectedMaterialOperation(row.operation_id, reason);
+    toast.success('Intento anulado con motivo registrado. No se modificaron existencias.');
+    await loadRejections();
+  } catch (e) { toast.error(getErrorMessage(e)); }
+  finally { resolvingRejection.value = false; }
+}
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
 const pendingUnitReturns = computed(() => custodyUnits.value.filter((u) => u.status === 'pending_return'));
@@ -69,6 +90,7 @@ async function loadAll() {
   // tapar el resto de la pantalla, y el conteo debe verse en el resumen
   // superior sin obligar a entrar a la pestaña Conciliación.
   void loadShortfalls();
+  void loadRejections();
 }
 
 // ---- Indicadores superiores — nunca se suman cantidades de distintas
@@ -192,6 +214,15 @@ const deliverMaterialTechnicianId = ref('');
 const deliverMaterialQty = ref<number | null>(null);
 const deliverMaterialReason = ref('');
 const savingDeliverMaterial = ref(false);
+// Fase 165, etapa 2 (cierre): mientras un intento con estos MISMOS datos
+// quede sin confirmar (error de red, rechazo), un reintento real reutiliza
+// la misma operationId -- el servidor lo trata como la misma operación, no
+// la duplica. En cuanto una entrega se confirma, se limpia: la siguiente
+// entrega, aunque sea con los mismos valores, es una entrega nueva.
+const pendingDeliverMaterialAttempt = ref<{ key: string; operationId: string } | null>(null);
+function deliverMaterialAttemptKey() {
+  return `${deliverMaterialProductId.value}|${deliverMaterialTechnicianId.value}|${deliverMaterialQty.value}|${deliverMaterialReason.value.trim()}`;
+}
 
 async function handleDeliverMaterial() {
   if (!deliverMaterialProductId.value || !deliverMaterialTechnicianId.value || !deliverMaterialQty.value || deliverMaterialQty.value <= 0) {
@@ -202,18 +233,22 @@ async function handleDeliverMaterial() {
   const technician = technicians.value.find((t) => t.id === deliverMaterialTechnicianId.value);
   const ok = await confirmDialog({
     title: 'Confirmar entrega de material',
-    message: `Se entregarán ${deliverMaterialQty.value} ${product?.unit ?? ''} de ${product?.name ?? ''} a ${technician?.full_name || technician?.email || 'el técnico seleccionado'}. Esto no descuenta el almacén central — solo se descuenta cuando el técnico lo use en una orden real.`,
+    message: `Se entregarán ${deliverMaterialQty.value} ${product?.unit ?? ''} de ${product?.name ?? ''} a ${technician?.full_name || technician?.email || 'el técnico seleccionado'}. Esto no descuenta el almacén central al momento de entregar — solo se descuenta cuando el técnico lo use en una orden real — pero no puede superar lo disponible en almacén entre todas las entregas ya hechas.`,
   });
   if (!ok) return;
+  const key = deliverMaterialAttemptKey();
+  const operationId = pendingDeliverMaterialAttempt.value?.key === key ? pendingDeliverMaterialAttempt.value.operationId : crypto.randomUUID();
+  pendingDeliverMaterialAttempt.value = { key, operationId };
   savingDeliverMaterial.value = true;
   try {
-    await custodyStore.deliverMaterialToTechnician(deliverMaterialTechnicianId.value, deliverMaterialProductId.value, deliverMaterialQty.value, deliverMaterialReason.value.trim() || undefined);
+    await custodyStore.deliverMaterialToTechnician(operationId, deliverMaterialTechnicianId.value, deliverMaterialProductId.value, deliverMaterialQty.value, deliverMaterialReason.value.trim() || undefined);
     toast.success('Material entregado al técnico.');
+    pendingDeliverMaterialAttempt.value = null; // confirmado: la próxima entrega, aunque repita los mismos valores, es nueva
     deliverMaterialQty.value = null;
     deliverMaterialReason.value = '';
     await loadAll();
   } catch (e) {
-    toast.error(getErrorMessage(e, 'No se pudo entregar el material'));
+    toast.error(getErrorMessage(e, 'No se pudo entregar el material')); // se conserva pendingDeliverMaterialAttempt: un reintento real de ESTE intento reutiliza la misma operación
   } finally {
     savingDeliverMaterial.value = false;
   }
@@ -347,6 +382,20 @@ onMounted(loadAll);
     <p v-if="loading" class="text-center text-slate-500 py-10">Cargando...</p>
 
     <template v-else>
+      <section v-if="rejectionError || rejectedMaterials.length" class="surface p-4 mb-4 space-y-3">
+        <h2 class="text-sm font-semibold">Consumos pendientes que impiden cerrar órdenes</h2>
+        <p v-if="rejectionError" class="text-xs text-red-600">{{ rejectionError }}</p>
+        <article v-for="row in rejectedMaterials" :key="row.operation_id" class="border-t pt-3 space-y-2">
+          <p class="text-sm">Registró el intento: {{ row.actor?.full_name || row.actor?.email || 'Usuario pendiente de vincular' }} · {{ formatPeruDateTime(row.created_at) }}</p>
+          <router-link class="text-xs text-sky-700 underline" :to="(row.job_type === 'installation' ? '/soporte/instalaciones/' : row.job_type === 'ticket' ? '/soporte/' : '/soporte/rutinas/') + row.job_id">Ver orden y revisar materiales</router-link>
+          <p class="text-xs text-amber-700">{{ row.message }} El técnico debe recibir material y reintentar la operación pendiente.</p>
+          <details class="text-xs"><summary>Si el intento fue equivocado</summary>
+            <p class="my-2">Anularlo no registra consumo ni modifica existencias. No anules materiales realmente utilizados.</p>
+            <input v-model="rejectionNotes[row.operation_id]" maxlength="500" class="field-input" placeholder="Motivo de la anulación" />
+            <button type="button" :disabled="resolvingRejection || !rejectionNotes[row.operation_id]?.trim()" class="btn-secondary mt-2" @click="cancelRejection(row)">Anular intento con motivo</button>
+          </details>
+        </article>
+      </section>
       <!-- Indicadores superiores -->
       <div class="grid gap-4 mb-5" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr))">
         <div class="surface p-4">
