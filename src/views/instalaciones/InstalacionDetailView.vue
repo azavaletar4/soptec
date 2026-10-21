@@ -280,6 +280,15 @@ const inventoryReadError = ref<string | null>(null);
 // edita ni se oculta nada en la base de datos. Caso real: un mismo kit
 // reintentado varias veces mostraba ~30 filas para 4 materiales reales.
 const activeMaterials = computed(() => activeMaterialMovements(materials.value));
+// Fase 168: los intentos revertidos no se ocultan para siempre -- quedan a
+// un clic ("Ver historial completo"), nunca mezclados con los vigentes, y
+// cada fila dice explícitamente que fue revertida (nunca se presenta como
+// si fuera un consumo activo).
+const showReversedMaterials = ref(false);
+const reversedMaterials = computed(() => {
+  const activeIds = new Set(activeMaterials.value.map((m) => m.id));
+  return materials.value.filter((m) => !activeIds.has(m.id));
+});
 
 // Fase 166 — regla operativa aprobada: un rechazo de material NO
 // serializado (custodia insuficiente) ya no bloquea el cierre, pero se
@@ -896,10 +905,24 @@ onMounted(async () => {
             <p v-else-if="inventoryReadError" class="text-xs text-red-600 mb-2">{{ inventoryReadError }}</p>
             <template v-else>
               <p v-if="!activeMaterials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en esta instalación.</p>
-              <ul v-else class="space-y-1.5 mb-4">
+              <ul v-else class="space-y-1.5 mb-2">
                 <li v-for="m in activeMaterials" :key="m.id" class="flex justify-between text-xs">
                   <span>{{ m.product?.name ?? 'Producto' }}</span>
                   <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }}</span>
+                </li>
+              </ul>
+              <button
+                v-if="reversedMaterials.length"
+                type="button"
+                class="text-[11px] text-sky-700 hover:underline mb-4"
+                @click="showReversedMaterials = !showReversedMaterials"
+              >
+                {{ showReversedMaterials ? 'Ocultar' : 'Ver' }} historial completo (incluye {{ reversedMaterials.length }} intento{{ reversedMaterials.length === 1 ? '' : 's' }} revertido{{ reversedMaterials.length === 1 ? '' : 's' }})
+              </button>
+              <ul v-if="showReversedMaterials && reversedMaterials.length" class="space-y-1.5 mb-4 pl-2 border-l-2 border-slate-200">
+                <li v-for="m in reversedMaterials" :key="m.id" class="flex justify-between text-xs text-slate-400">
+                  <span>{{ m.product?.name ?? 'Producto' }} — {{ m.movement_type === 'ingreso' ? 'reversión' : 'revertido' }}</span>
+                  <span>{{ m.quantity }} {{ m.product?.unit }} · {{ formatPeruDateTime(m.created_at) }}</span>
                 </li>
               </ul>
             </template>

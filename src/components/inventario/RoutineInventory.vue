@@ -12,6 +12,7 @@ import { executeRoutineInventory, pendingRoutineInventory, type RoutineInventory
 import type { InventoryMovement, InventoryUnit, Routine, MyInventoryCustody } from '@/types/domain';
 import { confirmedMaterialQuantity, materialCustodyLabel as custodyLabel, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
 import { custodyEquipmentModels, custodyEquipmentUnits, custodyMaterialChoices, custodyUnitLabel } from '@/lib/fieldCustodyChoices';
+import { activeMaterialMovements } from '@/lib/materialMovementPresentation';
 import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
 
 const props = defineProps<{ routine: Routine; canWrite?: boolean;
@@ -61,10 +62,9 @@ const consumables = computed(() => custodyMaterialChoices(custody.value.material
 const serialized = computed(() => custodyEquipmentModels(custody.value.units, custodyState.value));
 const materialAvailable = (id: string) => confirmedMaterialQuantity(custody.value.materials, id, custodyState.value);
 const materialLabel = (id: string, unit: string) => custodyLabel(materialAvailable(id), unit, custodyState.value);
-const activeMaterials = computed(() => {
-  const reversed = new Set(materials.value.map(m => m.reverses_movement_id).filter(Boolean));
-  return materials.value.filter(m => m.movement_type === 'egreso' && !reversed.has(m.id));
-});
+// Fase 168: mismo helper puro que InstalacionDetailView.vue (Fase 166) y
+// CampoTrabajoDetailView.vue -- una sola implementacion, no tres.
+const activeMaterials = computed(() => activeMaterialMovements(materials.value));
 const outgoingChoices = computed(() => assigned.value.filter(u => u.status === 'assigned' && u.contract_id === (contractId.value || null)));
 
 function refreshPending() {

@@ -25,6 +25,7 @@ import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
 import { createInstallationCustodySelector, isInstallableOwnCustody, installableEquipmentModelIds } from '@/lib/installationCustodySelector';
 import { confirmedMaterialQuantity, materialCustodyLabel, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
 import { custodyEquipmentModels, custodyEquipmentUnits, custodyMaterialChoices, custodyUnitLabel } from '@/lib/fieldCustodyChoices';
+import { activeMaterialMovements } from '@/lib/materialMovementPresentation';
 import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
 import type { MyInventoryCustody } from '@/types/domain';
 import { createInventoryRefresh } from '@/lib/inventoryRefresh';
@@ -550,10 +551,9 @@ watch(() => [auth.user?.id, auth.role], () => { void loadMyMaterialCustody(); })
 // opuesto, reintegra el stock) y, si corresponde, volver a registrarlo con
 // la cantidad correcta. Por eso la lista que ve el tecnico solo muestra los
 // egresos TODAVIA vigentes (sin su reversion), no el Kardex crudo completo.
-const activeMaterials = computed(() => {
-  const revertedIds = new Set(materials.value.filter((m) => m.reverses_movement_id).map((m) => m.reverses_movement_id));
-  return materials.value.filter((m) => m.movement_type === 'egreso' && !revertedIds.has(m.id));
-});
+// Fase 168: mismo helper puro que ya usa la ficha admin (InstalacionDetailView.vue,
+// Fase 166) y RoutineInventory.vue -- una sola implementacion, no tres.
+const activeMaterials = computed(() => activeMaterialMovements(materials.value));
 
 const editingMaterialId = ref<string | null>(null);
 const editMaterialQty = ref(1);
@@ -699,13 +699,17 @@ const kitCoveredProductIds = computed(() => {
 });
 // Fase 143: "Materiales usados" (Paso 3) es para CONSUMIBLES — excluye
 // equipos serializados (ONT/Mesh/TV Box, ya se asignan por serie/MAC en el
-// Paso 2) y lo que ya se registra desde el Kit base de arriba.
-// Averías read custody directly, including models absent from the active catalog.
-// Altas retains its existing catalog and kit behavior.
-const materialSelectableProducts = computed(() => {
-  const base = fieldProducts.value.filter((p) => p.is_active && !p.is_serialized && !kitCoveredProductIds.value.has(p.id));
-  return jobType === 'ticket' ? custodyMaterialChoices(myMaterialCustody.value, materialCustodyState.value) : base;
-});
+// Paso 2) y lo que ya se registra desde el Kit base de arriba (ese tiene su
+// propio aviso visual por fila, ver availableOf/custodyLabel mas arriba).
+// Fase 168: Altas y Averías comparten el MISMO criterio (custodia real >0
+// del tecnico, nunca el catalogo/almacen general) — mismo helper que ya usa
+// Rutinas (RoutineInventory.vue) desde 44c2adb. myMaterialCustody ya se
+// cargaba para ambos jobType (el Kit base de Altas la necesitaba), solo
+// faltaba aplicarla tambien aqui.
+const materialSelectableProducts = computed(() =>
+  custodyMaterialChoices(myMaterialCustody.value, materialCustodyState.value)
+    .filter((p) => !kitCoveredProductIds.value.has(p.id)),
+);
 
 function resetKitQuantities() {
   kitQuantities.value = Object.fromEntries(KIT_ALTA.map((l) => [l.key, l.defaultQty]));
@@ -2401,14 +2405,14 @@ async function handleCloseSubmit() {
             </li>
           </ul>
           <form class="flex gap-2" @submit.prevent="handleAddMaterial">
-            <select v-model="materialForm.productId" required class="field-input text-sm flex-1">
+            <select v-model="materialForm.productId" required :disabled="materialCustodyState !== 'ready'" class="field-input text-sm flex-1">
               <option value="" disabled>Producto...</option>
               <option v-for="p in materialSelectableProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ custodyLabel(p.id, p.unit) }})</option>
             </select>
             <input v-model.number="materialForm.quantity" type="number" min="1" :max="availableOf(materialForm.productId)" class="field-input text-sm w-16" />
             <button type="submit" :disabled="savingMaterial" class="btn-secondary text-xs shrink-0">+</button>
           </form>
-          <p v-if="jobType === 'ticket' && materialCustodyState === 'ready' && !materialSelectableProducts.length" class="text-xs text-slate-500 mt-1">Sin materiales disponibles en tu custodia.</p>
+          <p v-if="materialCustodyState === 'ready' && !materialSelectableProducts.length" class="text-xs text-slate-500 mt-1">Sin materiales disponibles en tu custodia.</p>
           <p v-if="materialForm.productId && availableOf(materialForm.productId) === 0" class="text-[11px] text-amber-700 mt-1">
             No tienes este material en custodia — pide la entrega a un administrador.
           </p>
