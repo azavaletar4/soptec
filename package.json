@@ -36,7 +36,8 @@
     "test:technician-custody-sql": "node --import tsx --test server/tests/technicianCustody.sql.test.ts",
     "test:custody-required-materials-sql": "node --import tsx --test server/tests/custodyRequiredMaterials.sql.test.ts",
     "test:material-delivery-validated-sql": "node --import tsx --test server/tests/materialDeliveryValidated.sql.test.ts",
-    "test:material-rejection-correction-sql": "node --import tsx --test server/tests/materialRejectionCorrection.sql.test.ts"
+    "test:material-rejection-correction-sql": "node --import tsx --test server/tests/materialRejectionCorrection.sql.test.ts",
+    "test:material-rejection-no-block-closure-sql": "node --import tsx --test server/tests/materialRejectionDoesNotBlockClosure.sql.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.1",

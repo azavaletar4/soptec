@@ -13,6 +13,7 @@ import { useClientPhotosStore } from '@/stores/clientPhotos';
 import { useInfraElementosStore } from '@/stores/infraElementos';
 import { useFoFibraStore } from '@/stores/foFibra';
 import { useAuthStore } from '@/stores/auth';
+import { useTechnicianCustodyStore, type RejectedMaterialOperation } from '@/stores/technicianCustody';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
@@ -20,6 +21,7 @@ import { countOcupadosReales } from '@/lib/napOccupancy';
 import { supabase } from '@/lib/supabase';
 import { readOrderInventory } from '@/lib/orderInventory';
 import { presentInstallationInventoryError } from '@/lib/installationInventoryError';
+import { activeMaterialMovements } from '@/lib/materialMovementPresentation';
 import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import type { FieldInventoryMovement, FieldInventoryUnit } from '@/types/fieldInventory';
 import {
@@ -54,6 +56,7 @@ const clientPhotosStore = useClientPhotosStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 const auth = useAuthStore();
+const custodyStore = useTechnicianCustodyStore();
 const toast = useToast();
 
 const installationId = computed(() => route.params.id as string);
@@ -111,6 +114,15 @@ function canEditMaterials(inst: Installation) {
   return canEdit(inst) && inst.status !== 'completed';
 }
 const canEditStatus = computed(() => (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') && !closedReadOnly.value);
+// Fase 166 — regla operativa aprobada: separar ejecución técnica de gestión
+// administrativa. "Completar instalación" (GPS, zona/NAP, fotos — Fase
+// 64b/73) es el MISMO flujo de cierre que corresponde a la App de Campo del
+// técnico; canEdit() daba este formulario tambien a ADMIN por error (mismo
+// permiso que SUPERADMIN). ADMIN ya tiene su propia herramienta para
+// gestionar el estado (selector de Estado, canEditStatus) sin necesidad de
+// este formulario — restringirlo a SUPERADMIN no le quita a ADMIN ninguna
+// capacidad real que estuviera usando para su trabajo administrativo.
+const canCompleteInstallationForm = computed(() => auth.role === 'SUPERADMIN' && !closedReadOnly.value);
 // Fase 148 — antes de que un tecnico tome la orden no hay nada que "usar":
 // el formulario de registro de materiales (plantilla + "otro material") es
 // flujo de ejecucion en campo, igual que ya pasa con equipos/completar para
@@ -262,6 +274,28 @@ async function copyInstallationSummary() {
 const materials = ref<FieldInventoryMovement[]>([]);
 const loadingMaterials = ref(false);
 const inventoryReadError = ref<string | null>(null);
+// Fase 166: el Kardex devuelto por inventory_order_read es crudo a propósito
+// (auditoría) — para "Materiales usados" solo se muestran los movimientos
+// vigentes (netea egresos ya revertidos junto con su reversión), nunca se
+// edita ni se oculta nada en la base de datos. Caso real: un mismo kit
+// reintentado varias veces mostraba ~30 filas para 4 materiales reales.
+const activeMaterials = computed(() => activeMaterialMovements(materials.value));
+
+// Fase 166 — regla operativa aprobada: un rechazo de material NO
+// serializado (custodia insuficiente) ya no bloquea el cierre, pero se
+// conserva y se advierte aquí mismo — nunca se anula sola ni se oculta.
+// Reusa la misma consulta que InventarioCustodiaView.vue ("Intentos
+// equivocados"), filtrada a esta orden — no duplica el RPC/consulta.
+const pendingMaterialRejections = ref<RejectedMaterialOperation[]>([]);
+async function loadPendingMaterialRejections() {
+  if (!installation.value) return;
+  try {
+    const all = await custodyStore.fetchRejectedMaterialOperations();
+    pendingMaterialRejections.value = all.filter((r) => r.job_type === 'installation' && r.job_id === installation.value!.id);
+  } catch {
+    pendingMaterialRejections.value = []; // advertencia best-effort: nunca bloquea la ficha si falla la consulta
+  }
+}
 
 // Lectura por RPC (inventory_order_read): la misma usada por CampoTrabajoDetailView/
 // RoutineInventory/TicketDetailView — autoriza por asignacion vigente en SQL, nunca
@@ -287,6 +321,7 @@ async function loadMaterialsAndUnits() {
   } finally {
     loadingMaterials.value = false;
   }
+  if (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN') await loadPendingMaterialRejections();
 }
 
 // ---- Tipo de servicio (Fase 45) — vive en el contrato, no en la instalacion ----
@@ -860,14 +895,31 @@ onMounted(async () => {
             <p v-if="loadingMaterials" class="text-slate-500 text-xs">Cargando...</p>
             <p v-else-if="inventoryReadError" class="text-xs text-red-600 mb-2">{{ inventoryReadError }}</p>
             <template v-else>
-              <p v-if="!materials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en esta instalación.</p>
+              <p v-if="!activeMaterials.length" class="text-slate-500 text-xs mb-3">Sin materiales registrados en esta instalación.</p>
               <ul v-else class="space-y-1.5 mb-4">
-                <li v-for="m in materials" :key="m.id" class="flex justify-between text-xs">
+                <li v-for="m in activeMaterials" :key="m.id" class="flex justify-between text-xs">
                   <span>{{ m.product?.name ?? 'Producto' }}</span>
                   <span class="text-slate-600">{{ m.quantity }} {{ m.product?.unit }}</span>
                 </li>
               </ul>
             </template>
+
+            <!-- Fase 166: rechazo de material NO serializado (custodia
+                 insuficiente) -- ya NO bloquea el cierre (regla operativa
+                 aprobada), pero se advierte aqui mismo, nunca se oculta.
+                 Se resuelve solo (misma clave) o se anula desde Inventario
+                 > Custodia > Intentos equivocados -- no se duplica ese
+                 formulario aqui. -->
+            <div v-if="pendingMaterialRejections.length" class="rounded-lg border border-amber-300 bg-amber-50 p-2.5 mb-3">
+              <p class="text-xs font-semibold text-amber-800 mb-1">⚠ Materiales pendientes de regularización</p>
+              <ul class="space-y-1">
+                <li v-for="r in pendingMaterialRejections" :key="r.operation_id" class="text-[11px] text-amber-700">
+                  {{ r.message }}
+                  <span class="text-amber-600">— {{ formatPeruDateTime(r.created_at) }}{{ r.actor?.full_name ? ` · ${r.actor.full_name}` : '' }}</span>
+                </li>
+              </ul>
+              <router-link to="/inventario/custodia" class="text-[11px] text-sky-700 hover:underline">Revisar y anular en Inventario &gt; Custodia →</router-link>
+            </div>
 
             <!-- Fase 149: el registro (plantilla/otro material) se saco de
                  esta vista para TODOS los roles y estados — es flujo de
@@ -953,13 +1005,19 @@ onMounted(async () => {
             <p v-if="iptvNoteError" class="text-xs text-red-600 mt-2">{{ iptvNoteError }}</p>
           </div>
 
-          <!-- Completar instalación — solo mientras no este completada/cancelada y el usuario pueda editarla. -->
+          <!-- Fase 166: este formulario es ejecución técnica (GPS, zona/NAP,
+               fotos — el mismo cierre de la App de Campo), no gestión
+               administrativa — se restringe a SUPERADMIN (edición
+               excepcional). ADMIN gestiona esta orden con el selector de
+               Estado/Prioridad/Cuadrilla/Notas, sin tener que completar un
+               formulario técnico. -->
           <form
-            v-if="canEdit(installation) && installation.status !== 'completed' && installation.status !== 'cancelled'"
+            v-if="canCompleteInstallationForm && installation.status !== 'completed' && installation.status !== 'cancelled'"
             class="surface p-4 text-sm"
             @submit.prevent="handleCompleteSubmit"
           >
             <h2 class="text-sm font-semibold mb-2">Completar instalación</h2>
+            <p class="text-[11px] text-slate-400 mb-2">Edición excepcional (SUPERADMIN) — lo habitual es que el técnico complete esto desde la App de Campo.</p>
 
             <h3 class="text-xs font-semibold text-slate-500 uppercase mb-2">Ubicación GPS</h3>
             <div class="grid grid-cols-2 gap-3 mb-2">
@@ -1020,6 +1078,13 @@ onMounted(async () => {
               {{ completeSaving ? 'Guardando...' : 'Completar instalación' }}
             </button>
           </form>
+          <p
+            v-else-if="canEditStatus && installation.status !== 'completed' && installation.status !== 'cancelled'"
+            class="surface p-4 text-xs text-slate-500"
+          >
+            La instalación se completa desde la App de Campo del técnico (firma, fotos y datos de red quedan ahí).
+            Para corregir el estado administrativamente, usa el selector de Estado arriba.
+          </p>
         </div>
       </div>
 
