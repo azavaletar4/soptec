@@ -13,6 +13,7 @@ const contract = '31000000-0000-0000-0000-000000000001';
 const install = '20000000-0000-0000-0000-000000000001';
 const otherInstall = '20000000-0000-0000-0000-000000000099';
 const ticket = '40000000-0000-0000-0000-000000000001';
+const routine = '10000000-0000-0000-0000-000000000165';
 const cable = '50000000-0000-0000-0000-000000000012';
 const patchcord = '50000000-0000-0000-0000-000000000014';
 
@@ -31,19 +32,24 @@ test('Fase 166: un rechazo de material NO serializado pendiente deja de bloquear
   const ticketOp = (action: string, payload: object, id: string, uid = tech) =>
     as(`select public.campo_inventory_operation('${id}','ticket','${ticket}','${action}','${JSON.stringify(payload).replaceAll("'", "''")}'::jsonb);`, uid);
   const closeTicket = () => sql(`update tickets set status='resolved' where id='${ticket}';`);
+  const routineOp = (payload: object, id: string, uid = tech) =>
+    as(`select public.routine_inventory_operation('${routine}','${id}','consume','${JSON.stringify(payload).replaceAll("'", "''")}');`, uid);
+  const closeRoutine = () => sql(`update routines set status='completed' where id='${routine}';`);
   const deliver = (technicianId: string, productId: string, qty: number) =>
     as(`select public.deliver_material_to_technician('${technicianId}','${productId}',${qty},'Entrega de prueba');`, admin);
   const rejectionStatus = (id: string) => sql(`select status from material_inventory_rejections where operation_id='${id}';`);
   const close = () => sql(`update installations set status='completed' where id='${install}';`);
 
   const reset = () => sql(`truncate public.material_inventory_rejections,public.work_order_photos,public.work_order_closures,public.inventory_unit_events,public.inventory_movements,public.inventory_units,
-      public.campo_inventory_operations,public.technician_material_custody,public.technician_material_custody_events,
-      public.technician_material_return_requests,public.job_assignees,public.installations,public.tickets;
+      public.campo_inventory_operations,public.routine_inventory_operations,public.technician_material_custody,public.technician_material_custody_events,
+      public.technician_material_return_requests,public.job_assignees,public.installations,public.tickets,public.routines;
     update inventory_products set current_stock=100;
     insert into installations(id,status,client_id,contract_id) values('${install}','in_progress','${client}','${contract}');
     insert into job_assignees values('installation','${install}','${tech}','leader');
     insert into tickets(id,status,client_id,contract_id) values('${ticket}','in_progress','${client}','${contract}');
-    insert into job_assignees values('ticket','${ticket}','${tech}','leader');`);
+    insert into job_assignees values('ticket','${ticket}','${tech}','leader');
+    insert into routines(id,status,client_id,contract_id) values('${routine}','in_progress','${client}','${contract}');
+    insert into job_assignees values('routine','${routine}','${tech}','leader');`);
 
   try {
     docker(['run', '--pull=never', '--rm', '-d', '--name', containerName, '--network', 'none', '--tmpfs', '/var/lib/postgresql/data', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', 'postgres:17']);
@@ -120,6 +126,16 @@ test('Fase 166: un rechazo de material NO serializado pendiente deja de bloquear
       assert.equal(rejectionStatus(id), 'pending');
       closeTicket();
       assert.equal(sql(`select status from tickets where id='${ticket}';`), 'resolved');
+      assert.equal(rejectionStatus(id), 'pending'); // sigue pendiente de revision administrativa, solo deja de bloquear
+    });
+
+    await t.test('un rechazo pendiente nunca corregido tampoco bloquea el cierre de una Rutina (mismo criterio que Alta/Averia, Fase 168 punto 3)', () => {
+      reset();
+      const id = randomUUID();
+      assert.throws(() => routineOp({ product_id: cable, quantity: 1 }, id), /No tienes suficiente material en custodia/);
+      assert.equal(rejectionStatus(id), 'pending');
+      closeRoutine();
+      assert.equal(sql(`select status from routines where id='${routine}';`), 'completed');
       assert.equal(rejectionStatus(id), 'pending'); // sigue pendiente de revision administrativa, solo deja de bloquear
     });
 

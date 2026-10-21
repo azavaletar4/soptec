@@ -1,0 +1,28 @@
+{
+  "snapshot_at": "2026-10-21T20:08:05.811953+00:00",
+  "proposito": "Respaldo de referencia de solo lectura antes de un posible despliegue de Fase 166/167 — permite comparar el estado real contra este punto si algo se ve distinto despues.",
+  "open_installations": [
+    { "id": "2146ec60-f000-4beb-b69a-f1b61ad48417", "status": "in_progress", "client_id": "dc551167-6454-4edd-89ae-af8d00223719", "contract_id": "1f012730-5697-46ea-be1d-54596b1817f9", "created_at": "2026-10-21T15:43:51.627945+00:00", "nota": "Alta real de Diego Villanueva Bernabe, CTR-2026-00727 -- caso diagnosticado en Fase 166/167, sigue intacta" },
+    { "id": "a1244590-b67b-47a5-be54-0a4f6afdf47a", "status": "scheduled", "client_id": "9350b9e1-4cf6-45fd-95e5-e07ae55aa13c", "contract_id": "a6840397-6dbd-4a59-901c-1d9f71ed6999", "created_at": "2026-10-21T15:56:37.69211+00:00" },
+    { "id": "11b247fa-a4aa-4146-a673-842a8cf28d62", "status": "scheduled", "client_id": "79e173c0-da3d-4085-b3e8-efcda3bb5449", "contract_id": "04be4d3e-084e-4adc-8327-fa51c9643d6d", "created_at": "2026-10-21T15:41:32.735427+00:00" }
+  ],
+  "pending_material_rejections": [
+    { "operation_id": "5ac65134-f2bd-410c-848a-9d336180d8ca", "job_type": "installation", "job_id": "2146ec60-f000-4beb-b69a-f1b61ad48417", "action": "kit", "status": "pending", "created_at": "2026-10-21T18:05:21.558449+00:00", "message": "No tienes suficiente material en custodia para este consumo (tienes 0, intentas usar 1). Pide la entrega a un administrador." }
+  ],
+  "funciones_a_reemplazar_md5_actual": {
+    "assert_no_rejected_materials(text,uuid)": "3ecf94d3f4f0f8c004b8208acb98592d",
+    "validate_installation_completion()": "4427ab7a21ba1c2a39f46310e4d8086e"
+  },
+  "rollback_preparado": {
+    "git_tag_vm": "rollback-pre-fase168-20261021200743 (HEAD 44c2adb791f76cddd490d6fd52df06633bc9bfc9)",
+    "docker_images_vm": [
+      "smartrayco-frontend:rollback-pre-fase168-20261021200743 (91e78788dd08cf4962a358507ae87dd77121d9f562983a178f5177f95b58b16a)",
+      "smartrayco-backend:rollback-pre-fase168-20261021200743 (0623b5c5a3587499a19d26102e41e66eaa407fb5dda2eba5467e652705e3340e)"
+    ],
+    "sql_rollback_candidatos": [
+      "scripts/rollback-fase166-materiales-no-bloquean-cierre.sql",
+      "scripts/rollback-fase167-equipo-serializado-obligatorio-cierre.sql"
+    ]
+  },
+  "limites_declarados": "No se verificó una restauración aislada real de Supabase (PITR/branch) en este ciclo -- Supabase Cloud gestiona backups automáticos por plan, sin una herramienta disponible en esta sesión para listar/forzar un punto de restauración ni para crear una rama de prueba sin incurrir en un paso adicional no solicitado explícitamente. Se recomienda verificar manualmente en el dashboard de Supabase (Database > Backups) que exista un punto de restauración reciente antes de autorizar el despliegue, como verificación adicional independiente de este respaldo de código."
+}
