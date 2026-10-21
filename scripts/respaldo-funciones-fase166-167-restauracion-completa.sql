@@ -1,0 +1,33 @@
+-- RESPALDO/RESTAURACION COMPLETA de Fase 166 + Fase 167 en un solo paso.
+-- Revierte AMBAS migraciones (20261021190000 y 20261021200000) en el orden
+-- correcto (167 antes de 166 -- el inverso exacto del orden de aplicacion),
+-- devolviendo assert_no_rejected_materials() y validate_installation_completion()
+-- a su estado real de produccion previo a esta fase. Ninguna fila de datos
+-- se toca (ambas son CREATE OR REPLACE FUNCTION puras) -- sin perdida de
+-- historial, consumos, custodias ni ordenes.
+--
+-- PROBADO en entorno aislado (Postgres real en Docker, container
+-- descartable, red "none", sin acceso a produccion) el 2026-10-21:
+-- 1) Se preparo el estado real de produccion (MD5 confirmado contra
+--    Supabase: validate_installation_completion=4427ab7a21ba1c2a39f46310e4d8086e,
+--    assert_no_rejected_materials=3ecf94d3f4f0f8c004b8208acb98592d).
+-- 2) Se aplicaron 20261021190000 y 20261021200000 (simulando el despliegue).
+-- 3) Se ejecuto este mismo respaldo/restauracion -- los MD5 volvieron a ser
+--    EXACTAMENTE los de produccion real (4427ab7a21ba1c2a39f46310e4d8086e /
+--    3ecf94d3f4f0f8c004b8208acb98592d), confirmando una restauracion
+--    byte-exacta end-to-end, no solo teorica.
+--
+-- Ubicacion de los componentes individuales (se pueden usar por separado
+-- si solo hace falta revertir una de las dos fases):
+--   scripts/rollback-fase167-equipo-serializado-obligatorio-cierre.sql
+--   scripts/rollback-fase166-materiales-no-bloquean-cierre.sql
+-- Este archivo los encadena en el orden seguro (167 primero, porque fue
+-- la ULTIMA migracion aplicada) para una restauracion de un solo comando.
+--
+-- Uso: psql <conexion a produccion> -f scripts/respaldo-funciones-fase166-167-restauracion-completa.sql
+-- Cada sub-script trae su propia guarda MD5 -- si el estado real no
+-- coincide exactamente con lo esperado, aborta sin cambiar nada (no hay
+-- restauracion parcial posible).
+\set ON_ERROR_STOP on
+\ir rollback-fase167-equipo-serializado-obligatorio-cierre.sql
+\ir rollback-fase166-materiales-no-bloquean-cierre.sql

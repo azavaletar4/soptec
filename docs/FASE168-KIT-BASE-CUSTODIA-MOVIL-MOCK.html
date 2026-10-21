@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kit base — evidencia selector móvil</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{font-family:system-ui,sans-serif;background:#e2e8f0;display:flex;justify-content:center}
+.field-input{border:1px solid #cbd5e1;border-radius:0.5rem;padding:0.25rem 0.5rem;font-size:0.75rem;width:100%}
+.surface{background:#fff;border-radius:0.75rem;border:1px solid #e2e8f0}
+.phone{width:390px;background:#f8fafc;border:10px solid #1e293b;border-radius:2rem;min-height:780px}
+</style>
+</head>
+<body class="p-6">
+<div class="phone p-3">
+<p class="text-[11px] text-slate-400 mb-2">390px (ancho móvil real) — datos sintéticos, ninguna orden/cliente real. Fila 1: una sola variante en custodia (auto-seleccionada). Fila 2: cero custodia (aviso, nunca almacén). Fila 3: dos variantes en custodia (selector solo entre ellas). Drop: una longitud en custodia.</p>
+
+<div class="surface p-3.5 mb-3">
+  <h2 class="text-sm font-semibold mb-1">📦 Kit base de instalación</h2>
+  <label class="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-2 mb-3">
+    <input type="checkbox" />
+    Cliente vuelve / Reconexión (conserva acometida — no descuenta Drop ni Roseta)
+  </label>
+  <div class="divide-y divide-slate-100">
+
+    <!-- Conector Óptico: 1 sola variante en custodia -> auto-seleccionada, sin mostrar otras del almacén -->
+    <div class="py-2 first:pt-0 last:pb-0">
+      <div class="flex items-center gap-2">
+        <span class="flex-1 text-xs text-slate-700">Conector Óptico</span>
+      </div>
+      <div class="flex items-center gap-2 mt-1.5">
+        <span class="flex-1 text-[11px] text-slate-400">Cantidad</span>
+        <input type="number" value="1" class="field-input w-20 py-1 text-xs" />
+        <span class="text-[11px] text-slate-400 w-16">unidad</span>
+      </div>
+      <p class="text-[11px] mt-1 text-slate-400">3 unidad disponibles</p>
+    </div>
+
+    <!-- Roseta: cero custodia -> aviso claro, nunca inventa ni muestra almacén -->
+    <div class="py-2">
+      <div class="flex items-center gap-2">
+        <span class="flex-1 text-xs text-slate-700">Roseta Óptica</span>
+      </div>
+      <p class="text-[11px] text-amber-700 mt-1">No tienes Roseta Óptica en tu custodia — pide la entrega a un administrador.</p>
+    </div>
+
+    <!-- Patchcord: 2 variantes en custodia -> select SOLO entre esas 2, nunca el catalogo completo -->
+    <div class="py-2 last:pb-0">
+      <div class="flex items-center gap-2">
+        <span class="flex-1 text-xs text-slate-700">Patchcord</span>
+      </div>
+      <select class="field-input w-full py-1 text-xs mt-1.5">
+        <option value="">Selecciona la medida usada...</option>
+        <option>Patchcord SC/APC 1m (2 unidad disponibles)</option>
+        <option>Patchcord SC/UPC 1m (1 unidad disponibles)</option>
+      </select>
+      <div class="flex items-center gap-2 mt-1.5">
+        <span class="flex-1 text-[11px] text-slate-400">Cantidad</span>
+        <input type="number" value="1" class="field-input w-20 py-1 text-xs" />
+        <span class="text-[11px] text-slate-400 w-16">unidad</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cable Drop: solo el largo que el tecnico tiene en custodia -->
+  <div class="py-2 border-t border-slate-100 mt-1">
+    <span class="text-xs text-slate-700">Cable Drop</span>
+    <div class="flex items-center gap-2 mt-1.5">
+      <select class="field-input w-full py-1 text-xs">
+        <option value="">Selecciona el largo prefabricado...</option>
+        <option>drop 100 metros (4 unidad disponibles)</option>
+      </select>
+    </div>
+    <div class="flex items-center gap-2 mt-1.5">
+      <span class="flex-1 text-[11px] text-slate-400">Tramos usados</span>
+      <input type="number" value="1" class="field-input w-20 py-1 text-xs" />
+    </div>
+    <p class="text-[11px] text-slate-500 mt-2">(drop 50/150/220/300 metros NO aparecen: el técnico no tiene ninguno en custodia — antes se mostraba el catálogo completo de 5 largos)</p>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

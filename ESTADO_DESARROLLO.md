@@ -5535,3 +5535,55 @@ Verificaciones adicionales pedidas antes de autorizar el despliegue de 166+167 j
 9. **Archivos ajenos del checkout principal**: `git status`/`git diff --stat` en `D:\SmartRayco` idéntico a antes de esta sesion (mismos 9 archivos, mismas lineas) -- todo el trabajo de esta fase vive exclusivamente en el worktree `D:\smartrayco-fase168`.
 
 **Secuencia exacta de activacion (cuando se autorice)**: (a) aplicar `20261021190000_fase166_materiales_no_bloquean_cierre.sql`; (b) aplicar `20261021200000_fase167_equipo_serializado_obligatorio_cierre.sql`; (c) hacer push/merge de `fase168-integracion` y desplegar frontend/backend con `deploy/safe-update.sh` (que crea su propio respaldo adicional); (d) smoke test de solo lectura (panel 200, Diego Villanueva sigue `in_progress`, ninguna orden cambio de estado sola); (e) decision SEPARADA y explicita sobre el rechazo pendiente real de Diego Villanueva (anular o dejar para regularizar) -- no forma parte de este despliegue.
+
+## Fase 168: dos pendientes resueltos antes del despliegue (21/10/2026, misma sesion posterior)
+
+**Pendiente 1 — Kit base de Altas sin almacen general**: el Kit base ya
+usaba custodia real para la CANTIDAD de cada fila (`availableOf`,
+`custodyLabel` por fila -- esto nunca cambio), pero la variante a elegir
+cuando hay mas de un producto que matchea el nombre (ej. 2 tipos de
+Conector Óptico) y el largo de Drop prefabricado se listaban desde el
+catalogo activo completo (`ferreteriaProducts`), no desde la custodia.
+Corregido en `CampoTrabajoDetailView.vue`: `kitRows` ahora calcula
+`custodyMatches` (solo variantes con `availableOf>0`) y el `<select>` de
+desambiguacion usa SOLO esas; igual para `dropPrefabProductsAvailable`
+(largo de Drop). Cuando no hay ninguna variante en custodia, se muestra
+"No tienes {material} en tu custodia — pide la entrega a un
+administrador" (antes decia incorrectamente "Falta crear en
+Inventario", que solo aplica cuando el catalogo no tiene ese producto en
+absoluto -- se mantuvo esa distincion). Cantidades predeterminadas (1
+conector/1 roseta/1 patchcord, ya en 1/1/1 desde `e679d9c`) y el toggle
+prefab/bobina de Drop: sin cambios. `ferreteriaProducts` (catalogo) se
+conserva intacto para esa distincion y para `kitCoveredProductIds` (nunca
+duplicar el registro del Kit en "Materiales usados") -- solo lo que el
+tecnico puede SELECCIONAR se filtra por custodia. No se toco ningun
+camino de registro/correccion/reversion (`handleRegisterKit`,
+`startEditMaterial`, `writeFieldInventory`) -- solo las listas de
+opciones. `vue-tsc`/`npm run build`: limpios. Evidencia visual a 390px
+(markup/clases reales, datos sinteticos, sin ninguna orden/cliente real):
+`docs/FASE168-KIT-BASE-CUSTODIA-MOVIL.jpg` (+ `...-MOCK.html` para
+reproducirla) -- no se realizo login real como tecnico en produccion
+para esto (riesgo innecesario sobre datos reales, descartado a
+proposito).
+
+**Pendiente 2 — Respaldo de Supabase verificado con restauracion
+probada**: documentado en `docs/FASE168-RESPALDO-SUPABASE-VERIFICADO.md`
+(no sobrescribe `FASE168-RESPALDO-PRE-DESPLIEGUE.json`, es un documento
+nuevo complementario). Nuevo `scripts/respaldo-funciones-fase166-167-restauracion-completa.sql`
+encadena (`\ir`) los dos rollbacks existentes en el orden correcto para
+una restauracion de un solo comando. **Probado end-to-end en un
+contenedor Postgres real descartable** (sin red, sin acceso a Supabase ni
+a la VM): se preparo el estado real de produccion (MD5 confirmados
+`4427ab7a21ba1c2a39f46310e4d8086e` / `3ecf94d3f4f0f8c004b8208acb98592d`),
+se aplicaron 166+167, y se ejecuto el script combinado real -- los MD5
+volvieron a ser EXACTAMENTE los de produccion, confirmando una
+restauracion byte-exacta, no solo teorica. Tambien se documentaron las
+dependencias reales (RLS de `material_inventory_rejections`, triggers de
+`installations`, grants `EXECUTE`) -- ninguna la tocan estas migraciones.
+Limite declarado sin cambios: no se verifico un punto de restauracion
+PITR real de Supabase Cloud (sin herramienta disponible para eso sin una
+accion adicional no pedida explicitamente).
+
+Commit de esta sesion: `[ver git log de fase168-integracion]`. Sin
+aplicar migraciones, sin push, sin deploy. Caso real de Diego Villanueva
+sin tocar. Checkout principal (`D:\SmartRayco`) sin tocar.

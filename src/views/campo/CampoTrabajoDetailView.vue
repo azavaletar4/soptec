@@ -646,13 +646,19 @@ const KIT_ALTA: KitLine[] = [
 const kitReconexion = ref(false);
 const kitProductChoice = ref<Record<string, string>>({});
 const kitQuantities = ref<Record<string, number>>({});
+// Fase 168: ferreteriaProducts sigue siendo CATALOGO (necesario para
+// reconocer que productos existen y poder avisar "falta crear en
+// Inventario") -- pero lo que el tecnico puede elegir/ver en el Kit base
+// (variante de conector/roseta/patchcord, largo de Drop) se filtra a su
+// custodia real >0, igual que "Materiales usados". Nunca almacen general.
 const ferreteriaProducts = computed(() => fieldProducts.value.filter((p) => p.is_active && p.inventory_categories?.slug === 'ferreteria'));
 const kitRows = computed(() =>
   KIT_ALTA.map((line) => {
     const matches = ferreteriaProducts.value.filter((p) => line.match.test(p.name));
-    const chosenId = matches.length > 1 ? kitProductChoice.value[line.key] : matches[0]?.id;
+    const custodyMatches = matches.filter((p) => (availableOf(p.id) ?? 0) > 0);
+    const chosenId = custodyMatches.length > 1 ? kitProductChoice.value[line.key] : custodyMatches[0]?.id;
     const excluded = kitReconexion.value && line.key === 'roseta';
-    return { ...line, matches, product: matches.find((p) => p.id === chosenId) ?? null, excluded };
+    return { ...line, matches, custodyMatches, product: custodyMatches.find((p) => p.id === chosenId) ?? null, excluded };
   }),
 );
 
@@ -677,6 +683,10 @@ const dropPrefabProducts = computed(() =>
     .filter((p) => /drop/i.test(p.name) && !/bobina/i.test(p.name) && dropLengthMeters(p.name) > 0)
     .sort((a, b) => dropLengthMeters(a.name) - dropLengthMeters(b.name)),
 );
+// Fase 168: el largo a elegir tambien se restringe a custodia real -- la
+// lista completa (dropPrefabProducts) sigue existiendo para distinguir
+// "no existe ese largo en Inventario" de "no lo tienes en tu custodia".
+const dropPrefabProductsAvailable = computed(() => dropPrefabProducts.value.filter((p) => (availableOf(p.id) ?? 0) > 0));
 const dropBobinaProduct = computed(() => ferreteriaProducts.value.find((p) => /bobina/i.test(p.name) && /drop/i.test(p.name)) ?? null);
 const dropMode = ref<'prefab' | 'bobina'>('prefab');
 const dropPrefabProductId = ref('');
@@ -2288,9 +2298,9 @@ async function handleCloseSubmit() {
                 <span class="flex-1 text-xs text-slate-700">{{ row.label }}</span>
               </div>
               <template v-if="!row.excluded">
-                <select v-if="row.matches.length > 1" v-model="kitProductChoice[row.key]" class="field-input w-full py-1 text-xs mt-1.5">
+                <select v-if="row.custodyMatches.length > 1" v-model="kitProductChoice[row.key]" class="field-input w-full py-1 text-xs mt-1.5">
                   <option value="">Selecciona la medida usada...</option>
-                  <option v-for="p in row.matches" :key="p.id" :value="p.id">{{ p.name }}</option>
+                  <option v-for="p in row.custodyMatches" :key="p.id" :value="p.id">{{ p.name }} ({{ custodyLabel(p.id, p.unit) }})</option>
                 </select>
                 <div v-if="row.product" class="flex items-center gap-2 mt-1.5">
                   <span class="flex-1 text-[11px] text-slate-400">Cantidad</span>
@@ -2301,6 +2311,7 @@ async function handleCloseSubmit() {
                   {{ custodyLabel(row.product.id, row.product.unit) }}
                 </p>
                 <p v-else-if="!row.matches.length" class="text-[11px] text-amber-700 mt-1">Falta crear "{{ row.label }}" en Inventario.</p>
+                <p v-else-if="!row.custodyMatches.length" class="text-[11px] text-amber-700 mt-1">No tienes {{ row.label }} en tu custodia — pide la entrega a un administrador.</p>
               </template>
               <p v-else class="text-[11px] text-slate-400 mt-1">Excluido (reconexión).</p>
             </div>
@@ -2315,7 +2326,7 @@ async function handleCloseSubmit() {
               <div class="flex items-center gap-2 mt-1.5">
                 <select v-model="dropPrefabProductId" class="field-input w-full py-1 text-xs">
                   <option value="">Selecciona el largo prefabricado...</option>
-                  <option v-for="p in dropPrefabProducts" :key="p.id" :value="p.id">{{ p.name }} ({{ custodyLabel(p.id, p.unit) }})</option>
+                  <option v-for="p in dropPrefabProductsAvailable" :key="p.id" :value="p.id">{{ p.name }} ({{ custodyLabel(p.id, p.unit) }})</option>
                 </select>
               </div>
               <div v-if="dropPrefabProductId" class="flex items-center gap-2 mt-1.5">
@@ -2323,6 +2334,7 @@ async function handleCloseSubmit() {
                 <input v-model.number="dropPrefabTramos" type="number" min="1" :max="availableOf(dropPrefabProductId)" step="1" class="field-input w-20 py-1 text-xs" />
               </div>
               <p v-if="!dropPrefabProducts.length" class="text-[11px] text-amber-700 mt-1">No hay Drop prefabricado en Inventario.</p>
+              <p v-else-if="!dropPrefabProductsAvailable.length" class="text-[11px] text-amber-700 mt-1">No tienes Drop en tu custodia — pide la entrega a un administrador.</p>
 
               <button
                 v-if="dropMode === 'prefab'"
