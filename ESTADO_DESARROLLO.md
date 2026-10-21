@@ -5672,3 +5672,100 @@ siguen exactamente igual.
 **PASS de recuperabilidad**: respaldo verificado, íntegro, recuperable y
 restaurado con éxito en entorno aislado real. Listo para que el usuario
 autorice reanudar el despliegue de Fase 168 desde el commit `75be8b6`.
+
+## Fase 168: DESPLEGADA EN PRODUCCION (21/10/2026, sesion posterior)
+
+Autorizado y ejecutado: migraciones `fase166_materiales_no_bloquean_cierre`
+(`20261021205816`) y `fase167_equipo_serializado_obligatorio_cierre`
+(`20261021205849`) aplicadas en Supabase -- MD5 reales tras aplicar
+identicos a los candidatos probados (`4201e9cb13b8b93d2ae80a0cc44035c2` /
+`e452ec213962f70d8db289ac17ed361f`). `git push origin fase168-integracion:main`
+bloqueado por el clasificador de modo automatico (falso positivo) --
+publicado manualmente por el usuario tras recibir el comando exacto
+(fast-forward, verificado antes de empujar, sin force). VM actualizada
+con `DEPLOY_YES=1 DEPLOY_ALLOW_MULTI_COMMIT=1 bash deploy/safe-update.sh 3908919`
+-- tag de rollback `rollback-20261021210844` + imagenes Docker respaldadas
+(ademas de las manuales previas `rollback-pre-fase168-20261021200743`).
+Desplegado `3908919`, confirmado: HTTPS/API 200, los 7 schedulers del
+backend activos, frontend sirviendo el bundle nuevo (strings de Fase 168
+confirmados en el JS real), 0 movimientos/consumos reales causados por
+este despliegue, Alta de Diego Villanueva Bernabe intacta
+(`in_progress`, rechazo `pending`). **Validacion real en campo**: pocos
+minutos despues del despliegue, el tecnico (Jhordanno Zavaleta) completo
+esa misma Alta desde la App de Campo real (`completed_at`
+2026-10-21 21:19:42 UTC) -- confirmacion end-to-end genuina de que Fase
+166 funciona en produccion, sin que esta sesion la provocara. Pendiente
+real: validacion visual en Android/WebView fisico (no realizada en
+ningun momento).
+
+## Fase 169: "Consumos pendientes" se convierte en incidencia administrable — CANDIDATO LOCAL, NO desplegado (21/10/2026, misma sesion)
+
+**Causa raiz**: el panel "Consumos pendientes que impiden cerrar
+ordenes" (`InventarioCustodiaView.vue`) describe un comportamiento que
+Fase 166 (ya en produccion) elimino -- un rechazo `pending` YA NO
+bloquea ningun cierre. Confirmado con el propio caso real que origino
+el reporte: la fila `pending` de Jhordanno Zavaleta (Alta de Diego
+Villanueva Bernabe, `operation_id` `5ac65134-...`) sigue `pending` HOY
+mismo, pese a que esa Alta ya esta `completed` -- la fila nunca se
+auto-resuelve (por diseño, Fase 166 no la toca), y el panel no distingue
+"orden ya cerrada, esto es puro historico" de "orden sigue abierta,
+esto es una incidencia real sin resolver". Tampoco existia una accion
+de "reintentar" -- solo "anular".
+
+**Correccion (candidato local, SIN aplicar):**
+- `supabase/migrations/20261021220000_fase169_reintentar_consumo_rechazado.sql`
+  (funcion NUEVA, no reemplaza ninguna existente): `retry_rejected_material_operation(operation_id)`,
+  solo ADMIN/SUPERADMIN, reintenta EXACTAMENTE el mismo producto/cantidad
+  del intento original (nunca editable por el administrador) debitando
+  la custodia del TECNICO ORIGINAL (mismo criterio que la accion
+  'correct' de Fase 165 etapa 2 -- el responsable verificable es quien
+  hizo el intento real, nunca quien lo gestiona despues). Reusa el MISMO
+  trigger de saldo (`apply_technician_material_custody_event`, P1650) --
+  si la custodia SIGUE sin alcanzar, falla identico a hoy, sin dejar
+  nada a medias (subtransaccion: todo el kit o nada). Solo Alta/Averia
+  (no Rutina todavia, documentado como limite) y solo si la orden sigue
+  abierta -- nunca permite tocar una orden ya cerrada.
+  Rollback: `scripts/rollback-fase169-reintentar-consumo-rechazado.sql`
+  (elimina la funcion nueva, no toca ninguna fila).
+- `src/lib/materialRejectionPresentation.ts` (nuevo, puro): `isJobOpenForRetry`
+  (mismos estados reales que el servidor, nunca asumidos) +
+  `parseRejectionItems` (interpreta el payload de 'kit'/'consume' sin
+  inventar datos para 'correct').
+- `src/stores/technicianCustody.ts`: `fetchRejectedMaterialOperationsDetailed()`
+  (nuevo, no reemplaza `fetchRejectedMaterialOperations()` -- InstalacionDetailView.vue
+  sigue usando la version simple sin cambios) resuelve cliente/estado de
+  la orden y la custodia VIGENTE por material; `retryRejectedMaterialOperation()`
+  (wrapper del RPC nuevo).
+- `InventarioCustodiaView.vue`: titulo corregido ("Intentos de material
+  pendientes de regularizar", ya no "...que impiden cerrar ordenes"),
+  cada fila muestra cliente/orden/tecnico/material/cantidad
+  solicitada/custodia vigente/motivo, badge "Orden abierta" vs "Orden
+  cerrada — historico", boton "Reintentar consumo" (solo visible en
+  ordenes abiertas, deshabilitado con motivo si la custodia vigente
+  todavia no alcanza) junto al "Descartar" ya existente (sin cambios en
+  su logica).
+
+**Pruebas**: `server/tests/retryRejectedMaterialOperation.sql.test.ts`
+(12/12, Postgres real en Docker: reintento valido debita custodia del
+tecnico no del admin, sin custodia falla sin dejar nada a medias, kit
+parcial no aplica ningun item si falta uno solo, orden completada
+rechaza el reintento, doble intento nunca duplica, intento anulado no
+reintenta, permisos ADMIN/SUPERADMIN si TECNICO_RED no, Averia igual
+que Alta, Rutina rechazada con mensaje claro, rollback exacto) +
+`src/lib/__tests__/materialRejectionPresentation.test.ts` (8/8) +
+`test:material-rejection-no-block-closure-sql` (7/7, sin regresion) +
+`vue-tsc`/`npm run build` limpios.
+
+**Evidencia visual**: `docs/FASE169-CUSTODIA-PANEL-MOCK.html` (markup/clases
+reales, Fila 1 = caso real ya conocido -- Jhordanno Zavaleta, orden ya
+cerrada, sin datos nuevos; Filas 2-3 = sinteticas, muestran "Reintentar"
+habilitado/deshabilitado). Captura de pantalla real NO se pudo generar
+en esta sesion (timeout reiterado de la herramienta de navegador, no
+relacionado con la pagina) -- el archivo queda disponible para abrir
+directamente.
+
+**Sin tocar**: ningun consumo, custodia, movimiento ni Alta real --
+todo lo verificado fue de solo lectura contra produccion. El caso real
+de Jhordanno Zavaleta/Diego Villanueva sigue exactamente igual (fila
+`pending`, Alta `completed`, sin anular ni reintentar). Sin migracion
+aplicada, sin push, sin deploy.

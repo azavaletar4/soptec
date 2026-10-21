@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fase 169 — evidencia panel Custodia</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{font-family:system-ui,sans-serif;background:#f8fafc}
+.surface{background:#fff;border-radius:0.75rem;border:1px solid #e2e8f0}
+.field-input{border:1px solid #cbd5e1;border-radius:0.5rem;padding:0.4rem 0.6rem;font-size:0.75rem;width:100%}
+.btn-secondary{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:0.5rem;padding:0.35rem 0.75rem}
+.btn-secondary:disabled{opacity:.5;cursor:not-allowed}
+.badge{display:inline-block;border-radius:9999px;padding:0.15rem 0.6rem;font-size:0.7rem;font-weight:600}
+</style>
+</head>
+<body class="p-4 max-w-3xl mx-auto">
+<p class="text-[11px] text-slate-400 mb-3">Reproducción con markup/clases reales de InventarioCustodiaView.vue — Fila 1: caso REAL ya conocido en esta conversación (Alta de Diego Villanueva Bernabe CTR-2026-00727, técnico Jhordanno Zavaleta, ya cerrada — sin datos nuevos, solo visualización). Fila 2 y 3: datos SINTÉTICOS para mostrar "Reintentar" habilitado/deshabilitado — ninguna orden/cliente real.</p>
+
+<section class="surface p-4 mb-4 space-y-3">
+  <h2 class="text-sm font-semibold">Intentos de material pendientes de regularizar</h2>
+  <p class="text-xs text-slate-500">Un rechazo de material ya NO bloquea el cierre de la orden (desde Fase 166) — esto es historial pendiente de revisar, no una traba activa.</p>
+
+  <!-- Fila 1: caso real, orden ya cerrada -->
+  <article class="border-t pt-3 space-y-2">
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <p class="text-sm font-medium">Alta — Diego Villanueva Bernabe</p>
+      <span class="badge bg-slate-100 text-slate-600">Orden cerrada — histórico</span>
+    </div>
+    <p class="text-xs text-slate-600">Técnico: Jhordanno Zavaleta · 21/10/2026, 01:05 p. m.</p>
+    <ul class="text-xs text-slate-700 space-y-0.5">
+      <li>Patchcord: solicitó 1 unidad, tiene ahora <span class="text-amber-700">0 unidad</span> en custodia</li>
+    </ul>
+    <a class="text-xs text-sky-700 underline" href="#">Ver orden</a>
+    <details class="text-xs"><summary>Descartar intento equivocado</summary>
+      <p class="my-2">Descartarlo no registra consumo ni modifica existencias. No lo descartes si el material se utilizó realmente — usa "Reintentar" en vez de esto.</p>
+      <input class="field-input" placeholder="Motivo del descarte" disabled />
+      <button type="button" class="btn-secondary mt-2" disabled>Descartar con motivo</button>
+    </details>
+  </article>
+
+  <!-- Fila 2 (sintetica): orden abierta, custodia YA suficiente -> Reintentar habilitado -->
+  <article class="border-t pt-3 space-y-2">
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <p class="text-sm font-medium">Avería — Cliente de ejemplo</p>
+      <span class="badge bg-amber-100 text-amber-800">Orden abierta</span>
+    </div>
+    <p class="text-xs text-slate-600">Técnico: Técnico de ejemplo · 21/10/2026, 03:40 p. m.</p>
+    <ul class="text-xs text-slate-700 space-y-0.5">
+      <li>Conector Óptico: solicitó 2 unidad, tiene ahora <span class="text-emerald-700 font-medium">3 unidad</span> en custodia</li>
+    </ul>
+    <a class="text-xs text-sky-700 underline" href="#">Ver orden</a>
+    <div class="flex flex-wrap items-center gap-2 pt-1">
+      <button type="button" class="btn-secondary text-xs" title="Registra el mismo material/cantidad, descontando la custodia del técnico">Reintentar consumo</button>
+    </div>
+    <details class="text-xs"><summary>Descartar intento equivocado</summary>
+      <p class="my-2">Descartarlo no registra consumo ni modifica existencias. No lo descartes si el material se utilizó realmente — usa "Reintentar" en vez de esto.</p>
+      <input class="field-input" placeholder="Motivo del descarte" disabled />
+      <button type="button" class="btn-secondary mt-2" disabled>Descartar con motivo</button>
+    </details>
+  </article>
+
+  <!-- Fila 3 (sintetica): orden abierta, custodia AUN insuficiente -> Reintentar deshabilitado -->
+  <article class="border-t pt-3 space-y-2">
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <p class="text-sm font-medium">Rutina — Otro cliente de ejemplo</p>
+      <span class="badge bg-amber-100 text-amber-800">Orden abierta</span>
+    </div>
+    <p class="text-xs text-slate-600">Técnico: Otro técnico de ejemplo · 21/10/2026, 04:10 p. m.</p>
+    <ul class="text-xs text-slate-700 space-y-0.5">
+      <li>Roseta Óptica: solicitó 1 unidad, tiene ahora <span class="text-amber-700">0 unidad</span> en custodia</li>
+    </ul>
+    <a class="text-xs text-sky-700 underline" href="#">Ver orden</a>
+    <div class="flex flex-wrap items-center gap-2 pt-1">
+      <button type="button" class="btn-secondary text-xs" disabled title="La custodia del técnico todavía no alcanza para todo el intento">Reintentar consumo</button>
+    </div>
+    <details class="text-xs"><summary>Descartar intento equivocado</summary>
+      <p class="my-2">Descartarlo no registra consumo ni modifica existencias. No lo descartes si el material se utilizó realmente — usa "Reintentar" en vez de esto.</p>
+      <input class="field-input" placeholder="Motivo del descarte" />
+      <button type="button" class="btn-secondary mt-2" disabled>Descartar con motivo</button>
+    </details>
+  </article>
+</section>
+
+</body>
+</html>

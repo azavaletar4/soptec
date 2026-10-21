@@ -19,7 +19,7 @@ import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInventoryStore } from '@/stores/inventory';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
 import { useCatalogsStore } from '@/stores/catalogs';
-import { useTechnicianCustodyStore, type RejectedMaterialOperation } from '@/stores/technicianCustody';
+import { useTechnicianCustodyStore, type DetailedRejectedMaterialOperation } from '@/stores/technicianCustody';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
@@ -39,26 +39,48 @@ const pendingMaterialRequests = ref<TechnicianMaterialReturnRequest[]>([]);
 const custodyUnits = ref<InventoryUnit[]>([]); // status with_technician O pending_return, de TODOS los tecnicos
 type MaterialCustodyRow = { technician_id: string; product_id: string; quantity: number; product: { id: string; name: string; unit: string } | null; technician: { id: string; full_name: string | null; email: string | null } | null };
 const materialCustody = ref<MaterialCustodyRow[]>([]);
-const rejectedMaterials = ref<RejectedMaterialOperation[]>([]);
+// Fase 169: desde Fase 166 (produccion), un rechazo 'pending' ya NO
+// bloquea el cierre de ninguna orden -- confirmado en los hechos (caso
+// real Jhordanno Zavaleta / CTR-2026-00727: la Alta se completo mientras
+// esta misma fila seguia 'pending'). El enriquecido distingue ordenes ya
+// cerradas (puro historico, sin accion de reintento posible/util) de
+// ordenes todavia abiertas (incidencia real, con Reintentar disponible
+// solo si la custodia VIGENTE ya alcanza).
+const rejectedMaterials = ref<DetailedRejectedMaterialOperation[]>([]);
 const rejectionNotes = ref<Record<string, string>>({});
 const rejectionError = ref('');
-const resolvingRejection = ref(false);
+const resolvingRejection = ref<string | null>(null);
+const retryingRejection = ref<string | null>(null);
 async function loadRejections() {
   rejectionError.value = '';
-  try { rejectedMaterials.value = await custodyStore.fetchRejectedMaterialOperations(); }
-  catch (e) { rejectionError.value = getErrorMessage(e, 'No se pudieron consultar los consumos pendientes.'); }
+  try { rejectedMaterials.value = await custodyStore.fetchRejectedMaterialOperationsDetailed(); }
+  catch (e) { rejectionError.value = getErrorMessage(e, 'No se pudieron consultar los intentos pendientes de regularizar.'); }
 }
-async function cancelRejection(row: RejectedMaterialOperation) {
-  const reason = rejectionNotes.value[row.operation_id]?.trim();
-  if (!reason) { toast.error('Escribe por qué este intento fue un error.'); return; }
-  if (!await confirmDialog({ title: 'Anular intento equivocado', message: 'Esto permite cerrar la orden sin registrar este intento. Si el material se utilizó realmente, formaliza la entrega y pide al técnico reintentar; no lo anules.', confirmLabel: 'Anular con motivo' })) return;
-  resolvingRejection.value = true;
+function canRetry(row: DetailedRejectedMaterialOperation): boolean {
+  return row.jobOpen && row.items.length > 0 && row.items.every((it) => it.availableNow >= it.quantityRequested);
+}
+async function retryRejection(row: DetailedRejectedMaterialOperation) {
+  if (!canRetry(row)) return;
+  if (!await confirmDialog({ title: 'Reintentar consumo', message: 'Vuelve a registrar EXACTAMENTE el mismo material y cantidad del intento original, descontando la custodia del técnico. Úsalo solo si confirmaste que el técnico ya recibió lo que le faltaba.', confirmLabel: 'Reintentar' })) return;
+  retryingRejection.value = row.operation_id;
   try {
-    await custodyStore.cancelRejectedMaterialOperation(row.operation_id, reason);
-    toast.success('Intento anulado con motivo registrado. No se modificaron existencias.');
+    await custodyStore.retryRejectedMaterialOperation(row.operation_id);
+    toast.success('Consumo registrado -- el intento queda resuelto.');
     await loadRejections();
   } catch (e) { toast.error(getErrorMessage(e)); }
-  finally { resolvingRejection.value = false; }
+  finally { retryingRejection.value = null; }
+}
+async function cancelRejection(row: DetailedRejectedMaterialOperation) {
+  const reason = rejectionNotes.value[row.operation_id]?.trim();
+  if (!reason) { toast.error('Escribe por qué este intento fue un error.'); return; }
+  if (!await confirmDialog({ title: 'Descartar intento equivocado', message: 'Esto no registra consumo ni modifica existencias. Si el material se utilizó realmente, usa "Reintentar" (con custodia suficiente) en vez de descartarlo.', confirmLabel: 'Descartar con motivo' })) return;
+  resolvingRejection.value = row.operation_id;
+  try {
+    await custodyStore.cancelRejectedMaterialOperation(row.operation_id, reason);
+    toast.success('Intento descartado con motivo registrado. No se modificaron existencias.');
+    await loadRejections();
+  } catch (e) { toast.error(getErrorMessage(e)); }
+  finally { resolvingRejection.value = null; }
 }
 
 const technicians = computed(() => catalogsStore.staff.filter((s) => s.role === 'TECNICO_RED'));
@@ -383,16 +405,45 @@ onMounted(loadAll);
 
     <template v-else>
       <section v-if="rejectionError || rejectedMaterials.length" class="surface p-4 mb-4 space-y-3">
-        <h2 class="text-sm font-semibold">Consumos pendientes que impiden cerrar órdenes</h2>
+        <h2 class="text-sm font-semibold">Intentos de material pendientes de regularizar</h2>
+        <p class="text-xs text-slate-500">
+          Un rechazo de material ya NO bloquea el cierre de la orden (desde Fase 166) — esto es historial pendiente de revisar, no una traba activa.
+        </p>
         <p v-if="rejectionError" class="text-xs text-red-600">{{ rejectionError }}</p>
         <article v-for="row in rejectedMaterials" :key="row.operation_id" class="border-t pt-3 space-y-2">
-          <p class="text-sm">Registró el intento: {{ row.actor?.full_name || row.actor?.email || 'Usuario pendiente de vincular' }} · {{ formatPeruDateTime(row.created_at) }}</p>
-          <router-link class="text-xs text-sky-700 underline" :to="(row.job_type === 'installation' ? '/soporte/instalaciones/' : row.job_type === 'ticket' ? '/soporte/' : '/soporte/rutinas/') + row.job_id">Ver orden y revisar materiales</router-link>
-          <p class="text-xs text-amber-700">{{ row.message }} El técnico debe recibir material y reintentar la operación pendiente.</p>
-          <details class="text-xs"><summary>Si el intento fue equivocado</summary>
-            <p class="my-2">Anularlo no registra consumo ni modifica existencias. No anules materiales realmente utilizados.</p>
-            <input v-model="rejectionNotes[row.operation_id]" maxlength="500" class="field-input" placeholder="Motivo de la anulación" />
-            <button type="button" :disabled="resolvingRejection || !rejectionNotes[row.operation_id]?.trim()" class="btn-secondary mt-2" @click="cancelRejection(row)">Anular intento con motivo</button>
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <p class="text-sm font-medium">{{ row.jobLabel }}</p>
+            <span v-if="row.jobOpen" class="badge bg-amber-100 text-amber-800">Orden abierta</span>
+            <span v-else class="badge bg-slate-100 text-slate-600">Orden cerrada — histórico</span>
+          </div>
+          <p class="text-xs text-slate-600">
+            Técnico: {{ row.actor?.full_name || row.actor?.email || 'Usuario pendiente de vincular' }} · {{ formatPeruDateTime(row.created_at) }}
+          </p>
+          <ul v-if="row.items.length" class="text-xs text-slate-700 space-y-0.5">
+            <li v-for="it in row.items" :key="it.productId">
+              {{ it.productName }}: solicitó {{ it.quantityRequested }} {{ it.unit }}, tiene ahora
+              <span :class="it.availableNow >= it.quantityRequested ? 'text-emerald-700 font-medium' : 'text-amber-700'">{{ it.availableNow }} {{ it.unit }}</span>
+              en custodia
+            </li>
+          </ul>
+          <p v-else class="text-xs text-amber-700">{{ row.message }}</p>
+          <router-link v-if="row.jobPath" class="text-xs text-sky-700 underline" :to="row.jobPath">Ver orden</router-link>
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              v-if="row.jobOpen"
+              type="button"
+              :disabled="!canRetry(row) || retryingRejection === row.operation_id"
+              :title="canRetry(row) ? 'Registra el mismo material/cantidad, descontando la custodia del técnico' : 'La custodia del técnico todavía no alcanza para todo el intento'"
+              class="btn-secondary text-xs"
+              @click="retryRejection(row)"
+            >
+              {{ retryingRejection === row.operation_id ? 'Reintentando...' : 'Reintentar consumo' }}
+            </button>
+          </div>
+          <details class="text-xs"><summary>Descartar intento equivocado</summary>
+            <p class="my-2">Descartarlo no registra consumo ni modifica existencias. No lo descartes si el material se utilizó realmente — usa "Reintentar" en vez de esto.</p>
+            <input v-model="rejectionNotes[row.operation_id]" maxlength="500" class="field-input" placeholder="Motivo del descarte" />
+            <button type="button" :disabled="resolvingRejection === row.operation_id || !rejectionNotes[row.operation_id]?.trim()" class="btn-secondary mt-2" @click="cancelRejection(row)">Descartar con motivo</button>
           </details>
         </article>
       </section>

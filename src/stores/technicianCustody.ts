@@ -11,11 +11,25 @@ import {
   type MaterialCustodyShortfall,
   type MaterialConsumptionMovementInput,
 } from '@/lib/materialCustodyShortfall';
+import { isJobOpenForRetry, parseRejectionItems } from '@/lib/materialRejectionPresentation';
 
 export interface RejectedMaterialOperation {
   operation_id: string; job_type: 'installation' | 'ticket' | 'routine'; job_id: string;
-  action: string; payload: Record<string, unknown>; message: string; created_at: string;
+  actor_id: string; action: string; payload: Record<string, unknown>; message: string; created_at: string;
   actor: { full_name: string | null; email: string | null } | null;
+}
+
+/** Fase 169: el mismo rechazo, pero con lo que un administrador necesita
+ * para decidir sin tener que abrir la orden aparte -- cliente, si la
+ * orden sigue abierta (antes de ofrecer "Reintentar"), y el material
+ * real (nombre/unidad) con la custodia VIGENTE del técnico (no la de
+ * cuando se registró el rechazo, que puede haber cambiado desde). */
+export interface DetailedRejectedMaterialOperation extends RejectedMaterialOperation {
+  jobStatus: string | null;
+  jobOpen: boolean;
+  jobLabel: string;
+  jobPath: string | null;
+  items: Array<{ productId: string; productName: string; unit: string; quantityRequested: number; availableNow: number }>;
 }
 
 /**
@@ -250,6 +264,83 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     const { error: err } = await supabase.rpc('cancel_rejected_material_operation', { p_operation_id: operationId, p_reason: reason });
     if (err) throw err;
   }
+  /** Fase 169: reintenta EXACTAMENTE el mismo intento (mismo producto/
+   * cantidad -- nunca editable por el administrador) debitando la
+   * custodia del técnico original. Solo ADMIN/SUPERADMIN (verificado en
+   * el servidor, RPC retry_rejected_material_operation). */
+  async function retryRejectedMaterialOperation(operationId: string) {
+    const { data, error: err } = await supabase.rpc('retry_rejected_material_operation', { p_operation_id: operationId });
+    if (err) throw err;
+    return data as { operationId: string; ids: string[]; at: string };
+  }
+
+  /** Mismo rechazo que fetchRejectedMaterialOperations(), enriquecido para
+   * la pantalla de Custodia: cliente/estado de la orden y la custodia
+   * VIGENTE del técnico por cada material del intento (Fase 169). */
+  async function fetchRejectedMaterialOperationsDetailed(): Promise<DetailedRejectedMaterialOperation[]> {
+    const base = await fetchRejectedMaterialOperations();
+    if (!base.length) return [];
+
+    type JobRow = { id: string; status: string; client: { first_name: string; last_name: string } | null };
+    const idsByType = {
+      installation: Array.from(new Set(base.filter((r) => r.job_type === 'installation').map((r) => r.job_id))),
+      ticket: Array.from(new Set(base.filter((r) => r.job_type === 'ticket').map((r) => r.job_id))),
+      routine: Array.from(new Set(base.filter((r) => r.job_type === 'routine').map((r) => r.job_id))),
+    };
+    const JOB_PATH_PREFIX: Record<'installation' | 'ticket' | 'routine', string> = {
+      installation: '/soporte/instalaciones/', ticket: '/soporte/', routine: '/soporte/rutinas/',
+    };
+    const JOB_LABEL_PREFIX: Record<'installation' | 'ticket' | 'routine', string> = {
+      installation: 'Alta', ticket: 'Avería', routine: 'Rutina',
+    };
+    const [installRes, ticketRes, routineRes] = await Promise.all([
+      idsByType.installation.length ? supabase.from('installations').select('id, status, client:clients(first_name,last_name)').in('id', idsByType.installation) : Promise.resolve({ data: [] as JobRow[], error: null }),
+      idsByType.ticket.length ? supabase.from('tickets').select('id, status, client:clients(first_name,last_name)').in('id', idsByType.ticket) : Promise.resolve({ data: [] as JobRow[], error: null }),
+      idsByType.routine.length ? supabase.from('routines').select('id, status, client:clients(first_name,last_name)').in('id', idsByType.routine) : Promise.resolve({ data: [] as JobRow[], error: null }),
+    ]);
+    if (installRes.error) throw installRes.error;
+    if (ticketRes.error) throw ticketRes.error;
+    if (routineRes.error) throw routineRes.error;
+    const jobById = new Map<string, { status: string; label: string; path: string }>();
+    for (const [type, res] of [['installation', installRes], ['ticket', ticketRes], ['routine', routineRes]] as const) {
+      for (const row of (res.data ?? []) as unknown as JobRow[]) {
+        const clientName = row.client ? `${row.client.first_name} ${row.client.last_name}` : 'cliente no disponible';
+        jobById.set(row.id, { status: row.status, label: `${JOB_LABEL_PREFIX[type]} — ${clientName}`, path: JOB_PATH_PREFIX[type] + row.id });
+      }
+    }
+
+    const itemsByOperation = new Map(base.map((r) => [r.operation_id, parseRejectionItems(r.action, r.payload)]));
+    const productIds = Array.from(new Set(Array.from(itemsByOperation.values()).flat().map((it) => it.productId)));
+    const actorIds = Array.from(new Set(base.map((r) => r.actor_id)));
+    const [productsRes, custodyRes] = await Promise.all([
+      productIds.length ? supabase.from('inventory_products').select('id, name, unit').in('id', productIds) : Promise.resolve({ data: [] as Array<{ id: string; name: string; unit: string }>, error: null }),
+      productIds.length && actorIds.length
+        ? supabase.from('technician_material_custody').select('technician_id, product_id, quantity').in('technician_id', actorIds).in('product_id', productIds)
+        : Promise.resolve({ data: [] as Array<{ technician_id: string; product_id: string; quantity: number }>, error: null }),
+    ]);
+    if (productsRes.error) throw productsRes.error;
+    if (custodyRes.error) throw custodyRes.error;
+    const productById = new Map((productsRes.data ?? []).map((p) => [p.id, p]));
+    const custodyByPair = new Map((custodyRes.data ?? []).map((c) => [`${c.technician_id}::${c.product_id}`, Number(c.quantity)]));
+
+    return base.map((r) => {
+      const job = jobById.get(r.job_id);
+      return {
+        ...r,
+        jobStatus: job?.status ?? null,
+        jobOpen: isJobOpenForRetry(r.job_type, job?.status ?? null),
+        jobLabel: job?.label ?? `${r.job_type} ${r.job_id}`,
+        jobPath: job ? job.path : null,
+        items: (itemsByOperation.get(r.operation_id) ?? []).map((it) => ({
+          productId: it.productId,
+          productName: productById.get(it.productId)?.name ?? it.productId,
+          unit: productById.get(it.productId)?.unit ?? '',
+          quantityRequested: it.quantity,
+          availableNow: custodyByPair.get(`${r.actor_id}::${it.productId}`) ?? 0,
+        })),
+      };
+    });
+  }
 
   return {
     loading,
@@ -267,6 +358,8 @@ export const useTechnicianCustodyStore = defineStore('technicianCustody', () => 
     requestUnitReturn,
     requestMaterialReturn,
     fetchRejectedMaterialOperations,
+    fetchRejectedMaterialOperationsDetailed,
     cancelRejectedMaterialOperation,
+    retryRejectedMaterialOperation,
   };
 });
