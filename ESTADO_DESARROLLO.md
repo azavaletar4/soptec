@@ -5587,3 +5587,88 @@ accion adicional no pedida explicitamente).
 Commit de esta sesion: `[ver git log de fase168-integracion]`. Sin
 aplicar migraciones, sin push, sin deploy. Caso real de Diego Villanueva
 sin tocar. Checkout principal (`D:\SmartRayco`) sin tocar.
+
+## Fase 168: respaldo logico PC+VM verificado, PITR reemplazado por estrategia del propietario (21/10/2026, misma sesion posterior)
+
+El usuario aclaro: Supabase Free, sin PITR/backups administrados en el
+dashboard -- la condicion 3 del despliegue anterior (bloqueante) se
+reemplaza por la estrategia que SI aplica a este proyecto: dos copias
+logicas independientes (PC + VM) via `pg_dump`, verificadas con
+restauracion aislada real. Commit `c4c7de4` en el checkout PRINCIPAL
+(`D:\SmartRayco`, no en este worktree -- son scripts de infraestructura
+reutilizable, junto al resto de `scripts/respaldar-*.ps1`/`verificar-*.ps1`
+ya existentes, no parte del codigo de Fase 166/167/168 en si).
+
+**Respaldo generado** (solo lectura, una unica transaccion
+`REPEATABLE READ READ ONLY` con snapshot exportado, `ROLLBACK` explicito
+-- nunca escribe en Cloud): `completo.dump` (pg_dump --format=custom,
+38.7MB, esquema+datos+funciones+triggers+RLS+politicas de TODOS los
+schemas accesibles -- confirmado `auth`/`storage`/`vault`/`realtime`/`extensions`
+ademas de `public`) + `roles.sql` (pg_dumpall --roles-only
+--no-role-passwords, 5.9KB). Metadata de consistencia
+(`snapshot-info.json`) confirma los MD5 EXACTOS de produccion real para
+las dos funciones que Fase 166/167 reemplazan
+(`4427ab7a21ba1c2a39f46310e4d8086e` / `3ecf94d3f4f0f8c004b8208acb98592d`)
+y 68 tablas/107 funciones/79 politicas en `public`.
+
+**Dos copias guardadas, fuera de directorios publicos**:
+- PC: `%LOCALAPPDATA%\SmartRaycoBackups\fase168_respaldo_20261021_203832_4c211f4f\`
+  (ACL NTFS restringida a este usuario + SYSTEM, protecciones heredadas
+  deshabilitadas).
+- VM: `/root/smartrayco-backups/fase168_respaldo_20261021_203832_4c211f4f/`
+  (directorio `700`, archivos `600`, solo root).
+- **SHA-256 verificado identico entre ambas copias** (`completo.dump`,
+  `roles.sql`, `snapshot-info.json`, `inventario.txt`) tras la
+  transferencia — manifiesto completo en `SHA256SUMS.txt` dentro de cada
+  copia.
+
+**Restauracion aislada probada** (`--network none`, imagen
+`supabase/postgres:17.6.1.136` -- nunca toca Cloud ni la VM, contenedor
+descartable): tras restaurar primero los roles (`roles.sql`, necesarios
+porque las politicas RLS los referencian) y luego `completo.dump`
+(`pg_restore --no-owner --no-privileges`), **resultado limpio**: 68/68
+tablas, 107/107 funciones, 80 triggers, 79/79 politicas RLS, 68 tablas
+con RLS habilitado, 39 instalaciones y 5 rechazos de materiales
+restaurados con datos reales (incluido el rechazo pendiente real de
+Diego Villanueva, `operation_id` presente) — y **los 2 MD5 de las
+funciones de Fase 166/167 IDENTICOS a los de produccion real**, sin
+ningun error en el log de `pg_restore` (0 lineas).
+
+**Limitaciones documentadas (no pueden respaldarse/restaurarse via
+`pg_dump` fuera de la plataforma Supabase)**: los roles de
+administracion propios de Supabase (`supabase_admin` con opcion ADMIN
+sobre `anon`/`authenticated`/`authenticator`, etc.) -- 45 errores
+esperados al restaurar `roles.sql` en un cluster Postgres aislado, todos
+del tipo "permission denied to grant privileges as role" o "role
+postgres already exists" (el propio bootstrap superuser del cluster
+nuevo) -- ninguno afecto el esquema/datos reales restaurados despues.
+Los ARCHIVOS binarios de Supabase Storage (fotos de clientes/equipos)
+NO estan incluidos -- `storage.objects` (metadata) si se respalda via
+`pg_dump`, pero los blobs en si viven fuera de Postgres; fuera de
+alcance de esta fase (el usuario pidio especificamente el respaldo
+LOGICO de PostgreSQL, no Storage).
+
+**Hallazgo real durante la implementacion**: un bug latente en el patron
+de credenciales ya existente (`Invoke-PrivateDocker`/`Invoke-BackupDocker`
+en `verificar-supabase-privado.ps1`/`material-custody-integral-backup.ps1`)
+-- sin fijar `[Console]::InputEncoding` a UTF-8 SIN BOM antes de escribir
+al stdin del contenedor Docker, .NET Framework antepone un BOM a la
+PRIMERA linea enviada (el certificado CA en base64), rompiendo su propio
+`base64 -d` dentro del contenedor. Confirmado y corregido con cargas
+sinteticas (nunca con credenciales reales) antes de usar el mecanismo
+contra produccion. No se modifico ningun script existente en esta fase
+(fuera de alcance, scripts ya aprobados) -- documentado aqui para quien
+continue, por si esos scripts fallan de la misma forma.
+
+**Sin tocar**: produccion real sin cambios mas alla de la unica
+transaccion de solo lectura (confirmado: Alta de Diego Villanueva sigue
+`in_progress`, su rechazo sigue `pending`, MD5 de ambas funciones sin
+drift). Ningun consumo real, custodia, inventario, OLT, MikroTik ni
+facturacion tocados. Respaldos anteriores de Fase 166/167 (tag git +
+imagenes Docker en la VM) intactos. Checkout principal: solo se agregaron
+los 3 scripts nuevos (commit `c4c7de4`), los 7 archivos ajenos pendientes
+siguen exactamente igual.
+
+**PASS de recuperabilidad**: respaldo verificado, íntegro, recuperable y
+restaurado con éxito en entorno aislado real. Listo para que el usuario
+autorice reanudar el despliegue de Fase 168 desde el commit `75be8b6`.
