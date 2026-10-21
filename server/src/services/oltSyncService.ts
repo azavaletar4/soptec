@@ -6,6 +6,7 @@ import { detectStatusAlert, detectSignalAlert } from './oltAlerts';
 import { buildOltAlertLogRows } from './oltAlertLog';
 import { type OltDeviceRow, telnetTargetFor } from '../lib/oltDevice';
 import { persistOntMeasurement } from './oltTelemetryPersistence';
+import { beginOltReadOperation, isOltReadOperationRunning } from './oltReadOperation';
 import { collectOltTelemetry, evaluateOntEvidence, rememberOntEvidence, ontTelemetry } from './oltTelemetry';
 import {
   listUnconfiguredOntsCommands,
@@ -51,7 +52,7 @@ export interface OltFullSyncResult {
 const runningDeviceIds = new Set<string>();
 
 export function isOltSyncRunning(deviceId: string): boolean {
-  return runningDeviceIds.has(deviceId);
+  return runningDeviceIds.has(deviceId) || isOltReadOperationRunning(deviceId);
 }
 
 /**
@@ -84,11 +85,14 @@ export async function runOltFullSync(
   opts: { priority?: OltLockPriority; includeSignal?: boolean } = {},
 ): Promise<OltFullSyncResult | null> {
   if (runningDeviceIds.has(device.id)) return null;
+  const release = beginOltReadOperation(device.id);
+  if (!release) return null;
   runningDeviceIds.add(device.id);
   try {
     return await performFullSync(device, opts.priority ?? 'interactive', opts.includeSignal ?? true);
   } finally {
     runningDeviceIds.delete(device.id);
+    release();
   }
 }
 
@@ -267,6 +271,8 @@ async function performFullSync(
   if (!updates.length && !alerts.length) {
     for (const { row, evidence } of signalReadings) ontTelemetry.rememberSignal(row, evidence);
   }
+  // One atomic durable snapshot per cycle, never one disk write per ONT.
+  ontTelemetry.flushSignalReferences();
 
   // 5) Salud del chasis: uptime, temperatura y CPU/RAM por tarjeta.
   let uptimeHours: number | null = null;

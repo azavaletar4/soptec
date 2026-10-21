@@ -1,6 +1,7 @@
 import { fullRunningConfigCommand, listAllOntsCommands, bulkOnuRxCommands, bulkOnuTxCommands, type ZteInterfaceRef } from '../ssh/zteCommands';
 import { parseFullRunningConfig, parseGlobalOntState, parseBulkPower, type GlobalOnt, type FullConfigOnt } from '../ssh/zteParsers';
 import { oltEvents } from './oltEvents';
+import { loadSignalCheckpoint, saveSignalCheckpoint, type SignalReference } from './oltSignalCheckpoint';
 
 export interface OntIdentity { id: string; olt_device_id: string; serial: string; frame: number; slot: number; port: number; ont_id: number }
 export type EvidenceOutcome = 'valid' | 'failed' | 'absent' | 'moved' | 'conflict' | 'ambiguous' | 'unconfirmed';
@@ -14,6 +15,15 @@ export interface TelemetryScan {
   stateReadAt: string | null; signalReadAt: Map<string, string>;
 }
 type Read = (commands: string[], timeoutMs: number) => Promise<string[]>;
+function verifiedPortPower(raw: string, ref: ZteInterfaceRef) {
+  const seen = new Set<number>();
+  for (const match of raw.matchAll(/^\s*gpon-onu_(\d+)\/(\d+)\/(\d+):(\d+)\s+/gm)) {
+    const onu = Number(match[4]);
+    if (Number(match[1]) !== ref.shelf || Number(match[2]) !== ref.slot || Number(match[3]) !== ref.port || seen.has(onu)) throw Error('Potencia de puerto ajeno o identidad duplicada');
+    seen.add(onu);
+  }
+  return parseBulkPower(raw);
+}
 function bindings(raw: string): Bindings {
   const count = [...raw.matchAll(/^\s*onu \d+ type \S+ sn \S+/gm)].length;
   const parsed = new Map([...parseFullRunningConfig(raw)].filter(([, v]) => !!v.serial));
@@ -41,8 +51,8 @@ export async function collectOltTelemetry(read: Read, options: { includeSignal: 
   for (const [key, ref] of options.includeSignal ? ports : []) {
     try {
       // Separate sessions: this firmware hangs if RX and TX share one connection.
-      result.rx.set(key, parseBulkPower((await read(bulkOnuRxCommands(ref), 30000))[1] ?? ''));
-      result.tx.set(key, parseBulkPower((await read(bulkOnuTxCommands(ref), 30000))[1] ?? ''));
+      result.rx.set(key, verifiedPortPower((await read(bulkOnuRxCommands(ref), 30000))[1] ?? '', ref));
+      result.tx.set(key, verifiedPortPower((await read(bulkOnuTxCommands(ref), 30000))[1] ?? '', ref));
       result.signalReadAt.set(key, new Date().toISOString());
     } catch { result.failedPorts.push(key); result.rx.delete(key); result.tx.delete(key); }
   }
@@ -91,11 +101,16 @@ export function evaluateOntEvidence(row: OntIdentity, scan: TelemetryScan): OntE
 export class OntTelemetryEvidence {
   private evidence = new Map<string, OntEvidence>();
   // Alert comparison only: never exposed as current optical power or read from legacy DB values.
-  private signalReferences = new Map<string, { identity: string; rx: number; at: number }>();
+  private signalReferences: Map<string, SignalReference>;
   private identity(row: OntIdentity) { return `${row.olt_device_id}|${serialKey(row.serial)}|${ontPosition(row)}`; }
-  constructor(private now: () => number = Date.now) {}
+  constructor(private now: () => number = Date.now, private checkpointPath?: string) {
+    this.signalReferences = checkpointPath ? loadSignalCheckpoint(checkpointPath) : new Map();
+  }
+  flushSignalReferences() {
+    if (this.checkpointPath) saveSignalCheckpoint(this.checkpointPath, this.signalReferences);
+  }
   remember(row: OntIdentity, evidence: OntEvidence) {
-    if (['absent', 'moved', 'conflict', 'ambiguous'].includes(evidence.outcome)) this.signalReferences.delete(row.id);
+    if (['absent', 'moved', 'conflict', 'ambiguous'].includes(evidence.outcome) && this.signalReferences.delete(row.id)) this.flushSignalReferences();
     this.evidence.set(row.id, evidence);
   }
   signalReference(row: OntIdentity): number | null {
@@ -114,7 +129,10 @@ export class OntTelemetryEvidence {
     const at = Date.parse(evidence.signalReadAt);
     if (Number.isFinite(at)) this.signalReferences.set(row.id, { identity: this.identity(row), rx: evidence.rxPower, at });
   }
-  invalidate(id: string) { this.evidence.delete(id); this.signalReferences.delete(id); }
+  invalidate(id: string) {
+    this.evidence.delete(id);
+    if (this.signalReferences.delete(id)) this.flushSignalReferences();
+  }
   project<T extends { id: string; olt_device_id?: string; serial?: string; frame?: number; slot?: number; port?: number; ont_id?: number; status?: unknown; rx_power?: unknown; tx_power?: unknown; last_synced_at?: unknown }>(row: T) {
     const saved = this.evidence.get(row.id);
     const valid = saved && row.olt_device_id === saved.oltDeviceId && serialKey(row.serial ?? '') === serialKey(saved.serial) && ontPosition(row as unknown as OntIdentity) === saved.position && this.now() <= Date.parse(saved.validUntil);
@@ -125,7 +143,8 @@ export class OntTelemetryEvidence {
         historical: historical ?? { status: row.status, rxPower: row.rx_power, txPower: row.tx_power, at: row.last_synced_at } } };
   }
 }
-export const ontTelemetry = new OntTelemetryEvidence();
+export const ontTelemetry = new OntTelemetryEvidence(Date.now,
+  process.env.OLT_SIGNAL_CHECKPOINT_PATH ?? (process.env.NODE_ENV === 'production' ? '/var/lib/smartrayco-olt/signal-references.json' : undefined));
 export function presentOntData<T>(value: T): T {
   if (Array.isArray(value)) return value.map(presentOntData) as T;
   if (value && typeof value === 'object' && 'id' in value && 'serial' in value && 'ont_id' in value) {

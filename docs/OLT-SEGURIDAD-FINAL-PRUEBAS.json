@@ -1,0 +1,56 @@
+{
+  "base": "0a10d33edb08f43fc3c67ee21d50b5638d811cf0",
+  "productionBaseline": "e679d9c9254746a7fe50ba317eabf7cb1d2c8871",
+  "result": "PASS_FOCUSED_RELEASE_GATES_PENDING",
+  "focused": {
+    "pass": 139,
+    "fail": 0
+  },
+  "originalReproductions": {
+    "importFailure": "PASS",
+    "signalGap": "PASS"
+  },
+  "checkpoint": {
+    "restart": "PASS",
+    "linuxContainerRecreation": "PASS",
+    "supabaseReused": false,
+    "migration": false
+  },
+  "frontendTypes": "PASS",
+  "build": "PASS_LOCAL_ONLY",
+  "backendTypes": {
+    "result": "FAIL_UNCHANGED_BASELINE",
+    "existingErrors": 5,
+    "newErrors": 0
+  },
+  "backup": {
+    "directory": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime/olt-seguridad-evidencia-20261020/backup-2026-10-20T22-41-08.247Z",
+    "status": "PASS",
+    "images": [
+      {
+        "service": "frontend",
+        "image": "sha256:8b8fcb9b9caa0ddb1de35c87e46cb29d1ef682407b80be8e008fd29009f389bd",
+        "archiveSha256": "9bf1d626a43442f7fed3481522f464082f6d354133896c06ebc9daa10f60f17a",
+        "blobsVerified": 17,
+        "bytes": 32955392,
+        "labExitCode": 0
+      },
+      {
+        "service": "backend",
+        "image": "sha256:43c7f723812b02d254ffe57909e328adfa20ac5a67cb1562eb91a051b76f032d",
+        "archiveSha256": "85c90977aa95547abe8dd783756680c1bfb1d72ad29ff5dc05981bafe86aac32",
+        "blobsVerified": 16,
+        "bytes": 296638464,
+        "labExitCode": 0
+      }
+    ]
+  },
+  "productionWrites": false,
+  "oltConfiguration": false,
+  "push": false,
+  "deployment": false,
+  "protectedFiles": {
+    "total": 216,
+    "changedHashes": 0
+  }
+}

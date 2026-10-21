@@ -43,9 +43,12 @@ services:
       dockerfile: deploy/Dockerfile.backend
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - olt_telemetry:/var/lib/smartrayco-olt
     environment:
       PORT: "3000"
       GENIEACS_NBI: "http://genieacs:7557"
+      OLT_SIGNAL_CHECKPOINT_PATH: "/var/lib/smartrayco-olt/signal-references.json"
     depends_on:
       genieacs:
         condition: service_healthy
@@ -107,6 +110,7 @@ networks:
     driver: bridge
 
 volumes:
+  olt_telemetry:
   mongo_data:
   mongo_configdb:
   genieacs_ext:

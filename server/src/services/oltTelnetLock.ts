@@ -36,6 +36,8 @@ interface QueueItem {
   fn: () => Promise<unknown>;
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
+  signal?: AbortSignal;
+  onAbort?: () => void;
 }
 
 interface DeviceQueue {
@@ -63,10 +65,12 @@ function runNext(deviceId: string) {
   // hacer cola detras de 20 puertos de un sync que nadie esta mirando.
   const next = q.interactive.shift() ?? q.background.shift();
   if (!next) return;
+  if (next.onAbort) next.signal?.removeEventListener('abort', next.onAbort);
+  if (next.signal?.aborted) { next.reject(Error('Lectura cancelada antes de abrir sesión OLT.')); runNext(deviceId); return; }
 
   q.running = true;
-  next
-    .fn()
+  Promise.resolve()
+    .then(next.fn)
     .then(
       (v) => next.resolve(v),
       (e) => next.reject(e),
@@ -80,12 +84,19 @@ function runNext(deviceId: string) {
 export function withOltLock<T>(
   deviceId: string,
   fn: () => Promise<T>,
-  opts: { priority?: Priority } = {},
+  opts: { priority?: Priority; signal?: AbortSignal } = {},
 ): Promise<T> {
   const priority = opts.priority ?? 'interactive';
   return new Promise<T>((resolve, reject) => {
     const q = getQueue(deviceId);
-    const item: QueueItem = { fn: fn as () => Promise<unknown>, resolve: resolve as (v: unknown) => void, reject };
+    if (opts.signal?.aborted) { reject(Error('Lectura cancelada.')); return; }
+    const item: QueueItem = { fn: fn as () => Promise<unknown>, resolve: resolve as (v: unknown) => void, reject, signal: opts.signal };
+    item.onAbort = () => {
+      const waiting = priority === 'interactive' ? q.interactive : q.background;
+      const index = waiting.indexOf(item);
+      if (index >= 0) { waiting.splice(index,1); reject(Error('Tiempo agotado esperando sesión OLT.')); }
+    };
+    opts.signal?.addEventListener('abort', item.onAbort, { once: true });
     (priority === 'interactive' ? q.interactive : q.background).push(item);
     runNext(deviceId);
   });

@@ -1,6 +1,7 @@
 import { collectOltTelemetry, evaluateOntEvidence, rememberOntEvidence, ontTelemetry, presentOntData } from '../services/oltTelemetry';
 import { persistOntMeasurement } from '../services/oltTelemetryPersistence';
 import { readVerifiedOntSignal } from '../services/oltVerifiedRead';
+import { guardOltReadOperation, createOltReadBudget } from '../services/oltReadOperation';
 import { validateProvisioningContract } from '../services/provisioningContract';
 import { createOltProvisioningRoutes } from './oltProvisioning';
 import { Hono, type Context } from 'hono';
@@ -734,15 +735,15 @@ oltRoutes.get('/onts/status', requireRole(...STAFF_READ), async (c) => {
 });
 
 /** Explicit metadata import; telemetry is published only by the shared serial-verified reader. */
-oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c) => {
+oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), guardOltReadOperation, async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
   // Explicit import remains metadata-only: measurements use the shared serial-verified reader.
+  const budget = createOltReadBudget(device);
   let scan: Awaited<ReturnType<typeof collectOltTelemetry>>;
   try {
-    scan = await collectOltTelemetry((commands, timeoutMs) => withOltLock(device.id,
-      () => runTelnetCommands(telnetTargetFor(device), commands, { timeoutMs })), { includeSignal: false });
+    scan = await collectOltTelemetry(budget.read, { includeSignal: false });
     if (!scan.before || !scan.after || !scan.states) throw Error('Identidad o estado no confirmados; no se importó nada.');
   } catch { return c.json({ error: 'No se pudo verificar el inventario de seriales de la OLT.' }, 502); }
   const globalOnts = scan.states!;
@@ -753,7 +754,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
   const { data: linkedRows, error: identityError, count: identityCount } = await supabaseAdmin
     .from('olt_onts')
     .select('id, frame, slot, port, ont_id, serial, client_id', { count: 'exact' })
-    .eq('olt_device_id', device.id);
+    .eq('olt_device_id', device.id).abortSignal(budget.signal);
   // Fail closed on transport/RLS errors AND truncated inventories. No mutation before this gate.
   if (identityError || !linkedRows || identityCount === null || linkedRows.length !== identityCount) {
     return c.json({ error: 'No se pudo obtener el inventario completo de identidades; no se importó nada.' }, 503);
@@ -800,6 +801,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
 
   let imported = 0;
   for (const metadata of [...rowsWithDescription, ...rowsWithoutDescription]) {
+    if (budget.signal.aborted) return c.json({ error: 'Tiempo de importación agotado; no se iniciaron más escrituras.', imported }, 503);
     const existing = linkedRows.find(r => r.frame === metadata.frame && r.slot === metadata.slot && r.port === metadata.port && r.ont_id === metadata.ont_id);
     if (existing) {
       // Never update identity fields. Atomic predicates protect against a concurrent replacement/link.
@@ -808,11 +810,11 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
         .eq('id', existing.id).eq('olt_device_id', olt_device_id).eq('serial', existing.serial)
         .eq('frame', frame).eq('slot', slot).eq('port', port).eq('ont_id', ont_id);
       query = existing.client_id === null ? query.is('client_id', null) : query.eq('client_id', existing.client_id);
-      const { data, error } = await query.select('id').maybeSingle();
+      const { data, error } = await query.select('id').abortSignal(budget.signal).maybeSingle();
       if (error || !data) return c.json({ error: 'Identidad o vínculo cambiado; importación detenida.', imported }, 409);
     } else {
       // Plain INSERT: a concurrently occupied position must fail, never take the UPDATE branch.
-      const { error } = await supabaseAdmin.from('olt_onts').insert(metadata);
+      const { error } = await supabaseAdmin.from('olt_onts').insert(metadata).abortSignal(budget.signal);
       if (error) return c.json({ error: 'No se pudo insertar la identidad sin sobrescribir registros.', imported }, 409);
     }
     imported++;
@@ -833,7 +835,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), async (c)
   });
 });
 
-oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) => {
+oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), guardOltReadOperation, async (c: Context) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
@@ -843,17 +845,17 @@ oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), async (c: Context) =
   if (slot == null || port == null) return c.json({ error: 'slot y port son requeridos' }, 400);
 
   try {
-    const scan = await collectOltTelemetry((commands, timeoutMs) => withOltLock(device.id,
-      () => runTelnetCommands(telnetTargetFor(device), commands, { timeoutMs })), { includeSignal: false });
+    const budget = createOltReadBudget(device);
+    const scan = await collectOltTelemetry(budget.read, { includeSignal: false });
     const { data: rows, error } = await supabaseAdmin.from('olt_onts').select('*')
-      .eq('olt_device_id', device.id).eq('frame', shelf).eq('slot', slot).eq('port', port);
+      .eq('olt_device_id', device.id).eq('frame', shelf).eq('slot', slot).eq('port', port).abortSignal(budget.signal);
     if (error) throw Error('No se pudo consultar la identidad de las ONT.');
     let updated = 0;
     const conflicts: object[] = [];
     for (const row of rows ?? []) {
       const e = evaluateOntEvidence(row, scan); rememberOntEvidence(row, e);
       if (e.outcome !== 'valid') { conflicts.push({ serial: row.serial, position: e.position, observedSerial: e.observedSerial, outcome: e.outcome }); continue; }
-      await persistOntMeasurement(row, { status: e.status as 'online' | 'offline', admin_state: e.adminState, last_synced_at: e.checkedAt });
+      await persistOntMeasurement(row, { status: e.status as 'online' | 'offline', admin_state: e.adminState, last_synced_at: e.checkedAt }, undefined, budget.signal);
       updated++;
     }
     const found = (scan.states ?? []).filter(o => o.frame === shelf && o.slot === slot && o.port === port);

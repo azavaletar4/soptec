@@ -5,6 +5,7 @@ import { startFakeOltCli } from './fakeOltCli';
 import { TEST_USERNAME, TEST_PASSWORD } from '../../telnet/__tests__/fakeOltServer';
 import { ontTelemetry } from '../oltTelemetry';
 import { requireAuth } from '../../middleware/auth';
+import { beginOltReadOperation } from '../oltReadOperation';
 
 test('scheduler y rutas reales: Janet/Estiven, guardas, proyección, señal e importación sin atribución cruzada', { timeout: 30000 }, async () => {
   const commands: string[] = [], writes: { table: string; method: string; body: any; filters: URLSearchParams }[] = [];
@@ -69,6 +70,11 @@ test('scheduler y rutas reales: Janet/Estiven, guardas, proyección, señal e im
     const { oltRoutes } = await import('../../routes/olt');
     // Only JWT verification is replaced by the test principal above; real handlers and role guards remain.
     for (const route of oltRoutes.routes) if (route.handler !== requireAuth) app.on(route.method, '/devices' + route.path, route.handler);
+    const busy=beginOltReadOperation(device.id);assert(busy);
+    const commandCount=commands.length;
+    assert.equal((await app.request('/devices/olt/onts/import-existing',{method:'POST'})).status,409);
+    assert.equal((await app.request('/devices/olt/onts/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot:2,port:8})})).status,409);
+    assert.equal(await runOltFullSync(device),null);assert.equal(commands.length,commandCount);busy();
     const list = await app.request('/devices/olt/onts'); assert.equal(list.status,200); const body = await list.json() as any[]; assert.equal(body[0].status,'unknown'); assert.equal(body[0].telemetry.historical.rxPower, -19.67);
     const serialStatus = await app.request('/devices/onts/status?serials=MSTC8CCE647E,HWTCDEB847B6');
     assert.equal((await serialStatus.json() as any).MSTC8CCE647E.status,'unknown');
