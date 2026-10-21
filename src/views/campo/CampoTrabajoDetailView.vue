@@ -23,7 +23,8 @@ import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import { createFieldInventoryClient } from '@/lib/fieldInventoryClient';
 import { createInstallationCustodySelector, isInstallableOwnCustody, installableEquipmentModelIds } from '@/lib/installationCustodySelector';
-import { confirmedMaterialQuantity, materialCustodyLabel, withAvailableCustody, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
+import { confirmedMaterialQuantity, materialCustodyLabel, type MaterialCustodyLoadState } from '@/lib/materialCustodyAvailability';
+import { custodyEquipmentModels, custodyEquipmentUnits, custodyMaterialChoices, custodyUnitLabel } from '@/lib/fieldCustodyChoices';
 import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
 import type { MyInventoryCustody } from '@/types/domain';
 import { createInventoryRefresh } from '@/lib/inventoryRefresh';
@@ -134,6 +135,7 @@ async function retryPendingInventory() {
     if (!pending) { inventoryPendingNotice.value = ''; return; }
     await writeFieldInventory(pending.p_action, pending.p_payload);
     await Promise.all([loadMaterials(), loadInstallEquipos(), loadEquipos()]);
+    if (jobType === 'ticket') await loadMyMaterialCustody();
     toast.success('Operación de inventario confirmada.');
   } catch (error) { toast.error(getErrorMessage(error)); }
 }
@@ -540,6 +542,7 @@ const installableEquipmentProductIds = computed(() => installableEquipmentModelI
 const installableEquipmentProducts = computed(() =>
   fieldProducts.value.filter((p) => p.is_serialized && installableEquipmentProductIds.value.has(p.id)),
 );
+const incomingEquipmentProducts = computed(() => custodyEquipmentModels(myEquipmentCustody.value, materialCustodyState.value));
 watch(() => [auth.user?.id, auth.role], () => { void loadMyMaterialCustody(); });
 
 // El Kardex es insert-only (Fase 58, no se borra ninguna fila) — "quitar" o
@@ -697,13 +700,11 @@ const kitCoveredProductIds = computed(() => {
 // Fase 143: "Materiales usados" (Paso 3) es para CONSUMIBLES — excluye
 // equipos serializados (ONT/Mesh/TV Box, ya se asignan por serie/MAC en el
 // Paso 2) y lo que ya se registra desde el Kit base de arriba.
-// Averias (ticket): Fase 165, etapa 2 — este selector tambien se retira a
-// solo custodia disponible >0 del tecnico, igual que el resto de Campo. Las
-// Altas conservan el catalogo completo tal como ya funciona (el Kit base
-// cubre su flujo de custodia con su propio aviso visual por fila).
+// Averías read custody directly, including models absent from the active catalog.
+// Altas retains its existing catalog and kit behavior.
 const materialSelectableProducts = computed(() => {
   const base = fieldProducts.value.filter((p) => p.is_active && !p.is_serialized && !kitCoveredProductIds.value.has(p.id));
-  return jobType === 'ticket' ? withAvailableCustody(base, availableOf, (p) => p.id, materialCustodyState.value) : base;
+  return jobType === 'ticket' ? custodyMaterialChoices(myMaterialCustody.value, materialCustodyState.value) : base;
 });
 
 function resetKitQuantities() {
@@ -1135,14 +1136,14 @@ async function handleOutgoingUnit() {
 }
 
 const incomingForm = ref({ productId: '', unitId: '', reason: '' });
-const availableIncomingUnits = ref<FieldInventoryUnit[]>([]);
+const availableIncomingUnits = computed(() => custodyEquipmentUnits(myEquipmentCustody.value, incomingForm.value.productId, materialCustodyState.value));
 const inventoryAccessBlocked = ref(false);
 let inventoryContextKey = '';
 function clearInventoryData() {
  installCustodySelector.invalidate();
  inventoryEpoch++; for (const request of inventoryReads) request.abort();
  fieldProducts.value = []; materials.value = []; installEquipmentUnits.value = [];
- installAvailableUnits.value = []; assignedUnits.value = []; pendingUnits.value = []; availableIncomingUnits.value = [];
+ installAvailableUnits.value = []; assignedUnits.value = []; pendingUnits.value = [];
  materialForm.value.productId = ''; installUnitForm.value.productId = ''; installUnitForm.value.unitId = '';
  incomingForm.value.productId = ''; incomingForm.value.unitId = '';
  outgoingForm.value.unitId = ''; editingMaterialId.value = null;
@@ -1165,7 +1166,7 @@ const inventoryRefresh = createInventoryRefresh({
    historical ? Promise.resolve({items: [] as FieldInventoryProduct[]}) : readInventory<FieldInventoryProduct>(context, 'products', {}, signal),
    readInventory<FieldInventoryUnit>(context, 'assigned', {}, signal),
    jobType === 'ticket' ? readInventory<FieldInventoryUnit>(context, 'pending', {}, signal) : Promise.resolve({items: [] as FieldInventoryUnit[]}),
-   productId && !historical ? readInventory<FieldInventoryUnit>(context, 'available', {productId}, signal) : Promise.resolve({items: [] as FieldInventoryUnit[]}),
+   jobType === 'installation' && productId && !historical ? readInventory<FieldInventoryUnit>(context, 'available', {productId}, signal) : Promise.resolve({items: [] as FieldInventoryUnit[]}),
   ]);
   return { movements, products, assigned, pending, available, productId, context };
  },
@@ -1177,7 +1178,6 @@ const inventoryRefresh = createInventoryRefresh({
    if (value.productId === installUnitForm.value.productId) installCustodySelector.accept(value.context, value.productId, value.available.items);
   } else {
    assignedUnits.value = value.assigned.items; pendingUnits.value = value.pending.items;
-   if (value.productId === incomingForm.value.productId) availableIncomingUnits.value = value.available.items;
   }
  },
 });
@@ -1202,13 +1202,10 @@ const incomingError = ref<string | null>(null);
 
 async function onIncomingProductChange() {
   incomingForm.value.unitId = '';
-  availableIncomingUnits.value = [];
   if (!incomingForm.value.productId) return;
   loadingIncomingUnits.value = true;
-  const productId = incomingForm.value.productId;
   try {
-    const result = await fieldInventory.read<FieldInventoryUnit>(fieldContext(), 'available', { productId });
-    if (productId === incomingForm.value.productId) availableIncomingUnits.value = result.items;
+    await loadMyMaterialCustody();
   } catch (e) {
     fieldInventoryWarning.value = getErrorMessage(e);
   } finally {
@@ -1221,13 +1218,18 @@ async function handleIncomingUnit() {
   savingIncoming.value = true;
   incomingError.value = null;
   try {
+    const originalContext = fieldContext();
+    const unitId = incomingForm.value.unitId;
+    await loadMyMaterialCustody();
+    if (JSON.stringify(originalContext) !== JSON.stringify(fieldContext())) throw Error('La orden o el técnico cambió. Actualiza antes de registrar.');
+    if (!availableIncomingUnits.value.some(u => u.id === unitId)) throw Error('El equipo ya no está disponible en tu custodia. Actualiza y elige nuevamente.');
     await writeFieldInventory('stage', {
-      unitId: incomingForm.value.unitId,
+      unitId,
       reason: incomingForm.value.reason || 'Equipo entrante registrado en averia',
     });
     incomingForm.value = { productId: '', unitId: '', reason: '' };
-    availableIncomingUnits.value = [];
     await loadEquipos();
+    await loadMyMaterialCustody();
   } catch (e) {
     incomingError.value = getErrorMessage(e, 'Error al registrar el equipo entrante');
   } finally {
@@ -2406,6 +2408,7 @@ async function handleCloseSubmit() {
             <input v-model.number="materialForm.quantity" type="number" min="1" :max="availableOf(materialForm.productId)" class="field-input text-sm w-16" />
             <button type="submit" :disabled="savingMaterial" class="btn-secondary text-xs shrink-0">+</button>
           </form>
+          <p v-if="jobType === 'ticket' && materialCustodyState === 'ready' && !materialSelectableProducts.length" class="text-xs text-slate-500 mt-1">Sin materiales disponibles en tu custodia.</p>
           <p v-if="materialForm.productId && availableOf(materialForm.productId) === 0" class="text-[11px] text-amber-700 mt-1">
             No tienes este material en custodia — pide la entrega a un administrador.
           </p>
@@ -2509,20 +2512,22 @@ async function handleCloseSubmit() {
             </div>
 
             <div class="pt-3 border-t border-slate-100">
-              <p class="text-xs font-medium text-slate-600 mb-1.5">Equipo entrante (del stock asignado)</p>
+              <p class="text-xs font-medium text-slate-600 mb-1.5">Equipo entrante (tu custodia)</p>
               <form class="space-y-1.5" @submit.prevent="handleIncomingUnit">
-                <select v-model="incomingForm.productId" class="field-input text-sm" @change="onIncomingProductChange">
+                <select v-model="incomingForm.productId" aria-label="Modelo de tu custodia" :disabled="materialCustodyState !== 'ready' || loadingIncomingUnits" class="field-input text-sm" @change="onIncomingProductChange">
                   <option value="">Producto...</option>
-                  <option v-for="p in fieldProducts.filter((prod) => prod.is_serialized)" :key="p.id" :value="p.id">
+                  <option v-for="p in incomingEquipmentProducts" :key="p.id" :value="p.id">
                     {{ p.name }}
                   </option>
                 </select>
-                <select v-model="incomingForm.unitId" class="field-input text-sm" :disabled="!incomingForm.productId || loadingIncomingUnits">
+                <select v-model="incomingForm.unitId" aria-label="Serie o MAC de tu custodia" class="field-input text-sm" :disabled="!incomingForm.productId || loadingIncomingUnits">
                   <option value="">{{ loadingIncomingUnits ? 'Cargando...' : 'Serie/MAC disponible...' }}</option>
-                  <option v-for="u in availableIncomingUnits" :key="u.id" :value="u.id">{{ u.serial_number || u.mac_address }}</option>
+                  <option v-for="u in availableIncomingUnits" :key="u.id" :value="u.id">{{ custodyUnitLabel(u) }}</option>
                 </select>
+                <p v-if="materialCustodyState === 'error'" class="text-xs text-amber-700">No se pudo consultar tu custodia. <button type="button" class="underline" @click="loadMyMaterialCustody">Reintentar</button></p>
+                <p v-if="materialCustodyState === 'ready' && !incomingEquipmentProducts.length" class="text-xs text-slate-500">Sin equipos disponibles en tu custodia.</p>
                 <p v-if="incomingForm.productId && !loadingIncomingUnits && !availableIncomingUnits.length" class="text-[11px] text-amber-700">
-                  Sin unidades disponibles en bodega para este producto.
+                  Sin unidades disponibles en tu custodia para este modelo.
                 </p>
                 <input v-model="incomingForm.reason" placeholder="Motivo (opcional)" class="field-input text-sm" />
                 <button type="submit" :disabled="savingIncoming || !incomingForm.unitId" class="btn-secondary text-xs w-full">

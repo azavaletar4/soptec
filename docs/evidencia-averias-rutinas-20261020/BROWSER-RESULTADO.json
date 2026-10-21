@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "checks": [
+    "ticket: modelo fuera de catálogo, serie/MAC propia, cuadrilla y sin consulta a bodega",
+    "ticket: rechazo y corrección real del formulario con mismo UUID",
+    "ticket: equipo confirmado con respuesta perdida se recupera con mismo UUID",
+    "ticket: sesión de otro integrante no hereda custodia",
+    "ticket: sin custodia no expone catálogo",
+    "ticket: error de consulta no expone catálogo y Reintentar recupera custodia",
+    "routine: modelo fuera de catálogo, serie/MAC propia, cuadrilla y sin consulta a bodega",
+    "routine: rechazo y corrección real del formulario con mismo UUID",
+    "routine: equipo confirmado con respuesta perdida se recupera con mismo UUID",
+    "routine: sesión de otro integrante no hereda custodia",
+    "routine: sin custodia no expone catálogo",
+    "routine: error de consulta no expone catálogo y Reintentar recupera custodia",
+    "installation: selector original conserva custodia propia y excluye bodega/ajena/devolución"
+  ],
+  "realWrites": 0,
+  "browserExceptions": 0,
+  "viewport": "390x844"
+}
