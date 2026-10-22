@@ -5,7 +5,7 @@ import { oltEvents } from './oltEvents';
 export interface MeasurementPatch { status?: 'online' | 'offline'; admin_state?: 'enable' | 'disable'; rx_power?: number; tx_power?: number; last_synced_at: string }
 /** Position AND stored serial are atomic write predicates: a concurrent import cannot receive old observations. */
 export async function persistOntMeasurement(row: OntIdentity, patch: MeasurementPatch, db = supabaseAdmin, signal?: AbortSignal) {
-  const query = db.from('olt_onts').update(patch)
+  const query = db.from('olt_onts').update(patch).is('retired_at', null)
     .eq('id', row.id).eq('olt_device_id', row.olt_device_id).eq('serial', row.serial)
     .eq('frame', row.frame).eq('slot', row.slot).eq('port', row.port).eq('ont_id', row.ont_id)
     .select('*');

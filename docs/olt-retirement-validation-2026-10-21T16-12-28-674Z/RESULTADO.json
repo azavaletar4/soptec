@@ -1,0 +1,26 @@
+{
+  "postgres": [
+    "tests 21",
+    "pass 21",
+    "fail 0"
+  ],
+  "regressions": [
+    "tests 47",
+    "pass 47",
+    "fail 0"
+  ],
+  "vueTypes": "PASS",
+  "build": "PASS",
+  "backendTypes": {
+    "status": "UNCHANGED_BASELINE_ERRORS",
+    "baselineExit": 2,
+    "diagnostics": [
+      "server/src/mikrotik/client.ts(48,5): error TS2741: Property 'bytes' is missing in type 'import(\"D:/SmartRayco/node_modules/undici/types/fetch\").Response' but required in type 'Response'.",
+      "server/src/mikrotik/client.ts(48,34): error TS2345: Argument of type 'RequestInit' is not assignable to parameter of type 'import(\"D:/SmartRayco/node_modules/undici/types/fetch\").RequestInit'.",
+      "server/src/services/oltProvisioningService.ts(225,23): error TS2322: Type '\"serviceGemport\"' is not assignable to type '\"vlan\" | \"serial\" | \"onuType\" | \"tcontProfile\" | \"trafficProfile\" | \"existencia\"'.",
+      "server/src/services/oltProvisioningService.ts(228,23): error TS2322: Type '\"serviceVlan\"' is not assignable to type '\"vlan\" | \"serial\" | \"onuType\" | \"tcontProfile\" | \"trafficProfile\" | \"existencia\"'."
+    ]
+  },
+  "status": "PASS_SCOPED_VALIDATION",
+  "evidence": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime/olt-retiro-historico-worktree/docs/olt-retirement-validation-2026-10-21T16-12-28-674Z"
+}

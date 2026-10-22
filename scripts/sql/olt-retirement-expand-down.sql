@@ -1,0 +1,155 @@
+-- Run only after contract-down and AFTER rolling back the compatible application.
+begin;
+set local lock_timeout='2s';
+lock table public.olt_onts in share row exclusive mode;
+do $$ begin
+ if (select md5(replace(prosrc,E'\r\n',E'\n')) from pg_proc where oid=to_regprocedure('public.assign_contract_nap_sync_ont_zone(uuid,uuid,uuid)')) is distinct from '24ceab68fa6e491605b4058995362177'
+ or (select md5(replace(prosrc,E'\r\n',E'\n')) from pg_proc where oid=to_regprocedure('public.crear_descuento_compensacion_masivo(text,uuid,text,numeric,numeric)')) is distinct from 'f7be06d3bea298ff396c9a6f3bc30a29' then raise exception 'SQL readers changed since candidate migration; do not overwrite on rollback'; end if;
+ if exists(select 1 from public.olt_onts where retired_at is not null)
+ or not exists(select 1 from pg_constraint where conrelid='public.olt_onts'::regclass and conname='olt_onts_olt_device_id_frame_slot_port_ont_id_key') then
+  raise exception 'Unsafe downgrade: history exists or original position constraint not restored';
+ end if;
+end $$;
+create or replace function public.crear_descuento_compensacion_masivo(
+  p_criterio text,
+  p_criterio_id uuid,
+  p_motivo text,
+  p_monto numeric default null,
+  p_porcentaje numeric default null
+)
+returns table (lote_id uuid, clientes_afectados int)
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_lote_id uuid;
+  v_client_id uuid;
+  v_contract_id uuid;
+  v_ont_count int;
+  v_monthly numeric(10, 2);
+  v_monto_cliente numeric(10, 2);
+  v_count int := 0;
+begin
+  if public.current_user_role() not in ('SUPERADMIN', 'ADMIN') then
+    raise exception 'Solo ADMIN/SUPERADMIN pueden aplicar descuentos por averia masiva';
+  end if;
+  if p_criterio not in ('zona', 'olt', 'nap') then
+    raise exception 'Criterio invalido: %', p_criterio;
+  end if;
+  if (p_monto is null) = (p_porcentaje is null) then
+    raise exception 'Indica exactamente uno: monto fijo o porcentaje';
+  end if;
+
+  insert into public.descuentos_compensacion_lotes (criterio, criterio_id, motivo, monto, porcentaje)
+  values (p_criterio, p_criterio_id, p_motivo, p_monto, p_porcentaje)
+  returning id into v_lote_id;
+
+  for v_client_id in
+    select distinct c.id
+      from public.clients c
+     where (p_criterio = 'zona' and c.zone_id = p_criterio_id)
+        or (p_criterio = 'olt' and exists (
+              select 1 from public.olt_onts o where o.client_id = c.id and o.olt_device_id = p_criterio_id
+            ))
+        or (p_criterio = 'nap' and exists (
+              select 1 from public.fo_nap_puertos n where n.client_id = c.id and n.infra_elemento_id = p_criterio_id
+            ))
+  loop
+    v_contract_id := null;
+
+    if p_criterio = 'olt' then
+      -- Solo se resuelve el contrato si hay exactamente UN ont de este
+      -- cliente en esta OLT (y ese ont ya tiene contract_id, Fase 37).
+      select count(*) into v_ont_count
+        from public.olt_onts o
+       where o.client_id = v_client_id and o.olt_device_id = p_criterio_id;
+
+      if v_ont_count = 1 then
+        select o.contract_id into v_contract_id
+          from public.olt_onts o
+         where o.client_id = v_client_id and o.olt_device_id = p_criterio_id;
+      end if;
+    end if;
+
+    if p_porcentaje is not null then
+      if v_contract_id is not null then
+        select monthly_fee into v_monthly from public.service_contracts where id = v_contract_id;
+      end if;
+      if v_monthly is null then
+        select monthly_fee into v_monthly
+          from public.service_contracts
+         where client_id = v_client_id and status = 'active'
+         order by created_at desc
+         limit 1;
+      end if;
+      if v_monthly is null then
+        continue; -- sin contrato activo, no hay mensualidad de la que sacar el %
+      end if;
+      v_monto_cliente := round(v_monthly * p_porcentaje / 100, 2);
+    else
+      v_monto_cliente := p_monto;
+    end if;
+
+    if v_monto_cliente > 0 then
+      insert into public.descuentos_compensacion (client_id, contract_id, monto, motivo, lote_id)
+      values (v_client_id, v_contract_id, v_monto_cliente, p_motivo, v_lote_id);
+      v_count := v_count + 1;
+    end if;
+
+    v_monthly := null;
+  end loop;
+
+  update public.descuentos_compensacion_lotes set clientes_afectados = v_count where id = v_lote_id;
+
+  return query select v_lote_id, v_count;
+end;
+$$;
+
+create or replace function public.assign_contract_nap_sync_ont_zone(
+  p_nap_id uuid, p_contract_id uuid, p_client_id uuid
+) returns table (nap_port_id uuid, ont_zone_synced boolean, ont_zone_skip_reason text)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_role text;
+  v_nap_result uuid;
+  v_zone_id uuid;
+  v_ont_count int;
+  v_ont_id uuid;
+  v_ont_zone_id uuid;
+  v_synced boolean := false;
+  v_skip_reason text := null;
+begin
+  v_role := public.current_user_role()::text;
+  if v_role is null or v_role not in ('SUPERADMIN', 'ADMIN', 'TECNICO_RED') then
+    raise exception 'No tienes permisos para esta accion' using errcode = '42501';
+  end if;
+
+  v_nap_result := public.assign_provisioning_nap(p_nap_id, p_contract_id, p_client_id);
+
+  select zone_id into v_zone_id from public.service_contracts where id = p_contract_id;
+
+  select count(*), (array_agg(id))[1] into v_ont_count, v_ont_id
+    from public.olt_onts where contract_id = p_contract_id;
+
+  if v_ont_count = 0 then
+    v_skip_reason := 'sin_ont_vinculada';
+  elsif v_ont_count > 1 then
+    v_skip_reason := 'ambiguo:' || v_ont_count::text;
+  else
+    select zone_id into v_ont_zone_id from public.olt_onts where id = v_ont_id;
+    if v_ont_zone_id is distinct from v_zone_id then
+      update public.olt_onts set zone_id = v_zone_id where id = v_ont_id;
+    end if;
+    v_synced := true;
+  end if;
+
+  return query select v_nap_result, v_synced, v_skip_reason;
+end;
+$$;
+drop trigger trg_olt_onts_retirement on public.olt_onts;
+drop function public.guard_olt_ont_retirement();
+alter table public.olt_onts drop column retired_at;
+commit;

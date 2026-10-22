@@ -182,10 +182,12 @@ export interface OltAlertLogEntryRaw {
   client: { id: string; name: string } | null;
   contract: { id: string; contractNumber: string | null; clientCode: string | null } | null;
   zoneName: string | null;
-  ont: { serial: string | null; description: string | null; slot: number | null; port: number | null; ontId: number | null; status: string | null } | null;
+  ont: { serial: string | null; description: string | null; slot: number | null; port: number | null; ontId: number | null; status: string | null; retiredAt?: string | null; currentStatusConfirmed?: boolean; currentStatusAt?: string | null } | null;
 }
 
 export interface OltAlertLogEntryView extends OltAlertLogEntryRaw {
+  currentStatusLabel: string;
+  retired: boolean;
   kindLabel: string;
   severity: AlertSeverity;
   atFormatted: string;
@@ -196,6 +198,11 @@ export interface OltAlertLogEntryView extends OltAlertLogEntryRaw {
 export function buildOltAlertLogEntryView(raw: OltAlertLogEntryRaw): OltAlertLogEntryView {
   return {
     ...raw,
+    retired: Boolean(raw.ont?.retiredAt),
+    currentStatusLabel: raw.ont?.retiredAt ? 'ONT retirada' :
+      raw.ont?.currentStatusConfirmed && raw.ont.currentStatusAt && ['online', 'offline'].includes(raw.ont.status ?? '')
+        ? 'Estado actual confirmado: ' + raw.ont.status + ' · lectura ' + formatPeruDateTime(raw.ont.currentStatusAt)
+        : 'Estado actual no confirmado',
     kindLabel: ALERT_KIND_LABEL[raw.kind],
     severity: ALERT_KIND_SEVERITY[raw.kind],
     atFormatted: formatPeruDateTime(raw.at),

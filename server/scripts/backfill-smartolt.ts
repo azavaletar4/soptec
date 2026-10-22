@@ -95,7 +95,7 @@ async function fetchSmartOltOnus(): Promise<SmartOltOnu[]> {
 }
 
 async function fetchLocalOnts(): Promise<LocalOnt[]> {
-  const { data, error } = await supabaseAdmin.from('olt_onts').select('id, serial, description, zone_id, splitter, splitter_port');
+  const { data, error } = await supabaseAdmin.from('olt_onts').select('id, serial, description, zone_id, splitter, splitter_port').is('retired_at', null);
   if (error) throw new Error(error.message);
   return (data ?? []) as LocalOnt[];
 }
@@ -267,7 +267,7 @@ async function main() {
 
   let updated = 0;
   for (const p of planned) {
-    const { error } = await supabaseAdmin.from('olt_onts').update(p.patch).eq('id', p.ontId);
+    const { error } = await supabaseAdmin.from('olt_onts').update(p.patch).is('retired_at', null).eq('id', p.ontId);
     if (error) {
       errors.push({ sn: p.sn, message: error.message });
       continue;

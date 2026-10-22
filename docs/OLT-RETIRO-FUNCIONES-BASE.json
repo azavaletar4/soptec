@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "readOnly": true,
+  "functions": [
+    {
+      "name": "assign_contract_nap_sync_ont_zone",
+      "arguments": "p_nap_id uuid, p_contract_id uuid, p_client_id uuid",
+      "bodyLfMd5": "61dc572f18d1101144b49d8bef3af38a",
+      "securityDefiner": true,
+      "owner": "postgres",
+      "grants": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "searchPath": [
+        "search_path=public, pg_temp"
+      ]
+    },
+    {
+      "name": "crear_descuento_compensacion_masivo",
+      "arguments": "p_criterio text, p_criterio_id uuid, p_motivo text, p_monto numeric, p_porcentaje numeric",
+      "bodyLfMd5": "41fd2a9b59106c76898dfac0bebc7501",
+      "securityDefiner": true,
+      "owner": "postgres",
+      "grants": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "searchPath": [
+        "search_path=public"
+      ]
+    }
+  ]
+}

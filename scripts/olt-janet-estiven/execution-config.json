@@ -1,0 +1,9 @@
+{
+  "workspace": "D:\\smartrayco-fase168\\revision-olt-janet-estiven\\scripts\\olt-janet-estiven/execution",
+  "dir": "C:\\Users\\USER\\AppData\\Local\\SmartRaycoBackups\\olt_janet_estiven_20261022_024040_47b5a5ac",
+  "candidate": "1da360de999fad64ac0a82a5be170c3812bdc6c6",
+  "integrationBase": "b201183d9324a855f72ee2e2c8cae8ba9ab45edf",
+  "productionHead": "3cf2596bc2d556b1d99830b7200b36d967c73b5b",
+  "migration": "supabase/migrations/20261021170000_olt_retirement_expand.sql",
+  "sha256": "fe3f33584eac4ce3c80a054967f2a66737cee680b6381c73aef244cf8482038e"
+}

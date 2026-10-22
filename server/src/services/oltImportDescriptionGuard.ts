@@ -26,6 +26,7 @@ export interface LinkedPosition {
   ontId: number;
   serial: string;
   clientId: string | null;
+  retiredAt?: string | null;
 }
 
 export interface ImportConflict {
@@ -55,6 +56,7 @@ export function classifyImportCandidates<T extends ImportCandidate>(
   candidates: readonly T[],
   linkedPositions: readonly LinkedPosition[],
 ): { fullRefresh: T[]; keepDescription: T[]; conflicts: ImportConflict[] } {
+  linkedPositions = linkedPositions.filter(p => !p.retiredAt);
   const linkedByPosition = new Map(
     linkedPositions.map((p) => [positionKey(p.frame, p.slot, p.port, p.ontId), p]),
   );

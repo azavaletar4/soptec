@@ -1,0 +1,31 @@
+▶ OLT retirement: real PostgreSQL 17, isolated data and actual application readers/writers
+  ✔ SQL reader replacement preserves grants, owner, security definer and search path (122.2798ms)
+  ✔ expand is additive and old active position remains unique (365.1655ms)
+  ✔ retirement/reuse creates a separate UUID; Janet, relations, alerts, operations and clients stay byte-identical (1232.1648ms)
+  ✔ same position and normalized serial duplicates are rejected (540.7548ms)
+  ✔ history rejects metadata/telemetry rewrites, deletion, cascade and unsafe restoration (779.3812ms)
+  ✔ real import classifier skips historical rows and retains the replacement (260.6539ms)
+  ✔ actual provisioning store updates active identity, rejects conflict and never updates retired UUID (631.721ms)
+  ✔ stale telemetry write is rejected atomically after retirement (361.0817ms)
+  ✔ cached live signal cannot leak onto retired history in backend or frontend (128.1691ms)
+  ✔ retired linked history does not count as an active NAP/zone binding or outage compensation recipient (984.5042ms)
+  ✔ retired identity is refused before direct optical transport (130.4698ms)
+  ✔ real HTTP routes expose history separately and reject retired actions before transport (2925.3367ms)
+  ✔ data rollback preserves both UUIDs/history and all protected rows, no unlink/delete (862.7111ms)
+  ✔ rollback refuses changed replacement links atomically (1122.2499ms)
+  ✔ schema downgrade refuses retained history without changing schema or rows (496.5168ms)
+  ✔ reconciliation fails atomically on changed Janet, prospect client, wrong inventory or missing approval (3052.6406ms)
+  ✔ plain insert can reuse retired position; duplicate insert races fail rather than taking an upsert update (754.0015ms)
+  ✔ failure after retirement but before replacement INSERT rolls back the entire candidate transaction (1096.4286ms)
+  ✔ expansion + contract are fully reversible before data retirement/reuse; original constraint restored (647.4115ms)
+  ✔ preexisting normalized serial duplicates block contract migration without dropping original uniqueness or repairing data (811.1298ms)
+✔ OLT retirement: real PostgreSQL 17, isolated data and actual application readers/writers (20338.3687ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20817.868
+

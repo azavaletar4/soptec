@@ -1,0 +1,2 @@
+select case when to_regclass('supabase_migrations.schema_migrations') is null then $$select json_build_object('ledgerExists',false,'candidates',json_build_array());$$ else $$select json_build_object('ledgerExists',true,'candidates',(select coalesce(json_agg(x),'[]'::json) from (select version from supabase_migrations.schema_migrations where version in ('20261021170000','20261021171000'))x),'latest',(select max(version) from supabase_migrations.schema_migrations));$$ end
+\gexec

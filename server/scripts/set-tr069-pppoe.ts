@@ -99,7 +99,7 @@ async function main() {
     throw new Error('Pasa --username y/o --password (al menos uno)');
   }
 
-  let query = supabaseAdmin.from('olt_onts').select('id, serial, description, client_id, tr069_enabled');
+  let query = supabaseAdmin.from('olt_onts').select('id, serial, description, client_id, tr069_enabled').is('retired_at', null);
   if (args.ont) query = query.eq('id', args.ont);
   else if (args.serial) query = query.eq('serial', args.serial);
   else query = query.eq('client_id', args.client as string);

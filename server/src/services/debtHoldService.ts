@@ -131,7 +131,7 @@ export interface ApplyResult {
 async function findOnts(clientId: string) {
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, olt_device_id, frame, slot, port, ont_id')
+    .select('id, olt_device_id, frame, slot, port, ont_id').is('retired_at', null)
     .eq('client_id', clientId);
   if (error) throw new Error(error.message);
   return data ?? [];
@@ -173,7 +173,7 @@ async function applyOltPlanToClientOnts(clientId: string, tcontProfile: string, 
     }
     const { error: updErr } = await supabaseAdmin
       .from('olt_onts')
-      .update({ tcont_profile: tcontProfile, traffic_profile: trafficProfile, plan_id: planId })
+      .update({ tcont_profile: tcontProfile, traffic_profile: trafficProfile, plan_id: planId }).is('retired_at', null)
       .eq('id', ont.id);
     if (updErr) return { ok: false, error: updErr.message };
   }

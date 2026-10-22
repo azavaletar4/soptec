@@ -3,8 +3,8 @@ import { parseFullRunningConfig, parseGlobalOntState, parseBulkPower, type Globa
 import { oltEvents } from './oltEvents';
 import { loadSignalCheckpoint, saveSignalCheckpoint, type SignalReference } from './oltSignalCheckpoint';
 
-export interface OntIdentity { id: string; olt_device_id: string; serial: string; frame: number; slot: number; port: number; ont_id: number }
-export type EvidenceOutcome = 'valid' | 'failed' | 'absent' | 'moved' | 'conflict' | 'ambiguous' | 'unconfirmed';
+export interface OntIdentity { retired_at?: string | null; id: string; olt_device_id: string; serial: string; frame: number; slot: number; port: number; ont_id: number }
+export type EvidenceOutcome = 'valid' | 'failed' | 'absent' | 'moved' | 'conflict' | 'ambiguous' | 'unconfirmed' | 'retired';
 export const ontPosition = (o: Pick<OntIdentity, 'frame' | 'slot' | 'port' | 'ont_id'>) => `${o.frame}/${o.slot}/${o.port}:${o.ont_id}`;
 const serialKey = (s: string) => s.trim().toUpperCase();
 type Bindings = Map<string, FullConfigOnt>;
@@ -72,6 +72,7 @@ const ttl = () => Math.max(60000, Math.min(65, Number(process.env.OLT_SYNC_INTER
 export function evaluateOntEvidence(row: OntIdentity, scan: TelemetryScan): OntEvidence {
   const position = ontPosition(row), serial = serialKey(row.serial), after = scan.after?.get(position);
   const e: OntEvidence = { oltDeviceId: row.olt_device_id, stateReadAt: scan.stateReadAt, signalReadAt: null, outcome: 'failed', checkedAt: scan.checkedAt, validUntil: new Date(Date.parse(scan.stateReadAt ?? scan.checkedAt) + ttl()).toISOString(), position, serial: row.serial, observedSerial: after?.serial ?? null, status: 'unknown', rxPower: null, txPower: null, signalOutcome: scan.signalRequested ? 'failed' : 'not-read' };
+  if (row.retired_at) { e.outcome = 'retired'; return e; }
   if (!scan.before || !scan.after) return e;
   const beforeMatches = [...scan.before].filter(([, b]) => serialKey(b.serial) === serial);
   const afterMatches = [...scan.after].filter(([, b]) => serialKey(b.serial) === serial);
@@ -110,10 +111,11 @@ export class OntTelemetryEvidence {
     if (this.checkpointPath) saveSignalCheckpoint(this.checkpointPath, this.signalReferences);
   }
   remember(row: OntIdentity, evidence: OntEvidence) {
-    if (['absent', 'moved', 'conflict', 'ambiguous'].includes(evidence.outcome) && this.signalReferences.delete(row.id)) this.flushSignalReferences();
+    if (['absent', 'moved', 'conflict', 'ambiguous', 'retired'].includes(evidence.outcome) && this.signalReferences.delete(row.id)) this.flushSignalReferences();
     this.evidence.set(row.id, evidence);
   }
   signalReference(row: OntIdentity): number | null {
+    if (row.retired_at) return null;
     const saved = this.signalReferences.get(row.id);
     const interval = Number(process.env.OLT_SYNC_INTERVAL_MINUTES ?? 20);
     const every = Number(process.env.OLT_SYNC_SIGNAL_EVERY_N_RUNS ?? 1);
@@ -125,7 +127,7 @@ export class OntTelemetryEvidence {
     return saved.rx;
   }
   rememberSignal(row: OntIdentity, evidence: OntEvidence) {
-    if (evidence.outcome !== 'valid' || evidence.signalOutcome !== 'valid' || evidence.rxPower === null || !evidence.signalReadAt) return;
+    if (row.retired_at || evidence.outcome !== 'valid' || evidence.signalOutcome !== 'valid' || evidence.rxPower === null || !evidence.signalReadAt) return;
     const at = Date.parse(evidence.signalReadAt);
     if (Number.isFinite(at)) this.signalReferences.set(row.id, { identity: this.identity(row), rx: evidence.rxPower, at });
   }
@@ -133,13 +135,13 @@ export class OntTelemetryEvidence {
     this.evidence.delete(id);
     if (this.signalReferences.delete(id)) this.flushSignalReferences();
   }
-  project<T extends { id: string; olt_device_id?: string; serial?: string; frame?: number; slot?: number; port?: number; ont_id?: number; status?: unknown; rx_power?: unknown; tx_power?: unknown; last_synced_at?: unknown }>(row: T) {
+  project<T extends { retired_at?: string | null; id: string; olt_device_id?: string; serial?: string; frame?: number; slot?: number; port?: number; ont_id?: number; status?: unknown; rx_power?: unknown; tx_power?: unknown; last_synced_at?: unknown }>(row: T) {
     const saved = this.evidence.get(row.id);
-    const valid = saved && row.olt_device_id === saved.oltDeviceId && serialKey(row.serial ?? '') === serialKey(saved.serial) && ontPosition(row as unknown as OntIdentity) === saved.position && this.now() <= Date.parse(saved.validUntil);
+    const valid = !row.retired_at && saved && row.olt_device_id === saved.oltDeviceId && serialKey(row.serial ?? '') === serialKey(saved.serial) && ontPosition(row as unknown as OntIdentity) === saved.position && this.now() <= Date.parse(saved.validUntil);
     const e = valid ? saved : null;
     const historical = 'telemetry' in row ? (row.telemetry as { historical?: unknown } | undefined)?.historical : undefined;
     return { ...row, status: e?.status ?? 'unknown', rx_power: e?.signalOutcome === 'valid' ? e.rxPower : null, tx_power: e?.signalOutcome === 'valid' ? e.txPower : null,
-      telemetry: { outcome: e?.outcome ?? 'unconfirmed', checkedAt: e?.checkedAt ?? null, stateReadAt: e?.stateReadAt ?? null, signalReadAt: e?.signalReadAt ?? null, validUntil: e?.validUntil ?? null, observedSerial: e?.observedSerial ?? null, observedPosition: e?.observedPosition ?? null, signalOutcome: e?.signalOutcome ?? 'not-read',
+      telemetry: { outcome: row.retired_at ? 'retired' : (e?.outcome ?? 'unconfirmed'), checkedAt: e?.checkedAt ?? null, stateReadAt: e?.stateReadAt ?? null, signalReadAt: e?.signalReadAt ?? null, validUntil: e?.validUntil ?? null, observedSerial: e?.observedSerial ?? null, observedPosition: e?.observedPosition ?? null, signalOutcome: e?.signalOutcome ?? 'not-read',
         historical: historical ?? { status: row.status, rxPower: row.rx_power, txPower: row.tx_power, at: row.last_synced_at } } };
   }
 }

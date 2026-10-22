@@ -1,0 +1,48 @@
+✔ active: confirmed live state is separate from original offline event (31.4369ms)
+✔ retired: cached online never labels historical ONT connected; pre-retirement event unchanged (0.4124ms)
+✔ unconfirmed, expired, reused position, missing relation and legacy payload never imply live state (0.8493ms)
+✔ active confirmed offline and recovered historical event remain independent (0.6762ms)
+✔ route and template wire lifecycle projection without filtering out historical alerts (4.2244ms)
+✔ ONT vinculada (client_id y contract_id presentes) -> fila con el snapshot de ambos (1.7105ms)
+✔ ONT sin ningun vinculo -> client_id/contract_id null, nunca inventa (migracion SmartOLT) (0.1615ms)
+✔ vinculo PARCIAL (contract_id sin client_id, dato inconsistente) -> ambos quedan null, nunca un vinculo a medias (0.1388ms)
+✔ vinculo PARCIAL inverso (client_id sin contract_id) -> ambos null tambien (0.1378ms)
+✔ ONT no encontrada en el mapa (no deberia pasar, pero no revienta) -> client_id/contract_id null (0.1541ms)
+✔ cliente con multiples servicios: 2 eventos de 2 ONTs distintas del mismo cliente -> cada fila con SU PROPIO contract_id, nunca mezclados (0.1623ms)
+✔ reconexion y desconexion conservan su propio kind y mensaje tecnico (0.1569ms)
+✔ lista vacia -> ninguna fila (0.6834ms)
+✔ señal baja/recuperada tambien se registran (mismo criterio de vinculo que conexion/desconexion) (0.1713ms)
+✔ computeRecoveryDurations: par normal offline->recovered -> minutos correctos para la fila recovered (12.4532ms)
+✔ computeRecoveryDurations: recovered SIN ningun offline previo en la ventana -> no calculable (no esta en el mapa, nunca inventa) (0.1839ms)
+✔ computeRecoveryDurations: 2 ciclos completos del mismo ONT -> cada recovered con SU PROPIA duracion, sin mezclar (0.1327ms)
+✔ computeRecoveryDurations: 2 offline seguidos sin recovered en medio -> se usa el MAS RECIENTE para calcular (0.1496ms)
+✔ computeRecoveryDurations: eventos de 2 ONTs distintas no se mezclan entre si (0.1373ms)
+✔ computeRecoveryDurations: lista vacia -> mapa vacio (0.0781ms)
+✔ formatPeruDateTime: ISO real -> fecha/hora en horario de Peru, no la del dispositivo (24.6442ms)
+✔ formatPeruDateTime: ISO invalido -> mensaje claro, nunca inventa una fecha (0.2259ms)
+✔ formatRelativeTime: menos de 1 minuto -> "hace un momento" (0.2025ms)
+✔ formatRelativeTime: minutos -> "hace N min" (0.132ms)
+✔ formatRelativeTime: horas -> "hace N h" (0.1427ms)
+✔ formatRelativeTime: dias -> "hace N d" (0.1438ms)
+✔ formatRelativeTime: ISO invalido -> cadena vacia, nunca inventa (0.1396ms)
+✔ formatRelativeTime: fecha "futura" por reloj desincronizado -> nunca negativo, se trata como "ahora" (0.1229ms)
+✔ buildOltAlertView: ONT vinculada (client_id + contract_id + contrato resuelto) -> linked, con cliente/contrato/zona del CONTRATO (1.1881ms)
+✔ buildOltAlertView: ONT sin client_id/contract_id (migracion SmartOLT) -> NUNCA infiere cliente, aunque la ONT tenga description con un nombre (0.4533ms)
+✔ buildOltAlertView: contract_id presente pero client_id null (dato inconsistente) -> sigue sin vincular, nunca expone medio vinculo (0.3299ms)
+✔ buildOltAlertView: cliente con multiples servicios -> usa el contrato de ESTA ont (contract_id exacto), nunca "cualquiera" del cliente (0.3036ms)
+✔ buildOltAlertView: ONT no encontrada en el panel (ont = null) -> no revienta, todo lo fisico queda null y nunca vinculado (0.238ms)
+✔ buildOltAlertView: ONT vinculada pero sin ninguna zona registrada (ni en contrato ni en la propia ONT) -> zoneName null, no inventa (0.2842ms)
+✔ buildOltAlertView: señal óptica baja/recuperada mantienen su propia etiqueta y severidad, no se confunden con desconexión (0.3779ms)
+✔ buildOltAlertLogEntryView: fila ya resuelta por el backend (snapshot vinculado) -> linked true, NO vuelve a resolver nada (0.3612ms)
+✔ buildOltAlertLogEntryView: fila sin cliente/contrato (snapshot de una ONT sin vincular) -> linked false, nunca inventa (0.2351ms)
+✔ buildOltAlertLogEntryView: duracion no calculable (null) se conserva tal cual, nunca se reemplaza por 0 (0.2045ms)
+✔ buildOltAlertLogEntryView: datos tecnicos de la ONT (estado actual) pasan intactos (0.2096ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 243.2888
+

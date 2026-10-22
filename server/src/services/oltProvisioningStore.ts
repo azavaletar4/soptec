@@ -141,7 +141,7 @@ export function createSupabaseProvisioningStore(supabaseAdmin: SupabaseClient): 
     },
 
     async upsertOnt(input) {
-      const current = await supabaseAdmin.from('olt_onts').select('*')
+      const current = await supabaseAdmin.from('olt_onts').select('*').is('retired_at', null)
         .eq('olt_device_id', input.olt_device_id).eq('frame', input.frame)
         .eq('slot', input.slot).eq('port', input.port).eq('ont_id', input.ont_id).maybeSingle();
       if (current.error) return { data: null, error: current.error.message };
@@ -150,19 +150,26 @@ export function createSupabaseProvisioningStore(supabaseAdmin: SupabaseClient): 
         (current.data.contract_id && current.data.contract_id !== input.contract_id) ||
         (current.data.client_id && current.data.client_id !== input.client_id)
       )) return { data: null, error: 'La posicion ya esta vinculada a otro serial, cliente o contrato' };
-      const { data, error } = await supabaseAdmin
-        .from('olt_onts')
-        .upsert(
-          { ...input, ...(current.data ? {} : { status: 'unknown' }) },
-          { onConflict: 'olt_device_id,frame,slot,port,ont_id' },
-        )
-        .select()
-        .single();
-      return { data: (data as OntRow | null) ?? null, error: error?.message ?? null };
+      // Active-only read + guarded UPDATE or plain INSERT. A partial UNIQUE index
+      // cannot be used by the former unconditional onConflict upsert.
+      let query;
+      if (current.data) {
+        query = supabaseAdmin.from('olt_onts').update(input).is('retired_at', null)
+          .eq('id', current.data.id).eq('serial', current.data.serial)
+          .eq('olt_device_id', input.olt_device_id).eq('frame', input.frame)
+          .eq('slot', input.slot).eq('port', input.port).eq('ont_id', input.ont_id);
+        query = current.data.client_id === null ? query.is('client_id', null) : query.eq('client_id', current.data.client_id);
+        query = current.data.contract_id === null ? query.is('contract_id', null) : query.eq('contract_id', current.data.contract_id);
+      } else {
+        query = supabaseAdmin.from('olt_onts').insert({ ...input, status: 'unknown' });
+      }
+      const { data, error } = await query.select().maybeSingle();
+      return { data: (data as OntRow | null) ?? null,
+        error: error?.message ?? (!data ? 'La identidad activa cambió; no se sobrescribió la ONT' : null) };
     },
 
     async getOntById(id) {
-      const { data, error } = await supabaseAdmin.from('olt_onts').select('*').eq('id', id).maybeSingle();
+      const { data, error } = await supabaseAdmin.from('olt_onts').select('*').is('retired_at', null).eq('id', id).maybeSingle();
       return { data: (data as OntRow | null) ?? null, error: error?.message ?? null };
     },
   };

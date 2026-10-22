@@ -82,12 +82,12 @@ test('configuración final fallida o respuesta vacía: las mediciones recogidas 
   assert.equal(evaluateOntEvidence(row(), empty).outcome, 'failed');
 });
 test('persistencia condicionada por id, OLT, serial y posición: conserva nueva ONT y vínculos ante reemplazo concurrente', async () => {
-  const stored = row(replacement); const unchanged = structuredClone(stored); const predicates = new Map<string, unknown>(); let writes = 0;
-  const fake = { from: () => ({ update: (patch: object) => { const q = { eq: (k: string, v: unknown) => { predicates.set(k, v); return q; }, select: () => q, maybeSingle: async () => {
+  const stored = { ...row(replacement), retired_at: null }; const unchanged = structuredClone(stored); const predicates = new Map<string, unknown>(); let writes = 0;
+  const fake = { from: () => ({ update: (patch: object) => { const q = { is: (k: string, v: unknown) => { predicates.set(k, v); return q; }, eq: (k: string, v: unknown) => { predicates.set(k, v); return q; }, select: () => q, maybeSingle: async () => {
     if ([...predicates].every(([k, v]) => (stored as unknown as Record<string, unknown>)[k] === v)) { writes++; return { data: { ...stored, ...patch }, error: null }; } return { data: null, error: null };
   } }; return q; } }) };
   await assert.rejects(persistOntMeasurement(row(), { status: 'online', rx_power: -10, last_synced_at: new Date().toISOString() }, fake as never), /identidad o posición cambió/);
-  assert.equal(writes, 0); assert.deepEqual(stored, unchanged); assert.deepEqual([...predicates.keys()], ['id','olt_device_id','serial','frame','slot','port','ont_id']);
+  assert.equal(writes, 0); assert.deepEqual(stored, unchanged); assert.deepEqual([...predicates.keys()], ['retired_at','id','olt_device_id','serial','frame','slot','port','ont_id']);
 });
 test('registro de discrepancia: dos seriales y posición, sin cliente, contrato, nombre o credenciales', async () => {
   const captured: string[] = [], original = console.warn; console.warn = (...args: unknown[]) => captured.push(args.join(' '));

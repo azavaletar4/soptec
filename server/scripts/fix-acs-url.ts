@@ -137,7 +137,7 @@ async function main() {
   console.log('\n=== ONTs con TR-069 habilitado (olt_onts) ===');
   const { data: onts, error: ontErr } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, olt_device_id, frame, slot, port, ont_id, serial, description, tr069_acs_url')
+    .select('id, olt_device_id, frame, slot, port, ont_id, serial, description, tr069_acs_url').is('retired_at', null)
     .eq('tr069_enabled', true)
     .returns<OntRow[]>();
   if (ontErr) throw new Error(ontErr.message);
@@ -205,7 +205,7 @@ async function main() {
     console.log(`  Aplicando a ${o.description ?? o.serial} (${o.serial})...`);
     try {
       await runTelnetCommands(target, setTr069AcsCommands(ref, o.ont_id, 1, args.set), { timeoutMs: 25000 });
-      const { error } = await supabaseAdmin.from('olt_onts').update({ tr069_acs_url: args.set }).eq('id', o.id);
+      const { error } = await supabaseAdmin.from('olt_onts').update({ tr069_acs_url: args.set }).is('retired_at', null).eq('id', o.id);
       if (error) throw new Error(error.message);
       console.log('    OK');
     } catch (e) {

@@ -87,6 +87,18 @@ test('handler: completed row without its ONT is never a success', () => scenario
   assert.equal(next.httpStatus, 500); assert.ok(next.persistenceWarning); assert.equal(next.ont, null);
 }));
 
+test('handler: historical retired ONT blocks pending reconciliation before any OLT/router operation', () => scenario(async (deps, fake, calls) => {
+  const first = await handleProvisionRequest(deps, body());
+  const op = fake._operations.get(first.operation!.id)!;
+  op.status = 'mikrotik_pending';
+  const ont = fake._onts.get(first.ont!.id)!;
+  ont.retired_at = new Date().toISOString();
+  const before = structuredClone(calls);
+  const blocked = await handleReconcileRequest(deps, op.id);
+  assert.equal(blocked.httpStatus, 409);
+  assert.deepEqual(calls, before);
+}));
+
 test('handler: secret values are removed from errors, history and response', () => scenario(async (deps, fake) => {
   deps.sensitiveValues = ['a secret with spaces'];
   deps.syncMikrotik = async () => { throw new Error('router echoed a secret with spaces'); };

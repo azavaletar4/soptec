@@ -22,6 +22,7 @@ export interface OltDevice {
 export type OltSerialStatus = Pick<OltOnt, 'status' | 'description' | 'rx_power' | 'tx_power' | 'telemetry'>;
 
 export interface OltOnt {
+  retired_at?: string | null;
   telemetry?: OntTelemetryPresentation;
   id: string;
   olt_device_id: string;
@@ -575,7 +576,7 @@ export const useOltStore = defineStore('olt', () => {
           if (eventName === 'ontChanged') {
             try {
               const patch = JSON.parse(payload) as Partial<OltOnt> & { id: string; deleted?: boolean };
-              if (patch.deleted) {
+              if (patch.deleted || patch.retired_at) {
                 onts.value = onts.value.filter((o) => o.id !== patch.id);
               } else {
                 const idx = onts.value.findIndex((o) => o.id === patch.id);

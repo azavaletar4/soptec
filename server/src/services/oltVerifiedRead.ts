@@ -4,6 +4,7 @@ import { persistOntMeasurement } from './oltTelemetryPersistence';
 import { beginOltReadOperation, createOltReadBudget } from './oltReadOperation';
 
 export async function readVerifiedOntSignal(device: OltDeviceRow, row: OntIdentity) {
+  if (row.retired_at) throw Error('La ONT está retirada; su posición es histórica y no admite consultas operativas.');
   if (device.id !== row.olt_device_id) throw Error('La ONT no pertenece a esta OLT.');
   const release = beginOltReadOperation(device.id);
   if (!release) throw Error('Ya hay una lectura de esta OLT en curso.');

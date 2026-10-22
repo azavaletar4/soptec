@@ -347,6 +347,12 @@ async function completedOperationResult(deps: ProvisionHandlerDeps, operation: P
  * resuelta (creada, reusada, o releida).
  */
 async function runProvisionAndPipeline(deps: ProvisionHandlerDeps, operation: ProvisioningOperationRow, preflightChecked = false): Promise<ProvisionHandlerResult> {
+  if (operation.ont_db_id) {
+    const active = await deps.store.getOntById(operation.ont_db_id);
+    if (active.error || !active.data || active.data.retired_at) {
+      return { httpStatus: 409, error: 'La ONT asociada ya no está activa; conserva la operación histórica y revisa la conciliación antes de tocar la OLT' };
+    }
+  }
   const sanitize = (message: string) => (deps.sensitiveValues ?? []).filter(Boolean).reduce((text, value) => text.split(value).join('[REDACTED]'), redactPotentialSecrets(message));
   if (!operation.client_id || !operation.contract_id) return { httpStatus: 400, error: 'La operación pendiente requiere un contrato antes de escribir; conserva el histórico y revisa el vínculo' };
   if (!preflightChecked) {

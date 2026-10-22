@@ -1,0 +1,17 @@
+const fs=require('fs'),path=require('path'),crypto=require('crypto'),assert=require('assert/strict');
+const cfg=JSON.parse(fs.readFileSync(__dirname+'/backup-location.json')),dir=cfg.BackupDirectory;
+const sha=p=>{const h=crypto.createHash('sha256'),fd=fs.openSync(p,'r'),buffer=Buffer.alloc(8*1024*1024);try{let n;while((n=fs.readSync(fd,buffer,0,buffer.length,null)))h.update(buffer.subarray(0,n));return h.digest('hex');}finally{fs.closeSync(fd);}};
+const verification=dir+'/restore-verify-20261022_040652';
+assert.equal(fs.statSync(verification+'/restore-errors.log').size,0);
+assert.equal(fs.statSync(verification+'/expansion-lab-errors.log').size,0);
+const v=JSON.parse(fs.readFileSync(verification+'/verificacion.json')),s=JSON.parse(fs.readFileSync(dir+'/snapshot-info.json'));
+assert.equal(v.tablas_public,s.table_count);assert.equal(v.funciones_public,s.function_count);assert.equal(v.politicas_rls,s.policy_count);
+const log=fs.readFileSync(verification+'/expansion-lab.log','utf8').trim().split(/\s+/);assert(log.length>=12&&log.every(x=>x==='1'));
+const root=path.resolve(__dirname,'../..');
+fs.mkdirSync(dir+'/candidate-tools',{recursive:true});
+for(const f of ['scripts/sql/olt-catalog-acl-canonical.sql','scripts/sql/olt-retirement-expand-down.sql','scripts/sql/olt-retirement-contract-down.sql','scripts/sql/olt-janet-estiven-reconcile-candidate.sql','scripts/sql/olt-janet-estiven-reconcile-rollback.sql','supabase/migrations/20261021170000_olt_retirement_expand.sql','supabase/migrations/20261021171000_olt_retirement_active_positions.sql'])fs.copyFileSync(root+'/'+f,dir+'/candidate-tools/'+path.basename(f));
+const receipt={status:'PASS',backupDirectory:dir,restoreEvidence:'restore-verify-20261022_040652',tables:v.tablas_public,functions:v.funciones_public,rlsPolicies:v.politicas_rls,guardedExpansionAssertions:log.length,aclTests:12,retirementAndAlertTests:26,frontendTypesAndBuild:'PASS',dumpSha256:sha(dir+'/completo.dump'),applicationImagesSha256:sha(dir+'/application-images.tar.gz'),configSha256:sha(dir+'/configuration.tar.gz'),productionMigrationApplied:false,productionReconciliationApplied:false};
+fs.writeFileSync(dir+'/RESUMEN-RECUPERACION.json',JSON.stringify(receipt,null,2),{flag:'wx'});
+const walk=(folder,prefix='')=>fs.readdirSync(folder,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name)).flatMap(e=>{assert(!e.isSymbolicLink());const rel=prefix+e.name;return e.isDirectory()?walk(folder+'/'+e.name,rel+'/'):[{file:rel,bytes:fs.statSync(folder+'/'+e.name).size,sha256:sha(folder+'/'+e.name)}];});
+const manifest=walk(dir).filter(x=>x.file!=='SHA256SUMS.json');fs.writeFileSync(dir+'/SHA256SUMS.json',JSON.stringify(manifest,null,2),{flag:'wx'});
+console.log(JSON.stringify({status:'PASS_LOCAL_BACKUP',files:manifest.length,dumpSha256:receipt.dumpSha256,manifestSha256:sha(dir+'/SHA256SUMS.json')}));

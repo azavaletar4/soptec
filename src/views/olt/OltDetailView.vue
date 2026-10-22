@@ -29,6 +29,7 @@ import {
   suspensionReasonLabel,
 } from '@/lib/oltConnectionStatus';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import RetiredOntsPanel from '@/components/olt/RetiredOntsPanel.vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useOltStore, type OltOnt, type OltHealth, type UnconfiguredOnt, type DisabledOnt } from '@/stores/olt';
@@ -222,7 +223,7 @@ async function loadUnconfigured(opts: { live?: boolean } = {}) {
 // Fase 3 comercial OLT: antes "Todas" vivia aparte como una tabla siempre
 // visible debajo de estas otras 3 — se consolido en una sola pestaña mas
 // para no mostrar el mismo listado (o un subconjunto) en 2 lugares a la vez.
-type OntTab = 'all' | 'uncfg' | 'reconnect' | 'disabled';
+type OntTab = 'all' | 'uncfg' | 'reconnect' | 'disabled' | 'retired';
 const activeOntTab = ref<OntTab>('all');
 const ontTabsEl = ref<HTMLElement | null>(null);
 function goToDisabledTab() {
@@ -1263,6 +1264,8 @@ const gauges = computed(() => {
           </button>
         </div>
 
+        <button type="button" class="btn-secondary mb-3" :aria-pressed="activeOntTab === 'retired'" @click="activeOntTab = 'retired'">Retiradas · historial</button>
+        <RetiredOntsPanel v-if="activeOntTab === 'retired'" :device-id="deviceId" />
         <template v-if="activeOntTab === 'all'">
           <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div v-if="statusFilter !== 'all'" class="flex items-center gap-2 text-xs">
@@ -1857,7 +1860,7 @@ const gauges = computed(() => {
                 :class="h.severity === 'critical' ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'"
               >
                 <div class="flex items-start justify-between gap-3">
-                  <span class="font-semibold text-xs" :class="h.severity === 'critical' ? 'text-red-800' : 'text-emerald-800'">{{ h.kindLabel }}</span>
+                  <span class="font-semibold text-xs" :class="h.severity === 'critical' ? 'text-red-800' : 'text-emerald-800'">Evento registrado: {{ h.kindLabel }}</span>
                   <span class="text-xs text-slate-500 whitespace-nowrap">{{ relativeTime(h.at) }} · {{ h.atFormatted }} (Perú)</span>
                 </div>
                 <div class="mt-1 text-slate-800 text-sm">
@@ -1870,16 +1873,19 @@ const gauges = computed(() => {
                   </router-link>
                   <span v-else class="text-slate-500">⬜ Pendiente de vincular</span>
                   <span v-if="h.contract?.clientCode" class="text-slate-400"> · código {{ h.contract.clientCode }}</span>
-                  <button v-if="!h.client" class="ml-2 text-xs text-sky-600 hover:underline" @click="openOntFromAlertLog(h.oltOntId)">
+                  <button v-if="!h.client && !h.retired" class="ml-2 text-xs text-sky-600 hover:underline" @click="openOntFromAlertLog(h.oltOntId)">
                     Ver ONT
                   </button>
                 </div>
                 <p class="mt-1 text-[11px] text-slate-500">
                   <span v-if="h.zoneName">{{ h.zoneName }} · </span>
                   <span v-if="h.durationMinutes != null">duración aprox. {{ h.durationMinutes }} min · </span>
-                  <span v-if="h.ont?.status">estado actual: {{ h.ont.status }} · </span>
-                  <span v-if="h.ont?.slot != null">Slot {{ h.ont.slot }}/Puerto {{ h.ont.port }}/ONU {{ h.ont.ontId }} · </span>
+                  <span :class="h.retired ? 'font-semibold text-amber-800' : ''">{{ h.currentStatusLabel }} · </span>
+                  <span v-if="h.ont?.slot != null">{{ h.retired ? 'Última posición histórica: ' : 'Posición registrada: ' }}Slot {{ h.ont.slot }}/Puerto {{ h.ont.port }}/ONU {{ h.ont.ontId }} · </span>
                   <span v-if="h.ont?.serial">{{ h.ont.serial }}</span>
+                  <span v-if="h.retired && h.ont?.retiredAt"> · retiro: {{ relativeTime(h.ont.retiredAt) }}</span>
+                </p>
+                <p v-if="h.detail" class="mt-1 text-xs text-slate-600">Dato registrado en el evento: {{ h.detail }}
                 </p>
               </div>
             </div>

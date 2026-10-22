@@ -1,0 +1,20 @@
+server/src/mikrotik/client.ts(48,5): error TS2741: Property 'bytes' is missing in type 'import("D:/SmartRayco/node_modules/undici/types/fetch").Response' but required in type 'Response'.
+server/src/mikrotik/client.ts(48,34): error TS2345: Argument of type 'RequestInit' is not assignable to parameter of type 'import("D:/SmartRayco/node_modules/undici/types/fetch").RequestInit'.
+  Types of property 'body' are incompatible.
+    Type 'BodyInit | null | undefined' is not assignable to type 'BodyInit | undefined'.
+      Type 'Blob' is not assignable to type 'BodyInit | undefined'.
+        Type 'Blob' is not assignable to type 'import("buffer").Blob'.
+          The types of 'stream().pipeThrough' are incompatible between these types.
+            Type '<T>(transform: ReadableWritablePair<T, Uint8Array<ArrayBuffer>>, options?: StreamPipeOptions | undefined) => ReadableStream<...>' is not assignable to type '<T>(transform: ReadableWritablePair<T, any>, options?: StreamPipeOptions | undefined) => ReadableStream<T>'.
+              Types of parameters 'transform' and 'transform' are incompatible.
+                Type 'ReadableWritablePair<T, any>' is not assignable to type 'ReadableWritablePair<T | undefined, Uint8Array<ArrayBuffer>>'.
+                  The types of 'readable.pipeThrough' are incompatible between these types.
+                    Type '<T>(transform: ReadableWritablePair<T, T>, options?: StreamPipeOptions | undefined) => ReadableStream<T>' is not assignable to type '<T>(transform: ReadableWritablePair<T, T | undefined>, options?: StreamPipeOptions | undefined) => ReadableStream<T>'.
+                      Types of parameters 'transform' and 'transform' are incompatible.
+                        Type 'ReadableWritablePair<T, T | undefined>' is not assignable to type 'ReadableWritablePair<T | undefined, T>'.
+                          The types of 'readable.pipeThrough(...).getReader' are incompatible between these types.
+                            Type '{ (options: { mode: "byob"; }): ReadableStreamBYOBReader; (): ReadableStreamDefaultReader<T | undefined>; (options?: ReadableStreamGetReaderOptions | undefined): ReadableStreamReader<...>; }' is not assignable to type '{ (options: { mode: "byob"; }): ReadableStreamBYOBReader; (): ReadableStreamDefaultReader<T>; (options?: ReadableStreamGetReaderOptions | undefined): ReadableStreamReader<...>; }'.
+                              Target signature provides too few arguments. Expected 1 or more, but got 0.
+server/src/services/oltProvisioningService.ts(225,23): error TS2322: Type '"serviceGemport"' is not assignable to type '"vlan" | "serial" | "onuType" | "tcontProfile" | "trafficProfile" | "existencia"'.
+server/src/services/oltProvisioningService.ts(228,23): error TS2322: Type '"serviceVlan"' is not assignable to type '"vlan" | "serial" | "onuType" | "tcontProfile" | "trafficProfile" | "existencia"'.
+

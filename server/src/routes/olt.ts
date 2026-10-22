@@ -18,6 +18,7 @@ import {
   type CachedUnconfiguredOnt,
 } from '../services/oltSyncService';
 import { oltEvents, type OntChangedEvent, type SummaryChangedEvent, type OltAlertEvent } from '../services/oltEvents';
+import { presentAlertHistoryOnt, type AlertHistoryOnt } from '../services/oltAlertHistoryOnt';
 import { computeRecoveryDurations } from '../services/oltAlertLog';
 import { resolveDisabledReason } from '../services/oltDisabledReason';
 import {
@@ -219,7 +220,7 @@ oltRoutes.get('/:id/summary', requireRole(...STAFF_READ), async (c) => {
   // mientras tanto, contar lo que ya haya en olt_onts en vez de puros ceros.
   const { data: onts } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, olt_device_id, serial, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power, last_synced_at')
+    .select('id, olt_device_id, serial, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power, last_synced_at').is('retired_at', null)
     .eq('olt_device_id', device.id);
   const rows = (onts ?? []).map(row => ontTelemetry.project(row));
   return c.json({
@@ -389,7 +390,7 @@ oltRoutes.get('/:id/alert-log', requireRole(...ONT_WRITE), async (c) => {
   let query = supabaseAdmin
     .from('olt_alert_log')
     .select(
-      'id, olt_ont_id, kind, at, detail, client_id, contract_id, clients(id, first_name, last_name), service_contracts(id, contract_number, client_code, zones(id, name)), olt_onts(id, serial, description, slot, port, ont_id, status)',
+      'id, olt_ont_id, kind, at, detail, client_id, contract_id, clients(id, first_name, last_name), service_contracts(id, contract_number, client_code, zones(id, name)), olt_onts(id, olt_device_id, serial, description, frame, slot, port, ont_id, status, retired_at)',
       { count: 'exact' },
     )
     .eq('olt_device_id', deviceId)
@@ -421,15 +422,7 @@ oltRoutes.get('/:id/alert-log', requireRole(...ONT_WRITE), async (c) => {
       client_code: string | null;
       zones: { id: string; name: string } | null;
     } | null;
-    olt_onts: {
-      id: string;
-      serial: string;
-      description: string | null;
-      slot: number;
-      port: number;
-      ont_id: number;
-      status: string;
-    } | null;
+    olt_onts: AlertHistoryOnt | null;
   }
   const rows = (data ?? []) as unknown as AlertLogRow[];
 
@@ -463,16 +456,7 @@ oltRoutes.get('/:id/alert-log', requireRole(...ONT_WRITE), async (c) => {
       ? { id: row.service_contracts.id, contractNumber: row.service_contracts.contract_number, clientCode: row.service_contracts.client_code }
       : null,
     zoneName: row.service_contracts?.zones?.name ?? null,
-    ont: row.olt_onts
-      ? {
-          serial: row.olt_onts.serial,
-          description: row.olt_onts.description,
-          slot: row.olt_onts.slot,
-          port: row.olt_onts.port,
-          ontId: row.olt_onts.ont_id,
-          status: row.olt_onts.status,
-        }
-      : null,
+    ont: presentAlertHistoryOnt(row.olt_onts),
   }));
 
   return c.json({ items, total: count ?? items.length });
@@ -534,7 +518,7 @@ async function enrichUnconfigured<T extends { serial: string }>(deviceId: string
 
   const { data: existingOnts } = await supabaseAdmin
     .from('olt_onts')
-    .select('serial, client_id, contract_id, clients(id, first_name, last_name, document_number)')
+    .select('serial, client_id, contract_id, clients(id, first_name, last_name, document_number)').is('retired_at', null)
     .eq('olt_device_id', deviceId)
     .in('serial', serials);
   const ontBySerial = new Map((existingOnts ?? []).map((o) => [o.serial, o]));
@@ -646,7 +630,7 @@ oltRoutes.get('/:id/onts/disabled', requireRole(...STAFF_READ), async (c) => {
 
   const { data: onts } = await supabaseAdmin
     .from('olt_onts')
-    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
+    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)').is('retired_at', null)
     .eq('olt_device_id', device.id);
 
   const items: Record<string, unknown>[] = [];
@@ -660,13 +644,21 @@ oltRoutes.get('/:id/onts/disabled', requireRole(...STAFF_READ), async (c) => {
 
 // ---- ONTs (cache local en olt_onts, sincronizada en background por Telnet) ----
 
+oltRoutes.get('/:id/onts/retired', requireRole(...STAFF_READ), async (c) => {
+  const { data, error } = await supabaseAdmin.from('olt_onts').select('*')
+    .eq('olt_device_id', c.req.param('id')).not('retired_at', 'is', null)
+    .order('retired_at', { ascending: false });
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json(presentOntData(data ?? []));
+});
+
 oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
     .select(
       '*, clients(id, first_name, last_name, phone, address), zones(id, name), ' +
         'service_contracts(id, contract_number, client_code, status, zones(id, name))',
-    )
+    ).is('retired_at', null)
     .eq('olt_device_id', c.req.param('id'))
     .order('slot')
     .order('port')
@@ -683,7 +675,7 @@ oltRoutes.get('/:id/onts', requireRole(...STAFF_READ), async (c) => {
 oltRoutes.get('/onts/by-client/:clientId', requireRole(...STAFF_READ), async (c) => {
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .select('*, plans(id, name, download_speed, upload_speed, olt_tcont_profile, olt_traffic_profile)')
+    .select('*, plans(id, name, download_speed, upload_speed, olt_tcont_profile, olt_traffic_profile)').is('retired_at', null)
     .eq('client_id', c.req.param('clientId'))
     .order('created_at', { ascending: false });
   if (error) return c.json({ error: error.message }, 500);
@@ -703,7 +695,7 @@ oltRoutes.get('/onts/search', requireRole(...STAFF_READ), async (c) => {
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, olt_device_id, serial, description, ont_id, frame, slot, port, status, olt_devices(id, name)')
+    .select('id, olt_device_id, serial, description, ont_id, frame, slot, port, status, olt_devices(id, name)').is('retired_at', null)
     .is('client_id', null)
     .ilike('serial', `%${serial}%`)
     .limit(20);
@@ -723,7 +715,7 @@ oltRoutes.get('/onts/status', requireRole(...STAFF_READ), async (c) => {
   const serials = raw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 200);
   if (!serials.length) return c.json({});
 
-  const { data, error } = await supabaseAdmin.from('olt_onts').select('id, olt_device_id, serial, frame, slot, port, ont_id, status, description, rx_power, tx_power, last_synced_at').in('serial', serials);
+  const { data, error } = await supabaseAdmin.from('olt_onts').select('id, olt_device_id, serial, frame, slot, port, ont_id, status, description, rx_power, tx_power, last_synced_at').is('retired_at', null).in('serial', serials);
   if (error) return c.json({ error: error.message }, 500);
 
   const byserial: Record<string, unknown> = {};
@@ -753,7 +745,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), guardOltR
   // Preserve every existing identity, linked or unlinked, when a position is reused.
   const { data: linkedRows, error: identityError, count: identityCount } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, frame, slot, port, ont_id, serial, client_id', { count: 'exact' })
+    .select('id, frame, slot, port, ont_id, serial, client_id', { count: 'exact' }).is('retired_at', null)
     .eq('olt_device_id', device.id).abortSignal(budget.signal);
   // Fail closed on transport/RLS errors AND truncated inventories. No mutation before this gate.
   if (identityError || !linkedRows || identityCount === null || linkedRows.length !== identityCount) {
@@ -806,7 +798,7 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), guardOltR
     if (existing) {
       // Never update identity fields. Atomic predicates protect against a concurrent replacement/link.
       const { olt_device_id, frame, slot, port, ont_id, serial, ...patch } = metadata;
-      let query = supabaseAdmin.from('olt_onts').update(patch)
+      let query = supabaseAdmin.from('olt_onts').update(patch).is('retired_at', null)
         .eq('id', existing.id).eq('olt_device_id', olt_device_id).eq('serial', existing.serial)
         .eq('frame', frame).eq('slot', slot).eq('port', port).eq('ont_id', ont_id);
       query = existing.client_id === null ? query.is('client_id', null) : query.eq('client_id', existing.client_id);
@@ -847,7 +839,7 @@ oltRoutes.post('/:id/onts/sync', requireRole(...ONT_WRITE), guardOltReadOperatio
   try {
     const budget = createOltReadBudget(device);
     const scan = await collectOltTelemetry(budget.read, { includeSignal: false });
-    const { data: rows, error } = await supabaseAdmin.from('olt_onts').select('*')
+    const { data: rows, error } = await supabaseAdmin.from('olt_onts').select('*').is('retired_at', null)
       .eq('olt_device_id', device.id).eq('frame', shelf).eq('slot', slot).eq('port', port).abortSignal(budget.signal);
     if (error) throw Error('No se pudo consultar la identidad de las ONT.');
     let updated = 0;
@@ -975,7 +967,7 @@ oltRoutes.route('/', createOltProvisioningRoutes({
 
 async function getOntOrNull(id: string | undefined) {
   if (!id) return null;
-  const { data } = await supabaseAdmin.from('olt_onts').select('*').eq('id', id).single();
+  const { data } = await supabaseAdmin.from('olt_onts').select('*').is('retired_at', null).eq('id', id).single();
   return data;
 }
 
@@ -1002,7 +994,7 @@ async function toggleActivation(c: Context, activate: boolean) {
   ontTelemetry.invalidate(ont.id);
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update({ status: 'unknown', admin_state: activate ? 'enable' : 'disable' })
+    .update({ status: 'unknown', admin_state: activate ? 'enable' : 'disable' }).is('retired_at', null)
     .eq('id', ont.id)
     .select()
     .single();
@@ -1043,7 +1035,7 @@ oltRoutes.put('/:id/onts/:ontDbId/plan', requireRole(...ONT_WRITE), async (c) =>
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update({ tcont_profile: tcontProfile, traffic_profile: trafficProfile, plan_id: planId ?? null })
+    .update({ tcont_profile: tcontProfile, traffic_profile: trafficProfile, plan_id: planId ?? null }).is('retired_at', null)
     .eq('id', ont.id)
     .select('*, clients(id, first_name, last_name, phone, address), zones(id, name), plans(id, name, download_speed, upload_speed)')
     .single();
@@ -1098,7 +1090,7 @@ oltRoutes.post('/:id/onts/:ontDbId/wan-pppoe', requireRole(...ONT_WRITE), async 
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update({ last_synced_at: new Date().toISOString() })
+    .update({ last_synced_at: new Date().toISOString() }).is('retired_at', null)
     .eq('id', ont.id)
     .select()
     .single();
@@ -1142,7 +1134,7 @@ oltRoutes.put('/:id/onts/:ontDbId/meta', requireRole(...ONT_WRITE), async (c) =>
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update(update)
+    .update(update).is('retired_at', null)
     .eq('id', ont.id)
     .select('*, clients(id, first_name, last_name, phone, address), zones(id, name)')
     .single();
@@ -1168,7 +1160,7 @@ oltRoutes.delete('/:id/onts/:ontDbId', requireRole(...ONT_WRITE), async (c) => {
     return c.json({ error: e instanceof Error ? e.message : 'Error al eliminar en la OLT' }, 502);
   }
 
-  const { error } = await supabaseAdmin.from('olt_onts').delete().eq('id', ont.id);
+  const { error } = await supabaseAdmin.from('olt_onts').delete().is('retired_at', null).eq('id', ont.id);
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: { id: ont.id, deleted: true } });
   return c.json({ ok: true });
@@ -1240,7 +1232,7 @@ oltRoutes.post('/:id/onts/:ontDbId/tr069', requireRole(...ONT_WRITE), async (c) 
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update({ tr069_enabled: true, tr069_acs_url: acsUrl })
+    .update({ tr069_enabled: true, tr069_acs_url: acsUrl }).is('retired_at', null)
     .eq('id', ont.id)
     .select()
     .single();
@@ -1269,7 +1261,7 @@ oltRoutes.delete('/:id/onts/:ontDbId/tr069', requireRole(...ONT_WRITE), async (c
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update({ tr069_enabled: false })
+    .update({ tr069_enabled: false }).is('retired_at', null)
     .eq('id', ont.id)
     .select()
     .single();

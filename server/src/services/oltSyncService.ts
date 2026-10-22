@@ -185,7 +185,7 @@ async function performFullSync(
   const globalOnts = scan.states ?? [];
   const { data: knownRows } = await supabaseAdmin
     .from('olt_onts')
-    .select('id, serial, olt_device_id, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power, client_id, contract_id')
+    .select('id, serial, olt_device_id, frame, slot, port, ont_id, status, admin_state, rx_power, tx_power, client_id, contract_id').is('retired_at', null)
     .eq('olt_device_id', device.id);
   const known = (knownRows ?? []) as KnownOnt[];
   // Fase 4 OLT — historial de alertas: mapa por id para resolver el

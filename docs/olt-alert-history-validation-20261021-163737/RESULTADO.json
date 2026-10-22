@@ -1,0 +1,11 @@
+{
+  "status": "PASS_SCOPED",
+  "tests": 39,
+  "fail": 0,
+  "vueTypes": "PASS",
+  "backendTypes": "SAME_FOUR_PREEXISTING_ERRORS",
+  "productionAccess": false,
+  "protectedFiles": 216,
+  "protectedDifferences": 0,
+  "scope": "pure live-evidence projection and presentation regressions; route/template wiring; no physical OLT or browser acceptance"
+}

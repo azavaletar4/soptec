@@ -1,0 +1,57 @@
+[olt-signal-checkpoint] No se pudo verificar el checkpoint; no se reutilizaron referencias.
+✔ reinicio: checkpoint conserva cruce verificado y no restaura estado/potencia como actuales ni duplica alerta (9.964ms)
+✔ reinicio: ausencia/conflicto invalida checkpoint; corrupción, versión y evidencia antigua no habilitan alertas (11.7896ms)
+✔ fallo de checkpoint no se oculta como persistencia correcta (1.3569ms)
+✔ puerto de potencia ajeno o fila duplicada: nunca atribuir RX/TX por onu-id aislado (2.6767ms)
+✔ operación lógica: importación, scheduler y señal comparten exclusión; se libera al terminar (0.4206ms)
+✔ presupuesto incluye cola: la sesión vencida no se ejecuta después ni se solapa (0.7984ms)
+✔ presupuesto real breve: abandona espera sin abrir conexión al equipo (10.3961ms)
+✔ error síncrono del lector libera el mutex y permite el siguiente turno (0.4038ms)
+✔ REST lento comparte presupuesto: aborta petición de metadatos sin lanzar escrituras posteriores (37.6531ms)
+✔ MSTC8CCE647E / HWTC5C94DB6 y serial real HWTCE5C94DB6: posición reutilizada nunca sustituye identidad (1.2058ms)
+✔ positionKey: formato estable frame/slot/port:ontId (0.1259ms)
+✔ ONT sin vincular -> fullRefresh (sigue tomando el nombre de la OLT, Situacion A) (0.7186ms)
+✔ ONT vinculada con el MISMO serial -> keepDescription (misma identidad, no se pisa el nombre) (0.1512ms)
+✔ comparacion de serial case-insensitive (mismo criterio que upsertOnt) (0.1633ms)
+✔ REEMPLAZO: misma posicion, serial distinto -> conflicto, NO se toca nada (ni description ni tecnico) (0.2783ms)
+✔ TRASLADO: la ONT vinculada desaparece de su posicion vieja (no esta en el escaneo) y aparece en una NUEVA posicion sin vincular todavia (0.1557ms)
+✔ posición sin vínculo reutilizada: tampoco sobrescribe la fila histórica ni su serial (0.1599ms)
+✔ fila heredada sin vinculo en la MISMA posicion que una ONT que SI cambio de serial: cada posicion se evalua independiente (0.1603ms)
+✔ REIMPORTACION: correr 2 veces seguidas con los mismos datos da exactamente el mismo resultado (sin vinculo) (0.2473ms)
+✔ REIMPORTACION: correr 2 veces seguidas con los mismos datos da exactamente el mismo resultado (vinculada, mismo serial) (0.1552ms)
+✔ REIMPORTACION: un conflicto ya reportado sigue reportandose igual en la siguiente corrida mientras nadie lo resuelva (nunca se auto-resuelve) (0.1321ms)
+✔ caso real mixto: Violeta/Clara/Mayco vinculadas (mismo serial) + 1 sin vincular + 1 reemplazo simulado (0.151ms)
+✔ lista vacia no rompe (0.09ms)
+✔ handler: completes and replay returns ONT without repeated external writes (40.236ms)
+✔ handler: concurrent same-key requests run the entire pipeline once (13.4477ms)
+✔ handler: changed client, contract, description, NAP or router rejects same key before IO (14.5583ms)
+✔ handler: missing callbacks on reconcile preserve requested pending stages (13.3278ms)
+✔ handler: retries failed MikroTik, skips confirmed DB and WAN (10.7141ms)
+✔ handler: journal failure stops before OLT mutation (1.5418ms)
+✔ handler: resolved ID persistence failure stops before OLT mutation (4.0192ms)
+✔ handler: completed row without its ONT is never a success (8.3275ms)
+✔ handler: historical retired ONT blocks pending reconciliation before any OLT/router operation (13.7533ms)
+✔ handler: secret values are removed from errors, history and response (7.1031ms)
+✔ handler: failed NAP assignment keeps DB pending and retries the link (8.2538ms)
+✔ handler: final save failure returns a warning and reuses confirmed stages on recovery (8.9783ms)
+✔ mismo serial y posición: estado y potencia solo tras las dos comprobaciones de identidad (4.0822ms)
+✔ serial trasladado: no mueve posición ni vínculos y no toma mediciones de la posición vieja (1.2424ms)
+✔ caso Janet/Estiven: posición reutilizada, nueva ONT protegida y Huawei de Janet sin cambios (0.4628ms)
+✔ ONT antigua ausente: ausencia confirmada del inventario no se convierte en desconexión física (0.3604ms)
+✔ consulta de configuración fallida o estado fallido: nunca offline confirmado ni datos históricos actuales (0.4855ms)
+✔ lectura de potencia fallida/incompleta: estado verificado separado, potencia anterior solo histórica (0.6916ms)
+✔ cambio durante la lectura o serial duplicado: no atribuir una observación ambigua (0.5731ms)
+✔ estado working requiere evidencia; offline observado conserva identidad; estado no reconocido queda sin confirmar (0.4465ms)
+✔ dos ONT en misma posición en momentos diferentes: evidencia aislada por id, serial, posición y caducidad (0.9176ms)
+✔ configuración final fallida o respuesta vacía: las mediciones recogidas no se publican (0.4839ms)
+✔ persistencia condicionada por id, OLT, serial y posición: conserva nueva ONT y vínculos ante reemplazo concurrente (0.9136ms)
+✔ registro de discrepancia: dos seriales y posición, sin cliente, contrato, nombre o credenciales (0.6019ms)
+ℹ tests 47
+ℹ suites 0
+ℹ pass 47
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1253.2244
+
