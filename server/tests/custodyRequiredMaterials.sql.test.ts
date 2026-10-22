@@ -125,6 +125,26 @@ test('Fase 165 etapa 2: custodia obligatoria de materiales en consumo real', { t
     sql('alter table public.work_order_closures alter column client_id drop not null;'); // Fase 101, igual que catalogo Cloud revisado
     sql(file('../../supabase/migrations/20261019170000_fase165_cierre_consumos_rechazados.sql'));
     candidateRoutineSQL = sql("select pg_get_functiondef('public.routine_inventory_operation(uuid,uuid,text,jsonb)'::regprocedure);");
+    // Candidate return routines only; all writes remain inside the isolated fixture.
+    sql(file('../../scripts/prepare-custody-returns-review.sql'));
+    await t.test('devoluciones: material ya consumido no se puede solicitar ni recibir como sobrante', () => {
+      reset();
+      deliver(tech, cable, 10);
+      const reqId = as(`select public.request_material_return('${cable}',7,'Pendiente antes del consumo');`);
+      campoOp('consume', { productId: cable, quantity: 8, reason: 'Consumo real fixture' });
+      assert.equal(custody(tech, cable), '2');
+      const stockBefore = sql(`select current_stock from inventory_products where id='${cable}';`);
+      const movementsBefore = sql('select count(*) from inventory_movements;');
+      assert.throws(() => as(`select public.confirm_material_return('${reqId}',true,null);`, admin), /no tiene esa cantidad en custodia/);
+      assert.equal(sql(`select status from technician_material_return_requests where id='${reqId}';`), 'pending');
+      as(`select public.confirm_material_return('${reqId}',false,'Saldo consumido');`, admin);
+      assert.throws(() => as(`select public.request_material_return('${cable}',8,'Ya consumido');`), /No tienes esa cantidad/);
+      campoOp('consume', { productId: cable, quantity: 2, reason: 'Consume remanente' });
+      assert.throws(() => as(`select public.request_material_return('${cable}',1,'Sin saldo');`), /No tienes esa cantidad/);
+      assert.equal(custody(tech, cable), '0');
+      assert.equal(Number(sql(`select current_stock from inventory_products where id='${cable}';`)), Number(stockBefore) - 2);
+      assert.equal(Number(sql('select count(*) from inventory_movements;')), Number(movementsBefore) + 1);
+    });
 
     // ---- Consumo valido ----
     await t.test('con custodia suficiente, el consumo se registra y descuenta la custodia (no el almacen)', () => {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
@@ -21,6 +21,30 @@ test('Fase 164: custodia de equipos y materiales por tecnico', { timeout: 180000
   const docker = (args: string[], input?: string) => execFileSync('docker', args, { input, encoding: 'utf8', windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   const args = ['exec', '-i', container, 'psql', '-h', '127.0.0.1', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres'];
   const sql = (s: string) => docker(args, s).trim();
+  const sqlAsync = (s: string) => new Promise<{ ok: boolean; output: string }>((resolve, reject) => {
+    const child = spawn('docker', args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    let output = '';
+    child.stdout.on('data', data => { output += data; });
+    child.stderr.on('data', data => { output += data; });
+    child.on('error', reject);
+    child.on('close', code => resolve({ ok: code === 0, output }));
+    child.stdin.end(s);
+  });
+  const waitForSession = async (name: string, waitType: string) => {
+    for (let i = 0; i < 60; i++) {
+      if (sql(`select count(*) from pg_stat_activity where application_name='${name}' and wait_event_type='${waitType}';`) === '1') return;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.fail(`No se observo ${name} esperando ${waitType}`);
+  };
+  const snapshot = () => sql(`select jsonb_build_object(
+    'requests',(select jsonb_agg(to_jsonb(r) order by id) from technician_material_return_requests r),
+    'events',(select jsonb_agg(to_jsonb(r) order by id) from technician_material_custody_events r),
+    'custody',(select jsonb_agg(to_jsonb(r) order by technician_id,product_id) from technician_material_custody r),
+    'movements',(select jsonb_agg(to_jsonb(r) order by id) from inventory_movements r),
+    'products',(select jsonb_agg(to_jsonb(r) order by id) from inventory_products r),
+    'units',(select jsonb_agg(to_jsonb(r) order by id) from inventory_units r),
+    'unitEvents',(select jsonb_agg(to_jsonb(r) order by id) from inventory_unit_events r));`);
   const as = (s: string, uid = tech) => sql(`set role authenticated; set request.jwt.claim.sub='${uid}'; ${s}`);
   const campoOp = (action: string, payload: object, uid = tech, id = randomUUID()) =>
     as(`select public.campo_inventory_operation('${id}','installation','${install}','${action}','${JSON.stringify(payload).replaceAll("'", "''")}'::jsonb);`, uid);
@@ -68,8 +92,74 @@ test('Fase 164: custodia de equipos y materiales por tecnico', { timeout: 180000
     sql(`alter type public.inventory_unit_status add value 'with_technician';`);
     sql(`alter type public.inventory_unit_status add value 'pending_return';`);
     sql(file('../../supabase/migrations/20261017030000_fase164_custodia_tecnicos.sql'));
+    const signatures = "'public.request_material_return(uuid,numeric,text)'::regprocedure,'public.my_inventory_custody()'::regprocedure";
+    const definitions = () => sql(`select string_agg(pg_get_functiondef(oid) || ';', E'\\n' order by oid) from pg_proc where oid in (${signatures});`);
+    const permissions = () => sql(`select jsonb_agg(jsonb_build_object('oid',oid,'owner',proowner,'acl',proacl,'config',proconfig,'definer',prosecdef) order by oid) from pg_proc where oid in (${signatures});`);
+    const originalDefinitions = definitions();
+    const originalPermissions = permissions();
+    reset();
+    as(`select public.deliver_material_to_technician('${tech}','${cable}',50,'fixture');`, admin);
+    for (const status of ['pending', 'confirmed', 'rejected']) {
+      const id = as(`select public.request_material_return('${cable}',2,'Existente');`);
+      if (status !== 'pending') as(`select public.confirm_material_return('${id}',${status === 'confirmed'},null);`, admin);
+    }
+    const existingData = snapshot();
+    docker([...args, '-v', 'rollback_path=/tmp/returns-rollback.sql', '-v', 'snapshot_path=/tmp/returns-snapshot.json'], file('../../scripts/tests/custody-returns-backup-readonly.sql'));
+    const rollbackSQL = docker(['exec', container, 'cat', '/tmp/returns-rollback.sql']);
+    const backupData = JSON.parse(docker(['exec', container, 'cat', '/tmp/returns-snapshot.json']));
+    assert.equal(backupData.requests.length, 3);
+    sql(file('../../scripts/tests/custody-returns-preflight-readonly.sql'));
     // Candidate routines are exercised only in this ephemeral, network-isolated database.
     sql(file('../../scripts/prepare-custody-returns-review.sql'));
+    await t.test('aplicar candidato preserva filas existentes, permisos, propietario y firmas', () => {
+      assert.equal(snapshot(), existingData);
+      assert.equal(permissions(), originalPermissions);
+    });
+    await t.test('rollback de definiciones restaura exactamente funciones sin cambiar datos', () => {
+      sql(rollbackSQL);
+      assert.equal(definitions(), originalDefinitions);
+      assert.equal(snapshot(), existingData);
+      assert.equal(permissions(), originalPermissions);
+      sql(file('../../scripts/prepare-custody-returns-review.sql'));
+    });
+    await t.test('dos sesiones simultaneas: una solicitud de 7 con saldo 10; la otra espera y se rechaza', async () => {
+      reset();
+      as(`select public.deliver_material_to_technician('${tech}','${cable}',10,'fixture');`, admin);
+      const first = sqlAsync(`set application_name='returns-first'; begin; set local role authenticated; set local request.jwt.claim.sub='${tech}'; select public.request_material_return('${cable}',7,'A'); select pg_sleep(4); commit;`);
+      await waitForSession('returns-first', 'Timeout');
+      const second = sqlAsync(`set application_name='returns-second'; set statement_timeout='10s'; set role authenticated; set request.jwt.claim.sub='${tech}'; select public.request_material_return('${cable}',7,'B');`);
+      await waitForSession('returns-second', 'Lock');
+      const [a, b] = await Promise.all([first, second]);
+      assert.ok(a.ok, a.output);
+      assert.equal(b.ok, false, b.output);
+      assert.match(b.output, /solicitud pendiente/);
+      assert.equal(sql(`select count(*)||'|'||sum(quantity) from technician_material_return_requests where status='pending';`), '1|7');
+      assert.equal(sql(`select quantity from technician_material_custody where technician_id='${tech}' and product_id='${cable}';`), '10');
+      assert.equal(sql(`select current_stock from inventory_products where id='${cable}';`), '100.00');
+      assert.equal(sql('select count(*) from inventory_movements;'), '0');
+    });
+    await t.test('ADMIN y SUPERADMIN reciben materiales y equipos con RPC existentes', () => {
+      for (const receiver of [admin, '00000000-0000-0000-0000-000000000001']) {
+        reset();
+        as(`select public.deliver_material_to_technician('${tech}','${cable}',10,'fixture');`, admin);
+        const id = as(`select public.request_material_return('${cable}',4,'Sobrante');`);
+        as(`select public.confirm_material_return('${id}',true,null);`, receiver);
+        assert.equal(sql(`select quantity from technician_material_custody where technician_id='${tech}' and product_id='${cable}';`), '6');
+        as(`select public.deliver_unit_to_technician('${unit}','${tech}','fixture');`, admin);
+        as(`select public.request_unit_return('${unit}','Sobrante');`);
+        assert.equal(sql(`select count(*) from inventory_units where id='${unit}' and status='in_stock';`), '0');
+        as(`select public.receive_unit_return('${unit}','in_stock',null);`, receiver);
+        assert.equal(sql(`select status from inventory_units where id='${unit}';`), 'in_stock');
+      }
+    });
+    await t.test('equipo ya instalado no puede solicitar devolucion de custodia', () => {
+      reset();
+      as(`select public.deliver_unit_to_technician('${unit}','${tech}','fixture');`, admin);
+      campoOp('assign', { unitId: unit, reason: 'Instalado' });
+      const before = snapshot();
+      assert.throws(() => as(`select public.request_unit_return('${unit}','Ya instalado');`), /Solo se puede solicitar devolucion/);
+      assert.equal(snapshot(), before);
+    });
 
     // ---- Equipos serializados ----
     await t.test('admin entrega un equipo en bodega a un tecnico activo', () => {

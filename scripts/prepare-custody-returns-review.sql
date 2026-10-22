@@ -1,6 +1,8 @@
 -- CANDIDATO PARA REVISION. NO APLICADO. Requiere autorizacion de base de datos.
 -- Conserva firmas, permisos y tablas existentes; bloqueo por saldo serializa solicitudes del mismo material.
 begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '30s';
 create or replace function public.request_material_return(p_product_id uuid, p_quantity numeric, p_reason text)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare current_qty numeric; req_id uuid;
