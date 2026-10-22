@@ -6,7 +6,8 @@
 // inventory_admin_only en Cloud): todo pasa por my_inventory_custody()/
 // request_unit_return()/request_material_return(), igual arquitectura que
 // el resto de Campo (RPC SECURITY DEFINER, nunca tablas directas).
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
+import { materialReturnError } from '@/lib/custodyReturns';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
 import { useToast } from '@/composables/useToast';
@@ -21,6 +22,7 @@ const loadError = ref<string | null>(null);
 const data = ref<MyInventoryCustody>({ units: [], materials: [], pendingReturnRequests: [] });
 
 async function load() {
+  if (loading.value && refreshTimer) return;
   loading.value = true;
   loadError.value = null;
   try {
@@ -42,6 +44,8 @@ function toggleUnitReturnForm(unitId: string) {
 }
 
 async function handleUnitReturn(unitId: string) {
+  if (savingUnitReturn.value) return;
+  if (!data.value.units.some(u => u.id === unitId && u.status === 'with_technician')) return;
   if (!unitReturnReason.value.trim()) {
     toast.error('Escribe el motivo de la devolución.');
     return;
@@ -71,6 +75,9 @@ function toggleMaterialReturnForm(productId: string) {
 }
 
 async function handleMaterialReturn(productId: string) {
+  if (savingMaterialReturn.value) return;
+  const validation = materialReturnError(data.value, productId, materialReturnQty.value);
+  if (validation) { toast.error(validation); return; }
   if (!materialReturnQty.value || materialReturnQty.value <= 0) {
     toast.error('Indica la cantidad a devolver.');
     return;
@@ -97,11 +104,18 @@ const STATUS_LABEL: Record<string, string> = {
   pending_return: 'Devolución en espera de recepción',
 };
 
-onMounted(load);
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  void load();
+  refreshTimer = setInterval(() => { if (!document.hidden && !savingUnitReturn.value && !savingMaterialReturn.value) void load(); }, 30000);
+});
+onUnmounted(() => clearInterval(refreshTimer));
 </script>
 
 <template>
-  <CampoLayout title="Mis equipos y materiales" show-back>
+  <CampoLayout title="Mi custodia" show-back>
+    <p class="text-xs text-slate-500 mb-3">Solicita la devolución de lo que no utilizaste. Administración confirma la recepción física.</p>
+    <button type="button" class="btn-secondary text-xs mb-3" :disabled="loading" @click="load">Actualizar</button>
     <p v-if="loading" class="text-center text-slate-500 py-6">Cargando...</p>
     <p v-else-if="loadError" class="text-sm text-red-600">{{ loadError }}</p>
     <template v-else>
@@ -112,7 +126,7 @@ onMounted(load);
           <div class="flex items-center justify-between gap-2">
             <div>
               <p class="text-sm font-medium">{{ u.product.name }}</p>
-              <p class="text-xs text-slate-500">{{ u.serial_number || u.mac_address || '—' }} · {{ STATUS_LABEL[u.status] || u.status }}</p>
+              <p class="text-xs text-slate-500 break-all">Serie: {{ u.serial_number || '—' }} · MAC: {{ u.mac_address || '—' }} · {{ STATUS_LABEL[u.status] || u.status }}</p>
             </div>
             <button
               v-if="u.status === 'with_technician'"
@@ -120,7 +134,7 @@ onMounted(load);
               class="btn-secondary text-xs"
               @click="toggleUnitReturnForm(u.id)"
             >
-              {{ unitReturnFormFor === u.id ? 'Cancelar' : 'Devolver' }}
+              {{ unitReturnFormFor === u.id ? 'Cancelar' : 'Solicitar devolución' }}
             </button>
           </div>
           <div v-if="unitReturnFormFor === u.id" class="mt-2 space-y-2">
@@ -138,8 +152,8 @@ onMounted(load);
         <div v-for="m in data.materials" :key="m.product.id" class="border-t border-slate-100 pt-2 mt-2 first:border-t-0 first:pt-0 first:mt-0">
           <div class="flex items-center justify-between gap-2">
             <p class="text-sm font-medium">{{ m.product.name }} — {{ m.quantity }} {{ m.product.unit }}</p>
-            <button type="button" class="btn-secondary text-xs" @click="toggleMaterialReturnForm(m.product.id)">
-              {{ materialReturnFormFor === m.product.id ? 'Cancelar' : 'Devolver' }}
+            <button type="button" class="btn-secondary text-xs" :disabled="savingMaterialReturn || data.pendingReturnRequests.some(r => r.product.id === m.product.id && r.status === 'pending')" @click="toggleMaterialReturnForm(m.product.id)">
+              {{ materialReturnFormFor === m.product.id ? 'Cancelar' : 'Solicitar devolución' }}
             </button>
           </div>
           <div v-if="materialReturnFormFor === m.product.id" class="mt-2 space-y-2">
@@ -153,10 +167,10 @@ onMounted(load);
       </section>
 
       <section v-if="data.pendingReturnRequests.length" class="surface p-3.5 mb-3">
-        <h2 class="text-sm font-semibold mb-2">Devoluciones de material en espera</h2>
+        <h2 class="text-sm font-semibold mb-2">Solicitudes de devolución de materiales</h2>
         <div v-for="r in data.pendingReturnRequests" :key="r.id" class="border-t border-slate-100 pt-2 mt-2 first:border-t-0 first:pt-0 first:mt-0">
           <p class="text-sm">{{ r.product.name }} — {{ r.quantity }}</p>
-          <p class="text-xs text-amber-700">Pendiente de recepción administrativa</p>
+          <p class="text-xs text-slate-600">{{ r.status === 'confirmed' ? 'Recibido' : r.status === 'rejected' ? 'Rechazado' : 'Pendiente de recepción administrativa' }}</p>
         </div>
       </section>
     </template>

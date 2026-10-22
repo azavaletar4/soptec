@@ -68,6 +68,8 @@ test('Fase 164: custodia de equipos y materiales por tecnico', { timeout: 180000
     sql(`alter type public.inventory_unit_status add value 'with_technician';`);
     sql(`alter type public.inventory_unit_status add value 'pending_return';`);
     sql(file('../../supabase/migrations/20261017030000_fase164_custodia_tecnicos.sql'));
+    // Candidate routines are exercised only in this ephemeral, network-isolated database.
+    sql(file('../../scripts/prepare-custody-returns-review.sql'));
 
     // ---- Equipos serializados ----
     await t.test('admin entrega un equipo en bodega a un tecnico activo', () => {
@@ -102,6 +104,7 @@ test('Fase 164: custodia de equipos y materiales por tecnico', { timeout: 180000
       as(`select public.deliver_unit_to_technician('${unit}','${tech}','x');`, admin);
       as(`select public.request_unit_return('${unit}','No se uso, cliente cancelo');`, tech);
       assert.equal(sql(`select status from inventory_units where id='${unit}';`), 'pending_return');
+      assert.throws(() => as(`select public.request_unit_return('${unit}','Duplicado');`, tech), /Solo se puede solicitar devolucion/);
       assert.throws(() => as(`select public.receive_unit_return('${unit}','in_stock',null);`, tech), /Solo administracion/);
       as(`select public.receive_unit_return('${unit}','in_stock',null);`, admin);
       assert.equal(sql(`select status||'|'||coalesce(custody_technician_id::text,'libre') from inventory_units where id='${unit}';`), 'in_stock|libre');
@@ -129,7 +132,15 @@ test('Fase 164: custodia de equipos y materiales por tecnico', { timeout: 180000
       reset();
       as(`select public.deliver_material_to_technician('${tech}','${cable}',50,'x');`, admin);
       const reqId = as(`select public.request_material_return('${cable}',20,'Sobro de la orden');`, tech);
+      assert.equal(sql(`select quantity from technician_material_custody where technician_id='${tech}' and product_id='${cable}';`), '50');
+      assert.equal(sql(`select current_stock from inventory_products where id='${cable}';`), '100.00');
+      assert.throws(() => as(`select public.request_material_return('${cable}',20,'Duplicado');`, tech), /solicitud pendiente/);
+      assert.throws(() => as(`select public.confirm_material_return('${reqId}',true,null);`, tech), /Solo administracion/);
       as(`select public.confirm_material_return('${reqId}',true,null);`, admin);
+      assert.throws(() => as(`select public.confirm_material_return('${reqId}',true,null);`, admin), /ya resuelta/);
+      assert.equal(sql(`select current_stock from inventory_products where id='${cable}';`), '100.00');
+      const history = JSON.parse(as('select public.my_inventory_custody();', tech));
+      assert.equal(history.pendingReturnRequests[0].status, 'confirmed');
       assert.equal(sql(`select quantity from technician_material_custody where technician_id='${tech}' and product_id='${cable}';`), '30');
       assert.equal(sql(`select status from technician_material_return_requests where id='${reqId}';`), 'confirmed');
       assert.equal(sql('select count(*) from inventory_movements;'), '0');
@@ -141,6 +152,7 @@ test('Fase 164: custodia de equipos y materiales por tecnico', { timeout: 180000
       as(`select public.confirm_material_return('${reqId}',false,'No corresponde');`, admin);
       assert.equal(sql(`select quantity from technician_material_custody where technician_id='${tech}' and product_id='${cable}';`), '50');
       assert.equal(sql(`select status from technician_material_return_requests where id='${reqId}';`), 'rejected');
+      assert.equal(JSON.parse(as('select public.my_inventory_custody();', tech)).pendingReturnRequests[0].status, 'rejected');
     });
     await t.test('no se puede solicitar devolver mas de lo que se tiene en custodia', () => {
       reset();
