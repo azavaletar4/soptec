@@ -5820,3 +5820,59 @@ vivo que el panel de Custodia muestra el caso real como "Orden cerrada
 **PASS de preparacion**: todo verificado, respaldo actualizado y
 restaurado con exito, rollback listo, captura real obtenida. Listo para
 que el usuario autorice el despliegue.
+
+## Fase 169: desplegada, validacion administrativa real PENDIENTE (21/10/2026, 21:30 Peru)
+
+Autorizacion explicita del propietario: publicar exclusivamente `cb57924`
+y `3cf2596` antes del despliegue; documentar al final. Push normal
+fast-forward `3908919..3cf2596`, desde este worktree aislado, sin force,
+sin tocar el checkout principal ni sus archivos ajenos.
+
+Migracion unica de esta activacion: `20261021220000_fase169_reintentar_consumo_rechazado`.
+SQL aprobado aplicado a Supabase Cloud `mzupdnjegfwmpajywckd` por TLS
+verify-full y registrado en `supabase_migrations.schema_migrations` con
+el SQL exacto, sin repetir 166/167. Funcion nueva comprobada por catalogos:
+SECURITY DEFINER, search_path `pg_catalog, public`, EXECUTE para
+authenticated, sin EXECUTE para anon/PUBLIC, control interno ADMIN/SUPERADMIN.
+MD5 del cuerpo nuevo: `f9b1fea0855798d6dcf7ef9392d21903`.
+Los MD5 normalizados de 166/167 siguen `4201e9cb13b8b93d2ae80a0cc44035c2`
+y `e452ec213962f70d8db289ac17ed361f`, respectivamente.
+Una consulta inicial al PostgreSQL local de la VM no encontro tablas
+operativas; fue exclusivamente READ ONLY y se corrigio el destino a Cloud
+antes de cualquier escritura. No se aplico SQL al PostgreSQL local.
+
+Frontend/backend desplegados con el procedimiento existente, sin modificarlo:
+`DEPLOY_YES=1 DEPLOY_ALLOW_MULTI_COMMIT=1 bash deploy/safe-update.sh 3cf2596bc2d556b1d99830b7200b36d967c73b5b`.
+PASS: HEAD VM exacto y limpio, HTTPS 200, `/api/health` 200/status ok,
+16 contenedores activos (healthchecks existentes saludables). No se
+repitieron las suites aprobadas. Build correcto; npm reporto advertencias
+de engine Node 20 en build frontend y 7 vulnerabilidades de dependencias
+(2 moderadas, 3 altas, 2 criticas); no se cambiaron dependencias fuera del
+candidato ni se ejecuto audit fix.
+
+Caso real verificado ANTES/DESPUES mediante consultas READ ONLY:
+Alta `2146ec60-f000-4beb-b69a-f1b61ad48417` sigue completed desde
+`2026-10-21T21:19:42.113898Z`; fila de rechazo
+`5ac65134-f2bd-410c-848a-9d336180d8ca` identica, pending, sin resolucion.
+40 movimientos historicos identicos (MD5 agregado
+`a355c57e37a83e391a86826cf33c294d`) y 40 eventos de custodia asociados
+identicos (MD5 agregado `8b8a96a28a5dec762596f3b569ca35b4`).
+No se ejecutaron reintentos ni descartes, ni se alteraron ordenes o saldos.
+
+Respaldos PC+VM `fase168_respaldo_20261022_014919_e1223f63` revalidados
+antes de escribir; dump SHA-256
+`29091f4db85fddad76a9e6437eb225ee4d33b89066297e6a1ea764ed0e6d2bc3`,
+roles SHA-256 `e5fd2b01af9340343b8732a3358a3f598c95ae4ad7737ea4e11c1f52762135d0`.
+Copias conservadas y hashes VM reconfirmados tras desplegar. Restauracion
+aislada aprobada anteriormente, no repetida. Rollback de aplicacion:
+`bash deploy/rollback.sh rollback-20261022022854` (tag a 3908919 e imagenes
+frontend/backend confirmadas disponibles). Rollback SQL especifico:
+`scripts/rollback-fase169-reintentar-consumo-rechazado.sql`; si se ejecuta,
+conciliar tambien el registro de migracion 169, sin tocar las anteriores.
+
+PENDIENTE: comprobar con ADMIN/SUPERADMIN la pantalla REAL de Custodia,
+que el caso Jhordanno/Diego se muestre como "Orden cerrada — historico"
+sin Reintentar, y confirmar el funcionamiento administrativo. Solicitado
+al propietario; no se dispone de confirmacion todavia. No se certifica
+operacion administrativa real ni se declara terminada la fase.
+No se tocaron OLT, MikroTik ni facturacion.
