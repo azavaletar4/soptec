@@ -5769,3 +5769,54 @@ todo lo verificado fue de solo lectura contra produccion. El caso real
 de Jhordanno Zavaleta/Diego Villanueva sigue exactamente igual (fila
 `pending`, Alta `completed`, sin anular ni reintentar). Sin migracion
 aplicada, sin push, sin deploy.
+
+## Fase 169: preparacion final para despliegue (21/10/2026, sesion posterior)
+
+1. **origin/main y produccion sin divergencias**: ambos siguen en
+   `3908919` exacto, 16 contenedores `Up`/`healthy` 5-6 horas.
+2. **Candidato `cb57924` confirmado**: diff contra `origin/main` es
+   exactamente el commit esperado (10 archivos).
+3. **Permisos/auditoria/no-duplicacion/orden-cerrada**: re-confirmado
+   con una corrida final de `retryRejectedMaterialOperation.sql.test.ts`
+   (12/12, Postgres real).
+4. **Pantalla distingue activas/historicas**: verificado tanto por
+   codigo (`isJobOpenForRetry`, 8/8) como contra el UNICO rechazo
+   `pending` real que existe hoy -- su instalacion esta `completed`,
+   por lo que la pantalla lo clasificaria correctamente como "Orden
+   cerrada — historico" (sin boton Reintentar).
+5. **Respaldo PostgreSQL ACTUALIZADO (post-166/167)**: nuevo par de
+   copias PC+VM, SIN sobrescribir las anteriores (`fase168_respaldo_20261021_203832_4c211f4f`
+   sigue intacto, mismo SHA-256 `b248ff59...`) --
+   `fase168_respaldo_20261022_014919_e1223f63` en PC
+   (`%LOCALAPPDATA%\SmartRaycoBackups\...`) y VM
+   (`/root/smartrayco-backups/...`, `700`/`600`), SHA-256 identico
+   verificado tras la copia (`completo.dump` `29091f4d...`). Restauracion
+   aislada limpia: 68/68 tablas, 107/107 funciones, 79/79 politicas RLS,
+   0 errores de `pg_restore`, MD5 de ambas funciones de Fase 166/167
+   confirmados POST-despliegue (`e452ec21...`/`4201e9cb...`).
+6. **Rollback especifico preparado**: `scripts/rollback-fase169-reintentar-consumo-rechazado.sql`
+   (elimina solo la funcion nueva -- aditiva, nunca reemplaza nada
+   existente, riesgo minimo). Frontend/backend: mismo mecanismo ya
+   usado en Fase 166/167/168 -- `deploy/safe-update.sh` crea su propio
+   tag de rollback + respaldo de imagenes Docker EN EL MOMENTO de
+   aplicar, revertible con `deploy/rollback.sh <ese-tag>`.
+7. **Captura real lograda** (el timeout de la sesion anterior era
+   transitorio, confirmado al reintentar): `docs/FASE169-CUSTODIA-PANEL-CAPTURA.jpg`
+   -- generada en un servidor HTTP local aislado (markup/clases reales,
+   datos sinteticos salvo la fila 1 que reproduce el caso real ya
+   conocido), nunca contra produccion.
+8. **Archivos/commits ajenos**: checkout principal sin tocar (mismos 10
+   archivos pendientes de siempre).
+
+**Secuencia exacta de activacion (cuando se autorice)**: (a) aplicar
+`20261021220000_fase169_reintentar_consumo_rechazado.sql`; (b) push/merge
+de `fase168-integracion` (commit `cb57924`) a `origin/main`; (c)
+`deploy/safe-update.sh` en la VM; (d) smoke test de solo lectura (panel
+200, el rechazo `pending` real sigue intacto, `retry_rejected_material_operation`
+responde "Solo administracion..." a un intento sin rol); (e) validar en
+vivo que el panel de Custodia muestra el caso real como "Orden cerrada
+— historico".
+
+**PASS de preparacion**: todo verificado, respaldo actualizado y
+restaurado con exito, rollback listo, captura real obtenida. Listo para
+que el usuario autorice el despliegue.
