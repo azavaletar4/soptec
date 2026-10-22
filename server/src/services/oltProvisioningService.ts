@@ -65,7 +65,7 @@ export interface ProvisionParams {
 }
 
 export interface VerifyMismatch {
-  field: 'serial' | 'onuType' | 'vlan' | 'tcontProfile' | 'trafficProfile' | 'existencia';
+  field: 'serial' | 'onuType' | 'vlan' | 'tcontProfile' | 'trafficProfile' | 'existencia' | 'serviceGemport' | 'serviceVlan';
   expected: string;
   actual: string | null;
 }

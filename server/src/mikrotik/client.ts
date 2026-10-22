@@ -1,4 +1,4 @@
-import { Agent, fetch as undiciFetch } from 'undici';
+import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from 'undici';
 
 export interface MikrotikTarget {
   host: string;
@@ -43,7 +43,7 @@ async function mikrotikRequestOnce<T>(
   const url = `${scheme}://${target.host}:${target.port}/rest${path}`;
   const auth = Buffer.from(`${target.username}:${target.password}`).toString('base64');
 
-  let res: Response;
+  let res: UndiciResponse;
   try {
     res = await undiciFetch(url, {
       method: opts.method ?? 'GET',
@@ -54,7 +54,7 @@ async function mikrotikRequestOnce<T>(
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       dispatcher: target.useTls ? insecureAgent : undefined,
       signal: AbortSignal.timeout(opts.timeoutMs ?? 15000),
-    } as RequestInit);
+    });
   } catch (e) {
     // undici envuelve la causa real (ECONNREFUSED, certificado, DNS...) en
     // `error.cause`, no en `error.message` (que suele decir solo "fetch failed").

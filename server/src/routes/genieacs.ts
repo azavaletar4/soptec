@@ -30,7 +30,7 @@ genieacsRoutes.all('*', async (c) => {
   const prefix = '/api/genieacs';
   const subPath = rawUrl.pathname.startsWith(prefix) ? rawUrl.pathname.slice(prefix.length) || '/' : rawUrl.pathname;
 
-  let body: Buffer | undefined;
+  let body: Buffer<ArrayBuffer> | undefined;
   if (c.req.method === 'POST' || c.req.method === 'PUT') {
     body = Buffer.from(await c.req.arrayBuffer());
   }

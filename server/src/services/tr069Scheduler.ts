@@ -21,7 +21,7 @@ async function runSync() {
   syncRunning = true;
   try {
     const result = await syncTr069Devices();
-    if (result.ok) {
+    if (result.ok === true) {
       // eslint-disable-next-line no-console
       console.log(`[tr069-scheduler] sync OK: ${result.created} nuevos, ${result.synced} actualizados, ${result.total} en GenieACS`);
     } else {

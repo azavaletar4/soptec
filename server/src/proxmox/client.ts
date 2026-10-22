@@ -1,4 +1,4 @@
-import { Agent, fetch as undiciFetch } from 'undici';
+import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from 'undici';
 
 // Proxmox VE en la LAN local, casi siempre con certificado autofirmado
 // (mismo criterio que server/src/mikrotik/client.ts) — se acepta
@@ -48,7 +48,7 @@ export async function proxmoxRequest<T = unknown>(
   const cfg = getConfig();
   const url = `https://${cfg.host}:${cfg.port}/api2/json${path}`;
 
-  let res: Response;
+  let res: UndiciResponse;
   try {
     res = await undiciFetch(url, {
       method: opts.method ?? 'GET',
@@ -59,7 +59,7 @@ export async function proxmoxRequest<T = unknown>(
       body: opts.body ? new URLSearchParams(opts.body as Record<string, string>).toString() : undefined,
       dispatcher: insecureAgent,
       signal: AbortSignal.timeout(opts.timeoutMs ?? 10000),
-    } as RequestInit);
+    });
   } catch (e) {
     const cause = e instanceof Error && 'cause' in e ? (e.cause as Error | undefined) : undefined;
     const detail = cause ? `${cause.message}${'code' in cause ? ` (${(cause as NodeJS.ErrnoException).code})` : ''}` : e instanceof Error ? e.message : String(e);
