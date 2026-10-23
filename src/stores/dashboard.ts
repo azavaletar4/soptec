@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import type { ClientStatus, TicketStatus } from '@/types/domain';
+import { CLIENT_LIFECYCLE_SELECT, countClientLifecycles, readAllClientPages, type ClientLifecycle } from '@/lib/clientLifecycle';
 
 export interface NetworkStatusGroup {
   total: number;
@@ -70,9 +71,11 @@ export interface DashboardSummary {
   };
 }
 
-async function countClients(status: ClientStatus): Promise<number> {
-  const { count } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('status', status);
-  return count ?? 0;
+async function countClients() {
+  const rows = await readAllClientPages<ClientLifecycle>((from, to) => supabase
+    .from('clients').select(`id, status, ${CLIENT_LIFECYCLE_SELECT}`, { count: 'exact' })
+    .order('id').range(from, to));
+  return countClientLifecycles(rows);
 }
 
 async function countTickets(status: TicketStatus): Promise<number> {
@@ -138,10 +141,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     error.value = null;
     try {
       const [
-        active,
-        suspended,
-        prospect,
-        retired,
+        clientCounts,
         contractsRes,
         network,
         oltSummary,
@@ -157,10 +157,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         billedLast6moRes,
         paidLast6moRes,
       ] = await Promise.all([
-        countClients('active'),
-        countClients('suspended'),
-        countClients('prospect'),
-        countClients('retired'),
+        countClients(),
         supabase.from('service_contracts').select('*', { count: 'exact', head: true }).eq('status', 'active'),
         apiFetch<NetworkStatus>('/api/dashboard/network-status'),
         apiFetch<OltAggregateSummary>('/api/dashboard/olt-summary'),
@@ -197,7 +194,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       const collectedThisMonth = paidThisMonth.reduce((s, r) => s + Number(r.amount), 0);
 
       summary.value = {
-        clients: { active, suspended, prospect, retired },
+        clients: clientCounts,
         activeContracts: contractsRes.count ?? 0,
         network,
         oltSummary,

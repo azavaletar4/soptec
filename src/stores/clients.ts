@@ -2,25 +2,30 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Client } from '@/types/domain';
+import { CLIENT_LIFECYCLE_SELECT, readAllClientPages, type ClientLifecycle } from '@/lib/clientLifecycle';
+
+export type ClientWithLifecycle = Client & ClientLifecycle;
 
 export const useClientsStore = defineStore('clients', () => {
-  const clients = ref<Client[]>([]);
+  const clients = ref<ClientWithLifecycle[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
   async function fetchClients() {
     loading.value = true;
     error.value = null;
-    const { data, error: err } = await supabase
-      .from('clients')
-      .select('*, zones(id, name)')
-      .order('created_at', { ascending: false });
-    loading.value = false;
-    if (err) {
-      error.value = err.message;
+    try {
+      clients.value = await readAllClientPages<ClientWithLifecycle>((from, to) => supabase
+        .from('clients')
+        .select(`*, zones(id, name), ${CLIENT_LIFECYCLE_SELECT}`, { count: 'exact' })
+        .order('created_at', { ascending: false }).order('id')
+        .range(from, to));
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : (err as { message?: string }).message ?? 'Error al cargar clientes';
       throw err;
+    } finally {
+      loading.value = false;
     }
-    clients.value = (data ?? []) as Client[];
   }
 
   // Un solo cliente por id, sin traer el listado completo — usado por la App
@@ -35,10 +40,10 @@ export const useClientsStore = defineStore('clients', () => {
     const { data, error: err } = await supabase
       .from('clients')
       .insert(payload)
-      .select('*, zones(id, name)')
+      .select(`*, zones(id, name), ${CLIENT_LIFECYCLE_SELECT}`)
       .single();
     if (err) throw err;
-    clients.value.unshift(data as Client);
+    clients.value.unshift(data as ClientWithLifecycle);
     return data as Client;
   }
 
@@ -47,11 +52,11 @@ export const useClientsStore = defineStore('clients', () => {
       .from('clients')
       .update(payload)
       .eq('id', id)
-      .select('*, zones(id, name)')
+      .select(`*, zones(id, name), ${CLIENT_LIFECYCLE_SELECT}`)
       .single();
     if (err) throw err;
     const idx = clients.value.findIndex((c) => c.id === id);
-    if (idx !== -1) clients.value[idx] = data as Client;
+    if (idx !== -1) clients.value[idx] = data as ClientWithLifecycle;
     return data as Client;
   }
 

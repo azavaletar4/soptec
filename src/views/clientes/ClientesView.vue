@@ -13,6 +13,8 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
+import { isRetiredClient, OPEN_INSTALLATION_STATUSES } from '@/lib/clientLifecycle';
+import type { ClientWithLifecycle } from '@/stores/clients';
 import type { Client, ClientStatus, ContractPriority, DocumentType, Installation } from '@/types/domain';
 
 const route = useRoute();
@@ -58,6 +60,22 @@ const saving = ref(false);
 const formError = ref<string | null>(null);
 const pendingPppoeHint = ref<string | null>(null);
 const searchQuery = ref('');
+const clientSection = ref<'current' | 'retired'>('current');
+const classificationReady = ref(false);
+const classificationError = ref<string | null>(null);
+const canPrepareReincorporation = computed(() => auth.role === 'ADMIN' || auth.role === 'SUPERADMIN');
+const reincorporatingClient = ref<Client | null>(null);
+const retiredClients = computed(() => clientsStore.clients.filter(isRetiredClient));
+const currentClients = computed(() => clientsStore.clients.filter((c) => !isRetiredClient(c)));
+const sectionClients = computed(() => clientSection.value === 'retired' ? retiredClients.value : currentClients.value);
+const pendingInstallationClients = computed(() => new Set(clientsStore.clients
+  .filter((c) => c.installations.some((i) => OPEN_INSTALLATION_STATUSES.has(i.status)))
+  .map((c) => c.id)));
+
+function prepareReincorporation(client: ClientWithLifecycle) {
+  if (!canPrepareReincorporation.value || !isRetiredClient(client)) return;
+  reincorporatingClient.value = client;
+}
 
 // Referido (Fase 33): solo aplica al ALTA de un cliente nuevo — vincula
 // quien lo recomendo para que le llegue el descuento de S/25 en su
@@ -77,7 +95,7 @@ const filteredReferentes = computed(() => {
 // no hay que crear un cliente nuevo, sino agregarle un contrato (linea) desde
 // su ficha. Sin este chequeo, el intento de alta falla recien al guardar con
 // el error crudo de Postgres (unique constraint), sin decir que hacer.
-const duplicateClient = computed<Client | null>(() => {
+const duplicateClient = computed<ClientWithLifecycle | null>(() => {
   const doc = form.value.document_number.trim();
   if (!doc) return null;
   return (
@@ -147,12 +165,11 @@ const installationsByClient = computed(() => {
   }
   return map;
 });
-const OPEN_INSTALLATION_STATUSES = new Set(['pending', 'scheduled', 'in_progress']);
 function openInstallationFor(clientId: string): Installation | null {
   return (installationsByClient.value.get(clientId) ?? []).find((i) => OPEN_INSTALLATION_STATUSES.has(i.status)) ?? null;
 }
 function hasOpenInstallation(clientId: string): boolean {
-  return openInstallationFor(clientId) !== null;
+  return pendingInstallationClients.value.has(clientId);
 }
 // Instalacion mas relevante para el acceso rapido "Ver orden de Alta": la
 // abierta si hay una, si no la mas reciente (asi el acceso rapido sigue
@@ -196,11 +213,12 @@ const QUICK_FILTER_TABS: { value: QuickFilter; label: string }[] = [
 ];
 
 const filteredClientsList = computed(() => {
-  let list = clientsStore.clients;
-  if (quickFilter.value === 'active') list = list.filter((c) => c.status === 'active');
+  if (!classificationReady.value) return [];
+  let list = sectionClients.value;
+  if (quickFilter.value === 'active') list = list.filter((c) => c.service_contracts.some((ct) => ct.status === 'active') || (!c.service_contracts.length && c.status === 'active'));
   else if (quickFilter.value === 'pending_install') list = list.filter((c) => hasOpenInstallation(c.id));
-  else if (quickFilter.value === 'suspended') list = list.filter((c) => c.status === 'suspended');
-  else if (quickFilter.value === 'multi_service') list = list.filter((c) => (contractsByClient.value.get(c.id)?.length ?? 0) >= 2);
+  else if (quickFilter.value === 'suspended') list = list.filter((c) => c.service_contracts.some((ct) => ct.status === 'suspended') || (!c.service_contracts.length && c.status === 'suspended'));
+  else if (quickFilter.value === 'multi_service') list = list.filter((c) => c.service_contracts.length >= 2);
 
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return list;
@@ -270,14 +288,20 @@ const STATUS_CLASS: Record<ClientStatus, string> = {
 };
 
 onMounted(async () => {
-  await Promise.all([
-    clientsStore.fetchClients(),
-    contractsStore.fetchContracts(),
-    installationsStore.fetchInstallations(),
-    mikrotikStore.fetchDevices(),
-    catalogs.fetchPlans(),
-    catalogs.fetchZones(),
-  ]);
+  try {
+    await Promise.all([
+      clientsStore.fetchClients(),
+      contractsStore.fetchContracts(),
+      installationsStore.fetchInstallations(),
+      mikrotikStore.fetchDevices(),
+      catalogs.fetchPlans(),
+      catalogs.fetchZones(),
+    ]);
+    classificationReady.value = true;
+  } catch (e) {
+    classificationError.value = getErrorMessage(e, 'No se pudo cargar la clasificación de clientes. Recarga para reintentar.');
+    return;
+  }
   if (mikrotikStore.devices.length === 1) {
     unlinkedDeviceId.value = mikrotikStore.devices[0].id;
   }
@@ -348,7 +372,7 @@ async function handleSubmit() {
   // via mientras una llamada anterior seguia en vuelo.
   if (saving.value) return;
   if (duplicateClient.value) {
-    formError.value = `Ya existe un cliente con ese documento (${duplicateClient.value.first_name} ${duplicateClient.value.last_name}). Ve a su ficha y usa "+ Nuevo contrato" para agregarle otro servicio.`;
+    formError.value = `Ya existe un cliente con ese documento (${duplicateClient.value.first_name} ${duplicateClient.value.last_name}). Consulta su ficha existente para conservar sus relaciones e historial.`;
     return;
   }
 
@@ -521,7 +545,7 @@ function goToDetail(client: Client) {
       <div>
         <h1 class="text-2xl font-semibold">Clientes</h1>
         <p class="text-slate-600 text-sm mt-1">
-          {{ searchQuery || quickFilter !== 'all' ? `${filteredClientsList.length} de ${clientsStore.clients.length}` : `${clientsStore.clients.length} registrados` }}
+          {{ classificationError ? 'Clasificación no disponible' : !classificationReady ? 'Cargando clasificación…' : `${currentClients.length} vigentes · ${retiredClients.length} retirados` }}
         </p>
       </div>
       <div v-if="canManageClients" class="flex gap-2">
@@ -531,6 +555,18 @@ function goToDetail(client: Client) {
     </div>
 
     <p v-if="clientsStore.error" class="mb-4 text-sm text-red-600">{{ clientsStore.error }}</p>
+    <p v-if="classificationError" role="alert" class="mb-4 text-sm text-red-600">{{ classificationError }}</p>
+
+    <div class="flex flex-wrap gap-2 mb-4" aria-label="Secciones de clientes">
+      <button v-for="section in (['current', 'retired'] as const)" :key="section" type="button"
+        class="btn-secondary" :class="clientSection === section ? 'ring-2 ring-sky-500' : ''" :aria-pressed="clientSection === section" :disabled="!classificationReady"
+        @click="clientSection = section">
+        {{ section === 'current' ? 'Clientes vigentes' : 'Clientes retirados' }}
+        <span v-if="classificationReady">({{ section === 'current' ? currentClients.length : retiredClients.length }})</span>
+      </button>
+    </div>
+    <p class="text-xs text-slate-500 mb-3">Vigentes incluye suspendidos y altas pendientes. El estado de la ficha se conserva; la sección considera todos sus servicios.</p>
+    <p v-if="classificationReady" class="text-sm text-slate-600 mb-3">{{ filteredClientsList.length }} de {{ sectionClients.length }} en esta sección</p>
 
     <div class="flex flex-wrap gap-2 mb-3">
       <button
@@ -565,12 +601,15 @@ function goToDetail(client: Client) {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="clientsStore.loading">
+          <tr v-if="classificationError">
+            <td colspan="7" class="px-4 py-6 text-center text-red-600">No se pudo cargar el listado. Recarga para reintentar.</td>
+          </tr>
+          <tr v-else-if="clientsStore.loading || !classificationReady">
             <td colspan="7" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!filteredClientsList.length">
             <td colspan="7" class="px-4 py-6 text-center text-slate-500">
-              {{ searchQuery || quickFilter !== 'all' ? 'Sin resultados para ese filtro/búsqueda.' : 'No hay clientes. Crea el primero.' }}
+              {{ searchQuery || quickFilter !== 'all' ? 'Sin resultados para ese filtro/búsqueda.' : 'No hay clientes en esta sección.' }}
             </td>
           </tr>
           <tr v-for="c in filteredClientsList" :key="c.id" class="border-t border-slate-200 hover:bg-slate-50">
@@ -617,6 +656,8 @@ function goToDetail(client: Client) {
               </div>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+              <button v-if="clientSection === 'retired' && canPrepareReincorporation" type="button"
+                class="text-sky-700 hover:underline text-xs" @click="prepareReincorporation(c)">Reincorporar</button>
               <router-link
                 v-if="latestInstallationFor(c.id)"
                 :to="`/soporte/instalaciones/${latestInstallationFor(c.id)!.id}`"
@@ -700,6 +741,18 @@ function goToDetail(client: Client) {
     </div>
 
     <Teleport to="body">
+      <div v-if="reincorporatingClient" class="modal-overlay">
+        <section role="dialog" aria-modal="true" aria-labelledby="reincorporation-title" class="w-full max-w-lg modal-panel">
+          <h2 id="reincorporation-title" class="text-lg font-semibold mb-3">Preparar reincorporación</h2>
+          <p class="text-sm mb-3">{{ reincorporatingClient.first_name }} {{ reincorporatingClient.last_name }} · {{ reincorporatingClient.document_number }}</p>
+          <p class="text-sm mb-3">Se reutilizará esta ficha y su historial. No crees otro cliente con el mismo documento.</p>
+          <p class="text-sm mb-4">La reincorporación operativa está pendiente de un flujo validado para revisar contratos anteriores, deuda, equipos y OLT. Esta acción no modifica estados, crea contratos ni asigna equipos.</p>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="reincorporatingClient = null">Cerrar</button>
+            <router-link class="btn-secondary" :to="`/clientes/${reincorporatingClient.id}`">Consultar ficha e historial</router-link>
+          </div>
+        </section>
+      </div>
       <div v-if="showModal" class="modal-overlay">
         <form
           class="w-full max-w-lg modal-panel max-h-[90vh] overflow-y-auto"
@@ -746,13 +799,14 @@ function goToDetail(client: Client) {
           <div v-if="duplicateClient" class="mb-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
             Ya existe un cliente con este documento:
             <span class="font-medium">{{ duplicateClient.first_name }} {{ duplicateClient.last_name }}</span>.
-            Un mismo cliente puede tener varias lineas — no crees otro cliente, agrega el contrato desde su ficha.
+            <p v-if="isRetiredClient(duplicateClient)">Es un cliente retirado. Conserva su ficha e historial; la reincorporación requiere revisar sus servicios antes de operar.</p>
+            <p v-else>Un mismo cliente puede tener varias líneas. Reutiliza su ficha para conservar sus relaciones e historial.</p>
             <button
               type="button"
               class="block mt-1 font-medium text-sky-700 hover:text-sky-800 underline"
               @click="showModal = false; router.push(`/clientes/${duplicateClient.id}`)"
             >
-              Ir a la ficha y agregar "+ Nuevo contrato"
+              Consultar ficha existente
             </button>
           </div>
 
