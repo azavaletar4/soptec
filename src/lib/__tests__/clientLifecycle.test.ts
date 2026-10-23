@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clientLifecycleStatus, countClientLifecycles, isRetiredClient, readAllClientPages, type ClientLifecycle } from '../clientLifecycle';
+import { clientLifecycleStatus, countClientLifecycles, isCurrentSubscriber, isRetiredClient, readAllClientPages, type ClientLifecycle } from '../clientLifecycle';
 
 const row = (status: ClientLifecycle['status'], contracts: ClientLifecycle['service_contracts'][number]['status'][] = [], installations: ClientLifecycle['installations'][number]['status'][] = []): ClientLifecycle => ({
   status, service_contracts: contracts.map((status) => ({ status })), installations: installations.map((status) => ({ status })),
@@ -13,12 +13,22 @@ test('baja definitiva: ficha sin contratos o todos los contratos cancelados', ()
   }
 });
 
-test('activo, suspendido y prospecto sin contratos permanecen vigentes', () => {
+test('fichas sin contratos permanecen consultables pero no son abonados', () => {
   for (const status of ['active', 'suspended', 'prospect'] as const) {
     assert.equal(isRetiredClient(row(status)), false);
     assert.equal(clientLifecycleStatus(row(status)), status);
+    assert.equal(isCurrentSubscriber(row(status)), false);
   }
   assert.equal(clientLifecycleStatus(row('retired', ['suspended'])), 'suspended');
+});
+
+test('prospecto sólo cuenta como abonado cuando tiene servicio vigente o servicio con Alta abierta', () => {
+  assert.equal(isCurrentSubscriber(row('prospect')), false);
+  assert.equal(isCurrentSubscriber(row('prospect', [], ['pending'])), false);
+  assert.equal(isCurrentSubscriber(row('prospect', ['cancelled'])), false);
+  assert.equal(isCurrentSubscriber(row('prospect', ['active'])), true);
+  assert.equal(isCurrentSubscriber(row('prospect', ['suspended'])), true);
+  assert.equal(isCurrentSubscriber(row('prospect', ['cancelled'], ['pending'])), true);
 });
 
 test('dos servicios: una cancelación nunca oculta otro activo o suspendido', () => {

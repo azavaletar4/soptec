@@ -1,0 +1,109 @@
+{
+  "at": "2026-10-23T16:29:25.30372+00:00",
+  "readOnly": true,
+  "counts": {
+    "active": 680,
+    "retired": 1,
+    "suspended": 17,
+    "registered": 698,
+    "subscribers": 697,
+    "suspendedOnly": 17,
+    "currentSection": 697,
+    "multipleServices": 15,
+    "mixedActiveExcluded": 0,
+    "pendingInstallation": 0,
+    "clientStatusProspect": 3,
+    "mixedActiveCancelled": 0,
+    "retiredInSubscribers": 0,
+    "withoutCurrentService": 0,
+    "prospectWithoutService": 0
+  },
+  "dashboard": {
+    "active": 680,
+    "suspended": 17,
+    "prospect": 0,
+    "retired": 1
+  },
+  "commercialProspects": {
+    "convertido": 2,
+    "en_negociacion": 1
+  },
+  "followups": 1,
+  "rlsTables": [
+    {
+      "rls": true,
+      "force": false,
+      "table": "clients"
+    },
+    {
+      "rls": true,
+      "force": false,
+      "table": "installations"
+    },
+    {
+      "rls": true,
+      "force": false,
+      "table": "prospect_followups"
+    },
+    {
+      "rls": true,
+      "force": false,
+      "table": "prospects"
+    },
+    {
+      "rls": true,
+      "force": false,
+      "table": "service_contracts"
+    }
+  ],
+  "rlsActors": [
+    {
+      "kind": "rls_actor",
+      "role": "SUPERADMIN",
+      "clients": 698,
+      "contracts": 716,
+      "followups": 1,
+      "prospects": 3,
+      "read_only": "on",
+      "installations": 41,
+      "activeMultiVisible": 15
+    },
+    {
+      "kind": "rls_actor",
+      "role": "ADMIN",
+      "clients": 698,
+      "contracts": 716,
+      "followups": 1,
+      "prospects": 3,
+      "read_only": "on",
+      "installations": 41,
+      "activeMultiVisible": 15
+    },
+    {
+      "kind": "rls_actor",
+      "role": "TECNICO_RED",
+      "clients": 698,
+      "contracts": 716,
+      "followups": 0,
+      "prospects": 0,
+      "read_only": "on",
+      "installations": 41,
+      "activeMultiVisible": 15
+    },
+    {
+      "kind": "rls_anon",
+      "clients": 0,
+      "followups": 0,
+      "prospects": 0,
+      "read_only": "on"
+    }
+  ],
+  "rolesWithoutActiveActor": [
+    "SOPORTE",
+    "FACTURACION"
+  ],
+  "policiesSha256": "e8db0a0ea7e4098103d02fb0ab069ede285a18a55255cf5741e1c18e462c6dee",
+  "caveat": "clients_staff_only desplegada es ALL para staff, incluyendo TECNICO_RED; no se modifica. SOPORTE/FACTURACION se validan por catálogo y UI, sin actor activo para ensayo real.",
+  "classification": "PASS",
+  "deployment": "NOT_DEPLOYED"
+}
