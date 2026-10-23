@@ -1,5 +1,7 @@
 # Clientes — preparación final, sin despliegue
 
+Actualización posterior: el despliegue autorizado se completó; estado actual, hashes y rollback en [CLIENTES-DESPLIEGUE.md](CLIENTES-DESPLIEGUE.md). Este documento conserva la evidencia histórica de preparación.
+
 Estado: **PREPARADO PARA REVISIÓN; NO DESPLEGADO**. Continuación de `e3c95aa`, conservado sin amend. Los cinco archivos adicionales de la aclaración de Prospectos pertenecen exclusivamente a Clientes: contador, clasificador, pruebas y documentación. Los cambios ajenos de Campo, soporte, router, inventario y otros documentos no se incluyen en el commit ni en el artefacto.
 
 ## Totales reales de Supabase
