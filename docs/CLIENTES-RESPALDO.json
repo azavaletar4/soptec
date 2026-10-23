@@ -1,0 +1,25 @@
+{
+  "pcBackup": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\clientes-backup-clientes-20261023T163256Z",
+  "vmStage": "/opt/smartrayco-staging/clientes-20261023T163256Z",
+  "filesVerified": 7,
+  "stagedFilesVerified": 4,
+  "rollbackImage": "sha256:314269b263dcfa8987f95caf9b458e4792efc187e8aa9dc1594793c1a2a6ca2c",
+  "rollbackExactIdentity": true,
+  "rollbackCheck": {
+    "check": "PASS",
+    "exactImage": true,
+    "image": "sha256:314269b263dcfa8987f95caf9b458e4792efc187e8aa9dc1594793c1a2a6ca2c",
+    "commandsNotExecuted": [
+      "docker load -i /opt/smartrayco-staging/clientes-20261023T163256Z/backup/frontend.image.tar",
+      "docker compose -f /opt/smartrayco/docker-compose.onprem.yml -f /opt/smartrayco-staging/custody-returns-20261022T171559Z/deploy.override.json -f /opt/smartrayco-staging/clientes-20261023T163256Z/backup/rollback.override.json up -d --no-deps --no-build --pull never frontend"
+    ],
+    "requiresDeploymentApproval": true
+  },
+  "stagedHashes": {
+    "frontend-dist.tar.gz": "e3b07dba31b7f5b4796e0157e93fa3e903b88d63e3f4d50fe6d1674351d833b2",
+    "release-manifest.json": "93487f1e74e6cc08fe58875bcb458f5893b69be21b7d44fa015844618abc7078",
+    "rollback-check.py": "812fef0bee3dd7aa1f05f824db7e577ab1045c08a4c9e53744f14ece47b15a90",
+    "image-verifier.py": "c72816d65a3c601ec42ca9194296087047f93fd24228504ba453d4fec6e21d07"
+  },
+  "deployment": "NOT_DEPLOYED"
+}

@@ -13,7 +13,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
-import { isRetiredClient, OPEN_INSTALLATION_STATUSES } from '@/lib/clientLifecycle';
+import { isCurrentSubscriber, isRetiredClient, OPEN_INSTALLATION_STATUSES } from '@/lib/clientLifecycle';
 import type { ClientWithLifecycle } from '@/stores/clients';
 import type { Client, ClientStatus, ContractPriority, DocumentType, Installation } from '@/types/domain';
 
@@ -67,6 +67,8 @@ const canPrepareReincorporation = computed(() => auth.role === 'ADMIN' || auth.r
 const reincorporatingClient = ref<Client | null>(null);
 const retiredClients = computed(() => clientsStore.clients.filter(isRetiredClient));
 const currentClients = computed(() => clientsStore.clients.filter((c) => !isRetiredClient(c)));
+const currentSubscribers = computed(() => currentClients.value.filter(isCurrentSubscriber));
+const withoutCurrentServiceCount = computed(() => currentClients.value.length - currentSubscribers.value.length);
 const sectionClients = computed(() => clientSection.value === 'retired' ? retiredClients.value : currentClients.value);
 const pendingInstallationClients = computed(() => new Set(clientsStore.clients
   .filter((c) => c.installations.some((i) => OPEN_INSTALLATION_STATUSES.has(i.status)))
@@ -545,7 +547,8 @@ function goToDetail(client: Client) {
       <div>
         <h1 class="text-2xl font-semibold">Clientes</h1>
         <p class="text-slate-600 text-sm mt-1">
-          {{ classificationError ? 'Clasificación no disponible' : !classificationReady ? 'Cargando clasificación…' : `${currentClients.length} vigentes · ${retiredClients.length} retirados` }}
+          {{ classificationError ? 'Clasificación no disponible' : !classificationReady ? 'Cargando clasificación…' : `${currentSubscribers.length} abonados vigentes · ${retiredClients.length} retirados` }}
+          <span v-if="classificationReady && withoutCurrentServiceCount"> · {{ withoutCurrentServiceCount }} fichas sin servicio vigente</span>
         </p>
       </div>
       <div v-if="canManageClients" class="flex gap-2">
@@ -562,10 +565,10 @@ function goToDetail(client: Client) {
         class="btn-secondary" :class="clientSection === section ? 'ring-2 ring-sky-500' : ''" :aria-pressed="clientSection === section" :disabled="!classificationReady"
         @click="clientSection = section">
         {{ section === 'current' ? 'Clientes vigentes' : 'Clientes retirados' }}
-        <span v-if="classificationReady">({{ section === 'current' ? currentClients.length : retiredClients.length }})</span>
+        <span v-if="classificationReady">({{ section === 'current' ? `${currentSubscribers.length} abonados` : retiredClients.length }})</span>
       </button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">Vigentes incluye suspendidos y altas pendientes. El estado de la ficha se conserva; la sección considera todos sus servicios.</p>
+    <p class="text-xs text-slate-500 mb-3">Abonados vigentes incluye servicios suspendidos y pendientes de instalación. Las fichas sin servicio se conservan para consulta y no se cuentan como abonados. El estado de la ficha se conserva.</p>
     <p v-if="classificationReady" class="text-sm text-slate-600 mb-3">{{ filteredClientsList.length }} de {{ sectionClients.length }} en esta sección</p>
 
     <div class="flex flex-wrap gap-2 mb-3">

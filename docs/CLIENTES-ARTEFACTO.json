@@ -1,0 +1,63 @@
+{
+  "base": "c01b3ee29b7956925cf9face2ae718b88a038a05",
+  "sourceBaseHead": "e3c95aaca9aaa78e6708c6543adf5567f7123c64",
+  "stage": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\clientes-release-SvNuLF",
+  "source": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\clientes-release-SvNuLF\\source",
+  "productionImage": "sha256:314269b263dcfa8987f95caf9b458e4792efc187e8aa9dc1594793c1a2a6ca2c",
+  "frontendArchive": {
+    "file": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\clientes-release-SvNuLF\\frontend-dist.tar.gz",
+    "sha256": "e3b07dba31b7f5b4796e0157e93fa3e903b88d63e3f4d50fe6d1674351d833b2"
+  },
+  "files": [
+    {
+      "file": "src/lib/clientLifecycle.ts",
+      "sha256": "91699dc637124825f52f2c9751ba8f452027c8ef7c8d0006266702fe17961150"
+    },
+    {
+      "file": "src/stores/clients.ts",
+      "sha256": "a86d68cf95b1cdf9429b31d647fdef07bffa45a887056f33980ee1e8cdcb7a4f"
+    },
+    {
+      "file": "src/stores/contracts.ts",
+      "sha256": "14d0aa18916f001bbc3aa9bbbb0005890c62059017d37c086da7cc511d547351"
+    },
+    {
+      "file": "src/stores/installations.ts",
+      "sha256": "eb2e941fe0f3f1488124c7984ba580de7a8dfc61390642032e2b544ecbd63820"
+    },
+    {
+      "file": "src/stores/dashboard.ts",
+      "sha256": "d559b768c69ea6488a1872ea5d424a2e9f2354b0a45617388470e31cd8f2f565"
+    },
+    {
+      "file": "src/views/clientes/ClientesView.vue",
+      "sha256": "d5aca52ce3dc0b87a9b1de5a52fb2fbd2ae6d7c6cb6a66fb965d89932addb7d6"
+    }
+  ],
+  "deployedOverlays": [
+    {
+      "file": "src/views/campo/CampoMiCustodiaView.vue",
+      "sha256": "c8589a05c74f04e5261f85797ccf3941e23fef5e4d29128c06303b84130f7748"
+    },
+    {
+      "file": "src/views/campo/CampoCustodiaView.vue",
+      "sha256": "3f5143e5ae00f89315d72d49b2faa337b9242f34a65409f62c22679fed594b84"
+    },
+    {
+      "file": "src/lib/custodyReturns.ts",
+      "sha256": "a5cf28ed3810aa96f09604d48db94a0dd1f9480626b2c0cf255f040117952637"
+    }
+  ],
+  "productionConfigKeys": [
+    "VITE_MATERIAL_CUSTODY_LIVE_SINCE",
+    "VITE_SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_URL"
+  ],
+  "configSha256": "43558d85f8af513fbd27036de7f14470164acc6315c449adaf89cf1f56d7556a",
+  "baselineFilesCompared": 994,
+  "packageLockUnchanged": true,
+  "prospectsSourceUnchanged": true,
+  "deployedOverlaysPreserved": true,
+  "build": "PASS",
+  "deployment": "NOT_DEPLOYED"
+}

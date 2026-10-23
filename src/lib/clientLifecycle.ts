@@ -18,6 +18,12 @@ export function isRetiredClient(client: ClientLifecycle): boolean {
   return client.service_contracts.length > 0 || client.status === 'retired';
 }
 
+// Una ficha comercial sin servicio sigue siendo consultable, pero no es
+// un abonado. El estado de la ficha por sí solo no acredita un servicio.
+export function isCurrentSubscriber(client: ClientLifecycle): boolean {
+  return !isRetiredClient(client) && client.service_contracts.length > 0;
+}
+
 export function clientLifecycleStatus(client: ClientLifecycle): ClientStatus {
   if (isRetiredClient(client)) return 'retired';
   if (client.service_contracts.some((c) => c.status === 'active')) return 'active';
