@@ -20,6 +20,7 @@ import { analyticsRoutes } from './routes/analytics';
 import { proxmoxRoutes } from './routes/proxmox';
 import { fieldInventoryRoutes } from './routes/fieldInventory';
 import { inventorySignalRoutes } from './routes/inventorySignals';
+import { clientRetirementRoutes } from './routes/clientRetirement';
 import { startTr069Scheduler } from './services/tr069Scheduler';
 import { startDebtHoldScheduler } from './services/debtHoldScheduler';
 import { startMikrotikReconcileScheduler } from './services/mikrotikReconcileScheduler';
@@ -54,6 +55,7 @@ app.route('/api/analytics', analyticsRoutes);
 app.route('/api/proxmox', proxmoxRoutes);
 app.route('/api/campo-inventory', fieldInventoryRoutes);
 app.route('/api/inventory-signals', inventorySignalRoutes);
+app.route('/api/clients', clientRetirementRoutes);
 // Sin requireAuth: la llama LibreNMS (un sistema externo), no un usuario
 // logueado — se protege con ALERTS_WEBHOOK_SECRET en su lugar (ver alerts.ts).
 app.route('/api/alerts', alertsRoutes);

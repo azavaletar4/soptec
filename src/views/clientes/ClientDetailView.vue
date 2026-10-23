@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientServiceDetailView from './ClientServiceDetailView.vue';
 import ClientStatCard from '@/components/clientes/ClientStatCard.vue';
+import ClientRetirementDialog from '@/components/clientes/ClientRetirementDialog.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -48,6 +49,8 @@ const displayContactAddress = computed(() => {
 const loadingContracts = ref(true);
 const updatingClientStatus = ref(false);
 const clientStatusError = ref<string | null>(null);
+const showRetirement = ref(false);
+const canRetireClient = computed(() => auth.role === 'ADMIN' || auth.role === 'SUPERADMIN');
 
 const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
   cedula: 'DNI',
@@ -77,8 +80,16 @@ const CONTRACT_STATUS_CLASS: Record<ContractStatus, string> = {
   cancelled: 'bg-slate-500/15 text-slate-600',
 };
 
-async function handleClientStatusChange(status: ClientStatus) {
+async function handleClientStatusChange(event: Event) {
   if (!client.value) return;
+  const select = event.target as HTMLSelectElement;
+  const status = select.value as ClientStatus;
+  select.value = client.value.status;
+  if (status === 'retired') {
+    if (!canRetireClient.value) { clientStatusError.value = 'La baja definitiva requiere ADMIN o SUPERADMIN.'; return; }
+    showRetirement.value = true;
+    return;
+  }
   updatingClientStatus.value = true;
   clientStatusError.value = null;
   try {
@@ -88,6 +99,11 @@ async function handleClientStatusChange(status: ClientStatus) {
   } finally {
     updatingClientStatus.value = false;
   }
+}
+
+async function retirementCompleted() {
+  try { await Promise.all([clientsStore.fetchClients(), loadContracts()]); }
+  catch { clientStatusError.value = 'Baja confirmada. Recarga para consultar el estado actualizado.'; }
 }
 
 async function loadContracts() {
@@ -221,10 +237,11 @@ onMounted(async () => {
             :value="client.status"
             :disabled="updatingClientStatus"
             class="field-input"
-            @change="handleClientStatusChange(($event.target as HTMLSelectElement).value as ClientStatus)"
+            @change="handleClientStatusChange"
           >
-            <option v-for="(label, value) in CLIENT_STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
+            <option v-for="(label, value) in CLIENT_STATUS_LABEL" :key="value" :value="value" :disabled="value === 'retired' && !canRetireClient">{{ label }}</option>
           </select>
+          <button v-if="canRetireClient && client.status === 'retired'" type="button" class="text-xs text-red-700 mt-2 hover:underline" @click="showRetirement = true">Revisar baja definitiva</button>
           <p v-if="clientStatusError" class="text-xs text-red-600 mt-1">{{ clientStatusError }}</p>
         </ClientStatCard>
         <ClientStatCard icon="💰" label="Saldo a favor">
@@ -246,7 +263,7 @@ onMounted(async () => {
       <!-- 2+ servicios: hay que elegir cual, cada uno con su propia ficha
       independiente — es el unico caso donde la vista cambia respecto a
       antes de la Fase 37 (ver ClientServiceDetailView.vue). -->
-      <template v-else-if="contracts.length > 1">
+      <template v-else-if="contracts.length > 1 || client.status === 'retired'">
         <h2 class="text-lg font-semibold mb-3">Servicios</h2>
         <div class="grid gap-3" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr))">
           <router-link
@@ -366,5 +383,6 @@ onMounted(async () => {
         </form>
       </div>
     </Teleport>
+    <ClientRetirementDialog v-if="showRetirement" :client-id="clientId" @close="showRetirement = false" @completed="retirementCompleted" />
   </AppLayout>
 </template>

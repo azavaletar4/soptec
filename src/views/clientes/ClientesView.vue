@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import ClientRetirementDialog from '@/components/clientes/ClientRetirementDialog.vue';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
@@ -65,6 +66,18 @@ const classificationReady = ref(false);
 const classificationError = ref<string | null>(null);
 const canPrepareReincorporation = computed(() => auth.role === 'ADMIN' || auth.role === 'SUPERADMIN');
 const reincorporatingClient = ref<Client | null>(null);
+const retirementClientId = ref<string | null>(null);
+function handleFormStatusChange() {
+  if (form.value.status !== 'retired' || !editing.value || editing.value.status === 'retired') return;
+  form.value.status = editing.value.status;
+  if (!canPrepareReincorporation.value) { formError.value = 'La baja definitiva requiere ADMIN o SUPERADMIN.'; return; }
+  retirementClientId.value = editing.value.id;
+}
+async function retirementCompleted() {
+  showModal.value = false;
+  try { await Promise.all([clientsStore.fetchClients(), contractsStore.fetchContracts()]); }
+  catch { toast.error('Baja confirmada. No se pudo actualizar el listado; recarga para consultar el estado actual.'); }
+}
 const retiredClients = computed(() => clientsStore.clients.filter(isRetiredClient));
 const currentClients = computed(() => clientsStore.clients.filter((c) => !isRetiredClient(c)));
 const currentSubscribers = computed(() => currentClients.value.filter(isCurrentSubscriber));
@@ -850,11 +863,11 @@ function goToDetail(client: Client) {
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Estado</label>
-            <select v-model="form.status" class="field-input">
+            <select v-model="form.status" class="field-input" @change="handleFormStatusChange">
               <option value="prospect">Prospecto</option>
               <option value="active">Activo</option>
               <option value="suspended">Suspendido</option>
-              <option value="retired">Baja</option>
+              <option v-if="editing" value="retired" :disabled="!canPrepareReincorporation">Baja</option>
             </select>
           </div>
           <p class="text-xs text-slate-400 mb-3">
@@ -884,5 +897,6 @@ function goToDetail(client: Client) {
         </form>
       </div>
     </Teleport>
+    <ClientRetirementDialog v-if="retirementClientId" :client-id="retirementClientId" @close="retirementClientId = null" @completed="retirementCompleted" />
   </AppLayout>
 </template>
