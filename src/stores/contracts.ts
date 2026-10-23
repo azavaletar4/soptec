@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { ContractStatus, ServiceContract } from '@/types/domain';
+import { readAllClientPages } from '@/lib/clientLifecycle';
 
 const PLAN_FIELDS = 'id, name, download_speed, upload_speed, price, mikrotik_profile, olt_tcont_profile, olt_traffic_profile';
 
@@ -15,16 +16,16 @@ export const useContractsStore = defineStore('contracts', () => {
   async function fetchContracts() {
     loading.value = true;
     error.value = null;
-    const { data, error: err } = await supabase
-      .from('service_contracts')
-      .select(CONTRACT_SELECT)
-      .order('created_at', { ascending: false });
-    loading.value = false;
-    if (err) {
-      error.value = err.message;
+    try {
+      contracts.value = await readAllClientPages<ServiceContract>((from, to) => supabase
+        .from('service_contracts').select(CONTRACT_SELECT, { count: 'exact' })
+        .order('created_at', { ascending: false }).order('id').range(from, to));
+    } catch (err) {
+      error.value = (err as { message?: string }).message ?? 'Error al cargar contratos';
       throw err;
+    } finally {
+      loading.value = false;
     }
-    contracts.value = (data ?? []) as unknown as ServiceContract[];
   }
 
   async function fetchContractsByClient(clientId: string) {

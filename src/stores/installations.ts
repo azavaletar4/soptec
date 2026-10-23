@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Installation, InstallationStatus } from '@/types/domain';
+import { readAllClientPages } from '@/lib/clientLifecycle';
 
 // Fase 152: se agrega phone_2 (telefono alternativo) al join de clients —
 // ya lo capturaba la conversion de prospecto (13k) pero esta vista no lo
@@ -23,17 +24,17 @@ export const useInstallationsStore = defineStore('installations', () => {
   async function fetchInstallations() {
     loading.value = true;
     error.value = null;
-    const { data, error: err } = await supabase
-      .from('installations')
-      .select(INSTALLATION_SELECT)
-      .order('scheduled_date', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false });
-    loading.value = false;
-    if (err) {
-      error.value = err.message;
+    try {
+      installations.value = await readAllClientPages<Installation>((from, to) => supabase
+        .from('installations').select(INSTALLATION_SELECT, { count: 'exact' })
+        .order('scheduled_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false }).order('id').range(from, to));
+    } catch (err) {
+      error.value = (err as { message?: string }).message ?? 'Error al cargar instalaciones';
       throw err;
+    } finally {
+      loading.value = false;
     }
-    installations.value = (data ?? []) as unknown as Installation[];
   }
 
   async function createInstallation(payload: Partial<Installation>) {
