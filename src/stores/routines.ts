@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { requireWorkOrderPoints } from '@/lib/workOrderPoints';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Routine, RoutineStatus } from '@/types/domain';
@@ -31,6 +32,7 @@ export const useRoutinesStore = defineStore('routines', () => {
   }
 
   async function createRoutine(payload: Partial<Routine>) {
+    requireWorkOrderPoints(payload.points);
     const { data, error: err } = await supabase.from('routines').insert(payload).select(ROUTINE_SELECT).single();
     if (err) throw err;
     routines.value.unshift(data as unknown as Routine);

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -88,9 +89,6 @@ const savingComment = ref(false);
 const updating = ref(false);
 const actionError = ref<string | null>(null);
 
-const pointsDraft = ref<number | null>(null);
-const savingPoints = ref(false);
-const pointsError = ref<string | null>(null);
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   open: 'Abierto',
@@ -141,7 +139,6 @@ async function loadTicket() {
     const found = ticketsStore.tickets.find((t) => t.id === ticketId.value);
     ticket.value = found ?? null;
     notFound.value = !found;
-    pointsDraft.value = found?.points ?? null;
   } finally {
     loading.value = false;
   }
@@ -562,18 +559,6 @@ async function handleSaveHeader() {
   }
 }
 
-async function handleSavePoints() {
-  if (!ticket.value) return;
-  savingPoints.value = true;
-  pointsError.value = null;
-  try {
-    ticket.value = await ticketsStore.updateTicket(ticket.value.id, { points: pointsDraft.value });
-  } catch (e) {
-    pointsError.value = getErrorMessage(e, 'Error al guardar el puntaje');
-  } finally {
-    savingPoints.value = false;
-  }
-}
 
 async function handleAddComment() {
   if (!ticket.value || !newComment.value.trim()) return;
@@ -915,21 +900,7 @@ async function handleDelete() {
               :technicians="catalogs.staff.filter((s) => s.role === 'TECNICO_RED')"
               :readonly="!canEditCrew"
             />
-            <div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
-              <label class="text-xs text-slate-500 shrink-0">Puntaje de la orden</label>
-              <input
-                v-model.number="pointsDraft"
-                type="number"
-                step="1"
-                placeholder="Automático (5/3)"
-                class="field-input py-1.5 text-xs w-28"
-                :disabled="!canEditCrew"
-                @blur="handleSavePoints"
-              />
-              <span v-if="savingPoints" class="text-[11px] text-slate-400">Guardando...</span>
-            </div>
-            <p v-if="pointsError" class="text-xs text-red-600 mt-1">{{ pointsError }}</p>
-            <p class="text-[11px] text-slate-400 mt-1">Se reparte en partes iguales entre los integrantes de la cuadrilla.</p>
+            <WorkOrderPointsEditor job-type="ticket" :job-id="ticket.id" :status="ticket.status" :points="ticket.points" @saved="ticket.points = $event" />
           </div>
 
           <div class="surface p-4 text-sm">

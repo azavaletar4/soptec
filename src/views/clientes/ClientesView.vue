@@ -475,7 +475,8 @@ async function handleSubmit() {
         // queda creado (mismo criterio que el referido arriba) — se avisa
         // y se puede completar a mano desde Soporte → Instalaciones.
         try {
-          await installationsStore.createInstallation({ client_id: savedId, contract_id: contractId });
+          // Conversión automática: conservar explícitamente la regla vigente de Alta (10).
+          await installationsStore.createInstallation({ client_id: savedId, contract_id: contractId, points: 10 });
           installationCreated = true;
         } catch (e) {
           toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo generar la orden de Alta. Puedes crearla manualmente desde Soporte → Instalaciones.'));

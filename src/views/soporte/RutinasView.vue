@@ -325,7 +325,7 @@ async function handleSubmit() {
   // exige a quien puede tocar el campo (admin/soporte, ver :disabled abajo);
   // un TECNICO_RED editando una rutina historica sin puntaje (el campo que
   // no puede tocar) no debe quedar bloqueado para guardar otros cambios.
-  if (canManage.value && (!form.value.points || Number(form.value.points) <= 0)) {
+  if (!editingRoutine.value && canManage.value && (typeof form.value.points !== 'number' || !Number.isFinite(form.value.points) || form.value.points <= 0)) {
     formError.value = 'Ingresa el puntaje de la rutina (mayor a 0) — lo necesita el Ranking de técnicos.';
     return;
   }
@@ -378,7 +378,7 @@ async function handleSubmit() {
     tipo_rutina: form.value.tipo_rutina,
     subtipo: form.value.subtipo || null,
     priority: form.value.priority,
-    points: form.value.points === '' ? null : Number(form.value.points),
+    ...(!editingRoutine.value ? { points: form.value.points === '' ? null : Number(form.value.points) } : {}),
     client_id: targetKind.value === 'client' ? form.value.client_id || null : null,
     contract_id:
       targetKind.value === 'client' && form.value.subtipo === TRASLADO_SERVICIO_SUBTIPO ? form.value.contract_id || null : null,
@@ -619,8 +619,11 @@ function formatDate(value: string | null) {
                 required
                 placeholder="Ej. 2 trámite simple, 15 mantenimiento NAP"
                 class="field-input"
-                :disabled="!canManage"
+                :disabled="!canManage || !!editingRoutine"
               />
+              <p v-if="editingRoutine" class="text-xs text-slate-500">
+                <RouterLink :to="`/soporte/rutinas/${editingRoutine.id}`" class="text-sky-700 underline">Ver detalle para ajustar el puntaje con motivo</RouterLink>
+              </p>
             </div>
           </div>
 

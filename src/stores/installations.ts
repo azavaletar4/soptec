@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { requireWorkOrderPoints } from '@/lib/workOrderPoints';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Installation, InstallationStatus } from '@/types/domain';
@@ -38,6 +39,7 @@ export const useInstallationsStore = defineStore('installations', () => {
   }
 
   async function createInstallation(payload: Partial<Installation>) {
+    requireWorkOrderPoints(payload.points);
     const { data, error: err } = await supabase
       .from('installations')
       .insert(payload)

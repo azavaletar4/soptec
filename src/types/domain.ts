@@ -321,6 +321,8 @@ export interface InstallationPostponement {
 }
 
 export interface Installation {
+  /** NULL conserva la regla histórica de 10 puntos. */
+  points: number | null;
   installation_postponements?: Pick<InstallationPostponement, 'id'>[];
   id: string;
   client_id: string;

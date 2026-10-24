@@ -38,6 +38,7 @@ const loadingContracts = ref(false);
 const dateRange = ref<DateRange | null>(null);
 
 const emptyForm = () => ({
+  points: '' as number | '',
   client_id: '',
   contract_id: '',
   priority: 'medium' as TicketPriority,
@@ -157,6 +158,10 @@ async function onClientChange() {
 }
 
 async function handleSubmit() {
+  if (typeof form.value.points !== 'number' || !Number.isFinite(form.value.points) || form.value.points <= 0) {
+    formError.value = 'Ingresa puntos mayores a 0.';
+    return;
+  }
   if (!form.value.client_id) {
     formError.value = 'Selecciona un cliente';
     return;
@@ -185,6 +190,7 @@ async function handleSubmit() {
   formError.value = null;
   try {
     const created = await installationsStore.createInstallation({
+      points: Number(form.value.points),
       client_id: form.value.client_id,
       contract_id: form.value.contract_id || null,
       priority: form.value.priority,
@@ -394,6 +400,10 @@ function formatDate(value: string | null) {
       <div v-if="showModal" class="modal-overlay">
         <form class="w-full max-w-lg modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleSubmit">
           <h2 class="text-lg font-semibold mb-4">Nueva instalación</h2>
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Puntos de la orden *</label>
+            <input v-model.number="form.points" type="number" min="0" step="any" required class="field-input" />
+          </div>
 
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Cliente</label>

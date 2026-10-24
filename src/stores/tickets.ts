@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { requireWorkOrderPoints } from '@/lib/workOrderPoints';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Ticket, TicketComment, TicketPriority, TicketStatus } from '@/types/domain';
@@ -52,6 +53,7 @@ export const useTicketsStore = defineStore('tickets', () => {
   }
 
   async function createTicket(payload: Partial<Ticket>) {
+    requireWorkOrderPoints(payload.points, true);
     const { data, error: err } = await supabase.from('tickets').insert(payload).select(TICKET_SELECT).single();
     if (err) throw err;
     tickets.value.unshift(data as unknown as Ticket);

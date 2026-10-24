@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -751,6 +752,9 @@ onMounted(async () => {
             </div>
           </div>
 
+          <div class="surface p-4 text-sm">
+            <WorkOrderPointsEditor job-type="installation" :job-id="installation.id" :status="installation.status" :points="installation.points" @saved="installation.points = $event" />
+          </div>
           <div class="surface p-4 text-sm">
             <h2 class="text-sm font-semibold mb-2">Cuadrilla asignada</h2>
             <CrewAssignEditor job-type="installation" :job-id="installation.id" :technicians="technicians" :readonly="!canEditCrew" />
