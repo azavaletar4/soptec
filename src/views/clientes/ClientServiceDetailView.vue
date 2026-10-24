@@ -13,6 +13,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useTicketsStore } from '@/stores/tickets';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
+import { isPppoeAdminRole } from '@/lib/mikrotikDeviceRole';
 import { useXuiStore, type XuiLineSummary, type XuiLineAction, type XuiBouquet } from '@/stores/xui';
 import { useOltStore, type OltOnt, type UnlinkedOnt } from '@/stores/olt';
 import { useInventoryUnitsStore } from '@/stores/inventoryUnits';
@@ -69,6 +70,10 @@ const catalogs = useCatalogsStore();
 const ticketsStore = useTicketsStore();
 const invoicesStore = useInvoicesStore();
 const mikrotikStore = useMikrotikStore();
+// Fase 168: un contrato solo se puede vincular al router administrador
+// PPPoE — un router de borde (dedicado o balanceador) no administra
+// clientes, ni participa en reconciliacion ni en cortes por deuda.
+const pppoeAdminMikrotikDevices = computed(() => mikrotikStore.devices.filter((d) => isPppoeAdminRole(d.device_role)));
 const xuiStore = useXuiStore();
 const oltStore = useOltStore();
 const inventoryUnitsStore = useInventoryUnitsStore();
@@ -1559,7 +1564,7 @@ onMounted(async () => {
             <label class="block text-xs text-slate-600 mb-1">Router MikroTik</label>
             <select v-model="contractForm.mikrotik_device_id" class="field-input" @change="onMikrotikDeviceChange">
               <option value="">Sin vincular</option>
-              <option v-for="d in mikrotikStore.devices" :key="d.id" :value="d.id">{{ d.name }}</option>
+              <option v-for="d in pppoeAdminMikrotikDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
             </select>
           </div>
           <div>

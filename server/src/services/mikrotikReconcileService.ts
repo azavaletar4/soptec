@@ -66,10 +66,15 @@ export function getLastReconcileReport(): ReconcileReport | null {
 }
 
 export async function reconcileMikrotik(): Promise<ReconcileReport> {
+  // Fase 168: solo el router administrador PPPoE participa de esta
+  // reconciliacion — un router de borde (dedicado o balanceador) no corre
+  // PPP de clientes, consultarle /ppp/secret solo generaria un "error de
+  // conexion" falso en el reporte.
   const { data: devices, error: devErr } = await supabaseAdmin
     .from('mikrotik_devices')
     .select('id, name, host, port, use_tls, username, password')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('device_role', 'pppoe_admin');
   if (devErr) throw new Error(devErr.message);
 
   const mismatches: ReconcileMismatch[] = [];

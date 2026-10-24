@@ -7,6 +7,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
 import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
+import { MIKROTIK_DEVICE_ROLES, MIKROTIK_DEVICE_ROLE_LABELS, MIKROTIK_DEVICE_ROLE_HINTS, type MikrotikDeviceRole } from '@/lib/mikrotikDeviceRole';
 
 const router = useRouter();
 const mikrotikStore = useMikrotikStore();
@@ -38,6 +39,7 @@ const emptyForm = () => ({
   username: 'admin',
   password: '',
   zone_id: '',
+  device_role: 'pppoe_admin' as MikrotikDeviceRole,
 });
 const form = ref(emptyForm());
 
@@ -89,6 +91,7 @@ function openEdit(device: MikrotikDevice) {
     username: device.username,
     password: '',
     zone_id: device.zone_id ?? '',
+    device_role: device.device_role,
   };
   formError.value = null;
   showModal.value = true;
@@ -152,8 +155,9 @@ async function handleTest(device: MikrotikDevice) {
         <div>
           <h2 class="text-sm font-semibold text-slate-900">Reconciliación con MikroTik</h2>
           <p class="text-xs text-slate-500 mt-0.5">
-            Compara periódicamente los usuarios PPPoE de cada router contra los contratos (detecta cambios hechos
-            directo en Winbox/WebFig). El perfil PPPoE se actualiza solo; el resto solo se reporta.
+            Compara periódicamente los usuarios PPPoE de cada router <strong>administrador PPPoE</strong> contra los
+            contratos (detecta cambios hechos directo en Winbox/WebFig). El perfil PPPoE se actualiza solo; el resto
+            solo se reporta. Los routers de borde (dedicado o balanceador) no participan — no administran clientes.
           </p>
         </div>
         <button class="btn-secondary text-xs" :disabled="reconcileLoading" @click="handleReconcileNow">
@@ -198,6 +202,7 @@ async function handleTest(device: MikrotikDevice) {
         <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Nombre</th>
+            <th class="text-left px-4 py-3">Tipo</th>
             <th class="text-left px-4 py-3">Host</th>
             <th class="text-left px-4 py-3">TLS</th>
             <th class="text-left px-4 py-3">Conexion</th>
@@ -206,10 +211,10 @@ async function handleTest(device: MikrotikDevice) {
         </thead>
         <tbody>
           <tr v-if="mikrotikStore.loading">
-            <td colspan="5" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+            <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
           <tr v-else-if="!filteredDevices.length">
-            <td colspan="5" class="px-4 py-6 text-center text-slate-500">
+            <td colspan="6" class="px-4 py-6 text-center text-slate-500">
               {{ searchQuery ? 'Sin resultados para esa busqueda.' : 'No hay routers. Registra el primero.' }}
             </td>
           </tr>
@@ -218,6 +223,14 @@ async function handleTest(device: MikrotikDevice) {
               <button class="text-slate-900 hover:text-sky-600 font-medium" @click="router.push(`/mikrotik/${d.id}`)">
                 {{ d.name }}
               </button>
+            </td>
+            <td class="px-4 py-3">
+              <span
+                class="badge"
+                :class="d.device_role === 'pppoe_admin' ? 'bg-sky-500/15 text-sky-700' : 'bg-amber-500/15 text-amber-700'"
+              >
+                {{ MIKROTIK_DEVICE_ROLE_LABELS[d.device_role] }}
+              </span>
             </td>
             <td class="px-4 py-3 text-slate-600 font-mono text-xs">{{ d.host }}:{{ d.port }}</td>
             <td class="px-4 py-3 text-slate-600">{{ d.use_tls ? 'Si' : 'No' }}</td>
@@ -253,6 +266,14 @@ async function handleTest(device: MikrotikDevice) {
               placeholder="Router-Principal"
               class="field-input"
             />
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Tipo de router</label>
+            <select v-model="form.device_role" class="field-input">
+              <option v-for="r in MIKROTIK_DEVICE_ROLES" :key="r" :value="r">{{ MIKROTIK_DEVICE_ROLE_LABELS[r] }}</option>
+            </select>
+            <p class="text-xs text-slate-500 mt-1">{{ MIKROTIK_DEVICE_ROLE_HINTS[form.device_role] }}</p>
           </div>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
