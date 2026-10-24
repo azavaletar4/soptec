@@ -13,6 +13,7 @@ import {
   type MikrotikTrafficLive,
   type PppActive,
   type PppSecret,
+  type ReconcileReport,
   type RouterResource,
   type TrafficHistoryRange,
 } from '@/stores/mikrotik';
@@ -20,6 +21,7 @@ import { MIKROTIK_DEVICE_ROLE_LABELS, isPppoeAdminRole } from '@/lib/mikrotikDev
 import { formatBpsAsMbps, splitMbpsForDisplay, toMbps, usageBarClass, usagePercent, usageTextClass, type CapacityUnit } from '@/lib/mikrotikBorderTraffic';
 import { formatPeruDateTime, formatRelativeTime } from '@/lib/oltAlertPresentation';
 import { useAuthStore } from '@/stores/auth';
+import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 
 const route = useRoute();
@@ -265,9 +267,36 @@ onUnmounted(() => {
   clearInterval(historyPoll);
 });
 
+// ---- Fase 170: reconciliacion PPPoE — EXCLUSIVA del router administrador, UN router a la vez ----
+
+const reconcileReport = ref<ReconcileReport | null>(null);
+const showReconcileDetail = ref(false);
+
+async function loadReconcileReport() {
+  try {
+    reconcileReport.value = await mikrotikStore.fetchReconcileReport(deviceId.value);
+  } catch {
+    // silencioso: es solo informativo, no bloquea el resto de la pantalla
+  }
+}
+
+const { loading: reconcileLoading, error: reconcileError, run: runReconcile } = useAsyncAction(
+  () => mikrotikStore.runReconcileNow(deviceId.value),
+  'Error al reconciliar',
+);
+async function handleReconcileNow() {
+  const report = await runReconcile();
+  if (report) reconcileReport.value = report;
+}
+
+function formatReconcileDate(iso: string) {
+  return new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 onMounted(async () => {
   if (!mikrotikStore.devices.length) await mikrotikStore.fetchDevices();
   await loadAll();
+  if (isPppoeAdmin.value) await loadReconcileReport();
   if (isBorderDedicated.value) {
     resetConfigForm();
     await Promise.all([loadLive(), loadHistory(), loadAlerts()]);
@@ -372,6 +401,46 @@ async function handleToggleSecret(secret: PppSecret) {
         </div>
 
         <template v-if="isPppoeAdmin">
+        <!-- Fase 170: reconciliación PPPoE — exclusiva de ESTE router administrador -->
+        <div class="surface p-4 mb-8">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-900">Reconciliación PPPoE de este router</h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Compara los usuarios PPPoE de <strong>{{ device.name }}</strong> contra los contratos vinculados a él
+                (detecta cambios hechos directo en Winbox/WebFig). El perfil PPPoE se actualiza solo; el resto solo se reporta.
+              </p>
+            </div>
+            <button class="btn-secondary text-xs" :disabled="reconcileLoading" @click="handleReconcileNow">
+              {{ reconcileLoading ? 'Reconciliando...' : 'Reconciliar ahora' }}
+            </button>
+          </div>
+
+          <p v-if="reconcileError" class="text-xs text-red-600 mt-3">{{ reconcileError }}</p>
+
+          <div v-if="reconcileReport" class="mt-3 text-xs text-slate-600">
+            <p>
+              Última corrida: {{ formatReconcileDate(reconcileReport.ranAt) }} — {{ reconcileReport.contractsChecked }}
+              contrato(s) evaluados, {{ reconcileReport.profilesUpdated }} perfil(es) actualizados,
+              <button
+                v-if="reconcileReport.mismatches.length"
+                class="text-amber-600 hover:underline"
+                @click="showReconcileDetail = !showReconcileDetail"
+              >
+                {{ reconcileReport.mismatches.length }} diferencia(s)
+              </button>
+              <span v-else class="text-green-600">sin diferencias</span>.
+              <span v-if="reconcileReport.error" class="text-red-600"> Error de conexión: {{ reconcileReport.error }}</span>
+            </p>
+            <div v-if="showReconcileDetail && reconcileReport.mismatches.length" class="mt-2 rounded-lg border border-slate-200 divide-y divide-slate-100 max-h-60 overflow-y-auto">
+              <div v-for="(m, i) in reconcileReport.mismatches" :key="i" class="px-3 py-2">
+                <span class="font-mono text-slate-500">{{ m.contractNumber }}</span> ({{ m.pppoeUsername }}) — {{ m.detail }}
+              </div>
+            </div>
+          </div>
+          <p v-else class="mt-3 text-xs text-slate-400">Todavía no corrió ninguna reconciliación en esta sesión del servidor.</p>
+        </div>
+
         <h2 class="text-lg font-semibold mb-3">Usuarios PPPoE ({{ secrets.length }})</h2>
         <input
           v-model="secretSearch"
