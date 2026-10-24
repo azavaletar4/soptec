@@ -2,10 +2,9 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import { useMikrotikStore, type MikrotikDevice, type ReconcileReport } from '@/stores/mikrotik';
+import { useMikrotikStore, type MikrotikDevice } from '@/stores/mikrotik';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
-import { useAsyncAction } from '@/composables/useAsyncAction';
 import { getErrorMessage } from '@/lib/errors';
 import { MIKROTIK_DEVICE_ROLES, MIKROTIK_DEVICE_ROLE_LABELS, MIKROTIK_DEVICE_ROLE_HINTS, type MikrotikDeviceRole } from '@/lib/mikrotikDeviceRole';
 
@@ -43,35 +42,8 @@ const emptyForm = () => ({
 });
 const form = ref(emptyForm());
 
-const reconcileReport = ref<ReconcileReport | null>(null);
-const showReconcileDetail = ref(false);
-
-async function loadReconcileReport() {
-  try {
-    reconcileReport.value = await mikrotikStore.fetchReconcileReport();
-  } catch {
-    // silencioso: es solo informativo, no bloquea el resto de la pantalla
-  }
-}
-
-// useAsyncAction (mismo molde que Zonas/Planes) — "run" ya deja
-// reconcileLoading/reconcileError manejados; solo falta guardar el
-// resultado si la llamada tuvo exito.
-const { loading: reconcileLoading, error: reconcileError, run: runReconcile } = useAsyncAction(
-  () => mikrotikStore.runReconcileNow(),
-  'Error al reconciliar',
-);
-async function handleReconcileNow() {
-  const report = await runReconcile();
-  if (report) reconcileReport.value = report;
-}
-
-function formatReconcileDate(iso: string) {
-  return new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
-}
-
 onMounted(async () => {
-  await Promise.all([mikrotikStore.fetchDevices(), catalogs.fetchZones(), loadReconcileReport()]);
+  await Promise.all([mikrotikStore.fetchDevices(), catalogs.fetchZones()]);
 });
 
 function openCreate() {
@@ -149,47 +121,6 @@ async function handleTest(device: MikrotikDevice) {
     </div>
 
     <p v-if="mikrotikStore.error" class="mb-4 text-sm text-red-600">{{ mikrotikStore.error }}</p>
-
-    <div class="surface p-4 mb-6">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 class="text-sm font-semibold text-slate-900">Reconciliación con MikroTik</h2>
-          <p class="text-xs text-slate-500 mt-0.5">
-            Compara periódicamente los usuarios PPPoE de cada router <strong>administrador PPPoE</strong> contra los
-            contratos (detecta cambios hechos directo en Winbox/WebFig). El perfil PPPoE se actualiza solo; el resto
-            solo se reporta. Los routers de borde (dedicado o balanceador) no participan — no administran clientes.
-          </p>
-        </div>
-        <button class="btn-secondary text-xs" :disabled="reconcileLoading" @click="handleReconcileNow">
-          {{ reconcileLoading ? 'Reconciliando...' : 'Reconciliar ahora' }}
-        </button>
-      </div>
-
-      <p v-if="reconcileError" class="text-xs text-red-600 mt-3">{{ reconcileError }}</p>
-
-      <div v-if="reconcileReport" class="mt-3 text-xs text-slate-600">
-        <p>
-          Última corrida: {{ formatReconcileDate(reconcileReport.ranAt) }} — {{ reconcileReport.contractsChecked }}
-          contrato(s) en {{ reconcileReport.devicesChecked }} router(s), {{ reconcileReport.profilesUpdated }} perfil(es)
-          actualizados,
-          <button
-            v-if="reconcileReport.mismatches.length"
-            class="text-amber-600 hover:underline"
-            @click="showReconcileDetail = !showReconcileDetail"
-          >
-            {{ reconcileReport.mismatches.length }} diferencia(s)
-          </button>
-          <span v-else class="text-green-600">sin diferencias</span>.
-          <span v-if="reconcileReport.errors.length" class="text-red-600"> {{ reconcileReport.errors.length }} error(es) de conexión.</span>
-        </p>
-        <div v-if="showReconcileDetail && reconcileReport.mismatches.length" class="mt-2 rounded-lg border border-slate-200 divide-y divide-slate-100 max-h-60 overflow-y-auto">
-          <div v-for="(m, i) in reconcileReport.mismatches" :key="i" class="px-3 py-2">
-            <span class="font-mono text-slate-500">{{ m.contractNumber }}</span> ({{ m.pppoeUsername }} @ {{ m.deviceName }}) — {{ m.detail }}
-          </div>
-        </div>
-      </div>
-      <p v-else class="mt-3 text-xs text-slate-400">Todavía no corrió ninguna reconciliación en esta sesión del servidor.</p>
-    </div>
 
     <input
       v-model="searchQuery"

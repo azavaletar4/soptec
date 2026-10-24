@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
-import { getLastReconcileReport, reconcileMikrotik } from '../services/mikrotikReconcileService';
+import { getLastReconcileReport, reconcileMikrotikDevice } from '../services/mikrotikReconcileService';
 import { DEFAULT_MIKROTIK_DEVICE_ROLE, isPppoeAdminRole, isValidMikrotikDeviceRole } from '../mikrotik/deviceRole';
 import { getLiveSnapshot } from '../services/mikrotikBorderTrafficService';
 
@@ -60,22 +60,6 @@ function targetFor(device: MikrotikDeviceRow): MikrotikTarget {
     password: device.password,
   };
 }
-
-// ---- Reconciliacion MikroTik -> Panel (Fase 31, ver mikrotikReconcileService.ts) ----
-// Registradas antes de "/:id/..." para que "reconcile" nunca se confunda con un id de router.
-
-mikrotikRoutes.get('/reconcile/report', requireRole(...STAFF_READ), async (c) => {
-  return c.json(getLastReconcileReport());
-});
-
-mikrotikRoutes.post('/reconcile/run', requireRole(...PPP_WRITE), async (c) => {
-  try {
-    const report = await reconcileMikrotik();
-    return c.json(report);
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : 'Error al reconciliar' }, 500);
-  }
-});
 
 // ---- CRUD mikrotik_devices ----
 
@@ -182,6 +166,32 @@ mikrotikRoutes.get('/:id/resource', requireRole(...STAFF_READ), async (c) => {
     return c.json(data);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar el router' }, 502);
+  }
+});
+
+// ---- Reconciliacion MikroTik -> Panel (Fase 31/170, ver mikrotikReconcileService.ts) ----
+// SIEMPRE acotada a UN router por `:id` (nunca "reconciliar todos" desde
+// esta ruta) — y SIEMPRE validada en backend contra device_role, nunca solo
+// confiando en que el frontend oculte el boton a un router de borde.
+
+mikrotikRoutes.get('/:id/reconcile/report', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const roleError = requirePppoeAdmin(device);
+  if (roleError) return c.json(roleError, 400);
+  return c.json(getLastReconcileReport(device.id));
+});
+
+mikrotikRoutes.post('/:id/reconcile/run', requireRole(...PPP_WRITE), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const roleError = requirePppoeAdmin(device);
+  if (roleError) return c.json(roleError, 400);
+  try {
+    const report = await reconcileMikrotikDevice(device.id);
+    return c.json(report);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al reconciliar' }, 500);
   }
 });
 

@@ -142,11 +142,12 @@ export interface ReconcileMismatch {
 
 export interface ReconcileReport {
   ranAt: string;
-  devicesChecked: number;
+  deviceId: string;
+  deviceName: string;
   contractsChecked: number;
   profilesUpdated: number;
   mismatches: ReconcileMismatch[];
-  errors: { deviceName: string; message: string }[];
+  error: string | null;
 }
 
 export const useMikrotikStore = defineStore('mikrotik', () => {
@@ -269,12 +270,14 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<MikrotikSaturationAlert[]>(`/api/mikrotik-devices/${id}/saturation-alerts`);
   }
 
-  function fetchReconcileReport() {
-    return apiFetch<ReconcileReport | null>('/api/mikrotik-devices/reconcile/report');
+  // Fase 170: la reconciliacion es por router (nunca "todos" en una sola
+  // llamada) — se consulta/corre desde el detalle de CADA router administrador.
+  function fetchReconcileReport(id: string) {
+    return apiFetch<ReconcileReport | null>(`/api/mikrotik-devices/${id}/reconcile/report`);
   }
 
-  function runReconcileNow() {
-    return apiFetch<ReconcileReport>('/api/mikrotik-devices/reconcile/run', { method: 'POST' });
+  function runReconcileNow(id: string) {
+    return apiFetch<ReconcileReport>(`/api/mikrotik-devices/${id}/reconcile/run`, { method: 'POST' });
   }
 
   return {
