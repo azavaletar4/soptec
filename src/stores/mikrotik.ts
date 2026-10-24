@@ -13,9 +13,62 @@ export interface MikrotikDevice {
   zone_id: string | null;
   is_active: boolean;
   device_role: MikrotikDeviceRole;
+  monitored_interface_name: string | null;
+  uplink_interface_name: string | null;
+  capacity_download_mbps: number;
+  capacity_upload_mbps: number;
   created_at: string;
   latitude: number | null;
   longitude: number | null;
+}
+
+// ---- Fase 169: trafico del borde dedicado ----
+
+export type MonitoredLinkStatus = 'ok' | 'not_configured' | 'offline' | 'warming_up';
+
+export interface MikrotikTrafficLive {
+  status: MonitoredLinkStatus;
+  message?: string;
+  fetchedAt?: string;
+  monitoredInterfaceName?: string;
+  uplinkInterfaceName?: string | null;
+  monitoredRunning?: boolean;
+  monitoredDisabled?: boolean;
+  rxBps?: number;
+  txBps?: number;
+  version?: string | null;
+  boardName?: string | null;
+  uptime?: string | null;
+  cpuLoadPercent?: number | null;
+  freeMemoryBytes?: number | null;
+  totalMemoryBytes?: number | null;
+}
+
+export interface MikrotikTrafficHistoryPoint {
+  bucket_start: string;
+  avg_rx_bps: number | null;
+  avg_tx_bps: number | null;
+  max_rx_bps: number | null;
+  max_tx_bps: number | null;
+  samples: number;
+  online_samples: number;
+}
+
+export type TrafficHistoryRange = '15m' | '1h' | '24h' | '7d';
+
+export interface MikrotikTrafficHistoryResponse {
+  range: TrafficHistoryRange;
+  points: MikrotikTrafficHistoryPoint[];
+}
+
+export interface MikrotikSaturationAlert {
+  id: string;
+  direction: 'download' | 'upload';
+  status: 'active' | 'resolved';
+  started_at: string;
+  resolved_at: string | null;
+  peak_bps: number;
+  threshold_bps: number;
 }
 
 export interface MikrotikInterface {
@@ -204,6 +257,18 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<MikrotikInterface[]>(`/api/mikrotik-devices/${id}/interfaces`);
   }
 
+  function fetchTrafficLive(id: string) {
+    return apiFetch<MikrotikTrafficLive>(`/api/mikrotik-devices/${id}/traffic-live`);
+  }
+
+  function fetchTrafficHistory(id: string, range: TrafficHistoryRange) {
+    return apiFetch<MikrotikTrafficHistoryResponse>(`/api/mikrotik-devices/${id}/traffic-history?range=${range}`);
+  }
+
+  function fetchSaturationAlerts(id: string) {
+    return apiFetch<MikrotikSaturationAlert[]>(`/api/mikrotik-devices/${id}/saturation-alerts`);
+  }
+
   function fetchReconcileReport() {
     return apiFetch<ReconcileReport | null>('/api/mikrotik-devices/reconcile/report');
   }
@@ -232,6 +297,9 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     fetchDhcpLeases,
     fetchIpAddresses,
     fetchInterfaces,
+    fetchTrafficLive,
+    fetchTrafficHistory,
+    fetchSaturationAlerts,
     fetchReconcileReport,
     runReconcileNow,
   };

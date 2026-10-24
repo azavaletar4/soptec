@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { getLastReconcileReport, reconcileMikrotik } from '../services/mikrotikReconcileService';
 import { DEFAULT_MIKROTIK_DEVICE_ROLE, isPppoeAdminRole, isValidMikrotikDeviceRole } from '../mikrotik/deviceRole';
+import { getLiveSnapshot } from '../services/mikrotikBorderTrafficService';
 
 export const mikrotikRoutes = new Hono();
 
@@ -15,7 +16,9 @@ const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
 const PPP_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
 const DEVICE_PUBLIC_FIELDS =
-  'id, name, host, port, use_tls, username, zone_id, is_active, device_role, latitude, longitude, created_at';
+  'id, name, host, port, use_tls, username, zone_id, is_active, device_role, ' +
+  'monitored_interface_name, uplink_interface_name, capacity_download_mbps, capacity_upload_mbps, ' +
+  'latitude, longitude, created_at';
 
 mikrotikRoutes.use('*', requireAuth);
 
@@ -27,6 +30,9 @@ interface MikrotikDeviceRow {
   username: string;
   password: string;
   device_role: string;
+  monitored_interface_name: string | null;
+  capacity_download_mbps: number;
+  capacity_upload_mbps: number;
 }
 
 async function getDeviceOrNull(id: string | undefined): Promise<MikrotikDeviceRow | null> {
@@ -111,8 +117,20 @@ mikrotikRoutes.put('/:id', requireRole(...DEVICE_WRITE), async (c) => {
   if ('device_role' in body && body.device_role && !isValidMikrotikDeviceRole(body.device_role)) {
     return c.json({ error: 'Tipo de router invalido' }, 400);
   }
+  // Fase 169: capacidad contratada — solo para estadisticas/alertas, nunca
+  // toca queues/perfiles/rutas reales del router. Debe ser un numero > 0.
+  for (const key of ['capacity_download_mbps', 'capacity_upload_mbps'] as const) {
+    if (key in body && body[key] != null) {
+      const n = Number(body[key]);
+      if (!Number.isFinite(n) || n <= 0) return c.json({ error: 'La capacidad debe ser un numero mayor a 0' }, 400);
+    }
+  }
   const update: Record<string, unknown> = {};
-  for (const key of ['name', 'host', 'port', 'use_tls', 'username', 'zone_id', 'is_active', 'device_role', 'latitude', 'longitude'] as const) {
+  for (const key of [
+    'name', 'host', 'port', 'use_tls', 'username', 'zone_id', 'is_active', 'device_role',
+    'monitored_interface_name', 'uplink_interface_name', 'capacity_download_mbps', 'capacity_upload_mbps',
+    'latitude', 'longitude',
+  ] as const) {
     if (key in body) update[key] = body[key];
   }
   if (body.password) update.password = body.password;
@@ -312,4 +330,71 @@ mikrotikRoutes.get('/:id/interfaces', requireRole(...STAFF_READ), async (c) => {
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar el router' }, 502);
   }
+});
+
+// ---- Monitoreo de trafico del borde dedicado (Fase 169) ----
+// Solo lectura: sirve la cache en memoria del scheduler (mikrotikBorderTrafficScheduler.ts)
+// y consultas a Supabase — nunca llama al router directamente desde aqui
+// (eso lo hace unicamente el scheduler, para no multiplicar consultas si
+// varios admins tienen el panel abierto a la vez).
+
+mikrotikRoutes.get('/:id/traffic-live', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  if (!device.monitored_interface_name) {
+    return c.json({ status: 'not_configured', message: 'Todavia no se eligio que interfaz monitorear en este router' });
+  }
+  const snapshot = getLiveSnapshot(device.id);
+  if (!snapshot) {
+    return c.json({ status: 'warming_up', message: 'Esperando la primera lectura del router (hasta unos segundos)...' });
+  }
+  return c.json(snapshot);
+});
+
+const HISTORY_RANGES = {
+  '15m': { sinceMinutes: 15, bucketSeconds: 60 },
+  '1h': { sinceMinutes: 60, bucketSeconds: 60 },
+  '24h': { sinceMinutes: 24 * 60, bucketSeconds: 300 },
+  '7d': { sinceMinutes: 7 * 24 * 60, bucketSeconds: 1800 },
+} as const;
+type HistoryRange = keyof typeof HISTORY_RANGES;
+function isHistoryRange(v: unknown): v is HistoryRange {
+  return typeof v === 'string' && v in HISTORY_RANGES;
+}
+
+mikrotikRoutes.get('/:id/traffic-history', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  if (!device.monitored_interface_name) return c.json({ error: 'Todavia no se eligio que interfaz monitorear en este router' }, 400);
+
+  const rangeParam = c.req.query('range');
+  const range: HistoryRange = isHistoryRange(rangeParam) ? rangeParam : '1h';
+  const { sinceMinutes, bucketSeconds } = HISTORY_RANGES[range];
+  const since = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
+
+  const { data, error } = await supabaseAdmin.rpc('fn_mikrotik_interface_series', {
+    p_device_id: device.id,
+    p_interface_name: device.monitored_interface_name,
+    p_since: since,
+    p_bucket_seconds: bucketSeconds,
+  });
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ range, points: data ?? [] });
+});
+
+mikrotikRoutes.get('/:id/saturation-alerts', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  if (!device.monitored_interface_name) return c.json([]);
+
+  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const { data, error } = await supabaseAdmin
+    .from('mikrotik_saturation_alerts')
+    .select('id, direction, status, started_at, resolved_at, peak_bps, threshold_bps')
+    .eq('device_id', device.id)
+    .eq('interface_name', device.monitored_interface_name)
+    .gte('started_at', since)
+    .order('started_at', { ascending: false });
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json(data ?? []);
 });
