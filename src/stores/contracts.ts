@@ -54,6 +54,9 @@ export const useContractsStore = defineStore('contracts', () => {
   }
 
   async function updateContract(id: string, payload: Partial<ServiceContract>) {
+    if (payload.status === 'cancelled' && contracts.value.find(c => c.id === id)?.status !== 'cancelled') {
+      throw new Error('Utiliza la baja administrativa confirmada para cancelar una línea.');
+    }
     const { data, error: err } = await supabase
       .from('service_contracts')
       .update(payload)
@@ -72,6 +75,20 @@ export const useContractsStore = defineStore('contracts', () => {
     contracts.value = contracts.value.filter((c) => c.id !== id);
   }
 
+  async function cancelContractAdministrative(id: string, updatedAt: string) {
+    const { data, error: err } = await supabase.rpc('contract_cancel_administrative', {
+      p_contract_id: id, p_updated_at: updatedAt, p_confirm: true,
+    });
+    if (err) {
+      if (err.code === 'PGRST202' || err.code === '42883') throw new Error('La baja administrativa transaccional todavía no está habilitada.');
+      throw err;
+    }
+    const saved = data.contract as ServiceContract;
+    const idx = contracts.value.findIndex(c => c.id === id);
+    if (idx !== -1) contracts.value[idx] = { ...contracts.value[idx], ...saved };
+    return saved;
+  }
+
   return {
     contracts,
     loading,
@@ -81,6 +98,7 @@ export const useContractsStore = defineStore('contracts', () => {
     createContract,
     updateContract,
     updateContractStatus,
+    cancelContractAdministrative,
     deleteContract,
   };
 });
