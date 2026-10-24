@@ -5,6 +5,7 @@ import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { getLastReconcileReport, reconcileMikrotikDevice } from '../services/mikrotikReconcileService';
 import { DEFAULT_MIKROTIK_DEVICE_ROLE, isPppoeAdminRole, isValidMikrotikDeviceRole } from '../mikrotik/deviceRole';
 import { getLiveSnapshot } from '../services/mikrotikBorderTrafficService';
+import { getBalancerConnectionsSnapshot } from '../services/mikrotikBalancerDiscoveryService';
 
 export const mikrotikRoutes = new Hono();
 
@@ -407,4 +408,22 @@ mikrotikRoutes.get('/:id/saturation-alerts', requireRole(...STAFF_READ), async (
     .order('started_at', { ascending: false });
   if (error) return c.json({ error: error.message }, 500);
   return c.json(data ?? []);
+});
+
+// ---- Fase 174: descubrimiento de conexiones WAN del balanceador ----
+// Solo lectura -- sirve lo que ya descubrio/guardo el scheduler
+// (mikrotikBalancerDiscoveryScheduler.ts); esta ruta nunca llama al router
+// directamente ni modifica su configuracion.
+mikrotikRoutes.get('/:id/balancer/connections', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  if (device.device_role !== 'borde_balanceador') {
+    return c.json({ error: `"${device.host}" no esta clasificado como router balanceador` }, 400);
+  }
+  try {
+    const connections = await getBalancerConnectionsSnapshot(device.id);
+    return c.json(connections);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar las conexiones del balanceador' }, 500);
+  }
 });

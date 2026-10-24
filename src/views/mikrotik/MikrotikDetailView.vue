@@ -8,6 +8,7 @@ import {
   type DhcpLease,
   type IpAddress,
   type MikrotikInterface,
+  type MikrotikBalancerConnection,
   type MikrotikSaturationAlert,
   type MikrotikTrafficHistoryPoint,
   type MikrotikTrafficLive,
@@ -36,9 +37,11 @@ const device = computed(() => mikrotikStore.devices.find((d) => d.id === deviceI
 // CPU, memoria), nunca una sección PPPoE/DHCP vacía o que de error.
 const isPppoeAdmin = computed(() => isPppoeAdminRole(device.value?.device_role));
 // Fase 172: el panel de trafico/saturación es EXCLUSIVO del borde dedicado
-// (CCR2004 Fiberlux) — el balanceador queda exactamente como lo dejó la
-// Fase 171 (sin tocar), a propósito.
+// (CCR2004 Fiberlux).
 const isBorderDedicated = computed(() => device.value?.device_role === 'borde_dedicado');
+// Fase 174: el balanceador tiene su propia sección (descubrimiento de
+// conexiones WAN) — ya no cae en la rama generica del administrador.
+const isBalancer = computed(() => device.value?.device_role === 'borde_balanceador');
 const canConfigureBorder = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
 const loading = ref(true);
@@ -268,14 +271,53 @@ async function handleSaveBorderConfig() {
   }
 }
 
+// ---- Fase 174: conexiones WAN descubiertas del balanceador ----
+
+const balancerConnections = ref<MikrotikBalancerConnection[]>([]);
+const balancerLoadError = ref<string | null>(null);
+
+async function loadBalancerConnections() {
+  try {
+    balancerConnections.value = await mikrotikStore.fetchBalancerConnections(deviceId.value);
+    balancerLoadError.value = null;
+  } catch (e) {
+    balancerLoadError.value = getErrorMessage(e, 'Error al consultar las conexiones del balanceador');
+  }
+}
+
+// Requisito 7/10: nunca se fija una cantidad -- se muestra exactamente lo
+// que el ultimo descubrimiento encontro, sin inventar ni completar huecos.
+const activeBalancerConnections = computed(() => balancerConnections.value.filter((c) => !c.removed_at));
+const removedBalancerConnections = computed(() => balancerConnections.value.filter((c) => c.removed_at));
+// Requisito 8: deshabilitada nunca es averia -- solo habilitada+caida lo es.
+function connectionStatusLabel(c: MikrotikBalancerConnection): string {
+  if (c.disabled) return 'Deshabilitada';
+  return c.running ? 'Conectada' : 'Sin conexión';
+}
+function connectionStatusClass(c: MikrotikBalancerConnection): string {
+  if (c.disabled) return 'bg-slate-500/15 text-slate-600';
+  return c.running ? 'bg-green-500/15 text-green-600' : 'bg-red-500/15 text-red-600';
+}
+// Requisito 6: una sola fuente de trafico por conexion (ya resuelto en el
+// backend, nivel PPPoE-client) -- aqui solo se suma lo que YA viene
+// calculado asi, nunca se mezcla con otro nivel.
+const balancerTotalRxBps = computed(() => activeBalancerConnections.value.reduce((acc, c) => acc + (c.disabled ? 0 : c.latest_rx_bps ?? 0), 0));
+const balancerTotalTxBps = computed(() => activeBalancerConnections.value.reduce((acc, c) => acc + (c.disabled ? 0 : c.latest_tx_bps ?? 0), 0));
+const balancerPortsInUse = computed(() => {
+  const ports = new Set(activeBalancerConnections.value.filter((c) => !c.disabled && c.physical_interface_name).map((c) => c.physical_interface_name));
+  return ports.size;
+});
+
 let livePoll: ReturnType<typeof setInterval> | undefined;
 let historyPoll: ReturnType<typeof setInterval> | undefined;
+let balancerPoll: ReturnType<typeof setInterval> | undefined;
 
 watch(historyRange, loadHistory);
 
 onUnmounted(() => {
   clearInterval(livePoll);
   clearInterval(historyPoll);
+  clearInterval(balancerPoll);
 });
 
 // ---- Fase 173: reconciliacion PPPoE — EXCLUSIVA del router administrador, UN router a la vez ----
@@ -320,6 +362,13 @@ onMounted(async () => {
       void loadAlerts();
     }, 30000);
   }
+  if (isBalancer.value) {
+    await loadBalancerConnections();
+    // Cada 60s -- mismo ritmo que el scheduler de descubrimiento del
+    // backend (mikrotikBalancerDiscoveryScheduler.ts); pedir mas seguido
+    // no traeria datos mas nuevos.
+    balancerPoll = setInterval(loadBalancerConnections, 60000);
+  }
 });
 
 async function handleToggleSecret(secret: PppSecret) {
@@ -357,7 +406,7 @@ async function handleToggleSecret(secret: PppSecret) {
       <p v-if="loadError" class="mb-4 text-sm text-red-600">{{ loadError }}</p>
       <p v-else-if="loading" class="text-slate-500 text-sm mb-6">Consultando el router...</p>
 
-      <template v-else-if="!isBorderDedicated">
+      <template v-else-if="isPppoeAdmin">
         <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
           <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">RouterOS</div>
@@ -568,6 +617,98 @@ async function handleToggleSecret(secret: PppSecret) {
           Nota: el cruce automatico ONT ↔ IP (por MAC de WAN) llega cuando se valide el comando de
           "wan-info" contra la OLT real (ver Fase 4). Por ahora, la MAC se puede buscar aqui manualmente.
         </p>
+      </template>
+
+      <!-- Fase 174: conexiones WAN descubiertas — EXCLUSIVO del balanceador -->
+      <template v-else-if="isBalancer">
+        <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
+          <div class="surface p-4">
+            <div class="text-slate-500 text-xs mb-1">RouterOS</div>
+            <div class="text-lg font-semibold">{{ resource?.version ?? '—' }}</div>
+          </div>
+          <div class="surface p-4">
+            <div class="text-slate-500 text-xs mb-1">CPU</div>
+            <div class="text-lg font-semibold">{{ resource?.['cpu-load'] ?? '—' }}%</div>
+          </div>
+          <div class="surface p-4">
+            <div class="text-slate-500 text-xs mb-1">Puertos SFP en uso</div>
+            <div class="text-lg font-semibold">{{ balancerPortsInUse }}</div>
+          </div>
+          <div class="surface p-4">
+            <div class="text-slate-500 text-xs mb-1">Consumo total (conexiones activas)</div>
+            <div class="text-sm font-semibold">↓{{ formatBpsAsMbps(balancerTotalRxBps) }}</div>
+            <div class="text-sm font-semibold">↑{{ formatBpsAsMbps(balancerTotalTxBps) }}</div>
+          </div>
+        </div>
+        <p class="text-xs text-slate-500 mb-4">
+          Descubierto automáticamente desde el router (interfaces físicas SFP, MACVLAN y sesiones PPPoE-WAN) —
+          nunca se fija una cantidad de puertos ni de conexiones. El consumo total usa una sola fuente de tráfico
+          por conexión (la sesión PPPoE) — nunca se suma junto con su puerto físico ni su MACVLAN.
+        </p>
+
+        <p v-if="balancerLoadError" class="mb-4 text-sm text-red-600">{{ balancerLoadError }}</p>
+
+        <h2 class="text-lg font-semibold mb-3">Conexiones WAN activas ({{ activeBalancerConnections.length }})</h2>
+        <div class="table-shell mb-8">
+          <table class="w-full text-sm min-w-[720px]">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+              <tr>
+                <th class="text-left px-4 py-3">Puerto físico</th>
+                <th class="text-left px-4 py-3">MACVLAN</th>
+                <th class="text-left px-4 py-3">Sesión PPPoE</th>
+                <th class="text-left px-4 py-3">Usuario</th>
+                <th class="text-left px-4 py-3">Estado</th>
+                <th class="text-left px-4 py-3">Descarga</th>
+                <th class="text-left px-4 py-3">Subida</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!activeBalancerConnections.length">
+                <td colspan="7" class="px-4 py-6 text-center text-slate-500">
+                  {{ balancerLoadError ? 'No se pudo consultar.' : 'Todavía sin datos — esperando el primer descubrimiento automático.' }}
+                </td>
+              </tr>
+              <tr v-for="c in activeBalancerConnections" :key="c.id" class="border-t border-slate-200">
+                <td class="px-4 py-3 font-mono text-xs">{{ c.physical_interface_name ?? 'Pendiente de vincular' }}</td>
+                <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ c.macvlan_interface_name ?? '—' }}</td>
+                <td class="px-4 py-3 font-mono text-xs">{{ c.pppoe_interface_name }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ c.pppoe_user ?? '—' }}</td>
+                <td class="px-4 py-3">
+                  <span class="badge" :class="connectionStatusClass(c)">{{ connectionStatusLabel(c) }}</span>
+                </td>
+                <td class="px-4 py-3 font-mono text-xs">{{ c.disabled ? '—' : formatBpsAsMbps(c.latest_rx_bps) }}</td>
+                <td class="px-4 py-3 font-mono text-xs">{{ c.disabled ? '—' : formatBpsAsMbps(c.latest_tx_bps) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Requisito 7: el historico de conexiones retiradas/renombradas se conserva, nunca se borra. -->
+        <details v-if="removedBalancerConnections.length" class="surface rounded-2xl">
+          <summary class="cursor-pointer select-none p-4 text-sm font-semibold">
+            Conexiones retiradas ({{ removedBalancerConnections.length }}) — conservadas solo como historial
+          </summary>
+          <div class="table-shell p-4 pt-0">
+            <table class="w-full text-sm min-w-[560px]">
+              <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+                <tr>
+                  <th class="text-left px-4 py-3">Sesión PPPoE</th>
+                  <th class="text-left px-4 py-3">Puerto físico</th>
+                  <th class="text-left px-4 py-3">Visto por última vez</th>
+                  <th class="text-left px-4 py-3">Retirada</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in removedBalancerConnections" :key="c.id" class="border-t border-slate-200">
+                  <td class="px-4 py-3 font-mono text-xs">{{ c.pppoe_interface_name }}</td>
+                  <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ c.physical_interface_name ?? '—' }}</td>
+                  <td class="px-4 py-3 text-slate-600">{{ formatPeruDateTime(c.last_seen_at) }}</td>
+                  <td class="px-4 py-3 text-slate-600">{{ formatPeruDateTime(c.removed_at!) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
       </template>
 
       <!-- Fase 172: panel de trafico/saturación — EXCLUSIVO del borde dedicado -->

@@ -71,6 +71,24 @@ export interface MikrotikSaturationAlert {
   threshold_bps: number;
 }
 
+// ---- Fase 174: conexiones WAN descubiertas del balanceador ----
+
+export interface MikrotikBalancerConnection {
+  id: string;
+  pppoe_interface_name: string;
+  macvlan_interface_name: string | null;
+  physical_interface_name: string | null;
+  pppoe_user: string | null;
+  disabled: boolean;
+  running: boolean;
+  first_seen_at: string;
+  last_seen_at: string;
+  removed_at: string | null;
+  latest_rx_bps: number | null;
+  latest_tx_bps: number | null;
+  latest_sampled_at: string | null;
+}
+
 export interface MikrotikInterface {
   '.id': string;
   name: string;
@@ -266,6 +284,10 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<MikrotikTrafficHistoryResponse>(`/api/mikrotik-devices/${id}/traffic-history?range=${range}`);
   }
 
+  function fetchBalancerConnections(id: string) {
+    return apiFetch<MikrotikBalancerConnection[]>(`/api/mikrotik-devices/${id}/balancer/connections`);
+  }
+
   function fetchSaturationAlerts(id: string) {
     return apiFetch<MikrotikSaturationAlert[]>(`/api/mikrotik-devices/${id}/saturation-alerts`);
   }
@@ -302,6 +324,7 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     fetchInterfaces,
     fetchTrafficLive,
     fetchTrafficHistory,
+    fetchBalancerConnections,
     fetchSaturationAlerts,
     fetchReconcileReport,
     runReconcileNow,

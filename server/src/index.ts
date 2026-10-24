@@ -28,6 +28,7 @@ import { startTrafficAnalyticsScheduler } from './services/trafficAnalyticsSched
 import { startOltSyncScheduler } from './services/oltSyncScheduler';
 import { startScheduleAlertScheduler } from './services/scheduleAlertScheduler';
 import { startMikrotikBorderTrafficScheduler } from './services/mikrotikBorderTrafficScheduler';
+import { startMikrotikBalancerDiscoveryScheduler } from './services/mikrotikBalancerDiscoveryScheduler';
 
 const app = new Hono();
 
@@ -83,3 +84,4 @@ startTrafficAnalyticsScheduler();
 startOltSyncScheduler();
 startScheduleAlertScheduler();
 startMikrotikBorderTrafficScheduler();
+startMikrotikBalancerDiscoveryScheduler();
