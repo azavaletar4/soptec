@@ -5,7 +5,7 @@ import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { getLastReconcileReport, reconcileMikrotikDevice } from '../services/mikrotikReconcileService';
 import { DEFAULT_MIKROTIK_DEVICE_ROLE, isPppoeAdminRole, isValidMikrotikDeviceRole } from '../mikrotik/deviceRole';
 import { getLiveSnapshot } from '../services/mikrotikBorderTrafficService';
-import { getBalancerConnectionsSnapshot, getBalancerTrafficHistory } from '../services/mikrotikBalancerDiscoveryService';
+import { getBalancerConnectionsSnapshot, getBalancerLinkAlerts, getBalancerTrafficHistory } from '../services/mikrotikBalancerDiscoveryService';
 import { BALANCER_HISTORY_RANGES, type BalancerHistoryRange } from '../mikrotik/balancerTrafficSeries';
 
 export const mikrotikRoutes = new Hono();
@@ -452,5 +452,24 @@ mikrotikRoutes.get('/:id/balancer/traffic-history', requireRole(...STAFF_READ), 
     return c.json(result);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar el historico del balanceador' }, 500);
+  }
+});
+
+// Fase 174b: alertas de caida/recuperacion de enlaces WAN (sesiones PPPoE
+// y puertos fisicos SFP) -- requiere la migracion
+// 20261024150000_fase174_balancer_link_alerts.sql, NO aplicada todavia en
+// produccion (pendiente de autorizacion). Hasta entonces responde 500 con
+// un mensaje claro; el frontend lo muestra sin romper el resto del panel.
+mikrotikRoutes.get('/:id/balancer/link-alerts', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  if (device.device_role !== 'borde_balanceador') {
+    return c.json({ error: `"${device.host}" no esta clasificado como router balanceador` }, 400);
+  }
+  try {
+    const result = await getBalancerLinkAlerts(device.id);
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar las alertas de enlaces del balanceador' }, 500);
   }
 });

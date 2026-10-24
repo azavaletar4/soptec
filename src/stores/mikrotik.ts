@@ -112,6 +112,23 @@ export interface MikrotikBalancerConnectionsHealth {
   lastDiscoveryAt: string | null;
 }
 
+// ---- Fase 174b: alertas de caida/recuperacion de enlaces WAN ----
+
+export interface MikrotikBalancerLinkAlert {
+  id: string;
+  link_kind: 'pppoe_connection' | 'physical_port';
+  link_name: string;
+  physical_interface_name: string | null;
+  status: 'active' | 'resolved';
+  started_at: string;
+  resolved_at: string | null;
+}
+
+export interface MikrotikBalancerLinkAlertsResponse {
+  active: MikrotikBalancerLinkAlert[];
+  history: MikrotikBalancerLinkAlert[];
+}
+
 export interface MikrotikInterface {
   '.id': string;
   name: string;
@@ -318,6 +335,10 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<MikrotikBalancerTrafficHistoryResponse>(`/api/mikrotik-devices/${id}/balancer/traffic-history?${params.toString()}`);
   }
 
+  function fetchBalancerLinkAlerts(id: string) {
+    return apiFetch<MikrotikBalancerLinkAlertsResponse>(`/api/mikrotik-devices/${id}/balancer/link-alerts`);
+  }
+
   function fetchSaturationAlerts(id: string) {
     return apiFetch<MikrotikSaturationAlert[]>(`/api/mikrotik-devices/${id}/saturation-alerts`);
   }
@@ -356,6 +377,7 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     fetchTrafficHistory,
     fetchBalancerConnections,
     fetchBalancerTrafficHistory,
+    fetchBalancerLinkAlerts,
     fetchSaturationAlerts,
     fetchReconcileReport,
     runReconcileNow,

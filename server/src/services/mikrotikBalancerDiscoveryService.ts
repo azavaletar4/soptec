@@ -1,7 +1,16 @@
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { computeInterfaceDelta } from '../mikrotik/borderTraffic';
-import { diffDiscoveredConnections, isBalancerDataStale, resolveConnectionTopology, type MacvlanRaw, type PppoeClientRaw } from '../mikrotik/balancerDiscovery';
+import {
+  classifyConnectionStatus,
+  diffDiscoveredConnections,
+  isBalancerDataStale,
+  resolveConnectionTopology,
+  type MacvlanRaw,
+  type PppoeClientRaw,
+  type ResolvedConnection,
+} from '../mikrotik/balancerDiscovery';
+import { decideWanLinkAlertTransition, wanLinkAlertKey } from '../mikrotik/balancerAlerts';
 import {
   BALANCER_HISTORY_RANGES,
   bucketTicks,
@@ -50,6 +59,11 @@ interface InterfaceCountersRaw {
   type?: string;
   'rx-byte'?: string;
   'tx-byte'?: string;
+  // Fase 174b: ya venian en esta misma respuesta de /interface (sin
+  // consulta nueva al router) -- solo faltaba leerlos, para el estado del
+  // PUERTO FISICO SFP (distinto del running/disabled de la sesion PPPoE).
+  running?: string;
+  disabled?: string;
 }
 
 /**
@@ -168,6 +182,98 @@ export async function discoverAndSyncBalancerConnections(device: BalancerDeviceR
     await supabaseAdmin
       .from('mikrotik_balancer_connection_counters_state')
       .upsert({ connection_id: row.id, last_rx_bytes: curr.rx, last_tx_bytes: curr.tx }, { onConflict: 'connection_id' });
+  }
+
+  // Fase 174b (requiere la migracion de mikrotik_balancer_link_alerts,
+  // ver supabase/migrations/20261024150000_*): si la tabla todavia no
+  // existe en este entorno, se registra el error y el resto del ciclo
+  // (que YA guardo conexiones/muestras arriba) sigue intacto -- esto nunca
+  // debe poder romper el descubrimiento base.
+  const connectionIdByPppoeName = new Map((connectionRows ?? []).map((c) => [c.pppoe_interface_name, c.id]));
+  try {
+    await evaluateAndPersistBalancerLinkAlerts(device, resolved, diff.removedNames, countersByName, connectionIdByPppoeName, now);
+  } catch (e) {
+    console.error(`[mikrotik-balancer-link-alerts] error en "${device.name}":`, e instanceof Error ? e.message : e);
+  }
+}
+
+/**
+ * Evalua y persiste las alertas de caida/recuperacion de enlaces WAN --
+ * sesiones PPPoE (requisito: caida/recuperacion de la sesion) y puertos
+ * fisicos SFP (requisito: el puerto deja de/vuelve a estar operativo),
+ * SIEMPRE por separado (requisito: nunca asumir que una sesion caida
+ * implica que su puerto fisico tambien lo esta). Solo se llama tras una
+ * lectura fresca y exitosa del router (nunca con datos obsoletos).
+ */
+async function evaluateAndPersistBalancerLinkAlerts(
+  device: BalancerDeviceRow,
+  resolved: ResolvedConnection[],
+  removedPppoeNames: string[],
+  countersByName: Map<string, InterfaceCountersRaw>,
+  connectionIdByPppoeName: Map<string, string>,
+  now: Date,
+): Promise<void> {
+  const { data: activeAlertRows, error: activeErr } = await supabaseAdmin
+    .from('mikrotik_balancer_link_alerts')
+    .select('id, link_kind, link_name')
+    .eq('device_id', device.id)
+    .eq('status', 'active');
+  if (activeErr) throw new Error(activeErr.message);
+  const activeAlertIdByKey = new Map(
+    (activeAlertRows ?? []).map((a) => [wanLinkAlertKey({ kind: a.link_kind as 'pppoe_connection' | 'physical_port', name: a.link_name }), a.id as string]),
+  );
+
+  async function fire(linkKind: 'pppoe_connection' | 'physical_port', linkName: string, connectionId: string | null, physicalInterfaceName: string | null) {
+    await supabaseAdmin.from('mikrotik_balancer_link_alerts').insert({
+      device_id: device.id,
+      link_kind: linkKind,
+      link_name: linkName,
+      connection_id: connectionId,
+      physical_interface_name: physicalInterfaceName,
+      status: 'active',
+      started_at: now.toISOString(),
+    });
+  }
+  async function resolve(linkKind: 'pppoe_connection' | 'physical_port', linkName: string) {
+    const id = activeAlertIdByKey.get(wanLinkAlertKey({ kind: linkKind, name: linkName }));
+    if (!id) return;
+    await supabaseAdmin.from('mikrotik_balancer_link_alerts').update({ status: 'resolved', resolved_at: now.toISOString() }).eq('id', id);
+  }
+
+  // Sesiones PPPoE-WAN presentes este ciclo.
+  for (const conn of resolved) {
+    const status = classifyConnectionStatus(conn.disabled, conn.running);
+    const hasActive = activeAlertIdByKey.has(wanLinkAlertKey({ kind: 'pppoe_connection', name: conn.pppoeInterfaceName }));
+    const transition = decideWanLinkAlertTransition(status, hasActive);
+    if (transition.shouldFire) {
+      await fire('pppoe_connection', conn.pppoeInterfaceName, connectionIdByPppoeName.get(conn.pppoeInterfaceName) ?? null, conn.physicalInterfaceName);
+    } else if (transition.shouldResolve) {
+      await resolve('pppoe_connection', conn.pppoeInterfaceName);
+    }
+  }
+
+  // Sesiones retiradas este ciclo (ya no aparecen en `resolved`) -- si
+  // tenian una averia activa, se cierra: una linea retirada no se queda
+  // mostrada como caida para siempre (requisito 7 aplicado a alertas).
+  for (const removedName of removedPppoeNames) {
+    await resolve('pppoe_connection', removedName);
+  }
+
+  // Puertos fisicos SFP realmente en uso (los que al menos una conexion
+  // referencia este ciclo -- nunca se vigilan puertos sin ninguna conexion
+  // mapeada, mismo criterio de auto-descubrimiento que el resto de Fase 174).
+  const physicalPortNames = new Set(resolved.map((r) => r.physicalInterfaceName).filter((n): n is string => !!n));
+  for (const portName of physicalPortNames) {
+    const counters = countersByName.get(portName);
+    if (!counters) continue; // referenciado pero no visto en /interface este ciclo -- no se puede clasificar, se deja como estaba
+    const status = classifyConnectionStatus(counters.disabled === 'true', counters.running === 'true');
+    const hasActive = activeAlertIdByKey.has(wanLinkAlertKey({ kind: 'physical_port', name: portName }));
+    const transition = decideWanLinkAlertTransition(status, hasActive);
+    if (transition.shouldFire) {
+      await fire('physical_port', portName, null, portName);
+    } else if (transition.shouldResolve) {
+      await resolve('physical_port', portName);
+    }
   }
 }
 
@@ -300,4 +406,55 @@ export async function getBalancerTrafficHistory(
   const ticks = sumSamplesByTick([...samplesByConnection.values()]);
   const points = bucketTicks(ticks, bucketSeconds);
   return { range, scope: scopeLabel, connectionCount: connectionIds.length, points };
+}
+
+// ---- Fase 174b: alertas de caida/recuperacion de enlaces WAN ----
+// Requiere la migracion 20261024150000_fase174_balancer_link_alerts.sql
+// (tabla mikrotik_balancer_link_alerts) -- preparada pero NO aplicada
+// todavia en produccion (pendiente de autorizacion). Hasta entonces, estas
+// funciones fallan con un error claro ("relation ... does not exist") que
+// la ruta/el frontend manejan sin romper el resto del panel.
+
+export interface BalancerLinkAlertRow {
+  id: string;
+  link_kind: 'pppoe_connection' | 'physical_port';
+  link_name: string;
+  physical_interface_name: string | null;
+  status: 'active' | 'resolved';
+  started_at: string;
+  resolved_at: string | null;
+}
+
+export interface BalancerLinkAlertsResult {
+  active: BalancerLinkAlertRow[];
+  // Resueltas recientes, mas nuevas primero -- nunca se borran (requisito:
+  // conservar historial de caida y recuperacion), solo se limita cuanto se
+  // manda de una vez al panel.
+  history: BalancerLinkAlertRow[];
+}
+
+const LINK_ALERT_HISTORY_LIMIT = 100;
+
+/** Solo lectura: alertas activas + historial reciente de enlaces WAN (sesiones PPPoE y puertos fisicos). */
+export async function getBalancerLinkAlerts(deviceId: string): Promise<BalancerLinkAlertsResult> {
+  const columns = 'id, link_kind, link_name, physical_interface_name, status, started_at, resolved_at';
+
+  const { data: active, error: activeErr } = await supabaseAdmin
+    .from('mikrotik_balancer_link_alerts')
+    .select(columns)
+    .eq('device_id', deviceId)
+    .eq('status', 'active')
+    .order('started_at', { ascending: false });
+  if (activeErr) throw new Error(activeErr.message);
+
+  const { data: history, error: historyErr } = await supabaseAdmin
+    .from('mikrotik_balancer_link_alerts')
+    .select(columns)
+    .eq('device_id', deviceId)
+    .eq('status', 'resolved')
+    .order('resolved_at', { ascending: false })
+    .limit(LINK_ALERT_HISTORY_LIMIT);
+  if (historyErr) throw new Error(historyErr.message);
+
+  return { active: (active ?? []) as BalancerLinkAlertRow[], history: (history ?? []) as BalancerLinkAlertRow[] };
 }

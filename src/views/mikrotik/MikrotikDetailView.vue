@@ -10,6 +10,7 @@ import {
   type MikrotikInterface,
   type MikrotikBalancerConnection,
   type MikrotikBalancerHistoryPoint,
+  type MikrotikBalancerLinkAlert,
   type MikrotikSaturationAlert,
   type MikrotikTrafficHistoryPoint,
   type MikrotikTrafficLive,
@@ -22,6 +23,7 @@ import {
 import { MIKROTIK_DEVICE_ROLE_LABELS, isPppoeAdminRole } from '@/lib/mikrotikDeviceRole';
 import { formatBpsAsMbps, splitMbpsForDisplay, toMbps, usageBarClass, usagePercent, usageTextClass, type CapacityUnit } from '@/lib/mikrotikBorderTraffic';
 import { formatRouterUptime, summarizeMemoryUsage, summarizeWanConnectionCounts } from '@/lib/mikrotikBalancerHealth';
+import { formatWanLinkAlertDuration, wanLinkAlertBadgeClass, wanLinkAlertLabel } from '@/lib/mikrotikBalancerLinkAlerts';
 import { formatPeruDateTime, formatRelativeTime } from '@/lib/oltAlertPresentation';
 import { useAuthStore } from '@/stores/auth';
 import { useAsyncAction } from '@/composables/useAsyncAction';
@@ -445,10 +447,33 @@ const filteredBalancerConnections = computed(() =>
   }),
 );
 
+// ---- Fase 174b: alertas de caida/recuperacion de enlaces WAN ----
+// Requiere la migracion de mikrotik_balancer_link_alerts -- si todavia no
+// esta aplicada, la ruta responde 500 y se muestra un aviso neutro (nunca
+// un error alarmante) sin romper el resto del panel ya funcionando.
+const balancerActiveLinkAlerts = ref<MikrotikBalancerLinkAlert[]>([]);
+const balancerLinkAlertHistory = ref<MikrotikBalancerLinkAlert[]>([]);
+const balancerLinkAlertsAvailable = ref(true);
+const showLinkAlertHistory = ref(false);
+
+async function loadBalancerLinkAlerts() {
+  try {
+    const res = await mikrotikStore.fetchBalancerLinkAlerts(deviceId.value);
+    balancerActiveLinkAlerts.value = res.active;
+    balancerLinkAlertHistory.value = res.history;
+    balancerLinkAlertsAvailable.value = true;
+  } catch {
+    // Todavia no se aplico la migracion de esta tabla -- se oculta la
+    // seccion en vez de mostrar un error (ver aviso de "Entrega" del pedido).
+    balancerLinkAlertsAvailable.value = false;
+  }
+}
+
 let livePoll: ReturnType<typeof setInterval> | undefined;
 let historyPoll: ReturnType<typeof setInterval> | undefined;
 let balancerPoll: ReturnType<typeof setInterval> | undefined;
 let balancerHistoryPoll: ReturnType<typeof setInterval> | undefined;
+let balancerLinkAlertsPoll: ReturnType<typeof setInterval> | undefined;
 
 watch(historyRange, loadHistory);
 
@@ -457,6 +482,7 @@ onUnmounted(() => {
   clearInterval(historyPoll);
   clearInterval(balancerPoll);
   clearInterval(balancerHistoryPoll);
+  clearInterval(balancerLinkAlertsPoll);
 });
 
 // ---- Fase 173: reconciliacion PPPoE — EXCLUSIVA del router administrador, UN router a la vez ----
@@ -502,12 +528,13 @@ onMounted(async () => {
     }, 30000);
   }
   if (isBalancer.value) {
-    await Promise.all([loadBalancerConnections(), loadBalancerHistory()]);
+    await Promise.all([loadBalancerConnections(), loadBalancerHistory(), loadBalancerLinkAlerts()]);
     // Cada 60s -- mismo ritmo que el scheduler de descubrimiento del
     // backend (mikrotikBalancerDiscoveryScheduler.ts); pedir mas seguido
     // no traeria datos mas nuevos.
     balancerPoll = setInterval(loadBalancerConnections, 60000);
     balancerHistoryPoll = setInterval(loadBalancerHistory, 60000);
+    balancerLinkAlertsPoll = setInterval(loadBalancerLinkAlerts, 60000);
   }
 });
 
@@ -808,6 +835,60 @@ async function handleToggleSecret(secret: PppSecret) {
         </p>
 
         <p v-if="balancerLoadError" class="mb-4 text-sm text-red-600">{{ balancerLoadError }}</p>
+
+        <!-- Fase 174b: alertas de caida/recuperacion de enlaces WAN -- encima del grafico principal, inmediatamente debajo de los indicadores -->
+        <div v-if="balancerLinkAlertsAvailable" class="mb-8">
+          <h3 class="text-sm font-semibold mb-3">Alertas de enlaces</h3>
+          <div v-if="!balancerActiveLinkAlerts.length" class="surface p-4 rounded-2xl text-sm text-slate-500">
+            Sin alertas activas — todos los enlaces WAN con datos recientes están como se espera.
+          </div>
+          <ul v-else class="space-y-2 mb-3">
+            <li v-for="a in balancerActiveLinkAlerts" :key="a.id" class="surface p-4 rounded-2xl border-l-4 border-red-500 bg-red-500/5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span class="badge" :class="wanLinkAlertBadgeClass(a.status)">{{ wanLinkAlertLabel(a.link_kind, a.status) }}</span>
+                  <span class="ml-2 font-mono text-sm">{{ a.link_name }}</span>
+                  <span v-if="a.link_kind === 'pppoe_connection' && a.physical_interface_name" class="ml-1 text-xs text-slate-500">({{ a.physical_interface_name }})</span>
+                </div>
+                <div class="text-xs text-slate-500 text-right">
+                  Desde {{ formatPeruDateTime(a.started_at) }} ({{ formatRelativeTime(a.started_at, nowMs) }}) —
+                  lleva {{ formatWanLinkAlertDuration(a.started_at, null, nowMs) }}
+                </div>
+              </div>
+            </li>
+          </ul>
+
+          <button class="text-xs text-sky-600 hover:underline" @click="showLinkAlertHistory = !showLinkAlertHistory">
+            {{ showLinkAlertHistory ? 'Ocultar' : 'Ver' }} historial de alertas ({{ balancerLinkAlertHistory.length }})
+          </button>
+          <div v-if="showLinkAlertHistory" class="table-shell mt-3">
+            <table class="w-full text-sm min-w-[640px]">
+              <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+                <tr>
+                  <th class="text-left px-4 py-3">Enlace</th>
+                  <th class="text-left px-4 py-3">Puerto</th>
+                  <th class="text-left px-4 py-3">Evento</th>
+                  <th class="text-left px-4 py-3">Detectado</th>
+                  <th class="text-left px-4 py-3">Recuperado</th>
+                  <th class="text-left px-4 py-3">Duración</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!balancerLinkAlertHistory.length">
+                  <td colspan="6" class="px-4 py-6 text-center text-slate-500">Todavía sin historial de alertas resueltas.</td>
+                </tr>
+                <tr v-for="a in balancerLinkAlertHistory" :key="a.id" class="border-t border-slate-200">
+                  <td class="px-4 py-3 font-mono text-xs">{{ a.link_name }}</td>
+                  <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ a.physical_interface_name ?? '—' }}</td>
+                  <td class="px-4 py-3">{{ wanLinkAlertLabel(a.link_kind, 'resolved') }}</td>
+                  <td class="px-4 py-3 text-slate-600">{{ formatPeruDateTime(a.started_at) }}</td>
+                  <td class="px-4 py-3 text-slate-600">{{ a.resolved_at ? formatPeruDateTime(a.resolved_at) : '—' }}</td>
+                  <td class="px-4 py-3 text-slate-600">{{ formatWanLinkAlertDuration(a.started_at, a.resolved_at, nowMs) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
 
         <!-- Gráfico principal: suma de las conexiones activas segun el alcance elegido (total / un puerto / una sesión) -->
         <div class="surface p-4 rounded-2xl mb-8">
