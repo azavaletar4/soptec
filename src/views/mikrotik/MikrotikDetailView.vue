@@ -1,22 +1,31 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import VueApexCharts from 'vue3-apexcharts';
 import {
   useMikrotikStore,
   type DhcpLease,
   type IpAddress,
   type MikrotikInterface,
+  type MikrotikSaturationAlert,
+  type MikrotikTrafficHistoryPoint,
+  type MikrotikTrafficLive,
   type PppActive,
   type PppSecret,
   type RouterResource,
+  type TrafficHistoryRange,
 } from '@/stores/mikrotik';
 import { MIKROTIK_DEVICE_ROLE_LABELS, isPppoeAdminRole } from '@/lib/mikrotikDeviceRole';
+import { formatBpsAsMbps, splitMbpsForDisplay, toMbps, usageBarClass, usagePercent, usageTextClass, type CapacityUnit } from '@/lib/mikrotikBorderTraffic';
+import { formatPeruDateTime, formatRelativeTime } from '@/lib/oltAlertPresentation';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 
 const route = useRoute();
 const router = useRouter();
 const mikrotikStore = useMikrotikStore();
+const auth = useAuthStore();
 
 const deviceId = computed(() => route.params.id as string);
 const device = computed(() => mikrotikStore.devices.find((d) => d.id === deviceId.value));
@@ -24,6 +33,11 @@ const device = computed(() => mikrotikStore.devices.find((d) => d.id === deviceI
 // se muestra solo lo que de verdad aplica (conexion, interfaces, trafico,
 // CPU, memoria), nunca una sección PPPoE/DHCP vacía o que de error.
 const isPppoeAdmin = computed(() => isPppoeAdminRole(device.value?.device_role));
+// Fase 169: el panel de trafico/saturación es EXCLUSIVO del borde dedicado
+// (CCR2004 Fiberlux) — el balanceador queda exactamente como lo dejó la
+// Fase 168 (sin tocar), a propósito.
+const isBorderDedicated = computed(() => device.value?.device_role === 'borde_dedicado');
+const canConfigureBorder = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
 const loading = ref(true);
 const loadError = ref<string | null>(null);
@@ -90,9 +104,182 @@ async function loadAll() {
   }
 }
 
+// ---- Fase 169: trafico/saturación del borde dedicado ----
+
+const live = ref<MikrotikTrafficLive | null>(null);
+const historyRange = ref<TrafficHistoryRange>('1h');
+const historyPoints = ref<MikrotikTrafficHistoryPoint[]>([]);
+const historyLoading = ref(false);
+const alerts = ref<MikrotikSaturationAlert[]>([]);
+const showTechInfo = ref(false);
+
+const HISTORY_RANGE_LABEL: Record<TrafficHistoryRange, string> = {
+  '15m': 'Últimos 15 min',
+  '1h': 'Última hora',
+  '24h': 'Últimas 24 horas',
+  '7d': 'Últimos 7 días',
+};
+
+const nowMs = ref(Date.now());
+
+async function loadLive() {
+  nowMs.value = Date.now();
+  try {
+    live.value = await mikrotikStore.fetchTrafficLive(deviceId.value);
+  } catch {
+    // Silencioso: no tumbar el panel por un fallo puntual del sondeo en vivo.
+  }
+}
+
+const lastReadLabel = computed(() => {
+  if (!live.value?.fetchedAt) return 'Sin lecturas todavía';
+  return `${formatPeruDateTime(live.value.fetchedAt)} (${formatRelativeTime(live.value.fetchedAt, nowMs.value)})`;
+});
+
+async function loadHistory() {
+  historyLoading.value = true;
+  try {
+    const res = await mikrotikStore.fetchTrafficHistory(deviceId.value, historyRange.value);
+    historyPoints.value = res.points;
+  } catch {
+    // Silencioso: el resto del panel (en vivo, config) sigue funcionando sin el historico.
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+async function loadAlerts() {
+  try {
+    alerts.value = await mikrotikStore.fetchSaturationAlerts(deviceId.value);
+  } catch {
+    // Silencioso.
+  }
+}
+
+const chartSeries = computed(() => [
+  { name: 'Descarga', data: historyPoints.value.map((p) => Math.round(p.avg_rx_bps ?? 0)) },
+  { name: 'Subida', data: historyPoints.value.map((p) => Math.round(p.avg_tx_bps ?? 0)) },
+]);
+const chartOptions = computed(() => ({
+  chart: { type: 'area' as const, toolbar: { show: false }, foreColor: '#64748b', background: 'transparent', animations: { speed: 300 } },
+  colors: ['#0ea5e9', '#8b5cf6'],
+  dataLabels: { enabled: false },
+  stroke: { curve: 'smooth' as const, width: 2 },
+  fill: { type: 'gradient', gradient: { opacityFrom: 0.3, opacityTo: 0.02, stops: [0, 90, 100] } },
+  grid: { borderColor: '#e2e8f0', strokeDashArray: 4 },
+  xaxis: {
+    type: 'datetime' as const,
+    categories: historyPoints.value.map((p) => new Date(p.bucket_start).getTime()),
+    labels: { datetimeUTC: false },
+  },
+  yaxis: { labels: { formatter: (v: number) => formatBpsAsMbps(v) } },
+  tooltip: { theme: 'light' as const, x: { format: 'dd MMM HH:mm' }, y: { formatter: (v: number) => formatBpsAsMbps(v) } },
+  legend: { show: true, position: 'top' as const, horizontalAlign: 'left' as const },
+}));
+
+const peakDownloadBps = computed(() => Math.max(0, ...historyPoints.value.map((p) => p.max_rx_bps ?? 0)));
+const peakUploadBps = computed(() => Math.max(0, ...historyPoints.value.map((p) => p.max_tx_bps ?? 0)));
+
+const activeAlerts = computed(() => alerts.value.filter((a) => a.status === 'active'));
+const recentlyResolvedAlerts = computed(() => alerts.value.filter((a) => a.status === 'resolved').slice(0, 3));
+const DIRECTION_LABEL = { download: 'Descarga', upload: 'Subida' } as const;
+
+const linkStatusLabel = computed(() => {
+  switch (live.value?.status) {
+    case 'ok':
+      return live.value.monitoredDisabled ? 'Interfaz deshabilitada' : live.value.monitoredRunning ? 'En línea' : 'Sin conexión';
+    case 'offline':
+      return 'Sin respuesta del router';
+    case 'not_configured':
+      return 'Pendiente de configurar';
+    case 'warming_up':
+      return 'Iniciando monitoreo...';
+    default:
+      return 'Consultando...';
+  }
+});
+const linkStatusClass = computed(() => {
+  if (live.value?.status === 'ok' && live.value.monitoredRunning && !live.value.monitoredDisabled) return 'bg-emerald-500/15 text-emerald-700';
+  if (live.value?.status === 'ok') return 'bg-amber-500/15 text-amber-700';
+  if (live.value?.status === 'offline') return 'bg-red-500/15 text-red-600';
+  return 'bg-slate-500/15 text-slate-600';
+});
+
+const downloadPct = computed(() => usagePercent(live.value?.rxBps, device.value?.capacity_download_mbps ?? 0));
+const uploadPct = computed(() => usagePercent(live.value?.txBps, device.value?.capacity_upload_mbps ?? 0));
+
+// ---- Configuración (solo ADMIN/SUPERADMIN) — nunca toca el router, solo metadatos en Supabase ----
+
+const configForm = reactive({
+  monitored_interface_name: '',
+  uplink_interface_name: '',
+  download_value: 500,
+  download_unit: 'Mbps' as CapacityUnit,
+  upload_value: 500,
+  upload_unit: 'Mbps' as CapacityUnit,
+});
+const configSaving = ref(false);
+const configError = ref<string | null>(null);
+const configSaved = ref(false);
+
+function resetConfigForm() {
+  if (!device.value) return;
+  const dl = splitMbpsForDisplay(device.value.capacity_download_mbps);
+  const ul = splitMbpsForDisplay(device.value.capacity_upload_mbps);
+  configForm.monitored_interface_name = device.value.monitored_interface_name ?? '';
+  configForm.uplink_interface_name = device.value.uplink_interface_name ?? '';
+  configForm.download_value = dl.value;
+  configForm.download_unit = dl.unit;
+  configForm.upload_value = ul.value;
+  configForm.upload_unit = ul.unit;
+}
+
+async function handleSaveBorderConfig() {
+  if (!device.value) return;
+  configSaving.value = true;
+  configError.value = null;
+  configSaved.value = false;
+  try {
+    await mikrotikStore.updateDevice(device.value.id, {
+      monitored_interface_name: configForm.monitored_interface_name || null,
+      uplink_interface_name: configForm.uplink_interface_name || null,
+      capacity_download_mbps: toMbps(configForm.download_value, configForm.download_unit),
+      capacity_upload_mbps: toMbps(configForm.upload_value, configForm.upload_unit),
+    });
+    configSaved.value = true;
+    await Promise.all([loadLive(), loadHistory(), loadAlerts()]);
+  } catch (e) {
+    configError.value = getErrorMessage(e, 'Error al guardar la configuración');
+  } finally {
+    configSaving.value = false;
+  }
+}
+
+let livePoll: ReturnType<typeof setInterval> | undefined;
+let historyPoll: ReturnType<typeof setInterval> | undefined;
+
+watch(historyRange, loadHistory);
+
+onUnmounted(() => {
+  clearInterval(livePoll);
+  clearInterval(historyPoll);
+});
+
 onMounted(async () => {
   if (!mikrotikStore.devices.length) await mikrotikStore.fetchDevices();
   await loadAll();
+  if (isBorderDedicated.value) {
+    resetConfigForm();
+    await Promise.all([loadLive(), loadHistory(), loadAlerts()]);
+    // Un solo sondeo en vivo por pestaña contra la CACHE del backend (nunca
+    // contra el router directo) -- varios admins con el panel abierto no
+    // multiplican las consultas reales al CCR2004.
+    livePoll = setInterval(loadLive, 5000);
+    historyPoll = setInterval(() => {
+      void loadHistory();
+      void loadAlerts();
+    }, 30000);
+  }
 });
 
 async function handleToggleSecret(secret: PppSecret) {
@@ -130,7 +317,7 @@ async function handleToggleSecret(secret: PppSecret) {
       <p v-if="loadError" class="mb-4 text-sm text-red-600">{{ loadError }}</p>
       <p v-else-if="loading" class="text-slate-500 text-sm mb-6">Consultando el router...</p>
 
-      <template v-else>
+      <template v-else-if="!isBorderDedicated">
         <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
           <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">RouterOS</div>
@@ -300,6 +487,214 @@ async function handleToggleSecret(secret: PppSecret) {
         <p class="text-xs text-slate-500 mt-3">
           Nota: el cruce automatico ONT ↔ IP (por MAC de WAN) llega cuando se valide el comando de
           "wan-info" contra la OLT real (ver Fase 4). Por ahora, la MAC se puede buscar aqui manualmente.
+        </p>
+      </template>
+
+      <!-- Fase 169: panel de trafico/saturación — EXCLUSIVO del borde dedicado -->
+      <template v-else>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-6 text-sm">
+          <span class="badge" :class="linkStatusClass">{{ linkStatusLabel }}</span>
+          <span class="text-slate-500">RouterOS {{ live?.version ?? resource?.version ?? '—' }}</span>
+          <span class="text-slate-500">Última lectura exitosa: {{ lastReadLabel }}</span>
+        </div>
+
+        <!-- Alertas de saturación -->
+        <div v-if="activeAlerts.length" class="surface p-4 mb-6 border-l-4 border-red-500 bg-red-500/5">
+          <h3 class="text-sm font-semibold text-red-700 mb-2">⚠ Enlace saturado</h3>
+          <ul class="space-y-1 text-sm text-red-700">
+            <li v-for="a in activeAlerts" :key="a.id">
+              {{ DIRECTION_LABEL[a.direction] }} sobre el 85% desde {{ formatPeruDateTime(a.started_at) }} ({{ formatRelativeTime(a.started_at, nowMs) }}) —
+              pico {{ formatBpsAsMbps(a.peak_bps) }} de un límite de {{ formatBpsAsMbps(a.threshold_bps) }}.
+            </li>
+          </ul>
+        </div>
+        <div v-else-if="recentlyResolvedAlerts.length" class="surface p-4 mb-6 border-l-4 border-emerald-500 bg-emerald-500/5 text-sm text-emerald-700">
+          Recuperado — {{ DIRECTION_LABEL[recentlyResolvedAlerts[0].direction] }} volvió a estar por debajo del 85% el
+          {{ formatPeruDateTime(recentlyResolvedAlerts[0].resolved_at!) }}.
+        </div>
+
+        <!-- Indicadores principales -->
+        <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
+          <div class="surface p-4 rounded-2xl">
+            <div class="text-slate-500 text-xs mb-1">↓ Descarga actual</div>
+            <div class="text-2xl font-semibold" :class="usageTextClass(downloadPct)">{{ formatBpsAsMbps(live?.rxBps) }}</div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 mb-1">
+              <div class="h-1.5 rounded-full transition-all" :class="usageBarClass(downloadPct)" :style="{ width: `${Math.min(100, downloadPct)}%` }"></div>
+            </div>
+            <div class="text-[11px] text-slate-500">{{ downloadPct }}% de {{ device.capacity_download_mbps }} Mbps contratados</div>
+          </div>
+          <div class="surface p-4 rounded-2xl">
+            <div class="text-slate-500 text-xs mb-1">↑ Subida actual</div>
+            <div class="text-2xl font-semibold" :class="usageTextClass(uploadPct)">{{ formatBpsAsMbps(live?.txBps) }}</div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 mb-1">
+              <div class="h-1.5 rounded-full transition-all" :class="usageBarClass(uploadPct)" :style="{ width: `${Math.min(100, uploadPct)}%` }"></div>
+            </div>
+            <div class="text-[11px] text-slate-500">{{ uploadPct }}% de {{ device.capacity_upload_mbps }} Mbps contratados</div>
+          </div>
+          <div class="surface p-4 rounded-2xl">
+            <div class="text-slate-500 text-xs mb-1">Pico — {{ HISTORY_RANGE_LABEL[historyRange] }}</div>
+            <div class="text-lg font-semibold">↓{{ formatBpsAsMbps(peakDownloadBps) }}</div>
+            <div class="text-lg font-semibold">↑{{ formatBpsAsMbps(peakUploadBps) }}</div>
+          </div>
+          <div class="surface p-4 rounded-2xl">
+            <div class="text-slate-500 text-xs mb-1">CPU / Memoria / Uptime</div>
+            <div class="text-lg font-semibold">{{ live?.cpuLoadPercent ?? resource?.['cpu-load'] ?? '—' }}%</div>
+            <div class="text-[11px] text-slate-500">{{ live?.uptime ?? resource?.uptime ?? '—' }}</div>
+          </div>
+        </div>
+
+        <!-- Gráfico principal -->
+        <div class="surface p-4 rounded-2xl mb-8">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 class="text-sm font-semibold">Tráfico de "{{ device.monitored_interface_name ?? 'interfaz sin configurar' }}" (entrada del proveedor)</h3>
+            <div class="flex gap-1">
+              <button
+                v-for="r in (['15m', '1h', '24h', '7d'] as const)"
+                :key="r"
+                class="text-xs px-2.5 py-1 rounded-full"
+                :class="historyRange === r ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                @click="historyRange = r"
+              >
+                {{ HISTORY_RANGE_LABEL[r] }}
+              </button>
+            </div>
+          </div>
+          <p v-if="!device.monitored_interface_name" class="text-sm text-slate-500">
+            Todavía no se eligió qué interfaz monitorear — configúralo abajo para empezar a ver datos.
+          </p>
+          <p v-else-if="historyLoading && !historyPoints.length" class="text-sm text-slate-500">Cargando historial...</p>
+          <p v-else-if="!historyPoints.length" class="text-sm text-slate-500">
+            Sin datos todavía para este rango — el monitoreo recién empieza a acumular historial desde ahora.
+          </p>
+          <VueApexCharts v-else type="area" height="280" :options="chartOptions" :series="chartSeries" />
+        </div>
+
+        <!-- Configuración (ADMIN/SUPERADMIN) -->
+        <div class="surface p-4 rounded-2xl mb-8">
+          <h3 class="text-sm font-semibold mb-3">Configuración de monitoreo</h3>
+          <p class="text-xs text-slate-500 mb-4">
+            Solo para estadísticas y alertas de este panel — nunca cambia la configuración real del router (VLANs, rutas, velocidades ni queues).
+          </p>
+          <template v-if="canConfigureBorder">
+            <div class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Interfaz de entrada (proveedor)</label>
+                <select v-model="configForm.monitored_interface_name" class="field-input">
+                  <option value="">Sin elegir</option>
+                  <option v-for="i in interfaces" :key="i['.id']" :value="i.name">{{ i.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Interfaz de salida (hacia administrador) — solo etiqueta</label>
+                <select v-model="configForm.uplink_interface_name" class="field-input">
+                  <option value="">Sin elegir</option>
+                  <option v-for="i in interfaces" :key="i['.id']" :value="i.name">{{ i.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Capacidad de descarga contratada</label>
+                <div class="flex gap-2">
+                  <input v-model.number="configForm.download_value" type="number" min="1" step="1" class="field-input" />
+                  <select v-model="configForm.download_unit" class="field-input w-28">
+                    <option value="Mbps">Mbps</option>
+                    <option value="Gbps">Gbps</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs text-slate-600 mb-1">Capacidad de subida contratada</label>
+                <div class="flex gap-2">
+                  <input v-model.number="configForm.upload_value" type="number" min="1" step="1" class="field-input" />
+                  <select v-model="configForm.upload_unit" class="field-input w-28">
+                    <option value="Mbps">Mbps</option>
+                    <option value="Gbps">Gbps</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <p v-if="configError" class="text-sm text-red-600 mb-3">{{ configError }}</p>
+            <p v-if="configSaved" class="text-sm text-emerald-600 mb-3">Configuración guardada.</p>
+            <button class="btn-primary text-sm" :disabled="configSaving" @click="handleSaveBorderConfig">
+              {{ configSaving ? 'Guardando...' : 'Guardar configuración' }}
+            </button>
+          </template>
+          <p v-else class="text-sm text-slate-500">
+            Capacidad contratada: ↓{{ device.capacity_download_mbps }} Mbps / ↑{{ device.capacity_upload_mbps }} Mbps.
+            Solo un administrador puede modificar esta configuración.
+          </p>
+        </div>
+
+        <!-- Información técnica (colapsable) -->
+        <details class="surface rounded-2xl" :open="showTechInfo" @toggle="showTechInfo = ($event.target as HTMLDetailsElement).open">
+          <summary class="cursor-pointer select-none p-4 text-sm font-semibold">Información técnica</summary>
+          <div class="p-4 pt-0">
+            <h4 class="text-sm font-semibold mb-3">Interfaces ({{ interfaces.length }})</h4>
+            <div class="table-shell mb-6">
+              <table class="w-full text-sm min-w-[620px]">
+                <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+                  <tr>
+                    <th class="text-left px-4 py-3">Nombre</th>
+                    <th class="text-left px-4 py-3">Rol</th>
+                    <th class="text-left px-4 py-3">Estado</th>
+                    <th class="text-left px-4 py-3">Descarga (RX)</th>
+                    <th class="text-left px-4 py-3">Subida (TX)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!interfaces.length">
+                    <td colspan="5" class="px-4 py-6 text-center text-slate-500">Sin interfaces.</td>
+                  </tr>
+                  <tr v-for="i in interfaces" :key="i['.id']" class="border-t border-slate-200">
+                    <td class="px-4 py-3 font-medium">{{ i.name }}</td>
+                    <td class="px-4 py-3">
+                      <span v-if="i.name === device.monitored_interface_name" class="badge bg-sky-500/15 text-sky-700">Entrada del proveedor</span>
+                      <span v-else-if="i.name === device.uplink_interface_name" class="badge bg-violet-500/15 text-violet-700">Salida hacia administrador</span>
+                      <span v-else class="text-slate-400">—</span>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class="badge" :class="i.running === 'true' ? 'bg-green-500/15 text-green-600' : 'bg-slate-500/15 text-slate-600'">
+                        {{ i.disabled === 'true' ? 'Deshabilitada' : (i.running === 'true' ? 'Conectada' : 'Sin conexion') }}
+                      </span>
+                    </td>
+                    <td class="px-4 py-3 font-mono text-xs">{{ formatBytes(i['rx-byte']) }}</td>
+                    <td class="px-4 py-3 font-mono text-xs">{{ formatBytes(i['tx-byte']) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4 class="text-sm font-semibold mb-3">Direcciones IP del router ({{ ipAddresses.length }})</h4>
+            <div class="table-shell">
+              <table class="w-full text-sm min-w-[480px]">
+                <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+                  <tr>
+                    <th class="text-left px-4 py-3">IP / Red</th>
+                    <th class="text-left px-4 py-3">Interfaz</th>
+                    <th class="text-left px-4 py-3">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!ipAddresses.length">
+                    <td colspan="3" class="px-4 py-6 text-center text-slate-500">Sin direcciones IP configuradas.</td>
+                  </tr>
+                  <tr v-for="ip in ipAddresses" :key="ip['.id']" class="border-t border-slate-200">
+                    <td class="px-4 py-3 font-mono text-xs">{{ ip.address }}</td>
+                    <td class="px-4 py-3 text-slate-600">{{ ip.interface }}</td>
+                    <td class="px-4 py-3">
+                      <span class="badge" :class="ip.disabled === 'true' ? 'bg-slate-500/15 text-slate-600' : 'bg-green-500/15 text-green-600'">
+                        {{ ip.disabled === 'true' ? 'Deshabilitada' : 'Activa' }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <p class="text-xs text-slate-500 mt-4">
+          El servicio REST de este router usa HTTP sin cifrar (puerto 80) — recomendado restringir su acceso solo al
+          servidor del panel y planificar HTTPS como mejora independiente (ver sección de seguridad, Fase 169).
         </p>
       </template>
     </template>
