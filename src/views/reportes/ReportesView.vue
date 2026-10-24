@@ -299,6 +299,7 @@ onMounted(loadReports);
       </div>
 
       <h3 class="text-sm font-semibold mb-3">Ranking de técnicos (por puntos en el periodo)</h3>
+      <p class="text-xs text-slate-500 mb-3">Hasta octubre de 2026: cálculo histórico de prueba. Desde noviembre: puntos confirmados por administración, por fecha de confirmación y cuadrilla revisada. Los demás conteos conservan su fecha de creación.</p>
       <div class="table-shell mb-6">
         <table class="w-full text-sm">
           <thead class="bg-slate-100 text-slate-600 text-xs uppercase">

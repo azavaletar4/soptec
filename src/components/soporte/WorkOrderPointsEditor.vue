@@ -1,22 +1,54 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onScopeDispose } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { supabase } from '@/lib/supabase';
 import { getErrorMessage } from '@/lib/errors';
-import { pointsAreEditable, requireWorkOrderPoints } from '@/lib/workOrderPoints';
+import { pointsAreEditable, requireWorkOrderPoints, type WorkOrderPointReview, type PointConfirmation } from '@/lib/workOrderPoints';
 import type { JobType } from '@/types/domain';
 
 const props = defineProps<{ jobType: JobType; jobId: string; status: string; points: number | null }>();
 const emit = defineEmits<{ saved: [points: number] }>();
 const auth = useAuthStore();
-const allowed = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? '') && pointsAreEditable(props.status));
+const isAdmin = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? ''));
+const review = ref<WorkOrderPointReview | null>(null);
+const reviewLoading = ref(false);
+const reviewError = ref('');
+const currentPoints = computed(() => review.value ? review.value.points : props.points);
+let reviewGeneration = 0;
+const allowed = computed(() => isAdmin.value && !reviewLoading.value && !!review.value && !review.value.confirmation &&
+  !review.value.historical && (pointsAreEditable(review.value.status) || review.value.finished));
+const canConfirm = computed(() => isAdmin.value && !reviewLoading.value && !!review.value?.finished &&
+  !review.value.confirmation && !!review.value.technicalCompletedAt && !!review.value.crew.length);
+const showConfirmation = ref(false);
+const explicitlyConfirmed = ref(false);
 const draft = ref<number | ''>('');
 const reason = ref('');
 const saving = ref(false);
 const error = ref('');
 const history = ref<{ id: string; old_points: number | null; new_points: number; changed_by: string; changed_at: string; reason: string }[]>([]);
 const historyError = ref('');
+let historyGeneration = 0;
+onScopeDispose(() => { reviewGeneration++; historyGeneration++; });
+async function loadReview() {
+  const generation = ++reviewGeneration;
+  review.value = null;
+  reviewError.value = '';
+  showConfirmation.value = false;
+  explicitlyConfirmed.value = false;
+  if (!isAdmin.value) { reviewLoading.value = false; return; }
+  reviewLoading.value = true;
+  try {
+    const { data, error: err } = await supabase.rpc('work_order_point_review', { p_job_type: props.jobType, p_job_id: props.jobId });
+    if (err) throw err;
+    if (generation !== reviewGeneration) return;
+    review.value = data as unknown as WorkOrderPointReview;
+    draft.value = review.value.points ?? '';
+    reason.value = '';
+  } catch (e) { if (generation === reviewGeneration) reviewError.value = getErrorMessage(e, 'No se pudo revisar la orden'); }
+  finally { if (generation === reviewGeneration) reviewLoading.value = false; }
+}
 async function loadHistory() {
+  const generation = ++historyGeneration;
   history.value = [];
   historyError.value = '';
   if (!['ADMIN', 'SUPERADMIN'].includes(auth.role ?? '')) return;
@@ -24,13 +56,16 @@ async function loadHistory() {
     .select('id,old_points,new_points,changed_by,changed_at,reason')
     .eq('job_type', props.jobType).eq('job_id', props.jobId)
     .order('changed_at', { ascending: false }).limit(20);
+  if (generation !== historyGeneration || !isAdmin.value) return;
   if (err) historyError.value = getErrorMessage(err, 'No se pudo cargar el historial');
   else history.value = data ?? [];
 }
-watch(() => [props.jobId, props.jobType, auth.role], () => { void loadHistory(); }, { immediate: true });
-watch(() => [props.jobId, props.points], () => { draft.value = props.points ?? ''; reason.value = ''; }, { immediate: true });
+watch(() => [props.jobId, props.jobType, auth.role, auth.user?.id], () => { void loadHistory(); }, { immediate: true });
+watch(() => [props.jobId, props.jobType, props.status, props.points, auth.role, auth.user?.id], () => { void loadReview(); }, { immediate: true });
+watch([draft, reason], () => { explicitlyConfirmed.value = false; });
 async function save() {
   if (!allowed.value || saving.value) return;
+  const generation = reviewGeneration;
   error.value = '';
   try {
     const points = requireWorkOrderPoints(draft.value, props.jobType === 'ticket');
@@ -41,17 +76,52 @@ async function save() {
       p_expected_points: props.points, p_reason: reason.value.trim(),
     });
     if (err) throw err;
+    if (generation !== reviewGeneration) return;
     emit('saved', points);
     reason.value = '';
-    await loadHistory();
-  } catch (e) { error.value = getErrorMessage(e, 'No se pudo ajustar el puntaje'); }
+    await Promise.all([loadHistory(), loadReview()]);
+  } catch (e) { if (generation === reviewGeneration) error.value = getErrorMessage(e, 'No se pudo ajustar el puntaje'); }
   finally { saving.value = false; }
 }
+function openConfirmation() {
+  error.value = '';
+  try { requireWorkOrderPoints(draft.value, props.jobType === 'ticket'); }
+  catch (e) { error.value = getErrorMessage(e, 'Puntos inválidos'); return; }
+  if (!canConfirm.value || saving.value) return;
+  explicitlyConfirmed.value = false;
+  showConfirmation.value = true;
+}
+async function confirmPoints() {
+  if (!canConfirm.value || !review.value || saving.value || !explicitlyConfirmed.value) return;
+  const generation = reviewGeneration;
+  error.value = '';
+  try {
+    const points = requireWorkOrderPoints(draft.value, props.jobType === 'ticket');
+    if (points !== review.value.points && !reason.value.trim()) throw new Error('Indica el motivo del ajuste.');
+    saving.value = true;
+    const { data, error: err } = await supabase.rpc('confirm_work_order_points', {
+      p_job_type: props.jobType, p_job_id: props.jobId, p_points: points,
+      p_expected_token: review.value.token, p_reason: reason.value.trim(), p_confirmed: true,
+    });
+    if (err) throw err;
+    if (generation !== reviewGeneration) return;
+    const confirmation = data as unknown as PointConfirmation;
+    emit('saved', Number(confirmation.points));
+    showConfirmation.value = false;
+    await Promise.all([loadReview(), loadHistory()]);
+  } catch (e) { if (generation === reviewGeneration) error.value = getErrorMessage(e, 'No se pudo confirmar; actualiza la revisión antes de reintentar'); }
+  finally { saving.value = false; }
+}
+const formatPoints = (points: number) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 4 }).format(points);
 </script>
 
 <template>
   <div class="mt-3 border-t border-slate-100 pt-3">
-    <p class="text-xs text-slate-600">Puntos de la orden: {{ points ?? (jobType === 'installation' ? '10 (regla histórica)' : 'Sin asignación manual') }}</p>
+    <p class="text-xs text-slate-600">Puntos de la orden: {{ currentPoints ?? (jobType === 'installation' ? '10 (regla histórica)' : 'Sin asignación manual') }}</p>
+    <p v-if="reviewLoading" class="text-xs mt-2">Consultando confirmación administrativa…</p>
+    <p v-if="reviewError" role="alert" class="text-xs text-red-600 mt-2">{{ reviewError }}</p>
+    <button v-if="isAdmin" type="button" class="text-xs text-sky-700 mt-2" :disabled="saving || reviewLoading" @click="loadReview">Actualizar revisión de puntos</button>
+    <p v-if="review?.historical" class="text-xs text-amber-700 mt-2">Prueba de octubre: puntaje histórico protegido. Esta confirmación no acredita puntos oficiales.</p>
     <form v-if="allowed" class="mt-2 space-y-2" @submit.prevent="save">
       <label class="block text-xs">Nuevo puntaje
         <input v-model.number="draft" type="number" :step="jobType === 'ticket' ? '1' : 'any'" :min="jobType === 'ticket' ? 1 : 0" required class="field-input" :disabled="saving" />
@@ -61,11 +131,24 @@ async function save() {
       </label>
       <button type="submit" class="btn-secondary text-xs" :disabled="saving">{{ saving ? 'Guardando...' : 'Guardar puntaje' }}</button>
     </form>
-    <p v-else class="text-xs text-slate-500 mt-1">Solo ADMIN/SUPERADMIN puede ajustar puntos antes del cierre del técnico.</p>
+    <p v-else-if="!isAdmin" class="text-xs text-slate-500 mt-1">Solo ADMIN/SUPERADMIN puede ajustar y confirmar puntos.</p>
+    <div v-if="review?.confirmation" class="text-xs mt-2 space-y-1">
+      <p class="font-semibold">Puntos confirmados: {{ formatPoints(review.confirmation.points) }}</p>
+      <p>{{ new Date(review.confirmation.confirmed_at).toLocaleString('es-PE', { timeZone: 'America/Lima' }) }} (Lima) · Responsable: {{ review.confirmation.confirmed_by }}</p>
+      <p v-for="member in review.confirmation.crew" :key="member.technicianId">{{ member.name }} · {{ member.role === 'leader' ? 'Líder' : 'Ayudante' }}: {{ formatPoints(review.confirmation.points / review.confirmation.crew.length) }} pts</p>
+      <p>La distribución confirmada se conserva aunque cambie la asignación posterior.</p>
+    </div>
+    <template v-else-if="review">
+      <p v-if="review.lastConfirmation?.invalidated_at" class="text-xs text-amber-700 mt-2">Confirmación anterior invalidada: {{ review.lastConfirmation.invalidation_reason }}. Revisa el nuevo ciclo.</p>
+      <p v-if="!review.finished" class="text-xs text-slate-500 mt-2">Disponible para confirmar puntos cuando el técnico termine la orden.</p>
+      <p v-else-if="!review.technicalCompletedAt" class="text-xs text-amber-700 mt-2">Falta la fecha de finalización técnica; revisa la orden antes de confirmar puntos.</p>
+      <p v-else-if="!review.crew.length" class="text-xs text-amber-700 mt-2">Asigna la cuadrilla antes de confirmar puntos.</p>
+      <button v-if="canConfirm" type="button" class="btn-primary text-xs mt-2" :disabled="saving" @click="openConfirmation">Revisar confirmación administrativa</button>
+    </template>
     <p v-if="error" role="alert" class="text-xs text-red-600 mt-1">{{ error }}</p>
     <p class="text-xs text-slate-500 mt-1">Se reparte entre los integrantes de la cuadrilla.</p>
-    <p v-if="historyError" class="text-xs text-red-600 mt-2">{{ historyError }}</p>
-    <details v-if="history.length" class="text-xs mt-2">
+    <p v-if="isAdmin && historyError" class="text-xs text-red-600 mt-2">{{ historyError }}</p>
+    <details v-if="isAdmin && history.length" class="text-xs mt-2">
       <summary>Últimos ajustes (hasta 20)</summary>
       <ul class="space-y-2 mt-2">
         <li v-for="change in history" :key="change.id" class="break-words">
@@ -76,5 +159,23 @@ async function save() {
         </li>
       </ul>
     </details>
+    <div v-if="showConfirmation && review" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="point-confirm-title">
+      <form class="modal-panel w-full max-w-lg p-5 space-y-3" @submit.prevent="confirmPoints">
+        <h3 id="point-confirm-title" class="font-semibold">Confirmar puntos definitivos</h3>
+        <p>Puntos definitivos de la orden: <strong>{{ formatPoints(Number(draft)) }} pts</strong></p>
+        <p v-if="review.historical" class="text-sm text-amber-700">Orden de prueba de octubre, sin acreditación oficial.</p>
+        <ul class="text-sm space-y-1">
+          <li v-for="member in review.crew" :key="member.technicianId">{{ member.name }} · {{ member.role === 'leader' ? 'Líder' : 'Ayudante' }}: {{ formatPoints(Number(draft) / review.crew.length) }} pts</li>
+        </ul>
+        <p v-if="draft !== review.points" class="text-sm">Cambio {{ review.points ?? 'sin asignación' }} → {{ draft }} pts. Motivo: {{ reason || 'Falta indicar motivo' }}</p>
+        <label class="flex gap-2 text-sm"><input v-model="explicitlyConfirmed" type="checkbox" required :disabled="saving" />Confirmo que los puntos y su distribución son correctos.</label>
+        <p class="text-xs text-slate-500">La confirmación no cambia el estado técnico. Reabrir o cancelar invalidará esta confirmación.</p>
+        <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
+        <div class="flex gap-2 justify-end">
+          <button type="button" class="btn-secondary" :disabled="saving" @click="showConfirmation = false">Volver</button>
+          <button type="submit" class="btn-primary" :disabled="saving || !explicitlyConfirmed">{{ saving ? 'Confirmando…' : 'Confirmar puntos' }}</button>
+        </div>
+      </form>
+    </div>
   </div>
 </template>

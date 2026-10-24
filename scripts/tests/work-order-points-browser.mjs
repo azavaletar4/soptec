@@ -38,6 +38,11 @@ try {
     const real=window.fetch.bind(window);window.fetch=async(input,init={})=>{
       const url=new URL(typeof input==='string'?input:input.url,location.href);
       if(url.origin===location.origin)return real(input,init);
+      if(url.pathname.endsWith('/work_order_point_review'))return new Response(JSON.stringify({
+        points:5,status:window.reviewClosed||'open',technicalCompletedAt:window.reviewClosed?'2026-11-12T15:00:00Z':null,
+        historical:false,finished:!!window.reviewClosed,crew:[{technicianId:'synthetic',name:'Técnico',role:'leader'}],token:'synthetic-review',
+        confirmation:window.reviewClosed?{id:'synthetic-confirmation',points:5,crew:[{technicianId:'synthetic',name:'Técnico',role:'leader'}],confirmed_at:'2026-11-13T15:00:00Z',confirmed_by:'synthetic-admin',invalidated_at:null}:null,lastConfirmation:null
+      }),{headers:{'content-type':'application/json'}});
       if(url.pathname.endsWith('/work_order_point_changes'))return new Response('[]',{headers:{'content-type':'application/json'}});
       if(url.pathname.endsWith('/adjust_work_order_points')){
         window.calls.push(JSON.parse(init.body));
@@ -63,7 +68,8 @@ try {
     await evaluate('window.saved=null');
   }
   for(const role of ['TECNICO_RED','SOPORTE']) {await evaluate(`setCase('${role}','open')`);await wait('!document.querySelector("form")');checks++;}
-  for(const status of ['resolved','closed','completed','cancelled']) {await evaluate(`setCase('SUPERADMIN','${status}')`);await wait('!document.querySelector("form")');checks++;}
+  // Estas fixtures terminales YA tienen confirmación vigente.
+  for(const status of ['resolved','closed','completed','cancelled']) {await evaluate(`window.reviewClosed='${status}';setCase('SUPERADMIN','${status}')`);await wait('!document.querySelector("form")');checks++;}
   assert.deepEqual(errors,[]);checks++;
   console.log(`WORK_ORDER_POINTS_BROWSER_OK: ${checks} checks; synthetic data; external network blocked`);
 } finally {if(ws)ws.close();chrome.kill();await server.close();}

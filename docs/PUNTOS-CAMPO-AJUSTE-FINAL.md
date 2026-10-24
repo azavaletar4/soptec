@@ -1,5 +1,9 @@
 # Puntos y firma en Campo — continuación de 506b35a
 
+> La autorización posterior de confirmación administrativa se implementa en
+> [CONFIRMACION-ADMINISTRATIVA-PUNTOS.md](CONFIRMACION-ADMINISTRATIVA-PUNTOS.md).
+> Esa entrega sustituye la limitación contable documentada aquí.
+
 Entrega local del 24/10/2026. No se repite la obligatoriedad de creación.
 Sin migraciones en producción, órdenes reales modificadas, push ni despliegue.
 Se conserva el trabajo previo ajeno a este alcance en el árbol local.
