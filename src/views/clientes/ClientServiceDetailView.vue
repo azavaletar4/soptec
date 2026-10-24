@@ -28,7 +28,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { syncOltZoneForContract, OLT_ZONE_SYNC_ROLES } from '@/lib/ontZoneSync';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { resolveOntPlanName } from '@/lib/ontPlanDisplay';
-import { countOcupadosReales } from '@/lib/napOccupancy';
+import { countOcupadosReales, occupiesCommercialCapacity, COMMERCIAL_STATUS_LABEL, COMMERCIAL_STATUS_CLASS } from '@/lib/napOccupancy';
 import {
   NAP_CLIENT_LIMIT,
   ZONE_CLIENT_LIMIT,
@@ -103,16 +103,8 @@ const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
   pasaporte: 'Pasaporte',
 };
 
-const STATUS_LABEL: Record<ContractStatus, string> = {
-  active: 'Activo',
-  suspended: 'Suspendido',
-  cancelled: 'Cancelado',
-};
-const STATUS_CLASS: Record<ContractStatus, string> = {
-  active: 'bg-green-500/15 text-green-600',
-  suspended: 'bg-red-500/15 text-red-600',
-  cancelled: 'bg-slate-500/15 text-slate-600',
-};
+const STATUS_LABEL: Record<ContractStatus, string> = COMMERCIAL_STATUS_LABEL;
+const STATUS_CLASS: Record<ContractStatus, string> = COMMERCIAL_STATUS_CLASS;
 
 const PRIORITY_LABEL: Record<ContractPriority, string> = {
   high: 'Alta',
@@ -270,7 +262,7 @@ const napId = ref('');
 const zoneNapError = ref<string | null>(null);
 
 function zoneServiceCount(zoneId: string, excludeContractId?: string | null) {
-  return contractsStore.contracts.filter((c) => c.zone_id === zoneId && c.id !== excludeContractId).length;
+  return contractsStore.contracts.filter((c) => c.zone_id === zoneId && c.id !== excludeContractId && occupiesCommercialCapacity(c.status)).length;
 }
 
 const selectedZoneCount = computed(() =>
@@ -463,8 +455,49 @@ async function syncXuiLineStatus(c: ServiceContract, previousStatus: ContractSta
   }
 }
 
+const emit = defineEmits<{ commercialCancelled: [contract: ServiceContract] }>();
+
+async function handleAdministrativeCancellation() {
+  if (!contract.value || savingContract.value || contract.value.status === 'cancelled') return;
+  const previousStatus = contract.value.status;
+  if (!inventoryAdmin.value) {
+    contractForm.value.status = previousStatus;
+    contractError.value = 'La baja administrativa requiere ADMIN/SUPERADMIN.';
+    return;
+  }
+  if (!confirm('Este contrato pasará a Cancelado y liberará su ocupación en la NAP. ¿Confirmar?')) {
+    contractForm.value.status = previousStatus;
+    return;
+  }
+  savingContract.value = true;
+  contractError.value = null;
+  try {
+    const saved = await contractsStore.cancelContractAdministrative(contract.value.id, contract.value.updated_at);
+    contract.value = { ...contract.value, ...saved };
+    emit('commercialCancelled', contract.value);
+    fillFormFromContract(contract.value);
+    // Sólo caché local: conservar cada vínculo histórico sin desasignar puertos.
+    for (const rows of Object.values(fibra.napPuertosPorElemento)) {
+      for (const row of rows) if (row.contract_id === saved.id && row.service_contracts) row.service_contracts.status = 'cancelled';
+    }
+    try { await clientsStore.fetchClients(); }
+    catch { contractError.value = 'Baja confirmada. No se pudo refrescar Clientes; recarga la vista. No repitas la baja.'; }
+  } catch (e) {
+    contractForm.value.status = previousStatus;
+    contractError.value = getErrorMessage(e, 'No se pudo confirmar la baja. Recarga la ficha antes de reintentar.');
+  } finally { savingContract.value = false; }
+}
+
+function handleContractStatusSelection() {
+  if (contractForm.value.status === 'cancelled') void handleAdministrativeCancellation();
+}
+
 async function handleSaveContract() {
-  if (!contract.value) return;
+  if (!contract.value || savingContract.value) return;
+  if (contractForm.value.status === 'cancelled' && contract.value.status !== 'cancelled') {
+    await handleAdministrativeCancellation();
+    return;
+  }
   if (contractForm.value.billing_day < 1 || contractForm.value.billing_day > 31) {
     contractError.value = 'El día de emisión debe estar entre 1 y 31';
     return;
@@ -502,6 +535,7 @@ async function handleSaveContract() {
   try {
     const saved = await contractsStore.updateContract(contract.value.id, payload);
     contract.value = saved;
+    if (saved.status === 'cancelled') return;
     await syncMikrotikProfile(saved, previousProfile);
     await syncXuiLineStatus(saved, previousStatus);
     await syncNap(saved);
@@ -1601,8 +1635,8 @@ onMounted(async () => {
 
         <div class="mb-3">
           <label class="block text-xs text-slate-600 mb-1">Estado</label>
-          <select v-model="contractForm.status" class="field-input">
-            <option v-for="(label, value) in STATUS_LABEL" :key="value" :value="value">{{ label }}</option>
+          <select v-model="contractForm.status" class="field-input" :disabled="savingContract" @change="handleContractStatusSelection">
+            <option v-for="(label, value) in STATUS_LABEL" :key="value" :value="value" :disabled="value === 'cancelled' && !inventoryAdmin">{{ label }}</option>
           </select>
         </div>
 

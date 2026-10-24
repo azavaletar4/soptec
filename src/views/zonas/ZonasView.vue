@@ -9,7 +9,7 @@ import { useAsyncAction } from '@/composables/useAsyncAction';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
-import { serviciosOcupados } from '@/lib/napOccupancy';
+import { classifyNapServices, occupiesCommercialCapacity, COMMERCIAL_STATUS_LABEL, COMMERCIAL_STATUS_CLASS } from '@/lib/napOccupancy';
 import { NAP_CLIENT_LIMIT, ZONE_CLIENT_LIMIT, ZONE_NAP_LIMIT, type Zone } from '@/types/domain';
 
 const catalogs = useCatalogsStore();
@@ -62,15 +62,17 @@ const napsByZone = computed(() => {
     // Fase 157: cuenta SERVICIOS (contratos), no filas de puerto sueltas —
     // ver src/lib/napOccupancy.ts (serviciosOcupados) para por que hace
     // falta el dedupe.
-    const servicios = serviciosOcupados(puertos);
+    const { occupied: servicios, history } = classifyNapServices(puertos);
     const capacity = el.puertos_total ?? NAP_CLIENT_LIMIT;
-    const clients = servicios.map((p) => ({
+    const toClient = (p: (typeof puertos)[number]) => ({
       id: p.client_id as string,
       contractId: p.contract_id,
       name: p.clients ? `${p.clients.first_name} ${p.clients.last_name}`.trim() : 'Cliente',
       contractNumber: p.service_contracts?.contract_number ?? null,
-    }));
-    return { id: el.id, name: el.name, used: servicios.length, capacity, clients };
+      status: p.service_contracts?.status,
+    });
+    const clients = servicios.map(toClient);
+    return { id: el.id, name: el.name, used: servicios.length, capacity, clients, history: history.map(toClient) };
   }
 });
 
@@ -82,7 +84,7 @@ const zonesWithCount = computed(() => {
   return catalogs.zones
     .map((z) => ({
       zone: z,
-      count: contractsStore.contracts.filter((c) => c.zone_id === z.id).length,
+      count: contractsStore.contracts.filter((c) => c.zone_id === z.id && occupiesCommercialCapacity(c.status)).length,
       naps: napsByZone.value[z.id] ?? [],
     }))
     .filter((z) => !q || z.zone.name.toLowerCase().includes(q) || z.naps.some((n) => n.name.toLowerCase().includes(q)))
@@ -167,8 +169,8 @@ async function handleDelete(zone: Zone) {
       <div>
         <h1 class="text-2xl font-semibold">Zonas</h1>
         <p class="text-slate-600 text-sm mt-1">
-          {{ zonesWithCount.length }} zonas · límite de {{ ZONE_CLIENT_LIMIT }} clientes por zona · máx.
-          {{ ZONE_NAP_LIMIT }} cajas NAP por zona · máx. {{ NAP_CLIENT_LIMIT }} clientes por NAP
+          {{ zonesWithCount.length }} zonas · límite de {{ ZONE_CLIENT_LIMIT }} servicios por zona · máx.
+          {{ ZONE_NAP_LIMIT }} cajas NAP por zona · máx. {{ NAP_CLIENT_LIMIT }} servicios por NAP
         </p>
       </div>
       <button class="btn-primary" @click="openCreate()">+ Agregar zona</button>
@@ -186,13 +188,13 @@ async function handleDelete(zone: Zone) {
     </p>
 
     <p v-if="zonesAtLimit.length" class="mb-2 text-sm text-red-600">
-      ⚠ {{ zonesAtLimit.length }} zona(s) llegaron al límite de {{ ZONE_CLIENT_LIMIT }} clientes:
-      {{ zonesAtLimit.map((z) => z.zone.name).join(', ') }}. No se podrán asignar más clientes ahí hasta liberar
+      ⚠ {{ zonesAtLimit.length }} zona(s) llegaron al límite de {{ ZONE_CLIENT_LIMIT }} servicios:
+      {{ zonesAtLimit.map((z) => z.zone.name).join(', ') }}. No se podrán asignar más servicios ahí hasta liberar
       cupo.
     </p>
 
     <p v-if="napsAtLimit.length" class="mb-4 text-sm text-red-600">
-      ⚠ {{ napsAtLimit.length }} caja(s) NAP llenas ({{ NAP_CLIENT_LIMIT }} clientes):
+      ⚠ {{ napsAtLimit.length }} caja(s) NAP llenas ({{ NAP_CLIENT_LIMIT }} servicios):
       {{ napsAtLimit.map((n) => `${n.nap} (${n.zone})`).join(', ') }}.
     </p>
 
@@ -252,17 +254,30 @@ async function handleDelete(zone: Zone) {
                       <span class="badge shrink-0" :class="fillClass(n.used, n.capacity)">{{ n.used }} / {{ n.capacity }}</span>
                     </div>
                     <ul v-if="n.clients.length" class="space-y-0.5 max-h-28 overflow-y-auto">
-                      <li v-for="c in n.clients" :key="c.id">
+                      <li v-for="c in n.clients" :key="c.contractId ?? c.id">
                         <router-link
                           :to="c.contractId ? `/clientes/${c.id}/servicios/${c.contractId}` : `/clientes/${c.id}`"
                           class="block truncate text-xs text-sky-700 hover:underline"
                           :title="c.name"
                         >
                           {{ c.name }} <span v-if="c.contractNumber" class="text-slate-400">({{ c.contractNumber }})</span>
+                          <span v-if="c.status" class="badge ml-1" :class="COMMERCIAL_STATUS_CLASS[c.status]">{{ COMMERCIAL_STATUS_LABEL[c.status] }}</span>
+                          <span v-else class="text-slate-500"> · Sin verificar</span>
                         </router-link>
                       </li>
                     </ul>
-                    <p v-else class="text-xs text-slate-400">Sin clientes asignados</p>
+                    <p v-else class="text-xs text-slate-400">Sin servicios vigentes</p>
+                    <details v-if="n.history.length" class="mt-2 border-t border-slate-100 pt-1 text-xs">
+                      <summary class="cursor-pointer text-slate-500">Historial: {{ n.history.length }} cancelado(s) · sin ocupación</summary>
+                      <ul class="mt-1 space-y-1 max-h-28 overflow-y-auto">
+                        <li v-for="c in n.history" :key="c.contractId ?? c.id">
+                          <router-link :to="`/clientes/${c.id}/servicios/${c.contractId}`" class="text-slate-600 hover:underline">
+                            {{ c.name }} <span v-if="c.contractNumber">({{ c.contractNumber }})</span>
+                          </router-link>
+                          <span class="badge ml-1" :class="COMMERCIAL_STATUS_CLASS.cancelled">Cancelado</span>
+                        </li>
+                      </ul>
+                    </details>
                   </div>
                 </div>
               </td>

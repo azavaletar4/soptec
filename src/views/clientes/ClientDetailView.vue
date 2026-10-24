@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import { COMMERCIAL_STATUS_CLASS } from '@/lib/napOccupancy';
 import ClientServiceDetailView from './ClientServiceDetailView.vue';
 import ClientStatCard from '@/components/clientes/ClientStatCard.vue';
 import { useClientsStore } from '@/stores/clients';
@@ -71,11 +72,7 @@ const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
   suspended: 'Suspendido',
   cancelled: 'Cancelado',
 };
-const CONTRACT_STATUS_CLASS: Record<ContractStatus, string> = {
-  active: 'bg-green-500/15 text-green-600',
-  suspended: 'bg-red-500/15 text-red-600',
-  cancelled: 'bg-slate-500/15 text-slate-600',
-};
+const CONTRACT_STATUS_CLASS: Record<ContractStatus, string> = COMMERCIAL_STATUS_CLASS;
 
 async function handleClientStatusChange(status: ClientStatus) {
   if (!client.value) return;
@@ -94,6 +91,11 @@ async function loadContracts() {
   loadingContracts.value = true;
   contracts.value = await contractsStore.fetchContractsByClient(clientId.value);
   loadingContracts.value = false;
+}
+
+function handleContractCommercialCancelled(saved: ServiceContract) {
+  const index = contracts.value.findIndex(c => c.id === saved.id);
+  if (index !== -1) contracts.value[index] = { ...contracts.value[index], ...saved };
 }
 
 // ---- Descuento por averia — compensacion para TODO el cliente (Fase 34) ----
@@ -268,7 +270,7 @@ onMounted(async () => {
 
       <!-- 1 solo servicio (el 99% de los casos): todo junto en la misma
       pagina, como antes de la Fase 37 — sin navegar a ningun lado. -->
-      <ClientServiceDetailView v-else embedded :client-id-override="clientId" :contract-id-override="contracts[0].id" />
+      <ClientServiceDetailView v-else embedded :client-id-override="clientId" :contract-id-override="contracts[0].id" @commercial-cancelled="handleContractCommercialCancelled" />
     </template>
 
     <Teleport to="body">

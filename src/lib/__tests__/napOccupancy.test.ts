@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countOcupadosReales, serviciosOcupados } from '../napOccupancy';
+import { countOcupadosReales, serviciosOcupados, classifyNapServices, occupiesCommercialCapacity } from '../napOccupancy';
 
 test('NAP occupancy: counts only ocupado ports that still have a client_id', () => {
   const puertos = [
@@ -40,6 +40,15 @@ test('NAP occupancy: sin residuos, el conteo no cambia', () => {
 
 test('NAP occupancy: caja vacia', () => {
   assert.equal(countOcupadosReales([]), 0);
+});
+
+test('comercial: activos/suspendidos ocupan, cancelados sólo historial; no muta vínculos', () => {
+ const rows = ['active','suspended','cancelled'].map((status,i)=>({estado:'ocupado' as const,client_id:'same-client',contract_id:'contract-'+i,puerto_numero:i,service_contracts:{status:status as 'active'|'suspended'|'cancelled'}}));
+ const before=JSON.stringify(rows), result=classifyNapServices(rows);
+ assert.equal(countOcupadosReales(rows),2);assert.equal(serviciosOcupados(rows).length,2);assert.equal(result.history.length,1);
+ assert.equal(JSON.stringify(rows),before);assert.ok(occupiesCommercialCapacity('suspended'));assert.equal(occupiesCommercialCapacity('cancelled'),false);
+ // Repetir vínculo histórico no duplica ocupación ni historial.
+ assert.equal(classifyNapServices([...rows,rows[2]]).history.length,1);
 });
 
 test('Fase 157 — serviciosOcupados: sin duplicados, devuelve un puerto por servicio', () => {
