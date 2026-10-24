@@ -5,7 +5,8 @@ import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { getLastReconcileReport, reconcileMikrotikDevice } from '../services/mikrotikReconcileService';
 import { DEFAULT_MIKROTIK_DEVICE_ROLE, isPppoeAdminRole, isValidMikrotikDeviceRole } from '../mikrotik/deviceRole';
 import { getLiveSnapshot } from '../services/mikrotikBorderTrafficService';
-import { getBalancerConnectionsSnapshot } from '../services/mikrotikBalancerDiscoveryService';
+import { getBalancerConnectionsSnapshot, getBalancerTrafficHistory } from '../services/mikrotikBalancerDiscoveryService';
+import { BALANCER_HISTORY_RANGES, type BalancerHistoryRange } from '../mikrotik/balancerTrafficSeries';
 
 export const mikrotikRoutes = new Hono();
 
@@ -425,5 +426,31 @@ mikrotikRoutes.get('/:id/balancer/connections', requireRole(...STAFF_READ), asyn
     return c.json(connections);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar las conexiones del balanceador' }, 500);
+  }
+});
+
+function isBalancerHistoryRange(v: unknown): v is BalancerHistoryRange {
+  return typeof v === 'string' && v in BALANCER_HISTORY_RANGES;
+}
+
+// Historico de trafico del balanceador -- total, por puerto fisico o de
+// una sola sesion PPPoE (nunca mezclado). Agregado en el backend sobre las
+// muestras ya guardadas (una sola fuente por conexion, el nivel PPPoE) --
+// no requiere ninguna tabla ni migracion nueva.
+mikrotikRoutes.get('/:id/balancer/traffic-history', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  if (device.device_role !== 'borde_balanceador') {
+    return c.json({ error: `"${device.host}" no esta clasificado como router balanceador` }, 400);
+  }
+  const rangeParam = c.req.query('range');
+  const range: BalancerHistoryRange = isBalancerHistoryRange(rangeParam) ? rangeParam : '1h';
+  const port = c.req.query('port') || undefined;
+  const connectionId = c.req.query('connectionId') || undefined;
+  try {
+    const result = await getBalancerTrafficHistory(device.id, range, { port, connectionId });
+    return c.json(result);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar el historico del balanceador' }, 500);
   }
 });

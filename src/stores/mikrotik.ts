@@ -89,6 +89,23 @@ export interface MikrotikBalancerConnection {
   latest_sampled_at: string | null;
 }
 
+export interface MikrotikBalancerHistoryPoint {
+  bucket_start: string;
+  avg_rx_bps: number | null;
+  avg_tx_bps: number | null;
+  max_rx_bps: number | null;
+  max_tx_bps: number | null;
+  samples: number;
+  online_samples: number;
+}
+
+export interface MikrotikBalancerTrafficHistoryResponse {
+  range: TrafficHistoryRange;
+  scope: 'total' | 'port' | 'connection';
+  connectionCount: number;
+  points: MikrotikBalancerHistoryPoint[];
+}
+
 export interface MikrotikInterface {
   '.id': string;
   name: string;
@@ -288,6 +305,13 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<MikrotikBalancerConnection[]>(`/api/mikrotik-devices/${id}/balancer/connections`);
   }
 
+  function fetchBalancerTrafficHistory(id: string, range: TrafficHistoryRange, scope: { port?: string; connectionId?: string } = {}) {
+    const params = new URLSearchParams({ range });
+    if (scope.port) params.set('port', scope.port);
+    if (scope.connectionId) params.set('connectionId', scope.connectionId);
+    return apiFetch<MikrotikBalancerTrafficHistoryResponse>(`/api/mikrotik-devices/${id}/balancer/traffic-history?${params.toString()}`);
+  }
+
   function fetchSaturationAlerts(id: string) {
     return apiFetch<MikrotikSaturationAlert[]>(`/api/mikrotik-devices/${id}/saturation-alerts`);
   }
@@ -325,6 +349,7 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     fetchTrafficLive,
     fetchTrafficHistory,
     fetchBalancerConnections,
+    fetchBalancerTrafficHistory,
     fetchSaturationAlerts,
     fetchReconcileReport,
     runReconcileNow,

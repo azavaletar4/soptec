@@ -2,6 +2,14 @@ import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { computeInterfaceDelta } from '../mikrotik/borderTraffic';
 import { diffDiscoveredConnections, resolveConnectionTopology, type MacvlanRaw, type PppoeClientRaw } from '../mikrotik/balancerDiscovery';
+import {
+  BALANCER_HISTORY_RANGES,
+  bucketTicks,
+  sumSamplesByTick,
+  type BalancerHistoryRange,
+  type BucketedPoint,
+  type RawSample,
+} from '../mikrotik/balancerTrafficSeries';
 
 // Fase 174 — parte con I/O (Supabase + REST) del descubrimiento automatico
 // de conexiones WAN del MikroTik BALANCEADOR. La logica de
@@ -208,4 +216,69 @@ export async function getBalancerConnectionsSnapshot(deviceId: string): Promise<
       latest_sampled_at: latest?.sampled_at ?? null,
     };
   });
+}
+
+export interface BalancerTrafficHistoryResult {
+  range: BalancerHistoryRange;
+  scope: 'total' | 'port' | 'connection';
+  connectionCount: number;
+  points: BucketedPoint[];
+}
+
+/**
+ * Historico de trafico del balanceador, en 3 alcances posibles (nunca se
+ * mezclan): total (todas las conexiones activas y habilitadas del
+ * dispositivo), por puerto fisico (solo las conexiones de ese puerto), o
+ * una sola conexion (individual, incluso si ya esta retirada -- su
+ * historico sigue siendo consultable). Usa UNICAMENTE
+ * mikrotik_balancer_connection_samples (el nivel PPPoE-client, la misma
+ * fuente unica que ya usa el descubrimiento) -- nunca se mezcla con datos
+ * del puerto fisico ni de la macvlan.
+ */
+export async function getBalancerTrafficHistory(
+  deviceId: string,
+  range: BalancerHistoryRange,
+  scope: { port?: string; connectionId?: string } = {},
+): Promise<BalancerTrafficHistoryResult> {
+  const { sinceMinutes, bucketSeconds } = BALANCER_HISTORY_RANGES[range];
+  const sinceIso = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
+
+  let connectionIds: string[];
+  let scopeLabel: 'total' | 'port' | 'connection';
+  if (scope.connectionId) {
+    connectionIds = [scope.connectionId];
+    scopeLabel = 'connection';
+  } else {
+    let query = supabaseAdmin
+      .from('mikrotik_balancer_connections')
+      .select('id')
+      .eq('device_id', deviceId)
+      .eq('disabled', false)
+      .is('removed_at', null);
+    if (scope.port) query = query.eq('physical_interface_name', scope.port);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    connectionIds = (data ?? []).map((c) => c.id);
+    scopeLabel = scope.port ? 'port' : 'total';
+  }
+
+  if (!connectionIds.length) return { range, scope: scopeLabel, connectionCount: 0, points: [] };
+
+  const { data: samples, error: samplesErr } = await supabaseAdmin
+    .from('mikrotik_balancer_connection_samples')
+    .select('connection_id, sampled_at, rx_bps, tx_bps, online')
+    .in('connection_id', connectionIds)
+    .gte('sampled_at', sinceIso)
+    .order('sampled_at', { ascending: true });
+  if (samplesErr) throw new Error(samplesErr.message);
+
+  const samplesByConnection = new Map<string, RawSample[]>(connectionIds.map((id) => [id, []]));
+  for (const s of samples ?? []) {
+    const bucket = samplesByConnection.get(s.connection_id);
+    bucket?.push({ sampledAt: s.sampled_at, rxBps: s.rx_bps, txBps: s.tx_bps, online: s.online });
+  }
+
+  const ticks = sumSamplesByTick([...samplesByConnection.values()]);
+  const points = bucketTicks(ticks, bucketSeconds);
+  return { range, scope: scopeLabel, connectionCount: connectionIds.length, points };
 }

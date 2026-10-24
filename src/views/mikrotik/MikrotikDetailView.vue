@@ -9,6 +9,7 @@ import {
   type IpAddress,
   type MikrotikInterface,
   type MikrotikBalancerConnection,
+  type MikrotikBalancerHistoryPoint,
   type MikrotikSaturationAlert,
   type MikrotikTrafficHistoryPoint,
   type MikrotikTrafficLive,
@@ -308,9 +309,128 @@ const balancerPortsInUse = computed(() => {
   return ports.size;
 });
 
+// Requisito 4: agrupado por puerto fisico, SIEMPRE descubierto (nunca una
+// lista fija) — cualquier puerto nuevo que aparezca entra solo.
+interface BalancerPortStat {
+  port: string;
+  connections: MikrotikBalancerConnection[];
+  upCount: number;
+  disabledCount: number;
+  rxBps: number;
+  txBps: number;
+}
+const balancerPortStats = computed<BalancerPortStat[]>(() => {
+  const byPort = new Map<string, BalancerPortStat>();
+  for (const c of activeBalancerConnections.value) {
+    if (!c.physical_interface_name) continue;
+    const entry = byPort.get(c.physical_interface_name) ?? { port: c.physical_interface_name, connections: [], upCount: 0, disabledCount: 0, rxBps: 0, txBps: 0 };
+    entry.connections.push(c);
+    if (c.disabled) entry.disabledCount++;
+    else {
+      if (c.running) entry.upCount++;
+      entry.rxBps += c.latest_rx_bps ?? 0;
+      entry.txBps += c.latest_tx_bps ?? 0;
+    }
+    byPort.set(c.physical_interface_name, entry);
+  }
+  return [...byPort.values()].sort((a, b) => a.port.localeCompare(b.port));
+});
+
+// ---- Requisitos 1/2/3/5: grafico de historico — total, por puerto o por conexion individual ----
+
+type BalancerChartScope = { type: 'total' } | { type: 'port'; port: string } | { type: 'connection'; connectionId: string };
+const balancerScope = ref<BalancerChartScope>({ type: 'total' });
+const balancerHistoryRange = ref<TrafficHistoryRange>('1h');
+const balancerHistoryPoints = ref<MikrotikBalancerHistoryPoint[]>([]);
+const balancerHistoryLoading = ref(false);
+const balancerHistoryError = ref<string | null>(null);
+
+const balancerScopeLabel = computed(() => {
+  const scope = balancerScope.value;
+  if (scope.type === 'port') return `Puerto ${scope.port}`;
+  if (scope.type === 'connection') {
+    const c = balancerConnections.value.find((x) => x.id === scope.connectionId);
+    return c ? `Sesión ${c.pppoe_interface_name}` : 'Sesión seleccionada';
+  }
+  return 'Todas las conexiones activas';
+});
+
+async function loadBalancerHistory() {
+  balancerHistoryLoading.value = true;
+  balancerHistoryError.value = null;
+  try {
+    const scopeParams = balancerScope.value.type === 'port'
+      ? { port: balancerScope.value.port }
+      : balancerScope.value.type === 'connection'
+        ? { connectionId: balancerScope.value.connectionId }
+        : {};
+    const res = await mikrotikStore.fetchBalancerTrafficHistory(deviceId.value, balancerHistoryRange.value, scopeParams);
+    balancerHistoryPoints.value = res.points;
+  } catch (e) {
+    balancerHistoryError.value = getErrorMessage(e, 'Error al consultar el histórico del balanceador');
+  } finally {
+    balancerHistoryLoading.value = false;
+  }
+}
+
+function selectBalancerTotalScope() {
+  balancerScope.value = { type: 'total' };
+  selectedConnectionIdForChart.value = '';
+  void loadBalancerHistory();
+}
+function selectBalancerPortScope(port: string) {
+  balancerScope.value = { type: 'port', port };
+  selectedConnectionIdForChart.value = '';
+  void loadBalancerHistory();
+}
+const selectedConnectionIdForChart = ref('');
+function selectBalancerConnectionScope(connectionId: string) {
+  if (!connectionId) return;
+  balancerScope.value = { type: 'connection', connectionId };
+  void loadBalancerHistory();
+}
+
+watch(balancerHistoryRange, loadBalancerHistory);
+
+const balancerChartSeries = computed(() => [
+  { name: 'Descarga', data: balancerHistoryPoints.value.map((p) => ({ x: new Date(p.bucket_start).getTime(), y: Math.round(p.avg_rx_bps ?? 0) })) },
+  { name: 'Subida', data: balancerHistoryPoints.value.map((p) => ({ x: new Date(p.bucket_start).getTime(), y: Math.round(p.avg_tx_bps ?? 0) })) },
+]);
+// Mismo patron estatico que el grafico del borde dedicado (Fase 172): ver
+// el comentario de esa seccion — `options` nunca depende de los datos,
+// para que vue3-apexcharts nunca le borre el formateador del eje Y.
+const balancerChartOptions = {
+  chart: { type: 'area' as const, toolbar: { show: false }, foreColor: '#64748b', background: 'transparent', animations: { speed: 300 } },
+  colors: ['#0ea5e9', '#8b5cf6'],
+  dataLabels: { enabled: false },
+  stroke: { curve: 'smooth' as const, width: 2 },
+  fill: { type: 'gradient', gradient: { opacityFrom: 0.3, opacityTo: 0.02, stops: [0, 90, 100] } },
+  grid: { borderColor: '#e2e8f0', strokeDashArray: 4 },
+  xaxis: { type: 'datetime' as const, labels: { datetimeUTC: false } },
+  yaxis: { labels: { formatter: (v: number) => formatBpsAsMbps(v) } },
+  tooltip: { theme: 'light' as const, x: { format: 'dd MMM HH:mm' }, y: { formatter: (v: number) => formatBpsAsMbps(v) } },
+  legend: { show: true, position: 'top' as const, horizontalAlign: 'left' as const },
+};
+
+// ---- Requisito 8: filtros de la tabla (puerto físico + estado) ----
+
+const tableFilterPort = ref('');
+const tableFilterStatus = ref<'' | 'up' | 'down' | 'disabled'>('');
+const filteredBalancerConnections = computed(() =>
+  activeBalancerConnections.value.filter((c) => {
+    if (tableFilterPort.value && c.physical_interface_name !== tableFilterPort.value) return false;
+    if (tableFilterStatus.value) {
+      const status = c.disabled ? 'disabled' : c.running ? 'up' : 'down';
+      if (status !== tableFilterStatus.value) return false;
+    }
+    return true;
+  }),
+);
+
 let livePoll: ReturnType<typeof setInterval> | undefined;
 let historyPoll: ReturnType<typeof setInterval> | undefined;
 let balancerPoll: ReturnType<typeof setInterval> | undefined;
+let balancerHistoryPoll: ReturnType<typeof setInterval> | undefined;
 
 watch(historyRange, loadHistory);
 
@@ -318,6 +438,7 @@ onUnmounted(() => {
   clearInterval(livePoll);
   clearInterval(historyPoll);
   clearInterval(balancerPoll);
+  clearInterval(balancerHistoryPoll);
 });
 
 // ---- Fase 173: reconciliacion PPPoE — EXCLUSIVA del router administrador, UN router a la vez ----
@@ -363,11 +484,12 @@ onMounted(async () => {
     }, 30000);
   }
   if (isBalancer.value) {
-    await loadBalancerConnections();
+    await Promise.all([loadBalancerConnections(), loadBalancerHistory()]);
     // Cada 60s -- mismo ritmo que el scheduler de descubrimiento del
     // backend (mikrotikBalancerDiscoveryScheduler.ts); pedir mas seguido
     // no traeria datos mas nuevos.
     balancerPoll = setInterval(loadBalancerConnections, 60000);
+    balancerHistoryPoll = setInterval(loadBalancerHistory, 60000);
   }
 });
 
@@ -648,7 +770,83 @@ async function handleToggleSecret(secret: PppSecret) {
 
         <p v-if="balancerLoadError" class="mb-4 text-sm text-red-600">{{ balancerLoadError }}</p>
 
-        <h2 class="text-lg font-semibold mb-3">Conexiones WAN activas ({{ activeBalancerConnections.length }})</h2>
+        <!-- Gráfico principal: suma de las conexiones activas segun el alcance elegido (total / un puerto / una sesión) -->
+        <div class="surface p-4 rounded-2xl mb-8">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <h3 class="text-sm font-semibold">Tráfico — {{ balancerScopeLabel }}</h3>
+            <div class="flex gap-1">
+              <button
+                v-for="r in (['15m', '1h', '24h', '7d'] as const)"
+                :key="r"
+                class="text-xs px-2.5 py-1 rounded-full"
+                :class="balancerHistoryRange === r ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                @click="balancerHistoryRange = r"
+              >
+                {{ HISTORY_RANGE_LABEL[r] }}
+              </button>
+            </div>
+          </div>
+          <button v-if="balancerScope.type !== 'total'" class="text-xs text-sky-600 hover:underline mb-3" @click="selectBalancerTotalScope">
+            ← Volver al total de todas las conexiones activas
+          </button>
+          <p v-if="balancerHistoryLoading && !balancerHistoryPoints.length" class="text-sm text-slate-500">Cargando historial...</p>
+          <p v-else-if="balancerHistoryError" class="text-sm text-red-600">{{ balancerHistoryError }}</p>
+          <p v-else-if="!balancerHistoryPoints.length" class="text-sm text-slate-500">
+            Recopilando historial — todavía no hay muestras suficientes para este alcance y rango.
+          </p>
+          <VueApexCharts v-else type="area" height="280" :options="balancerChartOptions" :series="balancerChartSeries" />
+        </div>
+
+        <!-- Estadisticas por puerto SFP: agrupado dinamicamente, sin cantidad fija de puertos -->
+        <h3 class="text-sm font-semibold mb-3">Consumo por puerto SFP</h3>
+        <div class="grid gap-4 mb-8" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))">
+          <p v-if="!balancerPortStats.length" class="text-sm text-slate-500">Todavía sin puertos con conexiones activas detectadas.</p>
+          <div
+            v-for="p in balancerPortStats"
+            :key="p.port"
+            class="surface p-4 rounded-2xl cursor-pointer transition-colors"
+            :class="balancerScope.type === 'port' && balancerScope.port === p.port ? 'ring-2 ring-sky-500' : ''"
+            @click="selectBalancerPortScope(p.port)"
+          >
+            <div class="text-slate-500 text-xs mb-1 font-mono">{{ p.port }}</div>
+            <div class="text-sm font-semibold">↓{{ formatBpsAsMbps(p.rxBps) }}</div>
+            <div class="text-sm font-semibold">↑{{ formatBpsAsMbps(p.txBps) }}</div>
+            <div class="text-[11px] text-slate-500 mt-1">
+              {{ p.connections.length }} conexión(es) — {{ p.upCount }} activa(s), {{ p.disabledCount }} deshabilitada(s)
+            </div>
+          </div>
+        </div>
+
+        <!-- Selector de sesion PPPoE-WAN individual -->
+        <div class="surface p-4 rounded-2xl mb-8">
+          <label class="text-sm font-semibold block mb-2">Ver el gráfico de una sesión PPPoE-WAN específica</label>
+          <select
+            v-model="selectedConnectionIdForChart"
+            class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full max-w-md"
+            @change="selectBalancerConnectionScope(selectedConnectionIdForChart)"
+          >
+            <option value="">Seleccionar sesión...</option>
+            <option v-for="c in activeBalancerConnections" :key="c.id" :value="c.id">
+              {{ c.pppoe_interface_name }}{{ c.physical_interface_name ? ` — ${c.physical_interface_name}` : '' }}
+            </option>
+          </select>
+        </div>
+
+        <p v-if="balancerLoadError" class="mb-4 text-sm text-red-600">{{ balancerLoadError }}</p>
+
+        <h2 class="text-lg font-semibold mb-3">Conexiones WAN activas ({{ filteredBalancerConnections.length }} de {{ activeBalancerConnections.length }})</h2>
+        <div class="flex flex-wrap items-center gap-3 mb-3">
+          <select v-model="tableFilterPort" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Todos los puertos</option>
+            <option v-for="p in balancerPortStats" :key="p.port" :value="p.port">{{ p.port }}</option>
+          </select>
+          <select v-model="tableFilterStatus" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Todos los estados</option>
+            <option value="up">Activa</option>
+            <option value="down">Caída</option>
+            <option value="disabled">Deshabilitada</option>
+          </select>
+        </div>
         <div class="table-shell mb-8">
           <table class="w-full text-sm min-w-[720px]">
             <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
@@ -663,12 +861,12 @@ async function handleToggleSecret(secret: PppSecret) {
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!activeBalancerConnections.length">
+              <tr v-if="!filteredBalancerConnections.length">
                 <td colspan="7" class="px-4 py-6 text-center text-slate-500">
-                  {{ balancerLoadError ? 'No se pudo consultar.' : 'Todavía sin datos — esperando el primer descubrimiento automático.' }}
+                  {{ balancerLoadError ? 'No se pudo consultar.' : activeBalancerConnections.length ? 'Ninguna conexión coincide con el filtro.' : 'Todavía sin datos — esperando el primer descubrimiento automático.' }}
                 </td>
               </tr>
-              <tr v-for="c in activeBalancerConnections" :key="c.id" class="border-t border-slate-200">
+              <tr v-for="c in filteredBalancerConnections" :key="c.id" class="border-t border-slate-200">
                 <td class="px-4 py-3 font-mono text-xs">{{ c.physical_interface_name ?? 'Pendiente de vincular' }}</td>
                 <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ c.macvlan_interface_name ?? '—' }}</td>
                 <td class="px-4 py-3 font-mono text-xs">{{ c.pppoe_interface_name }}</td>
