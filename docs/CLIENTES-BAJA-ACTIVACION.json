@@ -1,0 +1,87 @@
+{
+  "status": "PASS_TECNICO_PENDIENTE_CONFIRMACION_VISUAL_USUARIO",
+  "revision": "2620ed7",
+  "image": "sha256:51fb41c01d8412d270bcd23d84de1804eead9c74d89eb9ba4e464668db200db6",
+  "imageTag": "smartrayco-frontend:administrative-2620ed7-37ccd55",
+  "activatedAt": "2026-10-24T05:37:24.780360+00:00",
+  "artifact": {
+    "file": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\contract-administrative-release-oyfuKh\\frontend-dist.tar.gz",
+    "sha256": "37ccd55e18d5bd369b047122e39130254bc7df27cbda202ab2e842772e239ceb"
+  },
+  "sql": {
+    "applied": true,
+    "file": "contract-administrative-cancellation-proposal.sql",
+    "sha256": "adac9608cf1f068673fcb715fc43d7c32d42c8bb1d6e5d5b0b08e0ce15820ba3",
+    "functions": 3,
+    "triggers": 2,
+    "rlsUnchanged": true,
+    "rollbackSha256": "46971c56a90007616e38832fc49f76c2d7b78725b8fdaa56ec7b9bc0e8834bef"
+  },
+  "publishedFiles": 118,
+  "protectedServicesUnchanged": true,
+  "nginxUnchanged": true,
+  "integrity": {
+    "businessFingerprintsUnchanged": true,
+    "counts": {
+      "clients": 702,
+      "napLinks": 695,
+      "cancelled": 2,
+      "contracts": 721,
+      "suspended": 17
+    },
+    "napByStatus": {
+      "active": 676,
+      "suspended": 17,
+      "unverified": 0,
+      "cancelledHistory": 2
+    },
+    "permissions": [
+      {
+        "function": "contract_administrative_guard",
+        "authenticated": false,
+        "anon": false,
+        "service_role": false
+      },
+      {
+        "function": "contract_administrative_installation_guard",
+        "authenticated": false,
+        "anon": false,
+        "service_role": false
+      },
+      {
+        "function": "contract_cancel_administrative",
+        "authenticated": true,
+        "anon": false,
+        "service_role": false
+      }
+    ]
+  },
+  "backup": {
+    "pc": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\contract-administrative-backup-clientes-20261024T051917Z",
+    "vm": "/opt/smartrayco-staging/clientes-20261024T051917Z/backup",
+    "files": [
+      "nginx.conf",
+      "compose-1.yml",
+      "frontend.image.tar",
+      "previous.json",
+      "rollback.override.json",
+      "html.tar",
+      "compose-0.yml",
+      "compose-2.yml"
+    ],
+    "rollbackImage": "sha256:a1f9defba1bca3aa20b111bf1a2a680b649eb125b452693357d99184ce9c56f7",
+    "override": "/opt/smartrayco-staging/clientes-20261024T051917Z/backup/rollback.override.json"
+  },
+  "validation": {
+    "https": "PASS",
+    "visualAutomated": "PASS",
+    "visualData": "SYNTHETIC_ON_ACTUAL_PUBLISHED_BUNDLE",
+    "realUserVisual": "PENDING",
+    "realCancellation": "NOT_EXECUTED",
+    "operationalWritesDuringTests": 0,
+    "networkCommandsExecuted": 0,
+    "globalRetirementActivated": false
+  },
+  "rollbackExecuted": false,
+  "moduleClosed": false
+}

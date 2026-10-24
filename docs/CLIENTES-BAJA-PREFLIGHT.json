@@ -1,0 +1,118 @@
+{
+  "status": "PASS",
+  "revision": "2620ed7",
+  "schemaReadAt": "2026-10-24T05:28:25.023049+00:00",
+  "schemaEvidenceSha256": "3b926ce35d796ab745dbcacfe00e07ef359fc2f8d75e78c533297ffd1321913e",
+  "readOnly": true,
+  "requiredSchemaCompatible": true,
+  "candidateObjectsAbsent": true,
+  "rlsUnchanged": true,
+  "differences": [
+    "RPC y dos funciones trigger candidatas todavía ausentes; se crearían sólo tras autorización.",
+    "Producción usa set_updated_at=now(); la fixture anterior usa clock_timestamp(). No cambia firma ni atomicidad.",
+    "RLS de instalaciones/profiles es más detallada que la fixture; la RPC no escribe instalaciones y valida perfil vigente con su propietario postgres.",
+    "Los privilegios por defecto conceden EXECUTE a anon/authenticated/service_role; los REVOKE explícitos del candidato son obligatorios y se verificaron."
+  ],
+  "frontendBaseline": "sha256:a1f9defba1bca3aa20b111bf1a2a680b649eb125b452693357d99184ce9c56f7",
+  "base": "c01b3ee29b7956925cf9face2ae718b88a038a05",
+  "servicesUnchanged": true,
+  "servedFiles": 118,
+  "artifact": {
+    "file": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\contract-administrative-release-oyfuKh\\frontend-dist.tar.gz",
+    "sha256": "37ccd55e18d5bd369b047122e39130254bc7df27cbda202ab2e842772e239ceb"
+  },
+  "sourceFiles": [
+    {
+      "file": "src/lib/napOccupancy.ts",
+      "baselineSha256": "c73b72aac974ae8b5390ba3f7069edc095e34631a63a99d359754b78bba9b10e",
+      "sha256": "e548edbfae8b5749f442e07ba2f170b052ef6ac20eec99ae8d5cf2db693cec1b"
+    },
+    {
+      "file": "src/stores/contracts.ts",
+      "baselineSha256": "14d0aa18916f001bbc3aa9bbbb0005890c62059017d37c086da7cc511d547351",
+      "sha256": "824c6fcd17b2f93119fa62a1e53390965c2f23b69c7041c2e5da9c6da1f3c297"
+    },
+    {
+      "file": "src/stores/foFibra.ts",
+      "baselineSha256": "4f955ac74474fb499580aed63ff3f5ebcba69c032425b2b1d7ff9cebb57c07e9",
+      "sha256": "2ebc347d4675fdeb0bbe9370d2415a3670674c6aa4b52fd7f48f727d5c27b171"
+    },
+    {
+      "file": "src/types/domain.ts",
+      "baselineSha256": "f1f04071274b6ae30a5004196588a389cfbfcf9e3d58c6ee84854bcbcc989f82",
+      "sha256": "31b994211889dd44a1ef929e8b461a5ebf4c2b3c9590d59545c9522fbc72f568"
+    },
+    {
+      "file": "src/views/clientes/ClientDetailView.vue",
+      "baselineSha256": "b0ea11ebe3e9ff37769af9fd82ba8bb3dfe4ec7690b4eebb7d61328b3bd0dea0",
+      "sha256": "cae4e530b5d8771a3f5db93937adef51b72c1b774f77bc3b98c77163a08d5655"
+    },
+    {
+      "file": "src/views/clientes/ClientServiceDetailView.vue",
+      "baselineSha256": "3fbb49ea47034fe543a20e6a824abf788639b701b983fb1618499b9d810f748b",
+      "sha256": "537c0f68364cf91c954d8c76b3e815011f25e180aa962ac2e3e47e406dce51b6"
+    },
+    {
+      "file": "src/views/zonas/ZonasView.vue",
+      "baselineSha256": "ba335fb6c320a6607c79ea045387883ef270d1cdb9fb6001737b4c93ac62e6a3",
+      "sha256": "559840ff90cd619af013c727bb057622a2c14cf628b783cd159df396b6f9b59a"
+    }
+  ],
+  "sql": [
+    {
+      "file": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\contract-administrative-release-oyfuKh\\contract-administrative-cancellation-proposal.sql",
+      "sha256": "adac9608cf1f068673fcb715fc43d7c32d42c8bb1d6e5d5b0b08e0ce15820ba3"
+    },
+    {
+      "file": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\contract-administrative-release-oyfuKh\\contract-administrative-cancellation-rollback.sql",
+      "sha256": "46971c56a90007616e38832fc49f76c2d7b78725b8fdaa56ec7b9bc0e8834bef"
+    }
+  ],
+  "backup": {
+    "pc": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\contract-administrative-backup-clientes-20261024T051917Z",
+    "vm": "/opt/smartrayco-staging/clientes-20261024T051917Z/backup",
+    "files": {
+      "nginx.conf": {
+        "bytes": 873,
+        "sha256": "e7be05e43336a89dab2e83977a07bc1a6cddc9c846541dc646810eacee1d7f72"
+      },
+      "compose-1.yml": {
+        "bytes": 108,
+        "sha256": "b65c5542c02eeebb0471ac1ec1086c91c437445ca368cb918aff6fb78ff694ef"
+      },
+      "frontend.image.tar": {
+        "bytes": 31103488,
+        "sha256": "d910f8dcd47017b347e29d321807ee78d04810ed1cc6fbbb161b796c9685a25e"
+      },
+      "previous.json": {
+        "bytes": 15246,
+        "sha256": "94440a69c3672c3edd09800083636ee40767aa59879ec8c958ecec6e719d190b"
+      },
+      "rollback.override.json": {
+        "bytes": 136,
+        "sha256": "4b20dfac21c5855451232b5b29c778e750467cc48aa028438b3cb7a46b9ae2dd"
+      },
+      "html.tar": {
+        "bytes": 4273152,
+        "sha256": "ae91144f1b1da88dded0fd2925c501960f46b8b9d19cde6ce190cd47ce1caa22"
+      },
+      "compose-0.yml": {
+        "bytes": 3683,
+        "sha256": "ee98f1d336468b1b56190f46b09f61b0ccd58643a8e56d4c273f58b7f2e6a762"
+      },
+      "compose-2.yml": {
+        "bytes": 109,
+        "sha256": "c0547f90127f78153de4d9dc43c9943a14ff82e66d9bf3ca7109b2b647372213"
+      }
+    },
+    "imageVerification": {
+      "image": "sha256:a1f9defba1bca3aa20b111bf1a2a680b649eb125b452693357d99184ce9c56f7",
+      "exactIdentity": true,
+      "allReachableDescriptorsVerified": true,
+      "blobsVerified": 20,
+      "bytesVerified": 31082815
+    }
+  },
+  "deployment": "NOT_EXECUTED",
+  "sqlApplied": false
+}

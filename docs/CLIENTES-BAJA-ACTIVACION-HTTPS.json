@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "revision": "2620ed7",
+  "https": true,
+  "routes": [
+    "/",
+    "/clientes",
+    "/zonas",
+    "/clientes/prospectos"
+  ],
+  "apiHealth": "ok",
+  "filesVerified": 118,
+  "indexSha256": "a58e44819dd090bd3cfdc8655b3d0d1dbb29ccb9e9b459752c296de246979aed",
+  "artifactSha256": "37ccd55e18d5bd369b047122e39130254bc7df27cbda202ab2e842772e239ceb",
+  "rpcAnonymousStatus": 401,
+  "rpcErrorCode": "42501",
+  "rpcSchemaRecognized": true,
+  "methods": [
+    "GET"
+  ],
+  "businessWrites": 0
+}
