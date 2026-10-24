@@ -5876,3 +5876,81 @@ sin Reintentar, y confirmar el funcionamiento administrativo. Solicitado
 al propietario; no se dispone de confirmacion todavia. No se certifica
 operacion administrativa real ni se declara terminada la fase.
 No se tocaron OLT, MikroTik ni facturacion.
+
+## Fase 174: panel completo del MikroTik Balanceador — DESPLEGADA en produccion (24/10/2026, 21:40 Peru)
+
+Descubrimiento automatico de las conexiones WAN del balanceador (7 puertos
+SFP, 4 en uso: sfp-sfpplus2/3/6/7, 6 sesiones PPPoE-WAN cada uno = 24
+conexiones activas reales), con graficos/historial (15min/1h/24h/7d, Mbps/
+Gbps), indicadores de CPU/RAM/uptime, conteo de conexiones WAN por estado
+y alertas de caida/recuperacion de enlaces (sesiones PPPoE y puertos
+fisicos SFP, evaluados siempre por separado). Cadena fisico<-macvlan<-pppoe
+resuelta SIEMPRE por los campos propios que RouterOS reporta (nunca por
+nombre); trafico tomado unicamente del nivel PPPoE-client (una sola fuente
+por conexion, nunca sumado con el puerto fisico ni la macvlan). Admin-disabled
+(las 6 sesiones PPPoE-WAN055-060 deshabilitadas intencionalmente) nunca se
+trata como averia.
+
+Cuatro commits publicados en `origin/main` por fast-forward `df43ed6..b379028`
+(24/10/2026, autorizado explicitamente por el propietario tras confirmacion
+visual del preview en cada etapa):
+- `5027af0` — descubrimiento automatico de conexiones WAN (migracion
+  `20261024140000_fase174_balancer_wan_discovery.sql`: tablas
+  `mikrotik_balancer_connections`/`_samples`/`_counters_state`).
+- `85d8320` — graficos e historial por total/puerto/sesion (sin migracion;
+  agregacion en Node sobre las muestras ya guardadas, `balancerTrafficSeries.ts`).
+- `5866ed0` — indicadores de CPU/RAM/uptime y conteo de conexiones WAN por
+  estado (sin migracion; reutiliza el endpoint `/resource` ya existente),
+  mas deteccion de datos obsoletos (`isBalancerDataStale`) para mostrar
+  "estado desconocido"/"sin datos recientes" en vez de declarar una
+  conexion caida por una lectura vieja.
+- `b379028` — alertas de caida/recuperacion de enlaces WAN (migracion
+  `20261024150000_fase174_balancer_link_alerts.sql`: tabla
+  `mikrotik_balancer_link_alerts`, mismo patron que `mikrotik_saturation_alerts`
+  de Fase 172: activo/resuelto, nunca se borra, indice unico sobre
+  status='active' evita duplicados por sondeo).
+
+Ambas migraciones aplicadas a Supabase Cloud `mzupdnjegfwmpajywckd` con
+`scripts/apply-fase171-172-mikrotik.ps1` (DPAPI, contenedor Postgres oficial
+de un solo uso, TLS verify-full). Respaldo logico (`fase171-respaldo-pg-dump.ps1`,
+fases Prepare/Database/Restore) verificado ANTES de aplicar la migracion de
+alertas, con restauracion aislada confirmada sin errores
+(`restore-verify/stdout.log` limpio). Rollback preparado y probado contra
+Postgres 17 aislado en Docker para ambas migraciones
+(`scripts/rollback-fase174b-balancer-link-alerts.sql` incluido).
+
+Verificado con lecturas reales de solo lectura contra el balanceador real
+y contra Supabase productivo (nunca contra datos sinteticos): 24 conexiones
+activas repartidas 6/6/6/6 en los 4 puertos en uso; alcance "total" del
+grafico usa exactamente esas 24 sin duplicar; uptime real `5d11h42m39s`
+formateado "5 dias, 11 h, 42 min"; RAM real 3.70GB libres de 4.00GB
+formateada "309 MB usados, 8%"; las 6 sesiones deshabilitadas confirmadas
+con `conexiones_deshabilitadas_con_alerta_activa_ERRONEA_debe_ser_0 = 0`
+tras varios ciclos reales de descubrimiento; administrador PPPoE y borde
+dedicado confirmados intactos (muestra de trafico del dedicado fresca,
+reconciliacion del administrador sin tocar). Ningun comando de escritura
+contra MikroTik en todo Fase 174 -- solo GET (`/interface`,
+`/interface/macvlan`, `/interface/pppoe-client`, `/system/resource`).
+
+**IMPORTANTE — pendiente real**: la logica de deteccion de caida/recuperacion
+de enlaces (`decideWanLinkAlertTransition`) esta cubierta por pruebas
+unitarias exhaustivas y por una verificacion mecanica completa del ciclo de
+vida (activa -> duplicado rechazado por el indice unico -> resuelta ->
+reabierta) contra un Postgres aislado con el mismo esquema ya aplicado en
+produccion -- pero a proposito **nunca se desconecto un enlace real** (para
+no interrumpir servicio real ni inventar historial ficticio), por lo que
+**todavia no hay un caso real de caida/recuperacion que haya pasado por el
+camino completo en produccion** (la tabla `mikrotik_balancer_link_alerts`
+seguia en 0 filas al cierre de esta fase, porque no hubo ninguna caida real
+desde que se activo). Validacion pendiente: la primera vez que una sesion
+PPPoE-WAN o un puerto SFP reales caigan y se recuperen, confirmar
+visualmente que la alerta aparece con los datos correctos y se resuelve
+sola -- sin eso, esta parte de Fase 174 queda probada en laboratorio pero
+no certificada contra un evento real.
+
+Preview (`preview-fase174` en la VM, `panel.rayconetworks.com`) confirmado
+funcionando despues del push a `origin/main` (no requirio reconstruir ni
+redesplegar, el push a GitHub no afecta la VM por si solo). Pruebas:
+192 backend (`test:provisioning`) + 414 frontend (`test:fetch-timeout`),
+todas en verde; `vue-tsc`/`tsc`/`vite build` limpios (mismos 3 errores
+preexistentes no relacionados en tests ajenos).
