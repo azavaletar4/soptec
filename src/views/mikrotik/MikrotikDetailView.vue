@@ -158,26 +158,37 @@ async function loadAlerts() {
   }
 }
 
+// Fase 172 — corrección visual: vue3-apexcharts aplica cada actualizacion
+// de `options` con `JSON.parse(JSON.stringify(options))` (ver su propio
+// codigo fuente, copyData()) para no disparar los watchers profundos de
+// Vue — eso BORRA SIEMPRE cualquier función que viva dentro de `options`
+// (el formateador del eje Y, el del tooltip), aunque la carga inicial se
+// vea bien (el primer render usa un merge que sí preserva funciones). Cada
+// refresco de historico (loadHistory, cada 30s) volvia a pisar esas
+// funciones -> el eje Y volvia a mostrar el numero crudo en bps.
+//
+// Arreglo real: `options` deja de depender de `historyPoints` (queda
+// estatico, nunca vuelve a disparar esa ruta con JSON.stringify) — los
+// puntos nuevos entran como pares {x,y} dentro de `series` (que SI se
+// actualiza seguido, pero ahi nunca hubo funciones que perder). Mismos
+// valores, mismas series, mismos colores/rangos — solo cambia COMO llegan
+// los timestamps al grafico.
 const chartSeries = computed(() => [
-  { name: 'Descarga', data: historyPoints.value.map((p) => Math.round(p.avg_rx_bps ?? 0)) },
-  { name: 'Subida', data: historyPoints.value.map((p) => Math.round(p.avg_tx_bps ?? 0)) },
+  { name: 'Descarga', data: historyPoints.value.map((p) => ({ x: new Date(p.bucket_start).getTime(), y: Math.round(p.avg_rx_bps ?? 0) })) },
+  { name: 'Subida', data: historyPoints.value.map((p) => ({ x: new Date(p.bucket_start).getTime(), y: Math.round(p.avg_tx_bps ?? 0) })) },
 ]);
-const chartOptions = computed(() => ({
+const chartOptions = {
   chart: { type: 'area' as const, toolbar: { show: false }, foreColor: '#64748b', background: 'transparent', animations: { speed: 300 } },
   colors: ['#0ea5e9', '#8b5cf6'],
   dataLabels: { enabled: false },
   stroke: { curve: 'smooth' as const, width: 2 },
   fill: { type: 'gradient', gradient: { opacityFrom: 0.3, opacityTo: 0.02, stops: [0, 90, 100] } },
   grid: { borderColor: '#e2e8f0', strokeDashArray: 4 },
-  xaxis: {
-    type: 'datetime' as const,
-    categories: historyPoints.value.map((p) => new Date(p.bucket_start).getTime()),
-    labels: { datetimeUTC: false },
-  },
+  xaxis: { type: 'datetime' as const, labels: { datetimeUTC: false } },
   yaxis: { labels: { formatter: (v: number) => formatBpsAsMbps(v) } },
   tooltip: { theme: 'light' as const, x: { format: 'dd MMM HH:mm' }, y: { formatter: (v: number) => formatBpsAsMbps(v) } },
   legend: { show: true, position: 'top' as const, horizontalAlign: 'left' as const },
-}));
+};
 
 const peakDownloadBps = computed(() => Math.max(0, ...historyPoints.value.map((p) => p.max_rx_bps ?? 0)));
 const peakUploadBps = computed(() => Math.max(0, ...historyPoints.value.map((p) => p.max_tx_bps ?? 0)));

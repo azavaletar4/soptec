@@ -23,6 +23,15 @@ test('formatBpsAsMbps: formatea en Mbps o Gbps segun magnitud, nunca negativo/Na
   assert.equal(formatBpsAsMbps(1_200_000_000), '1.20 Gbps');
 });
 
+// Casos exactos pedidos por el usuario (corrección visual del eje Y del
+// gráfico del borde dedicado, tras subir la capacidad a 1 Gbps) — el valor
+// crudo en bps nunca se altera, solo la etiqueta que se muestra.
+test('formatBpsAsMbps: casos reales del eje Y (100 Mbps / 500 Mbps / 1 Gbps)', () => {
+  assert.equal(formatBpsAsMbps(100_000_000), '100.0 Mbps');
+  assert.equal(formatBpsAsMbps(500_000_000), '500.0 Mbps');
+  assert.equal(formatBpsAsMbps(1_000_000_000), '1.00 Gbps');
+});
+
 test('usagePercent: calcula % contra la capacidad configurada, acotado y sin division por cero', () => {
   assert.equal(usagePercent(250_000_000, 500), 50);
   assert.equal(usagePercent(500_000_000, 500), 100);
