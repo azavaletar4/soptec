@@ -3,7 +3,7 @@ import { findContractsLinkedToNonAdminRouter, listPppoeAdminDeviceIds, reconcile
 // Reconciliacion MikroTik -> Panel — mismo patron que debtHoldScheduler.ts /
 // tr069Scheduler.ts (setInterval, un solo proceso backend via PM2).
 //
-// Fase 170: recorre SOLO routers pppoe_admin, uno por uno (nunca "todos en
+// Fase 173: recorre SOLO routers pppoe_admin, uno por uno (nunca "todos en
 // un combinado") — cada router guarda su propio reporte
 // (mikrotikReconcileService.getLastReconcileReport(deviceId)), visible
 // unicamente en el detalle de ESE router.
@@ -32,7 +32,7 @@ async function runScan() {
       }
     }
 
-    // Requisito 8 (Fase 170): informar, nunca modificar, contratos cuyo
+    // Requisito 8 (Fase 173): informar, nunca modificar, contratos cuyo
     // mikrotik_device_id apunta a un router que no es administrador PPPoE.
     const misassociated = await findContractsLinkedToNonAdminRouter();
     if (misassociated.length) {

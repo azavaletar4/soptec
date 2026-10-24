@@ -1,4 +1,4 @@
--- Fase 168: clasificacion de routers MikroTik por funcion (RouterOS v7)
+-- Fase 171: clasificacion de routers MikroTik por funcion (RouterOS v7)
 --
 -- Hasta ahora todo router registrado en mikrotik_devices se trataba igual
 -- (administrador PPPoE de clientes). Esta columna permite registrar tambien

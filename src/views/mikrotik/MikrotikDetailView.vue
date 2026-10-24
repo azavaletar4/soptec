@@ -35,9 +35,9 @@ const device = computed(() => mikrotikStore.devices.find((d) => d.id === deviceI
 // se muestra solo lo que de verdad aplica (conexion, interfaces, trafico,
 // CPU, memoria), nunca una sección PPPoE/DHCP vacía o que de error.
 const isPppoeAdmin = computed(() => isPppoeAdminRole(device.value?.device_role));
-// Fase 169: el panel de trafico/saturación es EXCLUSIVO del borde dedicado
+// Fase 172: el panel de trafico/saturación es EXCLUSIVO del borde dedicado
 // (CCR2004 Fiberlux) — el balanceador queda exactamente como lo dejó la
-// Fase 168 (sin tocar), a propósito.
+// Fase 171 (sin tocar), a propósito.
 const isBorderDedicated = computed(() => device.value?.device_role === 'borde_dedicado');
 const canConfigureBorder = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 
@@ -106,7 +106,7 @@ async function loadAll() {
   }
 }
 
-// ---- Fase 169: trafico/saturación del borde dedicado ----
+// ---- Fase 172: trafico/saturación del borde dedicado ----
 
 const live = ref<MikrotikTrafficLive | null>(null);
 const historyRange = ref<TrafficHistoryRange>('1h');
@@ -267,7 +267,7 @@ onUnmounted(() => {
   clearInterval(historyPoll);
 });
 
-// ---- Fase 170: reconciliacion PPPoE — EXCLUSIVA del router administrador, UN router a la vez ----
+// ---- Fase 173: reconciliacion PPPoE — EXCLUSIVA del router administrador, UN router a la vez ----
 
 const reconcileReport = ref<ReconcileReport | null>(null);
 const showReconcileDetail = ref(false);
@@ -401,7 +401,7 @@ async function handleToggleSecret(secret: PppSecret) {
         </div>
 
         <template v-if="isPppoeAdmin">
-        <!-- Fase 170: reconciliación PPPoE — exclusiva de ESTE router administrador -->
+        <!-- Fase 173: reconciliación PPPoE — exclusiva de ESTE router administrador -->
         <div class="surface p-4 mb-8">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -559,7 +559,7 @@ async function handleToggleSecret(secret: PppSecret) {
         </p>
       </template>
 
-      <!-- Fase 169: panel de trafico/saturación — EXCLUSIVO del borde dedicado -->
+      <!-- Fase 172: panel de trafico/saturación — EXCLUSIVO del borde dedicado -->
       <template v-else>
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-6 text-sm">
           <span class="badge" :class="linkStatusClass">{{ linkStatusLabel }}</span>
@@ -763,7 +763,7 @@ async function handleToggleSecret(secret: PppSecret) {
 
         <p class="text-xs text-slate-500 mt-4">
           El servicio REST de este router usa HTTP sin cifrar (puerto 80) — recomendado restringir su acceso solo al
-          servidor del panel y planificar HTTPS como mejora independiente (ver sección de seguridad, Fase 169).
+          servidor del panel y planificar HTTPS como mejora independiente (ver sección de seguridad, Fase 172).
         </p>
       </template>
     </template>

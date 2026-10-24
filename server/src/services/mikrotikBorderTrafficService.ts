@@ -10,13 +10,13 @@ import {
   type SaturationSample,
 } from '../mikrotik/borderTraffic';
 
-// Fase 169 — parte con I/O (Supabase + REST) del monitoreo de trafico del
+// Fase 172 — parte con I/O (Supabase + REST) del monitoreo de trafico del
 // MikroTik de borde DEDICADO. La logica de calculo/decision vive en
 // mikrotik/borderTraffic.ts (sin I/O, con pruebas unitarias) — este archivo
 // solo conecta esa logica con la base real y el router real.
 //
 // Alcance a proposito limitado a device_role='borde_dedicado' — el
-// balanceador (Fase 168) no entra aqui todavia, queda intacto.
+// balanceador (Fase 171) no entra aqui todavia, queda intacto.
 
 export interface BorderDeviceRow {
   id: string;
@@ -67,7 +67,7 @@ export async function fetchLiveReading(device: BorderDeviceRow): Promise<LiveRea
   }
 }
 
-// ---- Cache en memoria para la vista "en vivo" (Fase 169) ----
+// ---- Cache en memoria para la vista "en vivo" (Fase 172) ----
 // Un solo proceso backend (sin balanceo, igual criterio que el resto de
 // schedulers de este repo) sondea el router cada pocos segundos UNA sola
 // vez; cualquier cantidad de pestañas/admins viendo el panel leen esta
@@ -284,7 +284,7 @@ async function evaluateAndPersistAlerts(device: BorderDeviceRow, now: Date): Pro
   }
 }
 
-// ---- Retencion (Fase 169): controlar crecimiento de registros ----
+// ---- Retencion (Fase 172): controlar crecimiento de registros ----
 
 const RETENTION_DAYS = Number(process.env.MIKROTIK_BORDER_TRAFFIC_RETENTION_DAYS ?? 45);
 

@@ -40,7 +40,7 @@ test('computeInterfaceDelta: con contadores REALES leidos del CCR2004 Fiberlux (
   // VLAN-236 (entrada del proveedor) en dos lecturas separadas 60s, con los
   // mismos ordenes de magnitud que devolvio /interface contra el router real
   // (uptime ~1 semana, enlace casi saturado) -- ver verificacion documentada
-  // en ESTADO_DESARROLLO.md Fase 169.
+  // en ESTADO_DESARROLLO.md Fase 172.
   const prev = { rx: 48_081_234_746_417, tx: 6_949_507_588_200 };
   const curr = { rx: prev.rx + 3_000_000_000, tx: prev.tx + 70_000_000 }; // ~400 Mbps bajada, ~9 Mbps subida en 60s
   const r = computeInterfaceDelta(prev, curr, 60);

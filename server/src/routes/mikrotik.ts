@@ -101,7 +101,7 @@ mikrotikRoutes.put('/:id', requireRole(...DEVICE_WRITE), async (c) => {
   if ('device_role' in body && body.device_role && !isValidMikrotikDeviceRole(body.device_role)) {
     return c.json({ error: 'Tipo de router invalido' }, 400);
   }
-  // Fase 169: capacidad contratada — solo para estadisticas/alertas, nunca
+  // Fase 172: capacidad contratada — solo para estadisticas/alertas, nunca
   // toca queues/perfiles/rutas reales del router. Debe ser un numero > 0.
   for (const key of ['capacity_download_mbps', 'capacity_upload_mbps'] as const) {
     if (key in body && body[key] != null) {
@@ -342,7 +342,7 @@ mikrotikRoutes.get('/:id/interfaces', requireRole(...STAFF_READ), async (c) => {
   }
 });
 
-// ---- Monitoreo de trafico del borde dedicado (Fase 169) ----
+// ---- Monitoreo de trafico del borde dedicado (Fase 172) ----
 // Solo lectura: sirve la cache en memoria del scheduler (mikrotikBorderTrafficScheduler.ts)
 // y consultas a Supabase — nunca llama al router directamente desde aqui
 // (eso lo hace unicamente el scheduler, para no multiplicar consultas si

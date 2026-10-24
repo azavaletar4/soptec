@@ -1,4 +1,4 @@
-// Fase 169 — helpers puros de presentacion para el panel de trafico del
+// Fase 172 — helpers puros de presentacion para el panel de trafico del
 // MikroTik de borde dedicado (CCR2004 Fiberlux). Sin llamadas a red/Supabase
 // aqui a proposito, para poder probarlos sin mockear nada.
 

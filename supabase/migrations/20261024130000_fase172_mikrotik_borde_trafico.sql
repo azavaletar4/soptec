@@ -1,5 +1,5 @@
--- Fase 169: monitoreo de trafico para el MikroTik de borde DEDICADO
--- (device_role='borde_dedicado', Fase 168). El balanceador y el
+-- Fase 172: monitoreo de trafico para el MikroTik de borde DEDICADO
+-- (device_role='borde_dedicado', Fase 171). El balanceador y el
 -- administrador PPPoE no se ven afectados por esta migracion -- las
 -- columnas nuevas quedan en null/default hasta que un admin las configure
 -- desde el panel para un router de borde dedicado especifico.
@@ -65,7 +65,7 @@ create trigger trg_mikrotik_interface_counters_state_updated_at
   before update on public.mikrotik_interface_counters_state
   for each row execute procedure public.set_updated_at();
 
--- Saturacion (>=85% sostenido >=5 min, Fase 169): activo/resuelto, nunca se
+-- Saturacion (>=85% sostenido >=5 min, Fase 172): activo/resuelto, nunca se
 -- borra -- queda como registro de cuando se recupero. El indice unico sobre
 -- status='active' es lo que evita alertas duplicadas por la misma
 -- direccion mientras siga activa.

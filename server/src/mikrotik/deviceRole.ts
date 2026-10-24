@@ -1,4 +1,4 @@
-// Fase 168 — clasificacion de routers MikroTik por funcion.
+// Fase 171 — clasificacion de routers MikroTik por funcion.
 //
 // Hasta ahora todo router registrado se trataba como administrador PPPoE.
 // 'pppoe_admin' es el UNICO rol que participa en reconciliacion PPPoE

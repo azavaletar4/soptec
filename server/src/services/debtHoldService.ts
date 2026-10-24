@@ -189,7 +189,7 @@ async function applyMikrotikProfile(contract: { mikrotik_device_id: string | nul
     .eq('id', contract.mikrotik_device_id)
     .single();
   if (devErr || !device) return { ok: false, error: devErr?.message ?? 'Router no encontrado' };
-  // Defensa adicional (Fase 168): un contrato nunca deberia quedar vinculado
+  // Defensa adicional (Fase 171): un contrato nunca deberia quedar vinculado
   // a un router de borde, pero si ocurriera no se le manda ningun comando PPP.
   if (!isPppoeAdminRole(device.device_role)) {
     return { ok: false, error: 'El router vinculado a este contrato esta clasificado como borde — no administra PPPoE, revisar la vinculacion' };

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { filterContractsLinkedToNonAdminRouter, type ContractLinkedToNonAdminRouter } from '../mikrotikReconcileService';
 
-// Fase 170 — reconciliacion PPPoE exclusiva por router administrador.
+// Fase 173 — reconciliacion PPPoE exclusiva por router administrador.
 // filterContractsLinkedToNonAdminRouter es la parte pura (sin Supabase) del
 // requisito 8: detectar, SOLO PARA INFORMAR, contratos cuyo
 // mikrotik_device_id apunta a un router que no es administrador PPPoE

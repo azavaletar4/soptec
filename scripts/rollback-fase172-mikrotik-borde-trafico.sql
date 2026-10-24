@@ -1,11 +1,11 @@
--- Revierte 20261024130000_fase169_mikrotik_borde_trafico.sql.
+-- Revierte 20261024130000_fase172_mikrotik_borde_trafico.sql.
 --
 -- Orden obligatorio: esta fase se revierte ANTES de (o sin necesidad de)
--- revertir Fase 168 -- Fase 168 (device_role) puede quedar aplicada sola
--- sin que nada de Fase 169 dependa de ella para funcionar en reversa.
--- Si en algun momento tambien se revierte Fase 168, hacerlo DESPUES de
+-- revertir Fase 171 -- Fase 171 (device_role) puede quedar aplicada sola
+-- sin que nada de Fase 172 dependa de ella para funcionar en reversa.
+-- Si en algun momento tambien se revierte Fase 171, hacerlo DESPUES de
 -- correr este script (mikrotikBorderTrafficService.ts referencia
--- device_role; si Fase 168 se revierte primero con Fase 169 todavia
+-- device_role; si Fase 171 se revierte primero con Fase 172 todavia
 -- aplicada, esas consultas empiezan a fallar con "column does not exist").
 --
 -- Solo lectura antes de borrar: avisa cuanto historico/alertas reales se
@@ -17,7 +17,7 @@ declare
 begin
   select count(*) into v_samples from public.mikrotik_interface_samples;
   select count(*) into v_alerts from public.mikrotik_saturation_alerts;
-  raise notice 'Fase 169 rollback: se van a borrar % muestras de trafico y % alertas de saturacion (historico real, si el monitoreo ya corrio en produccion)', v_samples, v_alerts;
+  raise notice 'Fase 172 rollback: se van a borrar % muestras de trafico y % alertas de saturacion (historico real, si el monitoreo ya corrio en produccion)', v_samples, v_alerts;
 end $$;
 
 begin;

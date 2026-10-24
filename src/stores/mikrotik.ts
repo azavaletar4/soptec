@@ -22,7 +22,7 @@ export interface MikrotikDevice {
   longitude: number | null;
 }
 
-// ---- Fase 169: trafico del borde dedicado ----
+// ---- Fase 172: trafico del borde dedicado ----
 
 export type MonitoredLinkStatus = 'ok' | 'not_configured' | 'offline' | 'warming_up';
 
@@ -270,7 +270,7 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<MikrotikSaturationAlert[]>(`/api/mikrotik-devices/${id}/saturation-alerts`);
   }
 
-  // Fase 170: la reconciliacion es por router (nunca "todos" en una sola
+  // Fase 173: la reconciliacion es por router (nunca "todos" en una sola
   // llamada) — se consulta/corre desde el detalle de CADA router administrador.
   function fetchReconcileReport(id: string) {
     return apiFetch<ReconcileReport | null>(`/api/mikrotik-devices/${id}/reconcile/report`);

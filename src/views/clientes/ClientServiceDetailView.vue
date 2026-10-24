@@ -70,7 +70,7 @@ const catalogs = useCatalogsStore();
 const ticketsStore = useTicketsStore();
 const invoicesStore = useInvoicesStore();
 const mikrotikStore = useMikrotikStore();
-// Fase 168: un contrato solo se puede vincular al router administrador
+// Fase 171: un contrato solo se puede vincular al router administrador
 // PPPoE — un router de borde (dedicado o balanceador) no administra
 // clientes, ni participa en reconciliacion ni en cortes por deuda.
 const pppoeAdminMikrotikDevices = computed(() => mikrotikStore.devices.filter((d) => isPppoeAdminRole(d.device_role)));

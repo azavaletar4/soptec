@@ -1,4 +1,4 @@
-// Fase 168 — clasificacion de routers MikroTik por funcion. Espejo del
+// Fase 171 — clasificacion de routers MikroTik por funcion. Espejo del
 // mismo contrato en server/src/mikrotik/deviceRole.ts (frontend y backend
 // no comparten build, se duplica a proposito — igual criterio que el resto
 // de tipos de mikrotik.ts).

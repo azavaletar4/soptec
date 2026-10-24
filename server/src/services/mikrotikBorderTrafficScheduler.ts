@@ -6,7 +6,7 @@ import {
   updateLiveSnapshotFromReading,
 } from './mikrotikBorderTrafficService';
 
-// Fase 169 — un solo ciclo (por defecto cada 5s) sondea TODOS los routers de
+// Fase 172 — un solo ciclo (por defecto cada 5s) sondea TODOS los routers de
 // borde dedicado ya configurados y actualiza la cache "en vivo" (memoria,
 // nunca Supabase) que leen las pestañas del panel — asi N admins viendo la
 // misma pantalla generan una sola consulta real al router, nunca N.

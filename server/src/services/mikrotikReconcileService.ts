@@ -7,14 +7,14 @@ import { isPppoeAdminRole } from '../mikrotik/deviceRole';
 // la unica forma real de detectar un cambio hecho directo en Winbox/WebFig
 // es sondear /ppp/secret periodicamente y comparar contra la BD.
 //
-// Fase 170: la reconciliacion esta SIEMPRE acotada a UN router administrador
+// Fase 173: la reconciliacion esta SIEMPRE acotada a UN router administrador
 // PPPoE a la vez (nunca "todos los routers" en una sola llamada) — tanto la
 // corrida manual (boton "Reconciliar ahora" en el detalle de ESE router)
 // como la corrida automatica (el scheduler la llama una vez por cada router
 // pppoe_admin, ver mikrotikReconcileScheduler.ts) usan esta misma funcion.
 // Nunca procesa un router de borde (dedicado o balanceador) — un balanceador
 // real puede tener decenas de interfaces PPPoE-WAN hacia el PROVEEDOR
-// (ver captura Winbox, Fase 170) que NO son abonados de SmartRayco; si se
+// (ver captura Winbox, Fase 173) que NO son abonados de SmartRayco; si se
 // llegaran a leer como secretos PPPoE se contarian como "contratos" por
 // error. El guard de device_role aplica ANTES de pedirle nada al router.
 //
@@ -82,7 +82,7 @@ export interface ReconcileReport {
   error: string | null;
 }
 
-// Fase 170: un reporte por router (nunca uno global compartido) — "Varios
+// Fase 173: un reporte por router (nunca uno global compartido) — "Varios
 // routers administradores: resultados aislados por dispositivo".
 const lastReportByDevice = new Map<string, ReconcileReport>();
 
@@ -216,7 +216,7 @@ export async function listPppoeAdminDeviceIds(): Promise<string[]> {
   return (data ?? []).map((d) => d.id as string);
 }
 
-// ---- Fase 170, requisito 8: deteccion de contratos mal asociados ----
+// ---- Fase 173, requisito 8: deteccion de contratos mal asociados ----
 // Un contrato con pppoe_username + mikrotik_device_id apuntando a un router
 // que NO es administrador PPPoE (dedicado o balanceador) nunca se evalua en
 // reconcileMikrotikDevice (ningun router de borde entra a ese loop) — por
