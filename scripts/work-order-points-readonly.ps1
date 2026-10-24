@@ -1,6 +1,6 @@
 # Consulta acotada READ ONLY: conteos de puntos y dos funciones de puntuacion.
 [CmdletBinding()]
-param()
+param([ValidateSet('points','closure')][string]$Scope='points')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $password=$null; $payload=$null; $response=$null
@@ -40,7 +40,8 @@ try {
     if([string]::IsNullOrEmpty($password) -or $password -match '[\r\n]') { throw 'SAFE:CREDENCIAL_INVALIDA' }
     $stage='CA'
     $ca=Get-TrustedCa $settings.PGSSLROOTCERT
-    $query=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'tests/work-order-points-readonly.sql'))
+    $queryFile=if($Scope -eq 'closure') { 'tests/field-points-signature-readonly.sql' } else { 'tests/work-order-points-readonly.sql' }
+    $query=[IO.File]::ReadAllText((Join-Path $PSScriptRoot $queryFile))
     $shell='IFS= read -r CERT; CERT=${CERT#$(printf ''\357\273\277'')}; printf %s "$CERT" | base64 -d > /tmp/smartrayco-ca.pem; IFS= read -r PGHOST; IFS= read -r PGPORT; IFS= read -r PGDATABASE; IFS= read -r PGUSER; IFS= read -r PGPASSWORD; export PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD; export PGSSLMODE=verify-full PGSSLROOTCERT=/tmp/smartrayco-ca.pem PGCONNECT_TIMEOUT=10 PGCLIENTENCODING=UTF8; export PGOPTIONS=' + "'-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=2000'" + '; exec psql -X -q -A -t --no-password -v ON_ERROR_STOP=1'
     $payload=$ca+"`n"+$settings.PGHOST+"`n5432`npostgres`n"+$settings.PGUSER+"`n"+$password+"`n"+$query+"`n"
     $stage='DOCKER_SQL'
@@ -51,7 +52,7 @@ try {
     }
     $rows=@($response.Output.Trim() -split '\r?\n' | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
     foreach($result in $rows) { if($result.read_only -ne 'on') { throw 'SAFE:CONTEXTO_INCORRECTO' } }
-    $destination=(Join-Path $PSScriptRoot 'inventory-auth-lab/runtime/work-order-points-preflight-private.json')
+    $destination=if($Scope -eq 'closure') { Join-Path $PSScriptRoot 'inventory-auth-lab/runtime/field-points-signature-private.json' } else { Join-Path $PSScriptRoot 'inventory-auth-lab/runtime/work-order-points-preflight-private.json' }
     [IO.File]::WriteAllText($destination,($rows | ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
     Write-Output 'WORK_ORDER_POINTS_READ_ONLY_OK; private output saved; no credentials or operational identifiers printed'
 } catch {

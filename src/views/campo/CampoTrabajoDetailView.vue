@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
-import SignaturePad from '@/components/campo/SignaturePad.vue';
+import CampoJobPoints from '@/components/campo/CampoJobPoints.vue';
 import RoutineInventory from '@/components/inventario/RoutineInventory.vue';
 import AuthorizeOnuModal from '@/views/olt/AuthorizeOnuModal.vue';
 import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
@@ -1390,7 +1390,7 @@ const TICKET_PHOTO_CATEGORIES = [
 
 // Paso 5 (Cierre): "resumen / datos pendientes" — reusa EXACTAMENTE las
 // mismas condiciones que ya exige handleCloseSubmit (zona/NAP, codigo de
-// cliente, firma); las fotos no son una validacion nueva, solo informativas
+// cliente); las fotos no son una validacion nueva, solo informativas
 // (hoy no bloquean el cierre, igual que antes de esta fase).
 const installSummary = computed(() => {
   if (jobType !== 'installation') return [];
@@ -1406,7 +1406,6 @@ const installSummary = computed(() => {
       ok: !missingPhotos.length,
       detail: missingPhotos.length ? `Faltan: ${missingPhotos.map((c) => c.label).join(', ')}` : null,
     },
-    { step: 5, label: 'Firma del cliente', ok: !!signatureBlob.value },
   ];
 });
 
@@ -1451,9 +1450,8 @@ const requiresJustification = computed(
 );
 const justificacionMissing = ref(false);
 const closurePhotos = ref<Record<string, File | undefined>>({});
+// Solo conserva firmas capturadas en borradores anteriores. Ya no hay captura digital.
 const signatureBlob = ref<Blob | null>(null);
-const signaturePadRef = ref<InstanceType<typeof SignaturePad> | null>(null);
-const signatureMissing = ref(false);
 const gettingLocation = ref(false);
 const closing = ref(false);
 const closeError = ref<string | null>(null);
@@ -1613,8 +1611,6 @@ async function restoreDraft() {
     equipmentEntries.value = draft.equipmentEntries.map((eq) => ({ ...eq, previewUrl: URL.createObjectURL(eq.file) }));
     if (draft.signatureBlob) {
       signatureBlob.value = draft.signatureBlob;
-      await nextTick();
-      await signaturePadRef.value?.loadImage(draft.signatureBlob);
     }
     toast.info('Se recuperó un borrador guardado de este cierre de trabajo.');
   } finally {
@@ -1634,17 +1630,7 @@ function openLightbox(photos: LightboxPhoto[], startId: string) {
 
 async function handleCloseSubmit() {
   if (!trabajo.value) return;
-  // Prueba de servicio entregado: en una instalacion NUEVA la firma del
-  // cliente es obligatoria (sin ella no queda constancia de que acepto el
-  // trabajo). En una averia/soporte sigue siendo opcional — a veces se
-  // resuelve remoto o el cliente no esta presente.
-  if (jobType === 'installation' && !signatureBlob.value) {
-    closeError.value = 'Falta la firma del cliente para completar la instalación.';
-    signatureMissing.value = true;
-    signaturePadRef.value?.scrollIntoView();
-    return;
-  }
-  signatureMissing.value = false;
+  // El cliente firma la hoja física de servicio; no se requiere firma digital.
 
   // Planta Externa (Zona + Caja NAP) es obligatoria al completar un alta —
   // sin esto no queda registrado donde quedo conectado el cliente.
@@ -1808,6 +1794,7 @@ async function handleCloseSubmit() {
     </template>
 
     <template v-else>
+      <CampoJobPoints :job-type="jobType" :job-id="jobId" />
       <section v-if="jobType !== 'routine'" class="surface p-3 mb-3">
         <p v-if="inventoryPendingNotice" class="text-sm text-amber-700">{{ inventoryPendingNotice }}</p>
         <button class="text-sm text-blue-700" :disabled="inventoryWriteBusy" @click="retryPendingInventory">
@@ -2808,13 +2795,7 @@ async function handleCloseSubmit() {
             </button>
           </div>
 
-          <SignaturePad
-            v-show="showStep(5)"
-            ref="signaturePadRef"
-            :required="jobType === 'installation'"
-            :invalid="signatureMissing"
-            @change="(b) => { signatureBlob = b; if (b) signatureMissing = false; }"
-          />
+          <p v-show="showStep(5)" class="text-xs text-slate-500 mt-3">El cliente firma la hoja física de servicio.</p>
 
           <p v-if="closeError" class="text-sm text-red-600 mt-3">{{ closeError }}</p>
           <p v-if="closeResult === 'queued'" class="text-sm text-amber-600 mt-3">

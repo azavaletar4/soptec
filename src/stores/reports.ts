@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { ClientStatus, InvoiceStatus, TicketCategory, TicketMotivoAveria, TicketPriority, TicketStatus } from '@/types/domain';
 
-// Puntos: fuente SQL compartida. Otros agregados: select + reduce en JS a la escala de
+// Reportes calculados en el cliente (select + reduce en JS): a la escala de
 // un solo ISP (cientos/pocos miles de filas) es mas simple que armar vistas
 // SQL de agregacion, y sigue el mismo patron ya usado en installations.ts,
 // inventory.ts, etc. (fetch directo via supabase-js, sin backend).
@@ -137,6 +137,7 @@ export const useReportsStore = defineStore('reports', () => {
     let rootCauseMissing = 0;
     let resolutionHoursSum = 0;
     let resolutionCount = 0;
+    const techMap = new Map<string, { name: string; ticketCount: number; points: number }>();
 
     for (const t of rows) {
       byStatus[t.status] += 1;
@@ -156,12 +157,21 @@ export const useReportsStore = defineStore('reports', () => {
           resolutionCount += 1;
         }
       }
+
+      if (t.assigned_to) {
+        const existing = techMap.get(t.assigned_to);
+        const name = t.assigned_profile?.full_name || t.assigned_profile?.email || 'Técnico';
+        if (existing) {
+          existing.ticketCount += 1;
+          existing.points += t.points ?? 0;
+        } else {
+          techMap.set(t.assigned_to, { name, ticketCount: 1, points: t.points ?? 0 });
+        }
+      }
     }
 
-    const { data: pointRows, error: pointError } = await supabase.rpc('ticket_report_points', { p_from: fromIso, p_to: toIso });
-    if (pointError) throw pointError;
-    const technicianRanking = ((pointRows ?? []) as { staff_id: string; name: string; ticket_count: number; points: number }[])
-      .map((v) => ({ staffId: v.staff_id, name: v.name, ticketCount: Number(v.ticket_count), points: Number(v.points) }))
+    const technicianRanking = [...techMap.entries()]
+      .map(([staffId, v]) => ({ staffId, ...v }))
       .sort((a, b) => b.points - a.points);
 
     return {

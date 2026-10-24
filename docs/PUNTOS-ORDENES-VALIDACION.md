@@ -1,5 +1,10 @@
 # Puntos obligatorios y ajuste administrativo — 24/10/2026
 
+> Esta entrega describe `506b35a`. La continuación
+> [PUNTOS-CAMPO-AJUSTE-FINAL.md](PUNTOS-CAMPO-AJUSTE-FINAL.md) sustituye sus
+> cambios pendientes de contabilización/reportes: conserva históricos y detiene
+> la acreditación oficial hasta resolver el cierre administrativo faltante.
+
 Implementación local. Sin migraciones, escrituras ni despliegues en producción.
 Referencia solicitada: `origin/main = f763d37b646a07ecbf70e354c8976ce96bae9d28`.
 Se conservó el checkout recibido (`HEAD 84b9af7`), con sus cambios previos:

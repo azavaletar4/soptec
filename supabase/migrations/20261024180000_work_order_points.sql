@@ -100,64 +100,6 @@ $$;
 revoke all on function public.adjust_work_order_points(text,uuid,numeric,numeric,text) from public,anon;
 grant execute on function public.adjust_work_order_points(text,uuid,numeric,numeric,text) to authenticated;
 
--- Reutilizar la fuente compartida instalada por Mi avance. Mantener cuadrilla,
--- penalizaciones, calendario y agregados. Fallar ante deriva de definición.
-do $patch$
-declare v_def text;
-begin
-  if to_regprocedure('public.technician_point_contributions(timestamptz,timestamptz)') is null then
-    raise exception 'Falta la fuente compartida de puntos: revisar instalación antes de continuar';
-  end if;
-  if (select md5(prosrc) from pg_proc where oid='public.technician_point_contributions(timestamptz,timestamptz)'::regprocedure)
-     <> '26a40b0e3a17831849b67a6562b6036d' then
-    raise exception 'Deriva de la fuente de puntos instalada: revisar antes de continuar';
-  end if;
-  select pg_get_functiondef('public.technician_point_contributions(timestamptz,timestamptz)'::regprocedure) into v_def;
-  if position('select i.id, i.assigned_to, i.completed_at as occurred_at' in v_def)=0
-     or position('select ij.id as job_id, ij.occurred_at,' in v_def)=0
-     or position('10.0 / greatest(crew_size, 1) from install_crew' in v_def)=0
-     or position('else 0' in v_def)=0 then
-    raise exception 'Deriva de la fuente de puntos: revisar antes de continuar';
-  end if;
-  v_def:=replace(v_def,'select i.id, i.assigned_to, i.completed_at as occurred_at',
-    'select i.id, i.assigned_to, i.points, i.completed_at as occurred_at');
-  v_def:=replace(v_def,'select ij.id as job_id, ij.occurred_at,',
-    'select ij.id as job_id, ij.occurred_at, ij.points,');
-  v_def:=replace(v_def,'10.0 / greatest(crew_size, 1) from install_crew',
-    'coalesce(points, 10.0) / greatest(crew_size, 1) from install_crew');
-  -- Categorías sin regla automática: respetar el puntaje manual cuando existe.
-  -- Históricos NULL siguen sumando 0; no inventar puntuación retrospectiva.
-  v_def:=replace(v_def,'else 0','else coalesce(points, 0)');
-  execute v_def;
-end $patch$;
-
--- Reporte de tickets: conservar cohorte por creación, calcular puntos de
--- trabajos terminados con la misma fuente que ranking/Mi avance.
-create function public.ticket_report_points(p_from timestamptz,p_to timestamptz)
-returns table (staff_id uuid,name text,ticket_count bigint,points numeric)
-language plpgsql stable security definer set search_path=public as $$
-begin
-  if not exists(select 1 from public.profiles where id=auth.uid() and active
-    and role::text in ('ADMIN','SUPERADMIN','SOPORTE','FACTURACION')) then
-    raise exception 'Acceso no autorizado al reporte de puntos';
-  end if;
-  if p_from is null or p_to is null or p_to<p_from then raise exception 'Intervalo inválido'; end if;
-  return query
-  with selected as materialized (
-    select t.id,coalesce(t.resolved_at,t.closed_at) as finished_at from public.tickets t
-    where t.created_at>=p_from and t.created_at<=p_to and t.status::text in ('resolved','closed')
-  ), bounds as (select min(finished_at) as lo,max(finished_at)+interval '1 microsecond' as hi from selected),
-  contributions as (
-    select c.* from bounds b cross join lateral public.technician_point_contributions(b.lo,b.hi) c
-    join selected s on s.id=c.job_id where c.job_type='ticket'
-  )
-  select c.technician_id,coalesce(pr.full_name,pr.email,'Técnico'),
-    count(distinct c.job_id) filter(where c.kind='work'),
-    sum(case when c.kind='recurrence' then -c.points else c.points end)
-  from contributions c join public.profiles pr on pr.id=c.technician_id
-  group by c.technician_id,pr.full_name,pr.email;
-end;
-$$;
-revoke all on function public.ticket_report_points(timestamptz,timestamptz) from public,anon;
-grant execute on function public.ticket_report_points(timestamptz,timestamptz) to authenticated;
+-- Contabilización definitiva detenida: falta cierre administrativo separado
+-- en Altas/Rutinas. Conservar íntegramente la fuente y reportes históricos.
 commit;

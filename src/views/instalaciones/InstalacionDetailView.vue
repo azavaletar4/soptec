@@ -1086,7 +1086,7 @@ onMounted(async () => {
             v-else-if="canEditStatus && installation.status !== 'completed' && installation.status !== 'cancelled'"
             class="surface p-4 text-xs text-slate-500"
           >
-            La instalación se completa desde la App de Campo del técnico (firma, fotos y datos de red quedan ahí).
+            La instalación se completa desde la App de Campo del técnico (fotos y datos de red quedan ahí; el cliente firma la hoja física).
             Para corregir el estado administrativamente, usa el selector de Estado arriba.
           </p>
         </div>

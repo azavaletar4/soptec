@@ -299,7 +299,6 @@ onMounted(loadReports);
       </div>
 
       <h3 class="text-sm font-semibold mb-3">Ranking de técnicos (por puntos en el periodo)</h3>
-      <p class="text-xs text-slate-500 mb-3">Tickets creados en el periodo y ya resueltos/cerrados. Puntos definitivos repartidos por cuadrilla, con reincidencias.</p>
       <div class="table-shell mb-6">
         <table class="w-full text-sm">
           <thead class="bg-slate-100 text-slate-600 text-xs uppercase">

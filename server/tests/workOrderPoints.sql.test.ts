@@ -36,11 +36,19 @@ test('Puntos de órdenes: PostgreSQL aislado, sin órdenes reales', { timeout: 1
       create policy profiles_read on profiles for select to authenticated using(true);`);
     sql(file('../../supabase/migrations/20260919020000_fase13_gestion_usuarios.sql').match(/create or replace function public\.current_user_role\(\)[\s\S]*?\$\$;/)![0]);
     sql(file('./workOrderPointsContributionBaseline.sql'));
+    const originalSource = sql("select md5(prosrc) from pg_proc where oid='technician_point_contributions(timestamptz,timestamptz)'::regprocedure;");
     // Historical fixtures exist BEFORE migration; migration must not rewrite them.
     sql(`insert into tickets(id,points,status,assigned_to,resolved_at) values('${id}',null,'resolved','${tech}','2026-10-05');
       insert into routines(points,status) values(null,'completed'),(0,'completed');
       insert into installations(status) values('completed');`);
+    sql(file('../../supabase/migrations/20261024190000_field_order_points_readonly.sql'));
+    // La lectura no depende de aplicar la candidata anterior: Altas sin columna points.
+    sql(`update installations set assigned_to='${tech}';`);
+    assert.equal(as("select my_field_order_points('installation',(select id from installations limit 1))->>'jobPoints';",tech),'10');
     sql(file('../../supabase/migrations/20261024180000_work_order_points.sql'));
+    await t.test('fuente histórica íntegra: no se activa contabilización administrativa incompleta',()=>{
+      assert.equal(sql("select md5(prosrc) from pg_proc where oid='technician_point_contributions(timestamptz,timestamptz)'::regprocedure;"), originalSource);
+    });
     await t.test('históricos intactos y fallback de avería',()=>{
       assert.equal(sql('select points is null from tickets;'),'t');
       assert.equal(sql('select count(*) from routines where points is null or points=0;'),'2');
@@ -92,18 +100,16 @@ test('Puntos de órdenes: PostgreSQL aislado, sin órdenes reales', { timeout: 1
       as(adjust('ticket','12','5'));
       as(adjust('ticket','18','12'));
       sql(`insert into job_assignees values('ticket','${id}','${tech}','leader'),('ticket','${id}','${other}','support');
-        update tickets set status='resolved',resolved_at='2026-10-05',category='other';`);
+        update tickets set status='resolved',resolved_at='2026-10-05',category='no_service';`);
       assert.deepEqual(sql("select count(*)||'|'||sum(points) from technician_point_contributions('2026-10-01','2026-11-01');").split('|').map(Number),[2,18]);
-      assert.deepEqual(as("select count(*)||'|'||sum(points)||'|'||sum(ticket_count) from ticket_report_points('2026-10-01','2026-11-01');").split('|').map(Number),[2,18,2]);
-      assert.throws(()=>as("select * from ticket_report_points('2026-10-01','2026-11-01');",tech),/no autorizado/);
       sql(`update tickets set status='closed';`);
       assert.equal(Number(sql("select sum(points) from technician_point_contributions('2026-10-01','2026-11-01');")),18);
     });
-    await t.test('altas y rutinas conservan reglas y usan valor definitivo',()=>{
+    await t.test('contabilización existente intacta: Alta conserva 10 y Rutina su valor actual',()=>{
       for(const [table,kind] of [['installations','installation'],['routines','routine']]) {
         reset(table); as(adjust(kind,'11','5'));
         sql(`update ${table} set status='completed',completed_at='2026-10-05';`);
-        assert.equal(sql("select sum(points) from technician_point_contributions('2026-10-01','2026-11-01');"),'11.0000000000000000');
+        assert.equal(Number(sql("select sum(points) from technician_point_contributions('2026-10-01','2026-11-01');")),kind==='installation'?10:11);
       }
     });
     await t.test('reprogramada admite ajuste; cancelada no; admin inactivo no',()=>{
@@ -113,6 +119,49 @@ test('Puntos de órdenes: PostgreSQL aislado, sin órdenes reales', { timeout: 1
       sql(`update profiles set active=true where id='${admin}';`);
       reset('routines'); sql("update routines set status='cancelled';");
       assert.throws(()=>as(adjust('routine','8','5')),/cerrada o cancelada/);
+    });
+    for (const [table,kind,terminal] of [['tickets','ticket','resolved'],['installations','installation','completed'],['routines','routine','completed']]) {
+      await t.test(`${kind}: líder/ayudante ven puntaje abierto, ajuste, terminado y baja de asignación`,()=>{
+        reset(table);
+        // Convertir otro perfil a técnico de apoyo solo dentro de esta fixture.
+        sql(`update profiles set role='TECNICO_RED' where id='${other}';
+          insert into job_assignees values('${kind}','${id}','${tech}','leader'),('${kind}','${id}','${other}','support');`);
+        const read=(uid=tech)=>JSON.parse(as(`select my_field_order_points('${kind}','${id}');`,uid)||'null');
+        for(const uid of [tech,other]) {
+          assert.equal(read(uid).jobPoints,5);assert.equal(read(uid).personalPoints,2.5);assert.equal(read(uid).crewSize,2);
+        }
+        as(adjust(kind,'12','5'));
+        assert.equal(read().jobPoints,12);assert.equal(read(other).personalPoints,6);
+        for(const uid of [tech,other]) {
+          assert.throws(()=>as(adjust(kind,'18','12'),uid),/Solo ADMIN/);
+          assert.throws(()=>as(`update ${table} set points=18;`,uid),/Solo ADMIN/);
+        }
+        const timestamp=kind==='ticket'?'resolved_at':'completed_at';
+        as(`update ${table} set status='${terminal}',${timestamp}='2026-10-05';`,tech);
+        assert.equal(read(other).jobPoints,12);
+        // Reintento de cierre no crea puntos ni auditorías adicionales.
+        sql(`update ${table} set status='${terminal}';`);
+        assert.equal(read().personalPoints,6);
+        // Solo contabilidad vigente de prueba: no certifica finalización administrativa.
+        assert.deepEqual(sql("select count(*)||'|'||sum(points) from technician_point_contributions('2026-10-01','2026-11-01');").split('|').map(Number),[2,kind==='installation'?10:12]);
+        assert.equal(sql('select count(*) from work_order_point_changes;'),'1');
+        sql(`delete from job_assignees where technician_id='${other}';`);
+        assert.equal(read(other),null);assert.equal(read().personalPoints,12);
+        assert.throws(()=>as(`select my_field_order_points('${kind}','${id}');`,admin),/propio técnico/);
+        assert.throws(()=>as(`select my_field_order_points('${kind}','${id}');`,''),/propio técnico/);
+        sql(`update profiles set active=false where id='${tech}';`);
+        assert.throws(()=>read(),/propio técnico/);
+        sql(`update profiles set active=true where id='${tech}';`);
+        assert.equal(JSON.parse(as(`select my_field_order_points('${kind}','00000000-0000-0000-0000-000000000099');`,tech)||'null'),null);
+      });
+    }
+    await t.test('consulta: fallback de asignación y permisos SQL, sin escrituras laterales',()=>{
+      reset('tickets');
+      const read=(uid=tech)=>JSON.parse(as(`select my_field_order_points('ticket','${id}');`,uid)||'null');
+      assert.equal(read().personalPoints,5);assert.equal(read(other),null);
+      assert.equal(sql('select count(*) from work_order_point_changes;'),'0');
+      for(const role of ['anon','service_role']) assert.throws(()=>sql(`set role ${role}; select my_field_order_points('ticket','${id}');`),/permission denied/);
+      assert.throws(()=>as(`select my_field_order_points('invalid','${id}');`,tech),/Tipo de orden/);
     });
   } finally { docker(['rm','-f',container]); }
 });
