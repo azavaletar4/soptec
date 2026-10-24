@@ -422,8 +422,8 @@ mikrotikRoutes.get('/:id/balancer/connections', requireRole(...STAFF_READ), asyn
     return c.json({ error: `"${device.host}" no esta clasificado como router balanceador` }, 400);
   }
   try {
-    const connections = await getBalancerConnectionsSnapshot(device.id);
-    return c.json(connections);
+    const health = await getBalancerConnectionsSnapshot(device.id);
+    return c.json(health);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar las conexiones del balanceador' }, 500);
   }

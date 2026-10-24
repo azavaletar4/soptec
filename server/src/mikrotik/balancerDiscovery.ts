@@ -68,6 +68,27 @@ export function classifyConnectionStatus(disabled: boolean, running: boolean): C
   return running ? 'up' : 'down';
 }
 
+// Tolera ~2 ciclos de descubrimiento perdidos (cada ~60s, ver
+// mikrotikBalancerDiscoveryScheduler.ts) antes de declarar los datos
+// obsoletos -- un solo sondeo fallido puntual no debe mostrar "sin datos
+// recientes" ni, mucho menos, "todas las conexiones caidas".
+export const BALANCER_DISCOVERY_STALE_AFTER_SECONDS = 180;
+
+/**
+ * El router balanceador no respondio hace cuanto -- usado para decidir si
+ * el estado running/disabled YA GUARDADO sigue siendo confiable para
+ * mostrar "conectada"/"sin conexion", o si hay que mostrar "estado
+ * desconocido" en vez de inventar que algo sigue (o dejo de estar) activo.
+ * `lastSeenAtIso` null (nunca se descubrio nada todavia) tambien es
+ * obsoleto por definicion.
+ */
+export function isBalancerDataStale(lastSeenAtIso: string | null, nowMs: number, staleAfterSeconds: number = BALANCER_DISCOVERY_STALE_AFTER_SECONDS): boolean {
+  if (!lastSeenAtIso) return true;
+  const lastSeenMs = new Date(lastSeenAtIso).getTime();
+  if (Number.isNaN(lastSeenMs)) return true;
+  return nowMs - lastSeenMs > staleAfterSeconds * 1000;
+}
+
 export interface ConnectionDiff {
   /** Nombres que aparecen ahora pero no estaban antes en la BD (altas nuevas). */
   newNames: string[];

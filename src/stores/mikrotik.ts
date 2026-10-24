@@ -106,6 +106,12 @@ export interface MikrotikBalancerTrafficHistoryResponse {
   points: MikrotikBalancerHistoryPoint[];
 }
 
+export interface MikrotikBalancerConnectionsHealth {
+  connections: MikrotikBalancerConnection[];
+  isStale: boolean;
+  lastDiscoveryAt: string | null;
+}
+
 export interface MikrotikInterface {
   '.id': string;
   name: string;
@@ -302,7 +308,7 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
   }
 
   function fetchBalancerConnections(id: string) {
-    return apiFetch<MikrotikBalancerConnection[]>(`/api/mikrotik-devices/${id}/balancer/connections`);
+    return apiFetch<MikrotikBalancerConnectionsHealth>(`/api/mikrotik-devices/${id}/balancer/connections`);
   }
 
   function fetchBalancerTrafficHistory(id: string, range: TrafficHistoryRange, scope: { port?: string; connectionId?: string } = {}) {

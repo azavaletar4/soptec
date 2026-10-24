@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { computeInterfaceDelta } from '../mikrotik/borderTraffic';
-import { diffDiscoveredConnections, resolveConnectionTopology, type MacvlanRaw, type PppoeClientRaw } from '../mikrotik/balancerDiscovery';
+import { diffDiscoveredConnections, isBalancerDataStale, resolveConnectionTopology, type MacvlanRaw, type PppoeClientRaw } from '../mikrotik/balancerDiscovery';
 import {
   BALANCER_HISTORY_RANGES,
   bucketTicks,
@@ -187,15 +187,33 @@ export interface BalancerConnectionSnapshot {
   latest_sampled_at: string | null;
 }
 
+export interface BalancerConnectionsHealth {
+  connections: BalancerConnectionSnapshot[];
+  // true cuando el ultimo descubrimiento exitoso fue hace demasiado (ver
+  // isBalancerDataStale) -- el panel debe mostrar "estado desconocido" en
+  // vez de reusar el ultimo running/disabled guardado como si fuera actual.
+  isStale: boolean;
+  lastDiscoveryAt: string | null;
+}
+
 /** Solo lectura: estado actual + ultima muestra de cada conexion conocida (incluidas las removidas, para que el historico siga consultable). */
-export async function getBalancerConnectionsSnapshot(deviceId: string): Promise<BalancerConnectionSnapshot[]> {
+export async function getBalancerConnectionsSnapshot(deviceId: string): Promise<BalancerConnectionsHealth> {
   const { data: connections, error } = await supabaseAdmin
     .from('mikrotik_balancer_connections')
     .select('id, pppoe_interface_name, macvlan_interface_name, physical_interface_name, pppoe_user, disabled, running, first_seen_at, last_seen_at, removed_at')
     .eq('device_id', deviceId)
     .order('pppoe_interface_name', { ascending: true });
   if (error) throw new Error(error.message);
-  if (!connections?.length) return [];
+
+  // La frescura se mide solo contra conexiones NO retiradas -- una retirada
+  // deja de actualizar last_seen_at a proposito (requisito 7) y no debe
+  // hacer parecer "obsoleto" el estado de las que si siguen activas.
+  const lastDiscoveryAt = (connections ?? [])
+    .filter((c) => !c.removed_at)
+    .reduce<string | null>((max, c) => (!max || c.last_seen_at > max ? c.last_seen_at : max), null);
+  const isStale = isBalancerDataStale(lastDiscoveryAt, Date.now());
+
+  if (!connections?.length) return { connections: [], isStale, lastDiscoveryAt };
 
   const { data: latestSamples } = await supabaseAdmin
     .from('mikrotik_balancer_connection_samples')
@@ -207,7 +225,7 @@ export async function getBalancerConnectionsSnapshot(deviceId: string): Promise<
     if (!latestByConnection.has(s.connection_id)) latestByConnection.set(s.connection_id, s);
   }
 
-  return connections.map((c) => {
+  const withLatest = connections.map((c) => {
     const latest = latestByConnection.get(c.id);
     return {
       ...c,
@@ -216,6 +234,7 @@ export async function getBalancerConnectionsSnapshot(deviceId: string): Promise<
       latest_sampled_at: latest?.sampled_at ?? null,
     };
   });
+  return { connections: withLatest, isStale, lastDiscoveryAt };
 }
 
 export interface BalancerTrafficHistoryResult {

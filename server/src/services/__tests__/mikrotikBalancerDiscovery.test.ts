@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   classifyConnectionStatus,
   diffDiscoveredConnections,
+  isBalancerDataStale,
   resolveConnectionTopology,
   type MacvlanRaw,
   type PppoeClientRaw,
@@ -84,4 +85,26 @@ test('diffDiscoveredConnections: el router no responde este ciclo (lista vacia) 
   // real confirmada por una lectura exitosa del router.
   const diff = diffDiscoveredConnections(['PPPoE-WAN031'], []);
   assert.deepEqual(diff.removedNames, ['PPPoE-WAN031']);
+});
+
+test('isBalancerDataStale: nunca descubrio nada todavia (null) -- obsoleto por definicion', () => {
+  assert.equal(isBalancerDataStale(null, Date.now()), true);
+});
+
+test('isBalancerDataStale: dentro del umbral -- datos confiables', () => {
+  const now = Date.parse('2026-10-24T20:10:00.000Z');
+  const lastSeen = '2026-10-24T20:08:00.000Z'; // hace 120s, bajo el umbral de 180s
+  assert.equal(isBalancerDataStale(lastSeen, now), false);
+});
+
+test('isBalancerDataStale: un solo ciclo perdido (60s) todavia no es obsoleto', () => {
+  const now = Date.parse('2026-10-24T20:10:00.000Z');
+  const lastSeen = '2026-10-24T20:09:00.000Z'; // hace 60s
+  assert.equal(isBalancerDataStale(lastSeen, now), false);
+});
+
+test('isBalancerDataStale: mas de 2 ciclos perdidos (>180s) -- obsoleto', () => {
+  const now = Date.parse('2026-10-24T20:10:00.000Z');
+  const lastSeen = '2026-10-24T20:06:00.000Z'; // hace 240s
+  assert.equal(isBalancerDataStale(lastSeen, now), true);
 });

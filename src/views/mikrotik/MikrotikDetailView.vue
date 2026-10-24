@@ -21,6 +21,7 @@ import {
 } from '@/stores/mikrotik';
 import { MIKROTIK_DEVICE_ROLE_LABELS, isPppoeAdminRole } from '@/lib/mikrotikDeviceRole';
 import { formatBpsAsMbps, splitMbpsForDisplay, toMbps, usageBarClass, usagePercent, usageTextClass, type CapacityUnit } from '@/lib/mikrotikBorderTraffic';
+import { formatRouterUptime, summarizeMemoryUsage, summarizeWanConnectionCounts } from '@/lib/mikrotikBalancerHealth';
 import { formatPeruDateTime, formatRelativeTime } from '@/lib/oltAlertPresentation';
 import { useAuthStore } from '@/stores/auth';
 import { useAsyncAction } from '@/composables/useAsyncAction';
@@ -276,10 +277,20 @@ async function handleSaveBorderConfig() {
 
 const balancerConnections = ref<MikrotikBalancerConnection[]>([]);
 const balancerLoadError = ref<string | null>(null);
+// true cuando el ultimo descubrimiento exitoso fue hace demasiado -- el
+// panel debe mostrar "estado desconocido" en vez de reusar el ultimo
+// running/disabled guardado como si fuera el estado actual (ver
+// isBalancerDataStale en el backend).
+const balancerIsStale = ref(false);
+const balancerLastDiscoveryAt = ref<string | null>(null);
 
 async function loadBalancerConnections() {
+  nowMs.value = Date.now();
   try {
-    balancerConnections.value = await mikrotikStore.fetchBalancerConnections(deviceId.value);
+    const health = await mikrotikStore.fetchBalancerConnections(deviceId.value);
+    balancerConnections.value = health.connections;
+    balancerIsStale.value = health.isStale;
+    balancerLastDiscoveryAt.value = health.lastDiscoveryAt;
     balancerLoadError.value = null;
   } catch (e) {
     balancerLoadError.value = getErrorMessage(e, 'Error al consultar las conexiones del balanceador');
@@ -291,14 +302,21 @@ async function loadBalancerConnections() {
 const activeBalancerConnections = computed(() => balancerConnections.value.filter((c) => !c.removed_at));
 const removedBalancerConnections = computed(() => balancerConnections.value.filter((c) => c.removed_at));
 // Requisito 8: deshabilitada nunca es averia -- solo habilitada+caida lo es.
+// Si los datos estan obsoletos (balancerIsStale), nunca se afirma
+// "conectada"/"sin conexion" con un valor viejo -- se muestra desconocido.
 function connectionStatusLabel(c: MikrotikBalancerConnection): string {
   if (c.disabled) return 'Deshabilitada';
+  if (balancerIsStale.value) return 'Estado desconocido';
   return c.running ? 'Conectada' : 'Sin conexión';
 }
 function connectionStatusClass(c: MikrotikBalancerConnection): string {
   if (c.disabled) return 'bg-slate-500/15 text-slate-600';
+  if (balancerIsStale.value) return 'bg-amber-500/15 text-amber-600';
   return c.running ? 'bg-green-500/15 text-green-600' : 'bg-red-500/15 text-red-600';
 }
+const balancerWanCounts = computed(() => summarizeWanConnectionCounts(activeBalancerConnections.value, balancerIsStale.value));
+const balancerMemory = computed(() => summarizeMemoryUsage(resource.value?.['free-memory'] != null ? Number(resource.value['free-memory']) : null, resource.value?.['total-memory'] != null ? Number(resource.value['total-memory']) : null));
+const balancerUptimeLabel = computed(() => formatRouterUptime(resource.value?.uptime ?? null));
 // Requisito 6: una sola fuente de trafico por conexion (ya resuelto en el
 // backend, nivel PPPoE-client) -- aqui solo se suma lo que YA viene
 // calculado asi, nunca se mezcla con otro nivel.
@@ -415,12 +433,12 @@ const balancerChartOptions = {
 // ---- Requisito 8: filtros de la tabla (puerto físico + estado) ----
 
 const tableFilterPort = ref('');
-const tableFilterStatus = ref<'' | 'up' | 'down' | 'disabled'>('');
+const tableFilterStatus = ref<'' | 'up' | 'down' | 'disabled' | 'unknown'>('');
 const filteredBalancerConnections = computed(() =>
   activeBalancerConnections.value.filter((c) => {
     if (tableFilterPort.value && c.physical_interface_name !== tableFilterPort.value) return false;
     if (tableFilterStatus.value) {
-      const status = c.disabled ? 'disabled' : c.running ? 'up' : 'down';
+      const status = c.disabled ? 'disabled' : balancerIsStale.value ? 'unknown' : c.running ? 'up' : 'down';
       if (status !== tableFilterStatus.value) return false;
     }
     return true;
@@ -743,6 +761,12 @@ async function handleToggleSecret(secret: PppSecret) {
 
       <!-- Fase 174: conexiones WAN descubiertas — EXCLUSIVO del balanceador -->
       <template v-else-if="isBalancer">
+        <div v-if="balancerIsStale && activeBalancerConnections.length" class="surface p-4 mb-6 border-l-4 border-amber-500 bg-amber-500/5 text-sm text-amber-700">
+          Sin datos recientes del router — la última lectura exitosa fue
+          {{ balancerLastDiscoveryAt ? `${formatPeruDateTime(balancerLastDiscoveryAt)} (${formatRelativeTime(balancerLastDiscoveryAt, nowMs)})` : 'hace demasiado' }}.
+          El estado de las conexiones se muestra como "desconocido" hasta la próxima lectura exitosa — nunca se asume que están caídas.
+        </div>
+
         <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
           <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">RouterOS</div>
@@ -753,8 +777,23 @@ async function handleToggleSecret(secret: PppSecret) {
             <div class="text-lg font-semibold">{{ resource?.['cpu-load'] ?? '—' }}%</div>
           </div>
           <div class="surface p-4">
+            <div class="text-slate-500 text-xs mb-1">RAM usada</div>
+            <div class="text-lg font-semibold">{{ balancerMemory.usedLabel }} <span class="text-xs text-slate-500">de {{ balancerMemory.totalLabel }}</span></div>
+            <div class="text-[11px] text-slate-500">{{ balancerMemory.usedPercent != null ? `${balancerMemory.usedPercent}% usado — ${balancerMemory.freeLabel} libre` : '—' }}</div>
+          </div>
+          <div class="surface p-4">
+            <div class="text-slate-500 text-xs mb-1">Uptime</div>
+            <div class="text-lg font-semibold">{{ balancerUptimeLabel }}</div>
+          </div>
+          <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">Puertos SFP en uso</div>
             <div class="text-lg font-semibold">{{ balancerPortsInUse }}</div>
+          </div>
+          <div class="surface p-4">
+            <div class="text-slate-500 text-xs mb-1">Conexiones WAN</div>
+            <div class="text-sm font-semibold text-green-600">{{ balancerWanCounts.up }} conectada(s)</div>
+            <div class="text-sm font-semibold text-red-600">{{ balancerWanCounts.down }} sin conexión</div>
+            <div class="text-[11px] text-slate-500">{{ balancerWanCounts.disabled }} deshabilitada(s) · {{ balancerWanCounts.unknown }} desconocida(s)</div>
           </div>
           <div class="surface p-4">
             <div class="text-slate-500 text-xs mb-1">Consumo total (conexiones activas)</div>
@@ -845,6 +884,7 @@ async function handleToggleSecret(secret: PppSecret) {
             <option value="up">Activa</option>
             <option value="down">Caída</option>
             <option value="disabled">Deshabilitada</option>
+            <option value="unknown">Estado desconocido</option>
           </select>
         </div>
         <div class="table-shell mb-8">
