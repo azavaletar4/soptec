@@ -3,6 +3,7 @@ import { runTelnetCommands } from '../telnet/client';
 import { withOltLock } from './oltTelnetLock';
 import { changeOntProfileCommands, type ZteInterfaceRef } from '../ssh/zteCommands';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
+import { isPppoeAdminRole } from '../mikrotik/deviceRole';
 import { assertClientCanReactivate } from './clientReactivationGuard';
 
 // Corte y reactivacion por deuda — ver comentario completo en la migracion
@@ -185,10 +186,15 @@ async function applyMikrotikProfile(contract: { mikrotik_device_id: string | nul
   if (!contract.mikrotik_device_id || !contract.pppoe_username) return { ok: true }; // sin PPPoE vinculado, nada que cortar ahi
   const { data: device, error: devErr } = await supabaseAdmin
     .from('mikrotik_devices')
-    .select('host, port, use_tls, username, password')
+    .select('host, port, use_tls, username, password, device_role')
     .eq('id', contract.mikrotik_device_id)
     .single();
   if (devErr || !device) return { ok: false, error: devErr?.message ?? 'Router no encontrado' };
+  // Defensa adicional (Fase 168): un contrato nunca deberia quedar vinculado
+  // a un router de borde, pero si ocurriera no se le manda ningun comando PPP.
+  if (!isPppoeAdminRole(device.device_role)) {
+    return { ok: false, error: 'El router vinculado a este contrato esta clasificado como borde — no administra PPPoE, revisar la vinculacion' };
+  }
   const target: MikrotikTarget = { host: device.host, port: device.port, useTls: device.use_tls, username: device.username, password: device.password };
 
   try {

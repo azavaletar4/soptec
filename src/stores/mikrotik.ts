@@ -1,6 +1,7 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/lib/api';
+import type { MikrotikDeviceRole } from '@/lib/mikrotikDeviceRole';
 
 export interface MikrotikDevice {
   id: string;
@@ -11,9 +12,21 @@ export interface MikrotikDevice {
   username: string;
   zone_id: string | null;
   is_active: boolean;
+  device_role: MikrotikDeviceRole;
   created_at: string;
   latitude: number | null;
   longitude: number | null;
+}
+
+export interface MikrotikInterface {
+  '.id': string;
+  name: string;
+  type: string;
+  running: string; // "true" | "false"
+  disabled: string; // "true" | "false"
+  'rx-byte'?: string;
+  'tx-byte'?: string;
+  comment?: string;
 }
 
 export interface PppSecret {
@@ -187,6 +200,10 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     return apiFetch<IpAddress[]>(`/api/mikrotik-devices/${id}/ip-addresses`);
   }
 
+  function fetchInterfaces(id: string) {
+    return apiFetch<MikrotikInterface[]>(`/api/mikrotik-devices/${id}/interfaces`);
+  }
+
   function fetchReconcileReport() {
     return apiFetch<ReconcileReport | null>('/api/mikrotik-devices/reconcile/report');
   }
@@ -214,6 +231,7 @@ export const useMikrotikStore = defineStore('mikrotik', () => {
     disconnectPppActive,
     fetchDhcpLeases,
     fetchIpAddresses,
+    fetchInterfaces,
     fetchReconcileReport,
     runReconcileNow,
   };

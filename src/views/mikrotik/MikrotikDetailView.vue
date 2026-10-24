@@ -6,10 +6,12 @@ import {
   useMikrotikStore,
   type DhcpLease,
   type IpAddress,
+  type MikrotikInterface,
   type PppActive,
   type PppSecret,
   type RouterResource,
 } from '@/stores/mikrotik';
+import { MIKROTIK_DEVICE_ROLE_LABELS, isPppoeAdminRole } from '@/lib/mikrotikDeviceRole';
 import { getErrorMessage } from '@/lib/errors';
 
 const route = useRoute();
@@ -18,6 +20,10 @@ const mikrotikStore = useMikrotikStore();
 
 const deviceId = computed(() => route.params.id as string);
 const device = computed(() => mikrotikStore.devices.find((d) => d.id === deviceId.value));
+// Un router de borde (dedicado o balanceador) no corre PPP de clientes —
+// se muestra solo lo que de verdad aplica (conexion, interfaces, trafico,
+// CPU, memoria), nunca una sección PPPoE/DHCP vacía o que de error.
+const isPppoeAdmin = computed(() => isPppoeAdminRole(device.value?.device_role));
 
 const loading = ref(true);
 const loadError = ref<string | null>(null);
@@ -26,6 +32,20 @@ const secrets = ref<PppSecret[]>([]);
 const active = ref<PppActive[]>([]);
 const leases = ref<DhcpLease[]>([]);
 const ipAddresses = ref<IpAddress[]>([]);
+const interfaces = ref<MikrotikInterface[]>([]);
+
+function formatBytes(value?: string): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(1)} ${units[i]}`;
+}
 
 const activeByName = computed(() => new Set(active.value.map((a) => a.name)));
 
@@ -48,18 +68,21 @@ async function loadAll() {
   loading.value = true;
   loadError.value = null;
   try {
-    const [res, sec, act, lea, ips] = await Promise.all([
+    const adminOnly = isPppoeAdmin.value;
+    const [res, ips, ifaces, sec, act, lea] = await Promise.all([
       mikrotikStore.fetchResource(deviceId.value),
-      mikrotikStore.fetchPppSecrets(deviceId.value),
-      mikrotikStore.fetchPppActive(deviceId.value),
-      mikrotikStore.fetchDhcpLeases(deviceId.value),
       mikrotikStore.fetchIpAddresses(deviceId.value),
+      mikrotikStore.fetchInterfaces(deviceId.value),
+      adminOnly ? mikrotikStore.fetchPppSecrets(deviceId.value) : Promise.resolve([]),
+      adminOnly ? mikrotikStore.fetchPppActive(deviceId.value) : Promise.resolve([]),
+      adminOnly ? mikrotikStore.fetchDhcpLeases(deviceId.value) : Promise.resolve([]),
     ]);
     resource.value = res;
+    ipAddresses.value = ips;
+    interfaces.value = ifaces;
     secrets.value = sec;
     active.value = act;
     leases.value = lea;
-    ipAddresses.value = ips;
   } catch (e) {
     loadError.value = getErrorMessage(e, 'Error al consultar el router');
   } finally {
@@ -93,7 +116,15 @@ async function handleToggleSecret(secret: PppSecret) {
 
     <div v-if="!device" class="text-slate-500">Router no encontrado.</div>
     <template v-else>
-      <h1 class="text-2xl font-semibold mb-1">{{ device.name }}</h1>
+      <div class="flex items-center gap-2 mb-1">
+        <h1 class="text-2xl font-semibold">{{ device.name }}</h1>
+        <span
+          class="badge"
+          :class="isPppoeAdmin ? 'bg-sky-500/15 text-sky-700' : 'bg-amber-500/15 text-amber-700'"
+        >
+          {{ MIKROTIK_DEVICE_ROLE_LABELS[device.device_role] }}
+        </span>
+      </div>
       <p class="text-slate-600 text-sm mb-6">{{ device.host }}:{{ device.port }}</p>
 
       <p v-if="loadError" class="mb-4 text-sm text-red-600">{{ loadError }}</p>
@@ -119,6 +150,41 @@ async function handleToggleSecret(secret: PppSecret) {
           </div>
         </div>
 
+        <h2 class="text-lg font-semibold mb-3">Interfaces ({{ interfaces.length }})</h2>
+        <div class="table-shell mb-8">
+          <table class="w-full text-sm min-w-[560px]">
+            <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+              <tr>
+                <th class="text-left px-4 py-3">Nombre</th>
+                <th class="text-left px-4 py-3">Tipo</th>
+                <th class="text-left px-4 py-3">Estado</th>
+                <th class="text-left px-4 py-3">Descarga (RX)</th>
+                <th class="text-left px-4 py-3">Subida (TX)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!interfaces.length">
+                <td colspan="5" class="px-4 py-6 text-center text-slate-500">Sin interfaces.</td>
+              </tr>
+              <tr v-for="i in interfaces" :key="i['.id']" class="border-t border-slate-200">
+                <td class="px-4 py-3 font-medium">{{ i.name }}</td>
+                <td class="px-4 py-3 text-slate-600">{{ i.type }}</td>
+                <td class="px-4 py-3">
+                  <span
+                    class="badge"
+                    :class="i.running === 'true' ? 'bg-green-500/15 text-green-600' : 'bg-slate-500/15 text-slate-600'"
+                  >
+                    {{ i.disabled === 'true' ? 'Deshabilitada' : (i.running === 'true' ? 'Conectada' : 'Sin conexion') }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 font-mono text-xs">{{ formatBytes(i['rx-byte']) }}</td>
+                <td class="px-4 py-3 font-mono text-xs">{{ formatBytes(i['tx-byte']) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <template v-if="isPppoeAdmin">
         <h2 class="text-lg font-semibold mb-3">Usuarios PPPoE ({{ secrets.length }})</h2>
         <input
           v-model="secretSearch"
@@ -177,7 +243,7 @@ async function handleToggleSecret(secret: PppSecret) {
           placeholder="Buscar por IP, MAC o hostname..."
           class="field-input mb-3"
         />
-        <div class="table-shell">
+        <div class="table-shell mb-8">
           <table class="w-full text-sm min-w-[560px]">
             <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
               <tr>
@@ -202,7 +268,9 @@ async function handleToggleSecret(secret: PppSecret) {
             </tbody>
           </table>
         </div>
-        <h2 class="text-lg font-semibold mt-8 mb-3">Direcciones IP del router ({{ ipAddresses.length }})</h2>
+        </template>
+
+        <h2 class="text-lg font-semibold mb-3">Direcciones IP del router ({{ ipAddresses.length }})</h2>
         <div class="table-shell">
           <table class="w-full text-sm min-w-[480px]">
             <thead class="bg-slate-100 text-slate-600 text-xs uppercase">

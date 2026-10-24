@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { getLastReconcileReport, reconcileMikrotik } from '../services/mikrotikReconcileService';
+import { DEFAULT_MIKROTIK_DEVICE_ROLE, isPppoeAdminRole, isValidMikrotikDeviceRole } from '../mikrotik/deviceRole';
 
 export const mikrotikRoutes = new Hono();
 
@@ -13,7 +14,8 @@ const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
 // Gestionar usuarios PPPoE (habilitar/deshabilitar) si es trabajo de campo.
 const PPP_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
-const DEVICE_PUBLIC_FIELDS = 'id, name, host, port, use_tls, username, zone_id, is_active, latitude, longitude, created_at';
+const DEVICE_PUBLIC_FIELDS =
+  'id, name, host, port, use_tls, username, zone_id, is_active, device_role, latitude, longitude, created_at';
 
 mikrotikRoutes.use('*', requireAuth);
 
@@ -24,6 +26,7 @@ interface MikrotikDeviceRow {
   use_tls: boolean;
   username: string;
   password: string;
+  device_role: string;
 }
 
 async function getDeviceOrNull(id: string | undefined): Promise<MikrotikDeviceRow | null> {
@@ -31,6 +34,15 @@ async function getDeviceOrNull(id: string | undefined): Promise<MikrotikDeviceRo
   const { data, error } = await supabaseAdmin.from('mikrotik_devices').select('*').eq('id', id).single();
   if (error || !data) return null;
   return data as MikrotikDeviceRow;
+}
+
+// Las operaciones PPPoE (secretos/perfiles/sesiones) solo aplican al router
+// administrador — un borde (dedicado o balanceador) no corre PPP de clientes.
+function requirePppoeAdmin(device: MikrotikDeviceRow): { error: string } | null {
+  if (!isPppoeAdminRole(device.device_role)) {
+    return { error: `"${device.host}" esta clasificado como router de borde — no administra PPPoE de clientes` };
+  }
+  return null;
 }
 
 function targetFor(device: MikrotikDeviceRow): MikrotikTarget {
@@ -72,6 +84,9 @@ mikrotikRoutes.get('/', requireRole(...STAFF_READ), async (c) => {
 
 mikrotikRoutes.post('/', requireRole(...DEVICE_WRITE), async (c) => {
   const body = await c.req.json();
+  if ('device_role' in body && body.device_role && !isValidMikrotikDeviceRole(body.device_role)) {
+    return c.json({ error: 'Tipo de router invalido' }, 400);
+  }
   const { data, error } = await supabaseAdmin
     .from('mikrotik_devices')
     .insert({
@@ -82,6 +97,7 @@ mikrotikRoutes.post('/', requireRole(...DEVICE_WRITE), async (c) => {
       username: body.username,
       password: body.password,
       zone_id: body.zone_id ?? null,
+      device_role: body.device_role || DEFAULT_MIKROTIK_DEVICE_ROLE,
     })
     .select(DEVICE_PUBLIC_FIELDS)
     .single();
@@ -92,8 +108,11 @@ mikrotikRoutes.post('/', requireRole(...DEVICE_WRITE), async (c) => {
 mikrotikRoutes.put('/:id', requireRole(...DEVICE_WRITE), async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
+  if ('device_role' in body && body.device_role && !isValidMikrotikDeviceRole(body.device_role)) {
+    return c.json({ error: 'Tipo de router invalido' }, 400);
+  }
   const update: Record<string, unknown> = {};
-  for (const key of ['name', 'host', 'port', 'use_tls', 'username', 'zone_id', 'is_active', 'latitude', 'longitude'] as const) {
+  for (const key of ['name', 'host', 'port', 'use_tls', 'username', 'zone_id', 'is_active', 'device_role', 'latitude', 'longitude'] as const) {
     if (key in body) update[key] = body[key];
   }
   if (body.password) update.password = body.password;
@@ -151,6 +170,8 @@ mikrotikRoutes.get('/:id/resource', requireRole(...STAFF_READ), async (c) => {
 mikrotikRoutes.get('/:id/ppp-secrets', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const roleError = requirePppoeAdmin(device);
+  if (roleError) return c.json(roleError, 400);
   try {
     const data = await mikrotikRequest(targetFor(device), '/ppp/secret');
     return c.json(data);
@@ -162,6 +183,8 @@ mikrotikRoutes.get('/:id/ppp-secrets', requireRole(...STAFF_READ), async (c) => 
 mikrotikRoutes.put('/:id/ppp-secrets/:secretId', requireRole(...PPP_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const roleError = requirePppoeAdmin(device);
+  if (roleError) return c.json(roleError, 400);
   const body = await c.req.json();
   // El ancho de banda se controla en la OLT; aqui solo se habilita/deshabilita
   // el secreto PPPoE y/o se le asigna el profile (usado para el plan contratado).
@@ -187,6 +210,8 @@ mikrotikRoutes.put('/:id/ppp-secrets/:secretId', requireRole(...PPP_WRITE), asyn
 mikrotikRoutes.post('/:id/ppp-secrets', requireRole(...PPP_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const roleError = requirePppoeAdmin(device);
+  if (roleError) return c.json(roleError, 400);
   const body = await c.req.json();
   const { name, password, profile, comment } = body;
   if (!name || !password || !profile) {
@@ -212,6 +237,8 @@ mikrotikRoutes.post('/:id/ppp-secrets', requireRole(...PPP_WRITE), async (c) => 
 mikrotikRoutes.get('/:id/ppp-profiles', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const roleError = requirePppoeAdmin(device);
+  if (roleError) return c.json(roleError, 400);
   try {
     const data = await mikrotikRequest(targetFor(device), '/ppp/profile');
     return c.json(data);
@@ -223,6 +250,8 @@ mikrotikRoutes.get('/:id/ppp-profiles', requireRole(...STAFF_READ), async (c) =>
 mikrotikRoutes.get('/:id/ppp-active', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const roleError = requirePppoeAdmin(device);
+  if (roleError) return c.json(roleError, 400);
   try {
     const data = await mikrotikRequest(targetFor(device), '/ppp/active');
     return c.json(data);
@@ -238,6 +267,8 @@ mikrotikRoutes.get('/:id/ppp-active', requireRole(...STAFF_READ), async (c) => {
 mikrotikRoutes.delete('/:id/ppp-active/:activeId', requireRole(...PPP_WRITE), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  const roleError = requirePppoeAdmin(device);
+  if (roleError) return c.json(roleError, 400);
   try {
     await mikrotikRequest(targetFor(device), `/ppp/active/${c.req.param('activeId')}`, { method: 'DELETE' });
     return c.json({ ok: true });
@@ -262,6 +293,21 @@ mikrotikRoutes.get('/:id/ip-addresses', requireRole(...STAFF_READ), async (c) =>
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
   try {
     const data = await mikrotikRequest(targetFor(device), '/ip/address');
+    return c.json(data);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar el router' }, 502);
+  }
+});
+
+// Interfaces + trafico acumulado (rx/tx-byte) — solo lectura, util para los
+// 3 tipos de router (admin PPPoE y los 2 de borde). No asume el mecanismo de
+// balanceo (PCC, ECMP, nth...): eso se identifica despues con otra consulta
+// de solo lectura una vez confirmado contra un balanceador real (Fase 3).
+mikrotikRoutes.get('/:id/interfaces', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'Router no encontrado' }, 404);
+  try {
+    const data = await mikrotikRequest(targetFor(device), '/interface');
     return c.json(data);
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar el router' }, 502);
