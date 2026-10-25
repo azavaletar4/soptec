@@ -9,7 +9,7 @@ const tech = '00000000-0000-0000-0000-000000000003';
 const other = '00000000-0000-0000-0000-000000000004';
 const id = '10000000-0000-0000-0000-000000000001';
 
-test('Puntos de órdenes: PostgreSQL aislado, sin órdenes reales', { timeout: 120000 }, async t => {
+test('Puntos de órdenes: PostgreSQL aislado, sin órdenes reales', { timeout: 180000 }, async t => {
   const container = `rayco-points-${process.pid}-${Date.now()}`;
   const docker = (args: string[], input?: string) => execFileSync('docker', args, { input, encoding: 'utf8', windowsHide: true, stdio: ['pipe','pipe','pipe'] });
   const sql = (s: string) => docker(['exec','-i',container,'psql','-h','127.0.0.1','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-U','postgres'],s).trim();
@@ -36,6 +36,7 @@ test('Puntos de órdenes: PostgreSQL aislado, sin órdenes reales', { timeout: 1
       create policy profiles_read on profiles for select to authenticated using(true);`);
     sql(file('../../supabase/migrations/20260919020000_fase13_gestion_usuarios.sql').match(/create or replace function public\.current_user_role\(\)[\s\S]*?\$\$;/)![0]);
     sql(file('./workOrderPointsContributionBaseline.sql'));
+    sql(file('./workOrderPointsDefaultPrivileges.sql'));
     const originalSource = sql("select md5(prosrc) from pg_proc where oid='technician_point_contributions(timestamptz,timestamptz)'::regprocedure;");
     // Historical fixtures exist BEFORE migration; migration must not rewrite them.
     sql(`insert into tickets(id,points,status,assigned_to,resolved_at) values('${id}',null,'resolved','${tech}','2026-10-05');
@@ -54,6 +55,19 @@ test('Puntos de órdenes: PostgreSQL aislado, sin órdenes reales', { timeout: 1
       assert.equal(sql('select count(*) from routines where points is null or points=0;'),'2');
       assert.equal(sql('select points is null from installations;'),'t');
       assert.equal(Number(sql("select points from technician_point_contributions('2026-10-01','2026-11-01') where job_type='ticket';")),5);
+    });
+    await t.test('ACL Supabase: service_role con BYPASSRLS no hereda acceso a auditoría',()=>{
+      sql('create table public.points_acl_probe(id integer);');
+      try {
+        assert.equal(sql("select rolbypassrls from pg_roles where rolname='service_role';"),'t');
+        assert.equal(sql("select has_table_privilege('service_role','points_acl_probe','INSERT');"),'t');
+        for(const role of ['anon','authenticated','service_role']) {
+          for(const privilege of ['INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'])
+            assert.equal(sql(`select has_table_privilege('${role}','work_order_point_changes','${privilege}');`),'f',`${role}: ${privilege}`);
+        }
+        assert.equal(sql("select has_table_privilege('service_role','work_order_point_changes','SELECT');"),'f');
+        assert.equal(sql("select has_table_privilege('authenticated','work_order_point_changes','SELECT');"),'t');
+      } finally { sql('drop table public.points_acl_probe;'); }
     });
     for(const [table,kind,terminal] of [['tickets','ticket','resolved'],['installations','installation','completed'],['routines','routine','completed']]) {
       await t.test(`${kind}: creación exige puntos también fuera del formulario`,()=>{
@@ -93,6 +107,30 @@ test('Puntos de órdenes: PostgreSQL aislado, sin órdenes reales', { timeout: 1
         assert.throws(()=>as(`update ${table} set status='${table==='tickets'?'open':'pending'}',points=8;`),/cerrada/);
         assert.equal(sql(`select points from ${table};`),'5');
         assert.equal(sql('select count(*) from work_order_point_changes;'),'0');
+      });
+      await t.test(`${kind}: auditoría inalterable por API y ajustes autorizados conservados`,()=>{
+        reset(table);
+        as(adjust(kind,'8','5'));
+        as(adjust(kind,'9','8'),'00000000-0000-0000-0000-000000000001');
+        const snapshot=sql('select jsonb_agg(to_jsonb(c) order by changed_at,id) from work_order_point_changes c;');
+        assert.equal(as('select count(*) from work_order_point_changes;'),'2');
+        for(const uid of [tech,other]) {
+          assert.throws(()=>as(adjust(kind,'10','9'),uid),/Solo ADMIN/);
+          assert.throws(()=>as(`update ${table} set points=10;`,uid),/Solo ADMIN/);
+        }
+        for(const role of ['anon','authenticated','service_role']) {
+          for(const uid of role==='authenticated'?[admin,'00000000-0000-0000-0000-000000000001',tech,other]:['']) {
+            const run=(s:string)=>sql(`set role ${role};set request.jwt.claim.sub='${uid}';${s}`);
+            for(const statement of [
+              `insert into work_order_point_changes(job_type,job_id,old_points,new_points,changed_by,reason) values('${kind}','${id}',9,10,'${admin}','Falsificación');`,
+              "update work_order_point_changes set new_points=99,reason='Falso';",
+              'delete from work_order_point_changes;',
+              'truncate work_order_point_changes;',
+            ]) assert.throws(()=>run(statement),/permission denied/,`${role}/${uid}: ${statement}`);
+          }
+        }
+        assert.equal(sql('select jsonb_agg(to_jsonb(c) order by changed_at,id) from work_order_point_changes c;'),snapshot);
+        assert.equal(sql(`select points from ${table};`),'9');
       });
     }
     await t.test('reportes y fuente compartida: valor definitivo, reparto y sin duplicación',()=>{

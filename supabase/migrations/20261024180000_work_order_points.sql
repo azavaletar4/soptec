@@ -17,7 +17,10 @@ create table public.work_order_point_changes (
 );
 create index work_order_point_changes_history on public.work_order_point_changes(job_type,job_id,changed_at desc);
 alter table public.work_order_point_changes enable row level security;
-revoke all on public.work_order_point_changes from public, anon, authenticated;
+-- Supabase concede ALL por defecto a service_role; BYPASSRLS no debe
+-- permitir falsificar ni borrar la auditoría. El trigger SECURITY DEFINER
+-- conserva la escritura transaccional como propietario para ajustes válidos.
+revoke all on public.work_order_point_changes from public, anon, authenticated, service_role;
 grant select on public.work_order_point_changes to authenticated;
 create policy work_order_point_changes_admin_read on public.work_order_point_changes
 for select to authenticated using (public.current_user_role() in ('ADMIN','SUPERADMIN'));

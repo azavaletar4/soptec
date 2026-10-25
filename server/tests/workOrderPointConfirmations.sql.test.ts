@@ -9,7 +9,7 @@ const root='00000000-0000-0000-0000-000000000001';
 const tech='00000000-0000-0000-0000-000000000003';
 const helper='00000000-0000-0000-0000-000000000004';
 const id='10000000-0000-0000-0000-000000000001';
-test('Confirmación administrativa: tres órdenes, PostgreSQL sin red ni datos reales',{timeout:180000},async t=>{
+test('Confirmación administrativa: tres órdenes, PostgreSQL sin red ni datos reales',{timeout:300000},async t=>{
   const container=`rayco-confirm-${process.pid}-${Date.now()}`;
   const docker=(args:string[],input?:string)=>execFileSync('docker',args,{input,encoding:'utf8',windowsHide:true,stdio:['pipe','pipe','pipe']});
   const args=['exec','-i',container,'psql','-h','127.0.0.1','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-U','postgres'];
@@ -42,6 +42,7 @@ test('Confirmación administrativa: tres órdenes, PostgreSQL sin red ni datos r
     sql(file('../../supabase/migrations/20260919020000_fase13_gestion_usuarios.sql').match(/create or replace function public\.current_user_role\(\)[\s\S]*?\$\$;/)![0]);
     sql(file('./workOrderPointsContributionBaseline.sql'));
     sql(file('./pointConfirmationRankingBaseline.sql'));
+    sql(file('./workOrderPointsDefaultPrivileges.sql'));
     sql(file('../../supabase/migrations/20261024180000_work_order_points.sql'));
     sql(file('../../supabase/migrations/20261024190000_field_order_points_readonly.sql'));
     sql(file('../../supabase/migrations/20261024200000_work_order_point_confirmations.sql'));
@@ -80,6 +81,40 @@ test('Confirmación administrativa: tres órdenes, PostgreSQL sin red ni datos r
         sql("create function fail_point_confirmation() returns trigger language plpgsql as $$begin raise exception 'Fallo final simulado';end$$;create trigger fail_confirmation before insert on work_order_point_confirmations for each row execute function fail_point_confirmation();");
         try {assert.throws(()=>as(call(kind,review(kind).token,18)),/Fallo final/);assert.equal(sql(`select points from ${table};`),'12');assert.equal(sql('select count(*) from work_order_point_changes;'),'0');}
         finally{sql('drop trigger fail_confirmation on work_order_point_confirmations;drop function fail_point_confirmation();');}
+      });
+      await t.test(`${kind}: ACL reales no permiten falsificar auditoría ni confirmación`,()=>{
+        reset(table,kind);
+        as(`select adjust_work_order_points('${kind}','${id}',14,12,'Revisión ADMIN');`);
+        as(`select adjust_work_order_points('${kind}','${id}',18,14,'Revisión SUPERADMIN');`,root);
+        const r=review(kind);
+        for(const actor of [tech,helper]) {
+          assert.throws(()=>as(call(kind,r.token,18),actor),/Solo ADMIN/);
+          assert.throws(()=>as(`select adjust_work_order_points('${kind}','${id}',20,18,'No autorizado');`,actor),/Solo ADMIN/);
+          assert.throws(()=>as(`update ${table} set points=20;`,actor),/Solo ADMIN/);
+        }
+        assert.equal(sql('select count(*) from work_order_point_confirmations;'),'0');
+        const confirmed=json(call(kind,r.token,18));
+        assert.equal(json(call(kind,r.token,18),root).id,confirmed.id);
+        const snapshot=()=>sql(`select jsonb_build_object('audit',(select jsonb_agg(to_jsonb(c) order by changed_at,id) from work_order_point_changes c),
+          'confirmation',(select jsonb_agg(to_jsonb(c) order by id) from work_order_point_confirmations c));`);
+        const before=snapshot();
+        for(const role of ['anon','authenticated','service_role']) {
+          for(const target of ['work_order_point_changes','work_order_point_confirmations']) {
+            for(const privilege of ['INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'])
+              assert.equal(sql(`select has_table_privilege('${role}','${target}','${privilege}');`),'f',`${role}/${target}/${privilege}`);
+            for(const actor of role==='authenticated'?[admin,root,tech,helper]:['']) {
+              for(const statement of [
+                `insert into ${target}(job_type,job_id,${target==='work_order_point_changes'?'new_points':'points'}) values('${kind}','${id}',99);`,
+                `update ${target} set ${target==='work_order_point_changes'?'new_points':'points'}=99;`,
+                `delete from ${target};`, `truncate ${target};`,
+              ]) assert.throws(()=>sql(`set role ${role};set request.jwt.claim.sub='${actor}';${statement}`),/permission denied/);
+            }
+          }
+        }
+        assert.equal(snapshot(),before);
+        assert.equal(sql('select count(*) from work_order_point_changes;'),'2');
+        assert.equal(sql('select count(*) from work_order_point_confirmations;'),'1');
+        assert.equal(sql(`select points from ${table};`),'18');
       });
       await t.test(`${kind}: cierre definitivo rechaza reapertura, cancelación y cambios directos/RPC`,()=>{
         reset(table,kind);const old=review(kind);
