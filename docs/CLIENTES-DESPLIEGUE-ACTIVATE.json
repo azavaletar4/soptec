@@ -1,0 +1,13 @@
+{
+  "status": "FRONTEND_ACTIVATED",
+  "revision": "2f25873",
+  "imageTag": "smartrayco-frontend:clientes-2f25873-e3b07db",
+  "imageId": "sha256:a1f9defba1bca3aa20b111bf1a2a680b649eb125b452693357d99184ce9c56f7",
+  "container": "e4caada21bd1f036f0e86ccd6227789453ef5d3531ed7e57d58c5195031f6fbd",
+  "artifactSha256": "e3b07dba31b7f5b4796e0157e93fa3e903b88d63e3f4d50fe6d1674351d833b2",
+  "assetFilesVerified": 118,
+  "protectedServicesUnchanged": true,
+  "nginxUnchanged": true,
+  "activatedAt": "2026-10-23T18:06:15.885586+00:00",
+  "startedAt": "2026-10-23T18:06:16.500411713Z"
+}

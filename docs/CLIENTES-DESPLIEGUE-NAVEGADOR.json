@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "origin": "https://panel.rayconetworks.com",
+  "realPublishedBundle": true,
+  "dataAndSession": "SIMULATED_FROM_READ_ONLY_AGGREGATE_SNAPSHOT_NO_REAL_IDENTIFIERS",
+  "subscribers": 698,
+  "retired": 1,
+  "suspended": 17,
+  "multipleServices": 15,
+  "prospectsLink": true,
+  "newClientModal": true,
+  "prospectsPage": true,
+  "reincorporationPreparationOnly": true,
+  "operationalHttpWrites": 0,
+  "realAuthenticatedValidation": "PENDING_OPERATOR"
+}

@@ -1,4 +1,6 @@
 import { defineStore } from 'pinia';
+import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
+import { requireWorkOrderPoints } from '@/lib/workOrderPoints';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Routine, RoutineStatus } from '@/types/domain';
@@ -31,6 +33,7 @@ export const useRoutinesStore = defineStore('routines', () => {
   }
 
   async function createRoutine(payload: Partial<Routine>) {
+    requireWorkOrderPoints(payload.points);
     const { data, error: err } = await supabase.from('routines').insert(payload).select(ROUTINE_SELECT).single();
     if (err) throw err;
     routines.value.unshift(data as unknown as Routine);
@@ -38,6 +41,7 @@ export const useRoutinesStore = defineStore('routines', () => {
   }
 
   async function updateRoutine(id: string, payload: Partial<Routine>) {
+    await assertWorkOrderMutable('routine', id);
     const { data, error: err } = await supabase
       .from('routines')
       .update(payload)
@@ -55,6 +59,7 @@ export const useRoutinesStore = defineStore('routines', () => {
   }
 
   async function deleteRoutine(id: string) {
+    await assertWorkOrderMutable('routine', id);
     const { error: err } = await supabase.from('routines').delete().eq('id', id);
     if (err) throw err;
     routines.value = routines.value.filter((r) => r.id !== id);

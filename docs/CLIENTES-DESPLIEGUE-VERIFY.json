@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "revision": "2f25873",
+  "imageId": "sha256:a1f9defba1bca3aa20b111bf1a2a680b649eb125b452693357d99184ce9c56f7",
+  "filesVerified": 118,
+  "protectedServicesUnchanged": true,
+  "nginxUnchanged": true,
+  "criticalErrorsSinceActivation": {
+    "frontend": 0,
+    "backend": 0
+  },
+  "rollbackImage": "sha256:314269b263dcfa8987f95caf9b458e4792efc187e8aa9dc1594793c1a2a6ca2c",
+  "rollbackAvailable": true
+}

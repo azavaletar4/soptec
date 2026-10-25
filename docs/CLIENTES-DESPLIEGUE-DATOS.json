@@ -1,0 +1,83 @@
+{
+  "before": {
+    "phase": "before",
+    "at": "2026-10-23T18:02:10.163828+00:00",
+    "readOnly": true,
+    "counts": {
+      "active": 681,
+      "retired": 1,
+      "suspended": 17,
+      "registered": 699,
+      "subscribers": 698,
+      "suspendedOnly": 17,
+      "currentSection": 698,
+      "multipleServices": 15,
+      "mixedActiveExcluded": 0,
+      "pendingInstallation": 1,
+      "clientStatusProspect": 4,
+      "mixedActiveCancelled": 0,
+      "retiredInSubscribers": 0,
+      "withoutCurrentService": 0,
+      "prospectWithoutService": 0
+    },
+    "dashboard": {
+      "active": 681,
+      "suspended": 17,
+      "prospect": 0,
+      "retired": 1
+    },
+    "commercialProspects": {
+      "convertido": 2,
+      "en_negociacion": 1
+    },
+    "followups": 1,
+    "rlsPoliciesSha256": "e8db0a0ea7e4098103d02fb0ab069ede285a18a55255cf5741e1c18e462c6dee",
+    "rlsUnchangedFromApproval": true,
+    "suspendedRemainCurrent": true,
+    "multipleServicesCountedPerClient": true,
+    "classification": "PASS"
+  },
+  "after": {
+    "phase": "after",
+    "at": "2026-10-23T18:06:32.643946+00:00",
+    "readOnly": true,
+    "counts": {
+      "active": 681,
+      "retired": 1,
+      "suspended": 17,
+      "registered": 699,
+      "subscribers": 698,
+      "suspendedOnly": 17,
+      "currentSection": 698,
+      "multipleServices": 15,
+      "mixedActiveExcluded": 0,
+      "pendingInstallation": 1,
+      "clientStatusProspect": 4,
+      "mixedActiveCancelled": 0,
+      "retiredInSubscribers": 0,
+      "withoutCurrentService": 0,
+      "prospectWithoutService": 0
+    },
+    "dashboard": {
+      "active": 681,
+      "suspended": 17,
+      "prospect": 0,
+      "retired": 1
+    },
+    "commercialProspects": {
+      "convertido": 2,
+      "en_negociacion": 1
+    },
+    "followups": 1,
+    "rlsPoliciesSha256": "e8db0a0ea7e4098103d02fb0ab069ede285a18a55255cf5741e1c18e462c6dee",
+    "rlsUnchangedFromApproval": true,
+    "suspendedRemainCurrent": true,
+    "multipleServicesCountedPerClient": true,
+    "classification": "PASS"
+  },
+  "reference": {
+    "subscribers": 697,
+    "retired": 1
+  },
+  "noOperationalWritesPerformed": true
+}

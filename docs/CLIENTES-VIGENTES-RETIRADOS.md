@@ -1,5 +1,7 @@
 # Clientes vigentes, retirados y preparación de reincorporación
 
+Estado posterior al despliegue autorizado: [CLIENTES-DESPLIEGUE.md](CLIENTES-DESPLIEGUE.md). La reincorporación operativa continúa sin activar.
+
 Fecha: 2026-10-23. Alcance: código de Clientes y contadores dependientes. La revisión inicial y la aclaración de Prospectos usaron sólo datos sintéticos. La preparación final autorizada posteriormente consulta Supabase en READ ONLY y prepara respaldos en staging, sin cambios operativos, migraciones, push ni despliegue. Totales reales, validación y procedimiento: [CLIENTES-PREPARACION-FINAL.md](CLIENTES-PREPARACION-FINAL.md).
 
 ## Causa y diseño aplicado

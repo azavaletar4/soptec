@@ -1,4 +1,6 @@
 import { defineStore } from 'pinia';
+import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
+import { requireWorkOrderPoints } from '@/lib/workOrderPoints';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Ticket, TicketComment, TicketPriority, TicketStatus } from '@/types/domain';
@@ -52,6 +54,7 @@ export const useTicketsStore = defineStore('tickets', () => {
   }
 
   async function createTicket(payload: Partial<Ticket>) {
+    requireWorkOrderPoints(payload.points, true);
     const { data, error: err } = await supabase.from('tickets').insert(payload).select(TICKET_SELECT).single();
     if (err) throw err;
     tickets.value.unshift(data as unknown as Ticket);
@@ -59,6 +62,7 @@ export const useTicketsStore = defineStore('tickets', () => {
   }
 
   async function updateTicket(id: string, payload: Partial<Ticket>) {
+    await assertWorkOrderMutable('ticket', id);
     const { data, error: err } = await supabase
       .from('tickets')
       .update(payload)
@@ -87,7 +91,7 @@ export const useTicketsStore = defineStore('tickets', () => {
    * se pierde. Solo SUPERADMIN/ADMIN (RLS lo exige, ver Fase 26).
    */
   async function deleteTicket(id: string) {
-    const ticket = tickets.value.find((t) => t.id === id);
+    await assertWorkOrderMutable('ticket', id);
 
     const { data: movements, error: movErr } = await supabase
       .from('inventory_movements')
@@ -96,15 +100,8 @@ export const useTicketsStore = defineStore('tickets', () => {
       .eq('movement_type', 'egreso');
     if (movErr) throw movErr;
 
-    for (const m of movements ?? []) {
-      const { error: retErr } = await supabase.from('inventory_movements').insert({
-        product_id: m.product_id,
-        movement_type: 'ingreso',
-        quantity: m.quantity,
-        reason: `Devolucion por eliminacion del ticket ${ticket?.ticket_number ?? id}`,
-      });
-      if (retErr) throw retErr;
-    }
+    // Fase 59 ya devuelve materiales en el mismo DELETE transaccional.
+    // No insertar compensaciones antes de saber si la orden puede borrarse.
 
     const { error: delErr } = await supabase.from('tickets').delete().eq('id', id);
     if (delErr) throw delErr;

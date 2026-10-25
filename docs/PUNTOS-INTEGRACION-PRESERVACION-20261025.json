@@ -1,0 +1,34 @@
+{
+  "parents": [
+    "f763d37b646a07ecbf70e354c8976ce96bae9d28",
+    "0b60cb8d1b1b90202ebbbcdb9e9fbeceb9003fe9"
+  ],
+  "exclusiveCommits": {
+    "local": 23,
+    "remote": 35,
+    "total": 58
+  },
+  "parentTreePaths": 1122,
+  "missingFiles": [],
+  "archivedFiles": {
+    "supabase/migrations/20261024120000_fase168_mikrotik_device_role.sql": "docs/sql/mikrotik-legacy/20261024120000_fase168_mikrotik_device_role.sql",
+    "supabase/migrations/20261024130000_fase169_mikrotik_borde_trafico.sql": "docs/sql/mikrotik-legacy/20261024130000_fase169_mikrotik_borde_trafico.sql"
+  },
+  "pointMigrations": [
+    {
+      "path": "supabase/migrations/20261024180000_work_order_points.sql",
+      "gitBlob": "65ed215d41c7385485c20b0ed3f15b2554e782d7"
+    },
+    {
+      "path": "supabase/migrations/20261024190000_field_order_points_readonly.sql",
+      "gitBlob": "50d2a0d3f148916de492607bf01728c0bd495812"
+    },
+    {
+      "path": "supabase/migrations/20261024200000_work_order_point_confirmations.sql",
+      "gitBlob": "987a873d36758bc7639f4ad9d575ca4959950bc8"
+    }
+  ],
+  "migrationVersionsUnique": true,
+  "originalFilesVerified": 289,
+  "originalMain": "0b60cb8d1b1b90202ebbbcdb9e9fbeceb9003fe9"
+}

@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "phase": "POST",
+  "revision": "2620ed7",
+  "bundle": "HTTPS publicado",
+  "syntheticData": true,
+  "authenticatedOperatorValidation": "PENDING_USER",
+  "badges": [
+    {
+      "label": "Activo",
+      "classes": "badge ml-1 bg-green-500/15 text-green-600",
+      "color": "oklch(0.627 0.194 149.214)"
+    },
+    {
+      "label": "Suspendido",
+      "classes": "badge ml-1 bg-amber-500/15 text-amber-700",
+      "color": "oklch(0.555 0.163 48.998)"
+    },
+    {
+      "label": "Cancelado",
+      "classes": "badge ml-1 bg-slate-500/15 text-slate-600",
+      "color": "oklch(0.446 0.043 257.281)"
+    }
+  ],
+  "commercialOccupied": 2,
+  "history": 1,
+  "confirmationDismissed": true,
+  "operationalWrites": 0,
+  "exceptions": 0
+}

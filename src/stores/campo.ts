@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
 import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
@@ -476,6 +477,7 @@ export const useCampoStore = defineStore('campo', () => {
   }
 
   async function performClosureSubmitInner(input: ClosureInput): Promise<{ ontZoneWarning: string | null }> {
+    await assertWorkOrderMutable(input.jobType, input.jobId);
     await checkMaterialClosure(() => supabase.rpc('assert_material_closure_ready', { p_job_type: input.jobType, p_job_id: input.jobId }));
     // Codigo de cliente / cintillo Drop (Fase 139) — PRIMERO, antes de subir
     // cualquier foto/firma: si el codigo ya pertenece a OTRO contrato (UNIQUE
@@ -605,17 +607,20 @@ export const useCampoStore = defineStore('campo', () => {
       }
     }
 
-    // Firma: si un intento anterior de ESTE cierre ya la subio (closure row
+    // Compatibilidad: solo firmas históricas de una cola/borrador anterior.
+    // La App ya no captura ni exige firmas digitales nuevas.
+    // Si un intento anterior de ESTE cierre ya la subio (closure row
     // ya existe con signature_path), se reusa en vez de subir un archivo
     // nuevo en cada reintento — evita dejar firmas huerfanas en Storage
     // (incidencia Violeta Garcia Silva: 2 archivos de firma para el mismo
     // cierre, el primero sin ninguna fila que lo referencie ya).
-    const { data: existingClosure } = await supabase
+    const { data: existingClosure, error: existingClosureError } = await supabase
       .from('work_order_closures')
       .select('signature_path')
       .eq('job_type', input.jobType)
       .eq('job_id', input.jobId)
       .maybeSingle();
+    if (existingClosureError) throw existingClosureError;
     let signaturePath: string | null = existingClosure?.signature_path ?? null;
     if (input.signatureBlob && !signaturePath) {
       signaturePath = `${input.jobType}/${input.jobId}/signature-${Date.now()}.png`;

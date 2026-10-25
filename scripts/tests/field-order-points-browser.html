@@ -1,0 +1,38 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Campo: consulta local de puntos y cierre sin firma</title></head><body><div id="app"></div>
+<script type="module">
+import { createApp, reactive, h } from 'vue';
+import { createPinia } from 'pinia';
+import { useAuthStore } from '/src/stores/auth.ts';
+import { supabase } from '/src/lib/supabase.ts';
+import { useCampoStore } from '/src/stores/campo.ts';
+import { useTicketsStore } from '/src/stores/tickets.ts';
+import { useInstallationsStore } from '/src/stores/installations.ts';
+import { useRoutinesStore } from '/src/stores/routines.ts';
+import Points from '/src/components/campo/CampoJobPoints.vue';
+const pinia=createPinia(),auth=useAuthStore(pinia);
+auth.role='TECNICO_RED'; auth.user={id:'00000000-0000-0000-0000-000000000003'};
+const state=reactive({jobType:'ticket',jobId:'10000000-0000-0000-0000-000000000001'});
+window.channels=[];window.removed=0;
+supabase.channel=name=>{
+  const ch={name,handlers:[],on(event,filter,callback){this.handlers.push({filter,callback});return this;},subscribe(callback){callback('SUBSCRIBED');return this;}};
+  window.channels.push(ch);return ch;
+};
+supabase.removeChannel=async()=>{window.removed++;return 'ok';};
+window.emitOrderChange=()=>window.channels.at(-1).handlers[0].callback({});
+window.setCase=(type,uid='00000000-0000-0000-0000-000000000003',role='TECNICO_RED')=>{state.jobType=type;auth.user={id:uid};auth.role=role;};
+const app=createApp({render:()=>h(Points,state)}).use(pinia);app.mount('#app');
+window.dispose=()=>app.unmount();
+const campo=useCampoStore(pinia);
+window.tryOrdinaryMutation=(type,action)=>{
+  if(type==='ticket'){const s=useTicketsStore(pinia);return action==='delete'?s.deleteTicket(state.jobId):s.updateTicketStatus(state.jobId,'open');}
+  if(type==='installation'){const s=useInstallationsStore(pinia);return action==='delete'?s.deleteInstallation(state.jobId):s.updateStatus(state.jobId,'pending');}
+  const s=useRoutinesStore(pinia);return action==='delete'?s.deleteRoutine(state.jobId):s.updateStatus(state.jobId,'pending');
+};
+window.closeWithoutSignature=async(type)=>campo.submitClosure({
+  jobType:type,jobId:state.jobId,clientId:null,contractId:null,targetStatus:type==='ticket'?'resolved':'completed',
+  latitude:null,longitude:null,ontSerial:null,closureNotes:'Hoja física firmada',photos:[],equipmentPhotos:[],signatureBlob:null,
+  updateClientGps:false,clientPhotoCategories:[],pendingApprovalCategories:[],motivoAveria:'other',motivoAveriaDetalle:'Prueba local',
+  justificacionCierre:null,potenciaDbm:null,napElementoId:null,zoneId:null,ontReplaced:false,installationAddress:null,clientCode:null
+});
+window.ready=true;
+</script></body></html>

@@ -1,0 +1,35 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Campo integrado: laboratorio sintético</title></head><body><div id="app"></div>
+<script type="module">
+import { createApp, h, ref } from 'vue';
+import { createPinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
+import { useAuthStore } from '/src/stores/auth.ts';
+import { supabase } from '/src/lib/supabase.ts';
+import Custody from '/src/views/campo/CampoMiCustodiaView.vue';
+import Points from '/src/components/campo/CampoJobPoints.vue';
+import Contribution from '/src/components/campo/CampoJobContribution.vue';
+const pinia=createPinia(),auth=useAuthStore(pinia);
+auth.role='TECNICO_RED';auth.user={id:'tech-a'};
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/:pathMatch(.*)*',component:{template:'<div />'}}]});
+await router.push('/campo/mi-custodia');await router.isReady();
+window.calls=[];window.custody={units:[{id:'unit-a',serial_number:'SERIE-SINTETICA',mac_address:null,status:'with_technician',product:{id:'ont',name:'ONT de prueba',unit:'u'}}],materials:[{product:{id:'cable',name:'Cable de prueba',unit:'m'},quantity:10}],pendingReturnRequests:[]};
+supabase.rpc=async(name,args)=>{
+  window.calls.push({name,args,actor:auth.user?.id});
+  if(name==='my_inventory_custody'){
+    const snapshot=structuredClone(window.custody),actor=auth.user?.id;
+    if(window.delayRead){window.delayRead=false;await new Promise(r=>window.releaseRead=r);}
+    return {data:actor==='tech-a'?snapshot:{units:[],materials:[],pendingReturnRequests:[]},error:null};
+  }
+  if(name==='request_unit_return') {window.custody.units[0].status='pending_return';return {data:null,error:null};}
+  if(name==='request_material_return') {window.custody.pendingReturnRequests.push({id:'request-a',product:window.custody.materials[0].product,quantity:args.p_quantity,status:'pending',requested_at:'2026-10-25'});return {data:'request-a',error:null};}
+  if(name==='my_field_order_points')return {data:{jobPoints:10,configuredPoints:10,personalPoints:5,crewSize:2,status:'resolved'},error:null};
+  if(name==='my_field_job_points')return {data:[{kind:'work',points:4,crewSize:2,occurredAt:'2026-11-02'}],error:null};
+  throw Error('Unexpected RPC: '+name);
+};
+supabase.channel=()=>({on(){return this;},subscribe(callback){callback('SUBSCRIBED');return this;}});
+supabase.removeChannel=async()=> 'ok';
+const surface=ref('custody');window.setSurface=value=>surface.value=value;
+window.setActor=id=>auth.user=id?{id}:null;
+const app=createApp({render:()=>surface.value==='custody'?h(Custody):h('main',[h(Points,{jobType:'ticket',jobId:'synthetic-order'}),h(Contribution,{jobType:'ticket',jobId:'synthetic-order'})])}).use(pinia).use(router);
+app.mount('#app');window.ready=true;
+</script></body></html>

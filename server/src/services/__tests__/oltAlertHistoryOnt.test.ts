@@ -31,7 +31,7 @@ test('retired: cached online never labels historical ONT connected; pre-retireme
 });
 test('unconfirmed, expired, reused position, missing relation and legacy payload never imply live state',()=>{
   const expired=new OntTelemetryEvidence(()=>now+120000);
-  expired.remember(row,{...cache().project(row).telemetry,oltDeviceId:'olt',serial:row.serial,position:'1/2/8:3',status:'online',validUntil:new Date(now+60000).toISOString()} as OntEvidence);
+  expired.remember(row,{...cache().project(row).telemetry,oltDeviceId:'olt',serial:row.serial,position:'1/2/8:3',status:'online',rxPower:null,txPower:null,validUntil:new Date(now+60000).toISOString()} as OntEvidence);
   for(const ont of [presentAlertHistoryOnt(row,new OntTelemetryEvidence(()=>now)),presentAlertHistoryOnt(row,expired),presentAlertHistoryOnt({...row,serial:'HWTCE5C94DB6'},cache()),null,{serial:row.serial,description:null,slot:2,port:8,ontId:3,status:'online'}]) {
     assert.equal(view(ont as ReturnType<typeof presentAlertHistoryOnt>).currentStatusLabel,'Estado actual no confirmado');
   }

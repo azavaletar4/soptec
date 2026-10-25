@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -196,6 +197,9 @@ onMounted(async () => {
       <div class="grid gap-4 lg:grid-cols-2">
         <!-- Columna izquierda: info de la orden -->
         <div class="flex flex-col gap-4">
+          <div class="surface p-4 text-sm">
+            <WorkOrderPointsEditor job-type="routine" :job-id="routine.id" :status="routine.status" :points="routine.points" @saved="routine.points = $event" />
+          </div>
           <div class="surface p-4 text-sm">
             <div class="text-slate-500 text-xs mb-2">Destino</div>
             <p class="text-slate-800">{{ targetLabel(routine) }}</p>

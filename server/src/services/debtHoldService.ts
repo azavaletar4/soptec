@@ -4,6 +4,7 @@ import { withOltLock } from './oltTelnetLock';
 import { changeOntProfileCommands, type ZteInterfaceRef } from '../ssh/zteCommands';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { isPppoeAdminRole } from '../mikrotik/deviceRole';
+import { assertClientCanReactivate } from './clientReactivationGuard';
 
 // Corte y reactivacion por deuda — ver comentario completo en la migracion
 // Fase 25 (supabase/migrations/20260922030000_fase25_corte_por_deuda.sql).
@@ -265,10 +266,14 @@ export async function applyDebtHold(contractId: string): Promise<ApplyResult> {
 export async function reactivateContract(contractId: string): Promise<ApplyResult> {
   const { data: contract, error } = await supabaseAdmin
     .from('service_contracts')
-    .select('id, client_id, plan_id, debt_hold_status, mikrotik_device_id, pppoe_username, mikrotik_profile_before_hold, plans(olt_tcont_profile, olt_traffic_profile)')
+    .select('id, client_id, status, plan_id, debt_hold_status, mikrotik_device_id, pppoe_username, mikrotik_profile_before_hold, plans(olt_tcont_profile, olt_traffic_profile), clients(status)')
     .eq('id', contractId)
     .single();
   if (error || !contract) throw new Error('Contrato no encontrado');
+  const parent = contract.clients as unknown as { status: string } | { status: string }[] | null;
+  const parentStatus = Array.isArray(parent) ? (parent.length === 1 ? parent[0]?.status : null) : parent?.status;
+  // Antes de cualquier plan/comando OLT o MikroTik, incluso al cobrar deuda antigua.
+  assertClientCanReactivate(contract.status, parentStatus);
   if (contract.debt_hold_status === 'none') throw new Error('Este contrato no esta en corte por deuda');
 
   const plan = contract.plans as unknown as { olt_tcont_profile: string | null; olt_traffic_profile: string | null } | null;

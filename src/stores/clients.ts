@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/api';
+import type { RetirementPreview, RetirementConfirmation, RetirementResult } from '@/types/clientRetirement';
 import type { Client } from '@/types/domain';
 import { CLIENT_LIFECYCLE_SELECT, readAllClientPages, type ClientLifecycle } from '@/lib/clientLifecycle';
 
@@ -37,6 +39,7 @@ export const useClientsStore = defineStore('clients', () => {
   }
 
   async function createClient(payload: Partial<Client>) {
+    if (payload.status === 'retired') throw new Error('Crea la ficha sin Baja y utiliza la operación de baja definitiva.');
     const { data, error: err } = await supabase
       .from('clients')
       .insert(payload)
@@ -48,9 +51,15 @@ export const useClientsStore = defineStore('clients', () => {
   }
 
   async function updateClient(id: string, payload: Partial<Client>) {
+    const safePayload = { ...payload };
+    if (safePayload.status === 'retired') {
+      if (clients.value.find(c => c.id === id)?.status !== 'retired') throw new Error('Utiliza la baja definitiva para revisar y cancelar todos los contratos.');
+      // Editar contacto de una ficha histórica no vuelve a ejecutar una baja.
+      delete safePayload.status;
+    }
     const { data, error: err } = await supabase
       .from('clients')
-      .update(payload)
+      .update(safePayload)
       .eq('id', id)
       .select(`*, zones(id, name), ${CLIENT_LIFECYCLE_SELECT}`)
       .single();
@@ -66,5 +75,11 @@ export const useClientsStore = defineStore('clients', () => {
     clients.value = clients.value.filter((c) => c.id !== id);
   }
 
-  return { clients, loading, error, fetchClients, fetchClientById, createClient, updateClient, deleteClient };
+  function previewRetirement(id: string) {
+    return apiFetch<RetirementPreview>(`/api/clients/${encodeURIComponent(id)}/retirement`);
+  }
+  function retireClient(id: string, confirmation: RetirementConfirmation) {
+    return apiFetch<RetirementResult>(`/api/clients/${encodeURIComponent(id)}/retirement`, { method: 'POST', body: JSON.stringify(confirmation) });
+  }
+  return { clients, loading, error, fetchClients, fetchClientById, createClient, updateClient, deleteClient, previewRetirement, retireClient };
 });

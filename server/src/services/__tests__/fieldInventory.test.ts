@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createClient} from '@supabase/supabase-js';
-import {readFieldInventory} from '../fieldInventory.ts';
+import {readFieldInventory} from '../fieldInventory';
 const actor='00000000-0000-4000-8000-000000000001',job='00000000-0000-4000-8000-000000000002';
 function fixture(code?:string,extra:Record<string,unknown>={}){
  const calls:{path:string;body:Record<string,unknown>}[]=[];

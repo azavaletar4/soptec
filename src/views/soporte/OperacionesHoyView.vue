@@ -169,6 +169,7 @@ function clearTechFilter() {
 const selectedTechName = computed(() => technicians.value.find((t) => t.id === techFilterId.value)?.full_name ?? null);
 
 const emptyForm = () => ({
+  points: '' as number | '',
   client_id: '',
   contract_id: '',
   title: '',
@@ -329,6 +330,10 @@ function openCreate() {
 }
 
 async function handleSubmit() {
+  if (typeof form.value.points !== 'number' || !Number.isInteger(form.value.points) || form.value.points <= 0) {
+    formError.value = 'Ingresa puntos enteros mayores a 0.';
+    return;
+  }
   if (!form.value.client_id) {
     formError.value = 'Selecciona un cliente';
     return;
@@ -369,6 +374,7 @@ async function handleSubmit() {
   formError.value = null;
   try {
     const created = await ticketsStore.createTicket({
+      points: Number(form.value.points),
       client_id: form.value.client_id,
       contract_id: form.value.contract_id || null,
       title: form.value.title,
@@ -652,6 +658,10 @@ function formatDate(value: string) {
           <div class="mb-3">
             <label class="block text-xs text-slate-600 mb-1">Título</label>
             <input v-model="form.title" required class="field-input" />
+          </div>
+          <div class="mb-3">
+            <label class="block text-xs text-slate-600 mb-1">Puntos de la orden *</label>
+            <input v-model.number="form.points" type="number" min="1" step="1" required class="field-input" />
           </div>
 
           <div class="mb-3">

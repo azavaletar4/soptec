@@ -1,0 +1,13 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Prueba local de puntos</title></head><body><div id="app"></div>
+<script type="module">
+import { createApp, reactive, h } from 'vue';
+import { createPinia } from 'pinia';
+import { useAuthStore } from '/src/stores/auth.ts';
+import Editor from '/src/components/soporte/WorkOrderPointsEditor.vue';
+const state=reactive({jobType:'ticket',jobId:'10000000-0000-0000-0000-000000000001',status:'open',points:5});
+const pinia=createPinia();
+const auth=useAuthStore(pinia); auth.role='ADMIN';
+window.setCase=(role,status,type='ticket')=>{auth.role=role;state.status=status;state.jobType=type;state.points=5;};
+createApp({render:()=>h(Editor,{...state,onSaved:value=>{state.points=value;window.saved=value;}})}).use(pinia).mount('#app');
+window.ready=true;
+</script></body></html>

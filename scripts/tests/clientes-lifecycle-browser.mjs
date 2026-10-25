@@ -36,7 +36,8 @@ try {
   const evaluate = async expression => { const r = await c('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw Error(JSON.stringify(r.exceptionDetails)); return r.result.value; };
   async function until(expression) { for (let i = 0; i < 100; i++) { if (await evaluate(expression)) return; await new Promise(r => setTimeout(r, 100)); } throw Error('Timeout: ' + expression); }
   const prospectsMode = process.argv.includes('--prospects');
-  function fixture(prospectsMode) {
+  const retirementMode = process.argv.includes('--retirement');
+  function fixture(prospectsMode, retirementMode) {
     const id = '00000000-0000-4000-8000-000000000001';
     const now = Math.floor(Date.now() / 1000), enc = o => btoa(JSON.stringify(o)).replaceAll('=', '').replaceAll('+', '-').replaceAll('/', '_');
     const user = { id, aud: 'authenticated', role: 'authenticated', email: 'clients@example.invalid', app_metadata: {}, user_metadata: {} };
@@ -46,6 +47,11 @@ try {
       service_contracts: statuses.map((status, n) => ({ id: id + '-' + n, client_id: id, status, client_code: 'CODE-' + id, priority: 'medium' })),
       installations: installationStatus ? [{ id: 'inst-' + id, client_id: id, status: installationStatus, created_at: '2026-10-01' }] : [] });
     const clients = [make('retired', 'Retirado', 'retired', ['cancelled']), make('active', 'Activo', 'active', ['active']), make('suspended', 'Suspendido', 'suspended', ['suspended']), make('mixed', 'Mixto', 'retired', ['cancelled', 'active']), make('pending', 'Pendiente', 'retired', ['cancelled'], 'pending')];
+    if (retirementMode) {
+      clients[1] = make('active', 'Activo', 'active', ['active', 'suspended']);
+      for (const client of clients) { client.saldo_a_favor = 0; for (const [i, ct] of client.service_contracts.entries()) { ct.contract_number = 'TEST-' + client.id + '-' + i; ct.service_type = 'internet_combo'; ct.updated_at = '2026-10-01'; ct.monthly_fee = 50; } }
+      window.__retirementState = clients; window.__retirementPosts = [];
+    }
     if (prospectsMode) clients.push(make('no-service', 'Ficha prospecto', 'prospect', []));
     const prospect = { id: 'p-1', full_name: 'Prospecto Comercial', phone: '999111222', address: 'Dirección comercial', zone_id: 'zone-1', plan_interes_id: 'plan-1', canal_contacto: 'whatsapp', estado: 'interesado', created_at: '2026-10-01', proximo_seguimiento: null };
     const realFetch = window.fetch.bind(window); window.__calls = [];
@@ -53,11 +59,32 @@ try {
       const url = new URL(typeof input === 'string' ? input : input.url, location.href);
       if (url.origin === location.origin && !url.pathname.startsWith('/api/')) return realFetch(input, init);
       const method = init.method ?? 'GET'; window.__calls.push({ path: url.pathname, search: url.search, method });
+      if (retirementMode && /^\/api\/clients\/[^/]+\/retirement$/.test(url.pathname)) {
+        const client = clients.find(c => c.id === url.pathname.split('/')[3]);
+        const respond = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+        if (!['ADMIN', 'SUPERADMIN'].includes(window.__role)) return respond({ error: 'Sin permisos' }, 403);
+        if (method === 'GET') {
+          if (window.__retirementDisabled) return respond({ error: 'La baja transaccional todavía no está habilitada en este entorno.' }, 503);
+          return respond({ clientId: client.id, name: client.first_name + ' ' + client.last_name, status: client.status, token: 'a'.repeat(32),
+            contracts: client.service_contracts.map(ct => ({ ...ct, number: ct.contract_number, code: ct.client_code, serviceType: ct.service_type, pppoeLinked: true, ontLinked: true, iptvLinked: false })),
+            openInstallations: window.__retirementOrders ? [{ id: 'open-order', status: 'scheduled', contractId: client.service_contracts[0].id }] : [], linkedEquipmentCount: 1, networkReviewRequired: true });
+        }
+        if (method === 'POST') {
+          const body = JSON.parse(init.body); window.__retirementPosts.push(body);
+          if (window.__retirementStale) return respond({ error: 'La ficha cambió; actualiza la vista previa.' }, 409);
+          if (window.__retirementOrders) return respond({ error: 'Hay Altas abiertas.' }, 409);
+          if (body.confirmAllContracts !== true) return respond({ error: 'Falta confirmar.' }, 400);
+          const affected = client.service_contracts.filter(ct => ct.status !== 'cancelled').map(ct => ct.id);
+          for (const ct of client.service_contracts) ct.status = 'cancelled'; client.status = 'retired';
+          return respond({ clientId: client.id, status: 'retired', cancelledContractIds: affected, cancelledCount: affected.length, networkReviewRequired: true, operationalNetworkActionsExecuted: false });
+        }
+      }
       if (!['GET', 'HEAD'].includes(method)) throw Error('Blocked write: ' + method);
       let data = []; const table = url.pathname.split('/').at(-1);
       if (table === 'profiles') data = { id, role: window.__role, must_change_password: false };
       if (table === 'clients') data = window.__failClients ? null : clients;
       if (table === 'service_contracts') data = clients.flatMap(c => c.service_contracts);
+      if (retirementMode && table === 'service_contracts' && url.searchParams.has('client_id')) data = data.filter(ct => ct.client_id === url.searchParams.get('client_id').replace(/^eq\./, ''));
       if (table === 'installations') data = clients.flatMap(c => c.installations);
       if (table === 'prospects') data = [prospect];
       if (table === 'prospect_followups') data = [{ id: 'f-1', prospect_id: 'p-1', notas: 'Historial conservado', fecha: '2026-10-01', profiles: { full_name: 'Operador simulado' } }];
@@ -73,13 +100,53 @@ try {
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json', 'Content-Range': '0-1/*' } });
     };
   }
-  await c('Page.addScriptToEvaluateOnNewDocument', { source: '(' + fixture.toString() + ')(' + JSON.stringify(prospectsMode) + ');' });
+  await c('Page.addScriptToEvaluateOnNewDocument', { source: '(' + fixture.toString() + ')(' + JSON.stringify(prospectsMode) + ',' + JSON.stringify(retirementMode) + ');' });
   const navigate = async (role = 'ADMIN') => { await c('Page.navigate', { url: 'http://127.0.0.1:4187/clientes?testRole=' + role }); await until('document.body?.textContent.includes("4 abonados vigentes · 1 retirados")'); };
   const click = label => evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().startsWith(${JSON.stringify(label)})).click()`);
   const names = () => evaluate('Array.from(document.querySelectorAll("tbody tr")).map(r => r.textContent)');
   await navigate();
   console.log('Synthetic client list loaded');
-  if (prospectsMode) {
+  if (retirementMode) {
+    const editActive = () => evaluate(`Array.from(document.querySelectorAll('tbody tr')).find(r => r.textContent.includes('Activo Sintetico')).querySelectorAll('button')[1].click()`);
+    const selectRetired = () => evaluate(`{ const select = Array.from(document.querySelectorAll('select')).find(s => s.querySelector('option[value="retired"]')); select.value = 'retired'; select.dispatchEvent(new Event('change', { bubbles: true })); }`);
+    const dialogClick = label => evaluate(`Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(label)}).click()`);
+    const ready = () => until('document.querySelector("[role=dialog]")?.textContent.includes("TEST-active-1")');
+    const posts = () => evaluate('window.__retirementPosts.length');
+    await editActive(); await selectRetired(); await ready();
+    assert.ok(await evaluate('document.querySelector("[role=dialog]").textContent.includes("2 contratos vigentes")'));
+    assert.equal(await evaluate('Array.from(document.querySelector("[role=dialog]").querySelectorAll("button")).find(b=>b.textContent.includes("Confirmar baja")).disabled'), true);
+    await dialogClick('Cancelar'); assert.equal(await posts(), 0);
+    await evaluate('window.__retirementOrders = true'); await selectRetired(); await ready();
+    assert.ok(await evaluate('document.querySelector("[role=dialog]").textContent.includes("Baja bloqueada")'));
+    assert.equal(await evaluate('document.querySelector("[role=dialog] input[type=checkbox]").disabled'), true);
+    await dialogClick('Cancelar'); assert.equal(await posts(), 0);
+    await evaluate('window.__retirementOrders = false; window.__retirementDisabled = true'); await selectRetired();
+    await until('document.querySelector("[role=dialog]")?.textContent.includes("todavía no está habilitada")');
+    await dialogClick('Cancelar'); assert.equal(await posts(), 0);
+    await evaluate('window.__retirementDisabled = false; window.__retirementStale = true'); await selectRetired(); await ready();
+    await evaluate('document.querySelector("[role=dialog] input[type=checkbox]").click()'); await dialogClick('Confirmar baja definitiva');
+    await until('document.querySelector("[role=dialog]")?.textContent.includes("La ficha cambió")'); assert.equal(await posts(), 1);
+    await dialogClick('Cancelar');
+    await evaluate('window.__retirementStale = false; Array.from(document.querySelectorAll(".modal-overlay form button")).find(b=>b.textContent.trim()==="Cancelar").click()');
+    await evaluate(`Array.from(document.querySelectorAll('tbody tr')).find(r => r.textContent.includes('Activo Sintetico')).querySelector('button').click()`);
+    await until('location.pathname === "/clientes/active" && !!document.querySelector("select")');
+    await selectRetired(); await ready();
+    await evaluate(`document.querySelector('[role=dialog] input[type=checkbox]').click()`);
+    await evaluate(`{ const button = Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(b=>b.textContent.includes('Confirmar baja')); button.click(); button.click(); }`);
+    await until('document.querySelector("[role=dialog]")?.textContent.includes("Baja comercial confirmada")');
+    assert.equal(await posts(), 2, 'Doble clic no duplica la baja');
+    assert.deepEqual(await evaluate('window.__retirementPosts[1].affectedContractIds'), ['active-0', 'active-1']);
+    assert.ok(await evaluate('window.__retirementState.find(c=>c.id==="active").status === "retired" && window.__retirementState.find(c=>c.id==="active").service_contracts.every(s=>s.status==="cancelled")'));
+    assert.equal(await evaluate('window.__calls.filter(c=>!["GET","HEAD"].includes(c.method) && !c.path.endsWith("/retirement")).length'), 0);
+    await dialogClick('Cerrar');
+    await navigate('SOPORTE'); await editActive();
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('select')).find(s=>s.querySelector('option[value="retired"]')).querySelector('option[value="retired"]').disabled`), true);
+    await selectRetired(); assert.equal(await evaluate('!!document.querySelector("[role=dialog]")'), false);
+    assert.equal(await posts(), 0);
+    await navigate('SUPERADMIN'); await editActive(); await selectRetired(); await ready(); await dialogClick('Cancelar');
+    assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
+    console.log('PASS: baja desde lista y ficha; cancelación sin POST; 2 contratos explícitos; Altas abiertas/SQL ausente bloquean; preview obsoleta; doble clic; roles; cero acciones de red o escrituras fuera del endpoint simulado.');
+  } else if (prospectsMode) {
     const setInput = (selector, value) => evaluate(`{ const input = document.querySelector(${JSON.stringify(selector)}); input.value = ${JSON.stringify(value)}; input.dispatchEvent(new Event('input', { bubbles: true })); }`);
     const prospectLinks = () => evaluate(`Array.from(document.querySelectorAll('a[href="/clientes/prospectos"]')).filter(a => a.textContent.includes('Prospectos')).length`);
     assert.equal(await prospectLinks(), 1);
@@ -144,7 +211,7 @@ try {
     const actions = await evaluate('JSON.parse(JSON.stringify(window.__actions))');
     assert.deepEqual(actions.map(a => a.action), ['prospect', 'followup', 'client', 'contract', 'installation', 'converted']);
     assert.deepEqual(actions[3].payload, { client_id: 'client-local', plan_id: 'plan-1', monthly_fee: 70, installation_address: 'Dirección comercial', zone_id: 'zone-1' });
-    assert.deepEqual(actions[4].payload, { client_id: 'client-local', contract_id: 'contract-local' });
+    assert.deepEqual(actions[4].payload, { client_id: 'client-local', contract_id: 'contract-local', points: 10 });
     assert.deepEqual(actions[5], { action: 'converted', id: 'p-1', clientId: 'client-local' });
     assert.equal(await evaluate('window.__calls.filter(c => !["GET", "HEAD"].includes(c.method)).length'), 0);
     for (const role of ['SUPERADMIN', 'SOPORTE', 'FACTURACION']) { await navigate(role); assert.equal(await prospectLinks(), 1); }

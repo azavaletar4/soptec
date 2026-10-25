@@ -1,0 +1,51 @@
+{
+  "status": "PASS",
+  "revision": "2620ed7",
+  "before": "2026-10-24T05:35:21.026893+00:00",
+  "after": "2026-10-24T05:40:50.749534+00:00",
+  "counts": {
+    "clients": 702,
+    "napLinks": 695,
+    "cancelled": 2,
+    "contracts": 721,
+    "suspended": 17
+  },
+  "commercialNap": {
+    "occupied": 693,
+    "cancelledHistory": 2
+  },
+  "napByStatus": {
+    "active": 676,
+    "suspended": 17,
+    "unverified": 0,
+    "cancelledHistory": 2
+  },
+  "businessFingerprintsUnchanged": true,
+  "rlsUnchanged": true,
+  "functions": 3,
+  "triggers": 2,
+  "approvedBodiesVerified": true,
+  "permissions": [
+    {
+      "function": "contract_administrative_guard",
+      "authenticated": false,
+      "anon": false,
+      "service_role": false
+    },
+    {
+      "function": "contract_administrative_installation_guard",
+      "authenticated": false,
+      "anon": false,
+      "service_role": false
+    },
+    {
+      "function": "contract_cancel_administrative",
+      "authenticated": true,
+      "anon": false,
+      "service_role": false
+    }
+  ],
+  "globalRetirementActivated": false,
+  "realCancellationsExecuted": 0,
+  "networkCommandsExecuted": 0
+}
