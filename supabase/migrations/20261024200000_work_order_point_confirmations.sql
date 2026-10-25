@@ -6,6 +6,7 @@ create table public.work_order_point_confirmations (
   job_type text not null check(job_type in ('ticket','installation','routine')),
   job_id uuid not null,
   points numeric not null check(points>0 and points<'Infinity'::numeric),
+  recurrence_penalty numeric not null default 0 check(recurrence_penalty in (0,5)),
   crew jsonb not null check(jsonb_typeof(crew)='array' and jsonb_array_length(crew)>0),
   technical_completed_at timestamptz not null,
   order_created_at timestamptz not null,
@@ -18,8 +19,8 @@ create table public.work_order_point_confirmations (
   invalidated_by uuid references public.profiles(id),
   invalidation_reason text
 );
-create unique index work_order_point_confirmation_current on public.work_order_point_confirmations(job_type,job_id) where invalidated_at is null;
-create index work_order_point_confirmation_period on public.work_order_point_confirmations(confirmed_at) where invalidated_at is null;
+create unique index work_order_point_confirmation_current on public.work_order_point_confirmations(job_type,job_id);
+create index work_order_point_confirmation_period on public.work_order_point_confirmations(confirmed_at);
 alter table public.work_order_point_confirmations enable row level security;
 revoke all on public.work_order_point_confirmations from public,anon,authenticated,service_role;
 grant select on public.work_order_point_confirmations to authenticated;
@@ -28,7 +29,7 @@ using(exists(select 1 from public.profiles p where p.id=auth.uid() and p.active 
 
 create function public.work_order_point_review(p_job_type text,p_job_id uuid)
 returns jsonb language plpgsql stable security definer set search_path=public as $$
-declare o jsonb; crew jsonb; latest jsonb; current_confirmation jsonb; done timestamptz; token text; history_revision text;
+declare o jsonb; crew jsonb; latest jsonb; current_confirmation jsonb; done timestamptz; token text; history_revision text; penalty numeric:=0;
 begin
   if not exists(select 1 from public.profiles where id=auth.uid() and active and role::text in ('ADMIN','SUPERADMIN')) then
     raise exception 'Solo ADMIN/SUPERADMIN puede revisar puntos' using errcode='42501';
@@ -40,6 +41,11 @@ begin
   if o is null then raise exception 'La orden no existe'; end if;
   done:=case when p_job_type='ticket' then coalesce((o->>'resolved_at')::timestamptz,(o->>'closed_at')::timestamptz)
     else (o->>'completed_at')::timestamptz end;
+  if p_job_type='ticket' and o->>'category' in ('no_service','slow_speed','equipment') and exists(
+    select 1 from public.tickets t2 where t2.client_id=(o->>'client_id')::uuid and t2.id<>p_job_id
+    and t2.category::text in ('no_service','slow_speed','equipment') and t2.created_at>done
+    and t2.created_at<=done+interval '7 days' and t2.imputable_a_tecnico
+  ) then penalty:=5; end if;
   select jsonb_agg(jsonb_build_object('technicianId',j.technician_id,'role',j.role,
     'name',coalesce(nullif(p.full_name,''),p.email,'Técnico')) order by j.technician_id) into crew
   from public.job_assignees j join public.profiles p on p.id=j.technician_id
@@ -52,17 +58,17 @@ begin
   select to_jsonb(c) into latest from public.work_order_point_confirmations c
   where c.job_type=p_job_type and c.job_id=p_job_id order by c.confirmed_at desc,c.id desc limit 1;
   select to_jsonb(c) into current_confirmation from public.work_order_point_confirmations c
-  where c.job_type=p_job_type and c.job_id=p_job_id and c.invalidated_at is null;
+  where c.job_type=p_job_type and c.job_id=p_job_id;
   -- Incluye toda la fila y ciclo anterior: una revisión vieja no sirve tras
   -- reasignación, reapertura o cambio de puntuación/estado.
   select md5(coalesce(string_agg(c.id::text||coalesce(c.invalidated_at::text,''),',' order by c.id),'')) into history_revision
   from public.work_order_point_confirmations c where c.job_type=p_job_type and c.job_id=p_job_id;
-  token:=md5(jsonb_build_object('order',o,'crew',crew,'history',history_revision)::text);
+  token:=md5(jsonb_build_object('order',o,'crew',crew,'history',history_revision,'penalty',penalty)::text);
   return jsonb_build_object('points',o->'points','status',o->>'status','technicalCompletedAt',done,
     'createdAt',o->>'created_at',
     'historical',done is not null and (done<timestamptz '2026-11-01 00:00:00 America/Lima' or (o->>'created_at')::timestamptz<timestamptz '2026-11-01 00:00:00 America/Lima'),
     'finished',case when p_job_type='ticket' then o->>'status' in ('resolved','closed') else o->>'status'='completed' end,
-    'crew',crew,'token',token,'confirmation',current_confirmation,'lastConfirmation',latest);
+    'crew',crew,'recurrencePenalty',penalty,'definitiveClosure',true,'token',token,'confirmation',current_confirmation,'lastConfirmation',latest);
 end;
 $$;
 revoke all on function public.work_order_point_review(text,uuid) from public,anon,service_role;
@@ -82,7 +88,7 @@ begin
   if v_role is null or v_role not in ('ADMIN','SUPERADMIN') then raise exception 'Solo ADMIN/SUPERADMIN puede ajustar puntos'; end if;
   kind:=case tg_table_name when 'tickets' then 'ticket' when 'installations' then 'installation' else 'routine' end;
   if old.status::text='cancelled' or new.status::text='cancelled' then raise exception 'La orden está cancelada'; end if;
-  if exists(select 1 from public.work_order_point_confirmations c where c.job_type=kind and c.job_id=old.id and c.invalidated_at is null) then
+  if exists(select 1 from public.work_order_point_confirmations c where c.job_type=kind and c.job_id=old.id) then
     raise exception 'Los puntos ya están confirmados';
   end if;
   done:=case when kind='ticket' then coalesce((to_jsonb(old)->>'resolved_at')::timestamptz,(to_jsonb(old)->>'closed_at')::timestamptz)
@@ -118,7 +124,7 @@ $$;
 
 create function public.confirm_work_order_points(p_job_type text,p_job_id uuid,p_points numeric,p_expected_token text,p_reason text,p_confirmed boolean)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare tbl text; o jsonb; review jsonb; result public.work_order_point_confirmations; done timestamptz;
+declare tbl text; o jsonb; review jsonb; result public.work_order_point_confirmations; done timestamptz; frozen_crew jsonb; penalty numeric;
 begin
   if not exists(select 1 from public.profiles where id=auth.uid() and active and role::text in ('ADMIN','SUPERADMIN')) then raise exception 'Solo ADMIN/SUPERADMIN puede confirmar puntos' using errcode='42501'; end if;
   if p_confirmed is distinct from true then raise exception 'Confirma explícitamente que los puntos son correctos'; end if;
@@ -126,7 +132,7 @@ begin
   if tbl is null then raise exception 'Tipo de orden inválido'; end if;
   execute format('select to_jsonb(t) from public.%I t where id=$1 for update',tbl) into o using p_job_id;
   if o is null then raise exception 'La orden no existe'; end if;
-  select * into result from public.work_order_point_confirmations c where c.job_type=p_job_type and c.job_id=p_job_id and c.invalidated_at is null;
+  select * into result from public.work_order_point_confirmations c where c.job_type=p_job_type and c.job_id=p_job_id;
   if found then
     if result.review_token=p_expected_token and result.points=p_points then return to_jsonb(result); end if;
     raise exception 'La orden ya tiene una confirmación vigente; recarga la revisión';
@@ -143,8 +149,13 @@ begin
     perform public.adjust_work_order_points(p_job_type,p_job_id,p_points,(review->>'points')::numeric,p_reason);
   end if;
   done:=(review->>'technicalCompletedAt')::timestamptz;
-  insert into public.work_order_point_confirmations(job_type,job_id,points,crew,technical_completed_at,order_created_at,category,client_id,confirmed_by,review_token)
-  values(p_job_type,p_job_id,p_points,review->'crew',done,(o->>'created_at')::timestamptz,o->>'category',(o->>'client_id')::uuid,auth.uid(),p_expected_token)
+  penalty:=(review->>'recurrencePenalty')::numeric;
+  select jsonb_agg(member||jsonb_build_object('points',p_points/jsonb_array_length(review->'crew'),
+    'recurrencePenalty',penalty/jsonb_array_length(review->'crew'),
+    'netPoints',(p_points-penalty)/jsonb_array_length(review->'crew')) order by n)
+    into frozen_crew from jsonb_array_elements(review->'crew') with ordinality as members(member,n);
+  insert into public.work_order_point_confirmations(job_type,job_id,points,recurrence_penalty,crew,technical_completed_at,order_created_at,category,client_id,confirmed_by,review_token)
+  values(p_job_type,p_job_id,p_points,penalty,frozen_crew,done,(o->>'created_at')::timestamptz,o->>'category',(o->>'client_id')::uuid,auth.uid(),p_expected_token)
   returning * into result;
   return to_jsonb(result);
 end;
@@ -152,26 +163,50 @@ $$;
 revoke all on function public.confirm_work_order_points(text,uuid,numeric,text,text,boolean) from public,anon,service_role;
 grant execute on function public.confirm_work_order_points(text,uuid,numeric,text,text,boolean) to authenticated;
 
--- No se toca el flujo técnico: observar una reapertura/cancelación invalida
--- el hecho administrativo, conserva el registro y permite revisar otro ciclo.
-create function public.invalidate_work_order_point_confirmation() returns trigger
-language plpgsql security definer set search_path=public as $$
-declare kind text; finished boolean;
+-- Confirmar cierra administrativamente. Guardas comunes a UPDATE/DELETE y
+-- RPCs SECURITY DEFINER: no hay excepción ordinaria para SUPERADMIN.
+create function public.work_order_is_final(p_job_type text,p_job_id uuid)
+returns boolean language plpgsql stable security definer set search_path=public as $$
 begin
-  kind:=case tg_table_name when 'tickets' then 'ticket' when 'installations' then 'installation' else 'routine' end;
-  finished:=case when kind='ticket' then new.status::text in ('resolved','closed') else new.status::text='completed' end;
-  if not finished then
-    update public.work_order_point_confirmations set invalidated_at=clock_timestamp(),invalidated_by=auth.uid(),
-      invalidation_reason='Estado técnico: '||new.status::text
-    where job_type=kind and job_id=new.id and invalidated_at is null;
+  if not exists(select 1 from public.profiles where id=auth.uid() and active and role::text in ('ADMIN','SUPERADMIN','SOPORTE','TECNICO_RED','FACTURACION')) then
+    raise exception 'Consulta exclusiva del personal activo' using errcode='42501';
   end if;
+  if p_job_type not in ('ticket','installation','routine') or p_job_type is null then raise exception 'Tipo de orden inválido'; end if;
+  return exists(select 1 from public.work_order_point_confirmations where job_type=p_job_type and job_id=p_job_id);
+end;
+$$;
+revoke all on function public.work_order_is_final(text,uuid) from public,anon,service_role;
+grant execute on function public.work_order_is_final(text,uuid) to authenticated;
+
+create function public.guard_final_work_order() returns trigger
+language plpgsql security definer set search_path=public as $$
+declare contexts jsonb:='[]'; target record; tbl text;
+begin
+  if tg_table_name='job_assignees' then
+    if tg_op<>'INSERT' then contexts:=contexts||jsonb_build_array(jsonb_build_object('kind',old.job_type,'id',old.job_id)); end if;
+    if tg_op<>'DELETE' then contexts:=contexts||jsonb_build_array(jsonb_build_object('kind',new.job_type,'id',new.job_id)); end if;
+  else
+    contexts:=jsonb_build_array(jsonb_build_object('kind',case tg_table_name when 'tickets' then 'ticket' when 'installations' then 'installation' else 'routine' end,'id',old.id));
+  end if;
+  for target in select distinct c->>'kind' as kind,(c->>'id')::uuid as id from jsonb_array_elements(contexts)c order by 1,2 loop
+    if tg_table_name='job_assignees' then
+      tbl:=case target.kind when 'ticket' then 'tickets' when 'installation' then 'installations' else 'routines' end;
+      -- Serializar cambios de cuadrilla con la misma fila que confirma la RPC.
+      execute format('select 1 from public.%I where id=$1 for update',tbl) using target.id;
+    end if;
+    if exists(select 1 from public.work_order_point_confirmations where job_type=target.kind and job_id=target.id) then
+      raise exception 'Cierre administrativo definitivo: la orden y su cuadrilla no se pueden modificar ni reabrir. Crea una nueva orden.' using errcode='P0001';
+    end if;
+  end loop;
+  if tg_op='DELETE' then return old; end if;
   return new;
 end;
 $$;
-revoke all on function public.invalidate_work_order_point_confirmation() from public,anon,authenticated,service_role;
-create trigger invalidate_point_confirmation after update of status on public.tickets for each row execute function public.invalidate_work_order_point_confirmation();
-create trigger invalidate_point_confirmation after update of status on public.installations for each row execute function public.invalidate_work_order_point_confirmation();
-create trigger invalidate_point_confirmation after update of status on public.routines for each row execute function public.invalidate_work_order_point_confirmation();
+revoke all on function public.guard_final_work_order() from public,anon,authenticated,service_role;
+create trigger a_guard_final_work_order before update or delete on public.tickets for each row execute function public.guard_final_work_order();
+create trigger a_guard_final_work_order before update or delete on public.installations for each row execute function public.guard_final_work_order();
+create trigger a_guard_final_work_order before update or delete on public.routines for each row execute function public.guard_final_work_order();
+create trigger a_guard_final_work_order before insert or update or delete on public.job_assignees for each row execute function public.guard_final_work_order();
 
 -- Extraer sin alterar la implementación histórica observada. La envoltura
 -- conserva el nombre/firma y ACL que ya consumen ranking y Mi avance.
@@ -190,31 +225,23 @@ returns table(technician_id uuid,job_type text,job_id uuid,occurred_at timestamp
 language sql stable security definer set search_path=public as $$
   with official as materialized (
     select c.* from public.work_order_point_confirmations c
-    where c.invalidated_at is null and c.confirmed_at>=timestamptz '2026-11-01 00:00:00 America/Lima'
+    where c.confirmed_at>=timestamptz '2026-11-01 00:00:00 America/Lima'
       and c.order_created_at>=timestamptz '2026-11-01 00:00:00 America/Lima'
       and c.technical_completed_at>=timestamptz '2026-11-01 00:00:00 America/Lima'
       and c.confirmed_at>=p_start and c.confirmed_at<p_end
-      and case c.job_type
-        when 'ticket' then exists(select 1 from public.tickets t where t.id=c.job_id and t.status::text in ('resolved','closed'))
-        when 'installation' then exists(select 1 from public.installations i where i.id=c.job_id and i.status::text='completed')
-        else exists(select 1 from public.routines r where r.id=c.job_id and r.status::text='completed') end
   ), crew as (
-    select c.*, (member->>'technicianId')::uuid as technician_id,jsonb_array_length(c.crew)::bigint as crew_size
+    select c.*, (member->>'technicianId')::uuid as technician_id,jsonb_array_length(c.crew)::bigint as crew_size,
+      (member->>'points')::numeric as frozen_points,(member->>'recurrencePenalty')::numeric as frozen_penalty
     from official c cross join lateral jsonb_array_elements(c.crew) member
   )
   select * from public.technician_point_contributions_legacy(p_start,least(p_end,timestamptz '2026-11-01 00:00:00 America/Lima'))
   where p_start<timestamptz '2026-11-01 00:00:00 America/Lima'
   union all
-  select c.technician_id,c.job_type,c.job_id,c.confirmed_at,'work',c.category,c.crew_size,c.points/c.crew_size from crew c
+  select c.technician_id,c.job_type,c.job_id,c.confirmed_at,'work',c.category,c.crew_size,c.frozen_points from crew c
   union all
-  -- Misma regla Fase 130: una penalización de 5 por avería original y EXISTS,
-  -- repartida por la cuadrilla confirmada; no cambia imputabilidad ni pagos.
-  select c.technician_id,c.job_type,c.job_id,c.confirmed_at,'recurrence',c.category,c.crew_size,5.0/c.crew_size from crew c
-  where c.job_type='ticket' and c.category in ('no_service','slow_speed','equipment') and exists(
-    select 1 from public.tickets t2 where t2.client_id=c.client_id and t2.id<>c.job_id
-    and t2.category::text in ('no_service','slow_speed','equipment') and t2.created_at>c.technical_completed_at
-    and t2.created_at<=c.technical_completed_at+interval '7 days' and t2.imputable_a_tecnico
-  );
+  -- Descuento y partes congelados al confirmar; una nueva avería no los recalcula.
+  select c.technician_id,c.job_type,c.job_id,c.confirmed_at,'recurrence',c.category,c.crew_size,c.frozen_penalty from crew c
+  where c.frozen_penalty<>0;
 $$;
 revoke all on function public.technician_point_contributions(timestamptz,timestamptz) from public,anon,authenticated,service_role;
 
@@ -230,7 +257,7 @@ begin
   elsif p_job_type='routine' then select completed_at into done from public.routines where id=p_job_id and status::text='completed'; end if;
   if done is null then return null; end if;
   if done<timestamptz '2026-11-01 00:00:00 America/Lima' then event_at:=done;
-  else select confirmed_at into event_at from public.work_order_point_confirmations where job_type=p_job_type and job_id=p_job_id and invalidated_at is null; end if;
+  else select confirmed_at into event_at from public.work_order_point_confirmations where job_type=p_job_type and job_id=p_job_id; end if;
   if event_at is null then return null; end if;
   select jsonb_agg(jsonb_build_object('kind',c.kind,'crewSize',c.crew_size,'occurredAt',c.occurred_at,
     'points',case when c.kind='recurrence' then -c.points else c.points end) order by c.kind)

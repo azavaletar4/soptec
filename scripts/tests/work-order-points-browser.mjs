@@ -40,7 +40,7 @@ try {
       if(url.origin===location.origin)return real(input,init);
       if(url.pathname.endsWith('/work_order_point_review'))return new Response(JSON.stringify({
         points:5,status:window.reviewClosed||'open',technicalCompletedAt:window.reviewClosed?'2026-11-12T15:00:00Z':null,
-        historical:false,finished:!!window.reviewClosed,crew:[{technicianId:'synthetic',name:'Técnico',role:'leader'}],token:'synthetic-review',
+        historical:false,finished:!!window.reviewClosed,definitiveClosure:true,crew:[{technicianId:'synthetic',name:'Técnico',role:'leader'}],token:'synthetic-review',
         confirmation:window.reviewClosed?{id:'synthetic-confirmation',points:5,crew:[{technicianId:'synthetic',name:'Técnico',role:'leader'}],confirmed_at:'2026-11-13T15:00:00Z',confirmed_by:'synthetic-admin',invalidated_at:null}:null,lastConfirmation:null
       }),{headers:{'content-type':'application/json'}});
       if(url.pathname.endsWith('/work_order_point_changes'))return new Response('[]',{headers:{'content-type':'application/json'}});

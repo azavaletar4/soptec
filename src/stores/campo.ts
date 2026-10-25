@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
 import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
@@ -476,6 +477,7 @@ export const useCampoStore = defineStore('campo', () => {
   }
 
   async function performClosureSubmitInner(input: ClosureInput): Promise<{ ontZoneWarning: string | null }> {
+    await assertWorkOrderMutable(input.jobType, input.jobId);
     await checkMaterialClosure(() => supabase.rpc('assert_material_closure_ready', { p_job_type: input.jobType, p_job_id: input.jobId }));
     // Codigo de cliente / cintillo Drop (Fase 139) — PRIMERO, antes de subir
     // cualquier foto/firma: si el codigo ya pertenece a OTRO contrato (UNIQUE

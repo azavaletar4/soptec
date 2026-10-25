@@ -42,6 +42,7 @@ try {
       const table=url.pathname.split('/').at(-1),method=init.method||'GET',body=init.body?JSON.parse(init.body):null;
       window.calls.push({table,method,body});
       const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});
+      if(table==='work_order_is_final')return json(!!window.finalOrder);
       if(table==='my_field_order_points'){
         if(window.readfail)return json({message:'Prueba de error de lectura'},400);
         return json(window.denied?null:{jobPoints:window.points,configuredPoints:window.points,personalPoints:window.points/2,crewSize:2,status:'in_progress',asOf:new Date().toISOString()});
@@ -101,6 +102,17 @@ try {
   await evaluate('setCase("ticket","00000000-0000-0000-0000-000000000003","ADMIN")');
   await wait('!document.querySelector("section")');checks++;
   assert.equal(await evaluate('calls.some(c=>c.table==="adjust_work_order_points")'),false);checks++;
+  await evaluate('window.finalOrder=true');
+  for(const type of ['ticket','installation','routine']) {
+    const before=await evaluate('calls.filter(c=>["PATCH","DELETE"].includes(c.method)).length');
+    for(const action of ['reopen','delete']) {
+      assert.equal(await evaluate(`tryOrdinaryMutation('${type}','${action}').then(()=>false,e=>e.message.includes('Cierre administrativo definitivo'))`),true);checks++;
+    }
+    assert.equal(await evaluate('calls.filter(c=>["PATCH","DELETE"].includes(c.method)).length'),before);checks++;
+    const saved=await evaluate('savedClosures.length');
+    assert.equal(await evaluate(`closeWithoutSignature('${type}').then(()=>false,e=>e.message.includes('Cierre administrativo definitivo'))`),true);checks++;
+    assert.equal(await evaluate('savedClosures.length'),saved);checks++;
+  }
   await evaluate('dispose()');
   assert.ok(await evaluate('removed>=4'));checks++;
   assert.deepEqual(errors,[]);checks++;

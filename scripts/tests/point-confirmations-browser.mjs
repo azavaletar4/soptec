@@ -37,7 +37,7 @@ try {
     window.calls=[];window.points=12;window.version=1;window.confirmed=false;window.stale=false;
     window.scenario={status:'open',type:'ticket'};window.reviewReads=0;
     const crew=[{technicianId:'00000000-0000-0000-0000-000000000003',name:'Ana',role:'leader'},{technicianId:'00000000-0000-0000-0000-000000000004',name:'Luis',role:'support'}];
-    const confirmation=()=>({id:'synthetic-confirmation',points:window.points,crew,confirmed_by:'00000000-0000-0000-0000-000000000002',confirmed_at:'2026-11-13T15:00:00Z',invalidated_at:null,invalidation_reason:null});
+    const confirmation=()=>({id:'synthetic-confirmation',points:window.points,recurrence_penalty:window.penalty||0,crew:crew.map(m=>({...m,points:window.points/2,recurrencePenalty:(window.penalty||0)/2,netPoints:(window.points-(window.penalty||0))/2})),confirmed_by:'00000000-0000-0000-0000-000000000002',confirmed_at:'2026-11-13T15:00:00Z',invalidated_at:null,invalidation_reason:null});
     const real=window.fetch.bind(window);window.fetch=async(input,init={})=>{
       const url=new URL(typeof input==='string'?input:input.url,location.href);
       if(url.origin===location.origin)return real(input,init);
@@ -48,7 +48,7 @@ try {
       if(table==='work_order_point_review'){
         window.reviewReads++;
         return json({points:window.points,status:scenario.status,technicalCompletedAt:['resolved','closed','completed'].includes(scenario.status)?'2026-11-12T15:00:00Z':null,
-          historical:false,finished:['resolved','closed','completed'].includes(scenario.status),crew,token:'review-'+window.version,
+          historical:false,finished:['resolved','closed','completed'].includes(scenario.status),crew,recurrencePenalty:window.penalty||0,definitiveClosure:!window.oldSchema,token:'review-'+window.version,
           confirmation:window.confirmed?confirmation():null,lastConfirmation:window.confirmed?confirmation():null});
       }
       if(table==='confirm_work_order_points'){
@@ -84,6 +84,7 @@ try {
     assert.equal(await evaluate('calls.filter(c=>c.table==="confirm_work_order_points").at(-1).body.p_reason'), 'Ajuste revisado');checks++;
     assert.equal(await evaluate('calls.filter(c=>c.table==="confirm_work_order_points").at(-1).body.p_job_type'),type);checks++;
     assert.equal(await evaluate('!!document.querySelector("input[type=number]")'),false);checks++;
+    assert.equal(await evaluate('document.body.innerText.includes("Cierre administrativo definitivo")'),true);checks++;
   }
   await evaluate('window.points=12;window.confirmed=false;window.version++;window.scenario={status:"resolved",type:"ticket"};setCase("ADMIN","resolved","ticket")');
   await wait('document.querySelector("input[type=number]")?.value==="12"');
@@ -98,6 +99,19 @@ try {
     await evaluate(`setCase('${role}','resolved','ticket')`);
     await wait('!document.querySelector("input[type=number]") && ![...document.querySelectorAll("button")].some(b=>b.textContent.includes("Revisar confirmación"))');checks++;
   }
+  await evaluate('window.points=12;window.penalty=5;window.confirmed=false;window.version++;window.scenario={status:"resolved",type:"ticket"};setCase("ADMIN","resolved","ticket")');
+  await wait('document.querySelector("input[type=number]")?.value==="12"');
+  await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Revisar confirmación")).click()');
+  await wait('document.querySelector("[role=dialog]")');
+  assert.equal(await evaluate('document.querySelector("[role=dialog]").innerText.includes("7 pts")'),true);checks++;
+  assert.equal(await evaluate('document.querySelector("[role=dialog]").innerText.includes("3.5 pts")'),true);checks++;
+  await evaluate('document.querySelector("[role=dialog] input[type=checkbox]").click();document.querySelector("[role=dialog] form").requestSubmit()');
+  await wait('document.body.innerText.includes("Cierre administrativo definitivo") && !document.querySelector("[role=dialog]")');
+  assert.equal(await evaluate('document.body.innerText.includes("3.5 pts netos")'),true);checks++;
+  await evaluate('window.oldSchema=true;[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Actualizar revisión")).click()');
+  await wait('document.body.innerText.includes("Falta instalar la candidata")');
+  assert.equal(await evaluate('!!document.querySelector("input[type=number]")'),false);checks++;
+  assert.equal(await evaluate('[...document.querySelectorAll("button")].some(b=>b.textContent.includes("Revisar confirmación"))'),false);checks++;
   assert.equal(await evaluate('calls.some(c=>c.method==="PATCH")'),false);checks++;
   assert.deepEqual(errors,[]);checks++;
   console.log(`POINT_CONFIRMATIONS_BROWSER_OK: ${checks} checks; real Vue editor, synthetic API, external network blocked`);

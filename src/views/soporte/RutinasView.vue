@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -282,7 +283,13 @@ function openCreate() {
   showModal.value = true;
 }
 
-function openEdit(r: Routine) {
+async function openEdit(r: Routine) {
+  try { await assertWorkOrderMutable('routine', r.id); }
+  catch (e) {
+    toast.error(getErrorMessage(e, 'No se puede editar esta rutina.'));
+    void router.push(`/soporte/rutinas/${r.id}`);
+    return;
+  }
   editingRoutine.value = r;
   void loadReturns(r.id);
   form.value = {

@@ -1,5 +1,9 @@
 # Confirmación administrativa de puntos — implementación local
 
+> Sustituido por [CIERRE-ADMINISTRATIVO-DEFINITIVO-PUNTOS.md](CIERRE-ADMINISTRATIVO-DEFINITIVO-PUNTOS.md),
+> según las reglas confirmadas el 25/10/2026. La invalidación/reconfirmación
+> descrita aquí corresponde a `bd4a567` y ya no es la política vigente.
+
 Continuación autorizada de `506b35a` y `33879cc`, 24/10/2026.
 No se repiten creación obligatoria, consulta de líder/ayudantes ni retirada
 de firma. No hay cambios de OLT, MikroTik, pagos, liquidaciones o asignación.

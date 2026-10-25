@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
 import { requireWorkOrderPoints } from '@/lib/workOrderPoints';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
@@ -51,6 +52,7 @@ export const useInstallationsStore = defineStore('installations', () => {
   }
 
   async function updateInstallation(id: string, payload: Partial<Installation>) {
+    await assertWorkOrderMutable('installation', id);
     const { data, error: err } = await supabase
       .from('installations')
       .update(payload)
@@ -68,6 +70,7 @@ export const useInstallationsStore = defineStore('installations', () => {
   }
 
   async function deleteInstallation(id: string) {
+    await assertWorkOrderMutable('installation', id);
     const { error: err } = await supabase.from('installations').delete().eq('id', id);
     if (err) throw err;
     installations.value = installations.value.filter((i) => i.id !== id);

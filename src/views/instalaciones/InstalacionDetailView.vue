@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
+import { useWorkOrderFinality } from '@/composables/useWorkOrderFinality';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -61,6 +62,7 @@ const custodyStore = useTechnicianCustodyStore();
 const toast = useToast();
 
 const installationId = computed(() => route.params.id as string);
+const { locked: administrativelyClosed, error: finalityError, loading: finalityLoading, markClosed } = useWorkOrderFinality('installation', installationId);
 const installation = ref<Installation | null>(null);
 const loading = ref(true);
 const notFound = ref(false);
@@ -73,7 +75,7 @@ const notFound = ref(false);
 // el Panel Web sin la validacion de permisos administrativos.
 const isTecnico = computed(() => auth.role === 'TECNICO_RED');
 function canDelete(inst: Installation) {
-  return inst.status === 'cancelled' && auth.role !== 'TECNICO_RED';
+  return !administrativelyClosed.value && inst.status === 'cancelled' && auth.role !== 'TECNICO_RED';
 }
 
 // ---- Fase 151: ordenes cerradas (completed/cancelled) quedan en solo
@@ -87,10 +89,11 @@ function canDelete(inst: Installation) {
 // que decida activarlos, para no editar una orden cerrada sin querer.
 const editModeForClosed = ref(false);
 const isClosedOrder = computed(() => installation.value?.status === 'completed' || installation.value?.status === 'cancelled');
-const closedReadOnly = computed(() => isClosedOrder.value && !(auth.role === 'SUPERADMIN' && editModeForClosed.value));
-const canRequestEditMode = computed(() => auth.role === 'SUPERADMIN' && isClosedOrder.value && !editModeForClosed.value);
+const closedReadOnly = computed(() => administrativelyClosed.value || (isClosedOrder.value && !(auth.role === 'SUPERADMIN' && editModeForClosed.value)));
+const canRequestEditMode = computed(() => !administrativelyClosed.value && auth.role === 'SUPERADMIN' && isClosedOrder.value && !editModeForClosed.value);
 
 function requestEditMode() {
+  if (administrativelyClosed.value) return;
   const ok = confirm(
     '⚠️ Esta orden ya está cerrada. Vas a habilitar edición excepcional — ' +
       'se mantiene igual de cerrada para todos los demás roles, y ningún ' +
@@ -753,7 +756,9 @@ onMounted(async () => {
           </div>
 
           <div class="surface p-4 text-sm">
-            <WorkOrderPointsEditor job-type="installation" :job-id="installation.id" :status="installation.status" :points="installation.points" @saved="installation.points = $event" />
+            <p v-if="finalityError" class="text-xs text-red-600">{{ finalityError }}</p>
+            <p v-else-if="administrativelyClosed && !finalityLoading" class="text-xs text-amber-700">Cierre administrativo definitivo. Para una incidencia nueva, crea una nueva orden.</p>
+            <WorkOrderPointsEditor job-type="installation" :job-id="installation.id" :status="installation.status" :points="installation.points" @saved="installation.points = $event" @confirmed="markClosed" />
           </div>
           <div class="surface p-4 text-sm">
             <h2 class="text-sm font-semibold mb-2">Cuadrilla asignada</h2>

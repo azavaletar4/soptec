@@ -9,15 +9,18 @@ export function pointsAreEditable(status: string): boolean {
   return ['open', 'pending', 'scheduled', 'assigned', 'in_progress', 'rescheduled'].includes(status);
 }
 
-export interface PointReviewCrew { technicianId: string; name: string; role: string }
+export interface PointReviewCrew { technicianId: string; name: string; role: string; points?: number; recurrencePenalty?: number; netPoints?: number }
 export interface PointConfirmation {
   id: string; points: number; crew: PointReviewCrew[]; confirmed_by: string;
   confirmed_at: string; invalidated_at: string | null; invalidation_reason: string | null;
+  recurrence_penalty?: number;
 }
 export interface WorkOrderPointReview {
   points: number | null; status: string; technicalCompletedAt: string | null;
   historical: boolean; finished: boolean; crew: PointReviewCrew[]; token: string;
   confirmation: PointConfirmation | null; lastConfirmation: PointConfirmation | null;
+  recurrencePenalty?: number;
+  definitiveClosure?: boolean;
 }
 
 /** El selector del reporte entrega horas sin zona. Conservar históricos;

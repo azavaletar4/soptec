@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
+import { useWorkOrderFinality } from '@/composables/useWorkOrderFinality';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -34,10 +35,10 @@ const toast = useToast();
 // Web — esta vista queda SOLO LECTURA para TECNICO_RED (estado, prioridad,
 // cuadrilla, reprogramacion y bitacora). Solo admin/soporte edita aqui.
 const isTecnico = computed(() => auth.role === 'TECNICO_RED');
-const canEdit = computed(() => !!ticket.value && !isTecnico.value);
+const canEdit = computed(() => !!ticket.value && !isTecnico.value && !administrativelyClosed.value);
 
 // Eliminar es solo para limpiar tickets de prueba — mismo rol que crear.
-const canDelete = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
+const canDelete = computed(() => !administrativelyClosed.value && (auth.role === 'SUPERADMIN' || auth.role === 'ADMIN'));
 const deleting = ref(false);
 
 // TECNICO_RED solo pasa su averia asignada a "en progreso" o "resuelto" —
@@ -71,6 +72,7 @@ const gpsMapsLink = computed(() => {
 });
 
 const ticketId = computed(() => route.params.id as string);
+const { locked: administrativelyClosed, error: finalityError, loading: finalityLoading, markClosed } = useWorkOrderFinality('ticket', ticketId);
 const ticket = ref<Ticket | null>(null);
 
 // Ultimo nivel de la miga de pan (Fase 114) — Breadcrumbs.vue arma el resto
@@ -898,9 +900,11 @@ async function handleDelete() {
               job-type="ticket"
               :job-id="ticket.id"
               :technicians="catalogs.staff.filter((s) => s.role === 'TECNICO_RED')"
-              :readonly="!canEditCrew"
+              :readonly="!canEditCrew || administrativelyClosed"
             />
-            <WorkOrderPointsEditor job-type="ticket" :job-id="ticket.id" :status="ticket.status" :points="ticket.points" @saved="ticket.points = $event" />
+            <p v-if="finalityError" class="text-xs text-red-600">{{ finalityError }}</p>
+            <p v-else-if="administrativelyClosed && !finalityLoading" class="text-xs text-amber-700">Cierre administrativo definitivo. Para una incidencia nueva, crea una nueva orden.</p>
+            <WorkOrderPointsEditor job-type="ticket" :job-id="ticket.id" :status="ticket.status" :points="ticket.points" @saved="ticket.points = $event" @confirmed="markClosed" />
           </div>
 
           <div class="surface p-4 text-sm">

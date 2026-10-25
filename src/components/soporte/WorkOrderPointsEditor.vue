@@ -7,7 +7,7 @@ import { pointsAreEditable, requireWorkOrderPoints, type WorkOrderPointReview, t
 import type { JobType } from '@/types/domain';
 
 const props = defineProps<{ jobType: JobType; jobId: string; status: string; points: number | null }>();
-const emit = defineEmits<{ saved: [points: number] }>();
+const emit = defineEmits<{ saved: [points: number]; confirmed: [confirmation: PointConfirmation] }>();
 const auth = useAuthStore();
 const isAdmin = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? ''));
 const review = ref<WorkOrderPointReview | null>(null);
@@ -41,7 +41,9 @@ async function loadReview() {
     const { data, error: err } = await supabase.rpc('work_order_point_review', { p_job_type: props.jobType, p_job_id: props.jobId });
     if (err) throw err;
     if (generation !== reviewGeneration) return;
-    review.value = data as unknown as WorkOrderPointReview;
+    const next = data as unknown as WorkOrderPointReview;
+    if (next?.definitiveClosure !== true) throw new Error('Falta instalar la candidata 20261024200000 de cierre definitivo; no se puede editar ni confirmar con la versión anterior.');
+    review.value = next;
     draft.value = review.value.points ?? '';
     reason.value = '';
   } catch (e) { if (generation === reviewGeneration) reviewError.value = getErrorMessage(e, 'No se pudo revisar la orden'); }
@@ -107,6 +109,7 @@ async function confirmPoints() {
     if (generation !== reviewGeneration) return;
     const confirmation = data as unknown as PointConfirmation;
     emit('saved', Number(confirmation.points));
+    emit('confirmed', confirmation);
     showConfirmation.value = false;
     await Promise.all([loadReview(), loadHistory()]);
   } catch (e) { if (generation === reviewGeneration) error.value = getErrorMessage(e, 'No se pudo confirmar; actualiza la revisión antes de reintentar'); }
@@ -134,12 +137,13 @@ const formatPoints = (points: number) => new Intl.NumberFormat('es-PE', { maximu
     <p v-else-if="!isAdmin" class="text-xs text-slate-500 mt-1">Solo ADMIN/SUPERADMIN puede ajustar y confirmar puntos.</p>
     <div v-if="review?.confirmation" class="text-xs mt-2 space-y-1">
       <p class="font-semibold">Puntos confirmados: {{ formatPoints(review.confirmation.points) }}</p>
+      <p class="font-semibold">Cierre administrativo definitivo. No se puede reabrir ni modificar la orden.</p>
       <p>{{ new Date(review.confirmation.confirmed_at).toLocaleString('es-PE', { timeZone: 'America/Lima' }) }} (Lima) · Responsable: {{ review.confirmation.confirmed_by }}</p>
-      <p v-for="member in review.confirmation.crew" :key="member.technicianId">{{ member.name }} · {{ member.role === 'leader' ? 'Líder' : 'Ayudante' }}: {{ formatPoints(review.confirmation.points / review.confirmation.crew.length) }} pts</p>
-      <p>La distribución confirmada se conserva aunque cambie la asignación posterior.</p>
+      <p v-if="review.confirmation.recurrence_penalty">Descuento confirmado por reincidencia: {{ formatPoints(review.confirmation.recurrence_penalty) }} pts. Neto: {{ formatPoints(review.confirmation.points - review.confirmation.recurrence_penalty) }} pts.</p>
+      <p v-for="member in review.confirmation.crew" :key="member.technicianId">{{ member.name }} · {{ member.role === 'leader' ? 'Líder' : 'Ayudante' }}: {{ formatPoints(member.netPoints ?? ((review.confirmation.points - (review.confirmation.recurrence_penalty ?? 0)) / review.confirmation.crew.length)) }} pts netos</p>
+      <p>Importes y reparto congelados. Una incidencia posterior requiere una nueva orden.</p>
     </div>
     <template v-else-if="review">
-      <p v-if="review.lastConfirmation?.invalidated_at" class="text-xs text-amber-700 mt-2">Confirmación anterior invalidada: {{ review.lastConfirmation.invalidation_reason }}. Revisa el nuevo ciclo.</p>
       <p v-if="!review.finished" class="text-xs text-slate-500 mt-2">Disponible para confirmar puntos cuando el técnico termine la orden.</p>
       <p v-else-if="!review.technicalCompletedAt" class="text-xs text-amber-700 mt-2">Falta la fecha de finalización técnica; revisa la orden antes de confirmar puntos.</p>
       <p v-else-if="!review.crew.length" class="text-xs text-amber-700 mt-2">Asigna la cuadrilla antes de confirmar puntos.</p>
@@ -163,13 +167,14 @@ const formatPoints = (points: number) => new Intl.NumberFormat('es-PE', { maximu
       <form class="modal-panel w-full max-w-lg p-5 space-y-3" @submit.prevent="confirmPoints">
         <h3 id="point-confirm-title" class="font-semibold">Confirmar puntos definitivos</h3>
         <p>Puntos definitivos de la orden: <strong>{{ formatPoints(Number(draft)) }} pts</strong></p>
+        <p v-if="review.recurrencePenalty" class="text-sm">Descuento existente por reincidencia: {{ formatPoints(review.recurrencePenalty) }} pts. Total neto a congelar: {{ formatPoints(Number(draft) - review.recurrencePenalty) }} pts.</p>
         <p v-if="review.historical" class="text-sm text-amber-700">Orden de prueba de octubre, sin acreditación oficial.</p>
         <ul class="text-sm space-y-1">
-          <li v-for="member in review.crew" :key="member.technicianId">{{ member.name }} · {{ member.role === 'leader' ? 'Líder' : 'Ayudante' }}: {{ formatPoints(Number(draft) / review.crew.length) }} pts</li>
+          <li v-for="member in review.crew" :key="member.technicianId">{{ member.name }} · {{ member.role === 'leader' ? 'Líder' : 'Ayudante' }}: {{ formatPoints((Number(draft) - (review.recurrencePenalty ?? 0)) / review.crew.length) }} pts netos</li>
         </ul>
         <p v-if="draft !== review.points" class="text-sm">Cambio {{ review.points ?? 'sin asignación' }} → {{ draft }} pts. Motivo: {{ reason || 'Falta indicar motivo' }}</p>
         <label class="flex gap-2 text-sm"><input v-model="explicitlyConfirmed" type="checkbox" required :disabled="saving" />Confirmo que los puntos y su distribución son correctos.</label>
-        <p class="text-xs text-slate-500">La confirmación no cambia el estado técnico. Reabrir o cancelar invalidará esta confirmación.</p>
+        <p class="text-xs text-slate-500">Este cierre administrativo es definitivo y no cambia el estado técnico. Después no se podrá modificar, cancelar ni reabrir la orden. Una incidencia nueva requiere una nueva orden.</p>
         <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
         <div class="flex gap-2 justify-end">
           <button type="button" class="btn-secondary" :disabled="saving" @click="showConfirmation = false">Volver</button>
