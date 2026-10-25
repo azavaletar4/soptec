@@ -9,6 +9,7 @@ import { useTicketsStore } from '/src/stores/tickets.ts';
 import { useInstallationsStore } from '/src/stores/installations.ts';
 import { useRoutinesStore } from '/src/stores/routines.ts';
 import Points from '/src/components/campo/CampoJobPoints.vue';
+import { listQueuedClosures, removeQueuedClosure, flushQueue } from '/src/lib/offlineQueue.ts';
 const pinia=createPinia(),auth=useAuthStore(pinia);
 auth.role='TECNICO_RED'; auth.user={id:'00000000-0000-0000-0000-000000000003'};
 const state=reactive({jobType:'ticket',jobId:'10000000-0000-0000-0000-000000000001'});
@@ -28,11 +29,14 @@ window.tryOrdinaryMutation=(type,action)=>{
   if(type==='installation'){const s=useInstallationsStore(pinia);return action==='delete'?s.deleteInstallation(state.jobId):s.updateStatus(state.jobId,'pending');}
   const s=useRoutinesStore(pinia);return action==='delete'?s.deleteRoutine(state.jobId):s.updateStatus(state.jobId,'pending');
 };
-window.closeWithoutSignature=async(type)=>campo.submitClosure({
+window.closeWithoutSignature=async(type,extra={})=>campo.submitClosure({
   jobType:type,jobId:state.jobId,clientId:null,contractId:null,targetStatus:type==='ticket'?'resolved':'completed',
   latitude:null,longitude:null,ontSerial:null,closureNotes:'Hoja física firmada',photos:[],equipmentPhotos:[],signatureBlob:null,
   updateClientGps:false,clientPhotoCategories:[],pendingApprovalCategories:[],motivoAveria:'other',motivoAveriaDetalle:'Prueba local',
-  justificacionCierre:null,potenciaDbm:null,napElementoId:null,zoneId:null,ontReplaced:false,installationAddress:null,clientCode:null
+  justificacionCierre:null,potenciaDbm:null,napElementoId:null,zoneId:null,ontReplaced:false,installationAddress:null,clientCode:null,...extra
 });
+window.offline={read:listQueuedClosures,clear:async()=>{for(const row of await listQueuedClosures())await removeQueuedClosure(row.localId);},
+  online:value=>Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>value}),
+  flush:()=>flushQueue(item=>window.closeWithoutSignature(item.jobType,item))};
 window.ready=true;
 </script></body></html>

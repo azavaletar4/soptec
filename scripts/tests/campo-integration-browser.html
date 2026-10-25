@@ -13,6 +13,7 @@ auth.role='TECNICO_RED';auth.user={id:'tech-a'};
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/:pathMatch(.*)*',component:{template:'<div />'}}]});
 await router.push('/campo/mi-custodia');await router.isReady();
 window.calls=[];window.custody={units:[{id:'unit-a',serial_number:'SERIE-SINTETICA',mac_address:null,status:'with_technician',product:{id:'ont',name:'ONT de prueba',unit:'u'}}],materials:[{product:{id:'cable',name:'Cable de prueba',unit:'m'},quantity:10}],pendingReturnRequests:[]};
+window.credit=4;window.assignedPoints=10;window.channels=[];window.contributionFail=false;
 supabase.rpc=async(name,args)=>{
   window.calls.push({name,args,actor:auth.user?.id});
   if(name==='my_inventory_custody'){
@@ -22,11 +23,16 @@ supabase.rpc=async(name,args)=>{
   }
   if(name==='request_unit_return') {window.custody.units[0].status='pending_return';return {data:null,error:null};}
   if(name==='request_material_return') {window.custody.pendingReturnRequests.push({id:'request-a',product:window.custody.materials[0].product,quantity:args.p_quantity,status:'pending',requested_at:'2026-10-25'});return {data:'request-a',error:null};}
-  if(name==='my_field_order_points')return {data:{jobPoints:10,configuredPoints:10,personalPoints:5,crewSize:2,status:'resolved'},error:null};
-  if(name==='my_field_job_points')return {data:[{kind:'work',points:4,crewSize:2,occurredAt:'2026-11-02'}],error:null};
+  if(name==='my_field_order_points')return {data:{jobPoints:window.assignedPoints,configuredPoints:window.assignedPoints,personalPoints:window.assignedPoints/2,crewSize:2,status:'resolved'},error:null};
+  if(name==='my_field_job_points'){
+    if(window.contributionFail)return {data:null,error:{message:'Error sintético de lectura'}};
+    const snapshot=window.credit,actor=auth.user?.id;
+    if(window.delayContribution){window.delayContribution=false;await new Promise(r=>window.releaseContribution=r);}
+    return {data:actor==='tech-a'&&snapshot!==null?[{kind:'work',points:snapshot,crewSize:2,occurredAt:'2026-11-02'}]:null,error:null};
+  }
   throw Error('Unexpected RPC: '+name);
 };
-supabase.channel=()=>({on(){return this;},subscribe(callback){callback('SUBSCRIBED');return this;}});
+supabase.channel=name=>{const channel={name,handlers:[],on(event,filter,callback){this.handlers.push({filter,callback});return this;},subscribe(callback){callback('SUBSCRIBED');return this;}};window.channels.push(channel);return channel;};
 supabase.removeChannel=async()=> 'ok';
 const surface=ref('custody');window.setSurface=value=>surface.value=value;
 window.setActor=id=>auth.user=id?{id}:null;

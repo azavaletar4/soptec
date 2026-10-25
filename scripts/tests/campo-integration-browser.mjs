@@ -28,7 +28,7 @@ try {
     await c(request.url.startsWith(base)?'Fetch.continueRequest':'Fetch.failRequest',request.url.startsWith(base)?{requestId}:{requestId,errorReason:'BlockedByClient'});
   });
   const evaluate=async expression=>{const r=await c('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
-  const until=async expression=>{for(let n=0;n<150;n++){if(await evaluate(expression))return;await new Promise(r=>setTimeout(r,100));}throw Error('Timeout: '+expression);};
+  const until=async expression=>{for(let n=0;n<220;n++){if(await evaluate(expression))return;await new Promise(r=>setTimeout(r,100));}throw Error('Timeout: '+expression);};
   const click=(text)=>evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='${text}').click()`);
   await c('Page.navigate',{url:base+'scripts/tests/campo-integration-browser.html'});
   await until('window.ready && document.body.innerText.includes("SERIE-SINTETICA")');checks++;
@@ -54,6 +54,24 @@ try {
   await evaluate('setActor("tech-a");setSurface("points")');
   await until('document.body.innerText.includes("Tu parte asignada: 5 pts") && document.body.innerText.includes("Mi aporte en puntos")');checks++;
   assert.ok(await evaluate('document.body.innerText.includes("4 pts") && document.body.innerText.includes("requieren confirmación administrativa")'));checks++;
+  await evaluate('window.credit=null;window.dispatchEvent(new Event("focus"))');
+  await until('document.body.innerText.includes("Sin aporte registrado")');checks++;
+  // Admin confirms without touching order points: no order UPDATE event exists.
+  await evaluate('window.credit=6');
+  await until('document.body.innerText.includes("6 pts")');checks++;
+  await evaluate('window.assignedPoints=20;window.channels.filter(c=>c.name.startsWith("field-order-points")).at(-1).handlers[0].callback()');
+  await until('document.body.innerText.includes("Tu parte asignada: 10 pts")');checks++;
+  assert.ok(await evaluate('document.body.innerText.includes("6 pts")'));checks++;
+  await evaluate('window.contributionFail=true;window.dispatchEvent(new Event("online"))');
+  await until('document.body.innerText.includes("No se pudo consultar el aporte")');
+  assert.ok(await evaluate('!document.body.innerText.includes("6 pts")'));checks++;
+  await evaluate('window.contributionFail=false;window.dispatchEvent(new Event("online"))');
+  await until('document.body.innerText.includes("6 pts")');checks++;
+  await evaluate('window.delayContribution=true;window.dispatchEvent(new Event("focus"))');
+  await until('!!window.releaseContribution');
+  await evaluate('setActor("tech-b")');await until('document.body.innerText.includes("Sin aporte registrado")');
+  await evaluate('window.releaseContribution()');await new Promise(r=>setTimeout(r,150));
+  assert.ok(await evaluate('!document.body.innerText.includes("6 pts")'));checks++;
   assert.deepEqual(errors,[]);checks++;
   console.log(`CAMPO_INTEGRATION_BROWSER_OK: ${checks} checks; pending returns, protected identity and both point views; external requests blocked`);
 } finally {if(ws)ws.close();chrome.kill();await server.close();}

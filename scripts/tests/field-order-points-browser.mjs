@@ -66,6 +66,33 @@ try {
   const wait=async expression=>{for(let n=0;n<220;n++){if(await evaluate(expression))return;await new Promise(r=>setTimeout(r,100));}throw Error('Timeout: '+expression);};
   await c('Page.navigate',{url:base+'scripts/tests/field-order-points-browser.html'});
   await wait('window.ready && document.body.innerText.includes("10 pts")');
+  if(process.argv.includes('--offline-only')) {
+    await evaluate('offline.clear();offline.online(false)');
+    for(const type of ['ticket','installation','routine']) {
+      const writes=await evaluate('calls.filter(c=>["PATCH","DELETE"].includes(c.method)||c.table==="work_order_closures").length');
+      assert.equal((await evaluate(`closeWithoutSignature('${type}',{latitude:-12.04,longitude:-77.03})`)).queued,true);checks++;
+      assert.equal(await evaluate('calls.filter(c=>["PATCH","DELETE"].includes(c.method)||c.table==="work_order_closures").length'),writes);checks++;
+    }
+    assert.equal(await evaluate('offline.read().then(rows=>rows.length)'),3);checks++;
+    // A fresh page recreates the real store; IndexedDB is retained by the profile.
+    await c('Page.reload');await wait('window.ready && !!window.offline');
+    assert.equal(await evaluate('offline.read().then(rows=>rows.length)'),3);checks++;
+    await evaluate('offline.online(true);window.existingSignature="historical/signature.png"');
+    const synced=await evaluate('offline.flush()');assert.deepEqual(synced,{synced:3,remaining:0});checks++;
+    assert.ok(await evaluate('savedClosures.every(row=>row.signature_path==="historical/signature.png" && row.latitude===-12.04 && row.longitude===-77.03)'));checks++;
+    assert.equal((await evaluate('offline.flush()')).synced,0);checks++;
+    await evaluate('offline.online(false)');
+    await evaluate(`closeWithoutSignature('ticket',{photos:[{category:'service_sheet',file:new File(['synthetic photo'],'sheet.jpg',{type:'image/jpeg'})}],latitude:-12.04,longitude:-77.03})`);
+    assert.equal(await evaluate('offline.read().then(rows=>rows[0].photos[0].blob.size)'),15);checks++;
+    await evaluate('offline.online(true);window.finalOrder=true');
+    const writes=await evaluate('calls.filter(c=>["PATCH","DELETE"].includes(c.method)||c.table==="work_order_closures").length');
+    assert.deepEqual(await evaluate('offline.flush()'),{synced:0,remaining:1});checks++;
+    assert.ok(await evaluate('offline.read().then(rows=>rows[0].lastError.includes("Cierre administrativo definitivo") && rows[0].photos[0].blob.size===15)'));checks++;
+    assert.equal(await evaluate('calls.filter(c=>["PATCH","DELETE"].includes(c.method)||c.table==="work_order_closures").length'),writes);checks++;
+    await evaluate('offline.clear()');
+    assert.deepEqual(errors,[]);checks++;
+    console.log(`FIELD_OFFLINE_BROWSER_OK: ${checks} checks; real IndexedDB/store, synthetic API, no external network`);
+  } else {
   for(const type of ['ticket','installation','routine']) {
     await evaluate(`window.points=10;setCase('${type}')`);
     await wait('document.body.innerText.includes("10 pts")');
@@ -119,4 +146,5 @@ try {
   assert.ok(await evaluate('removed>=4'));checks++;
   assert.deepEqual(errors,[]);checks++;
   console.log(`FIELD_ORDER_POINTS_BROWSER_OK: ${checks} checks; synthetic API; no external network; signatureless closure pipeline only`);
+  }
 } finally {if(ws)ws.close();chrome.kill();await server.close();}

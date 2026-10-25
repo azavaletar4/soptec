@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { supabase } from '@/lib/supabase';
 import { usePersonalRead } from '@/composables/usePersonalRead';
@@ -11,6 +11,38 @@ const { data, loading, error, load } = usePersonalRead(identity, async () => {
   const { data, error } = await supabase.rpc('my_field_job_points', { p_job_type: props.jobType, p_job_id: props.jobId });
   if (error) throw error;
   return data as unknown as Pick<PointContribution, 'kind' | 'points' | 'crewSize' | 'occurredAt'>[] | null;
+});
+let channel: ReturnType<typeof supabase.channel> | null = null;
+let timer: ReturnType<typeof setInterval> | null = null;
+let stopWatching: (() => void) | undefined;
+function disconnect() {
+  if (channel) { void supabase.removeChannel(channel); channel = null; }
+  if (timer) { clearInterval(timer); timer = null; }
+}
+function refresh() { if (identity.value && document.visibilityState === 'visible') void load(); }
+onMounted(() => {
+  stopWatching = watch(identity, (key) => {
+    disconnect();
+    if (!key) return;
+    const table = { ticket: 'tickets', installation: 'installations', routine: 'routines' }[props.jobType];
+    if (!table) return;
+    channel = supabase.channel(`field-job-contribution:${key}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter: `id=eq.${props.jobId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'job_assignees', filter: `job_id=eq.${props.jobId}` }, refresh)
+      .subscribe((status) => { if (status === 'SUBSCRIBED') refresh(); });
+    // Confirming unchanged points need not UPDATE the order. The confirmation
+    // table is admin-only; technicians refresh through their own read RPC.
+    timer = setInterval(refresh, 15000);
+  }, { immediate: true });
+  window.addEventListener('focus', refresh);
+  window.addEventListener('online', refresh);
+  document.addEventListener('visibilitychange', refresh);
+});
+onBeforeUnmount(() => {
+  stopWatching?.(); disconnect();
+  window.removeEventListener('focus', refresh);
+  window.removeEventListener('online', refresh);
+  document.removeEventListener('visibilitychange', refresh);
 });
 </script>
 
