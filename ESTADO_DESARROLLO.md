@@ -1,6 +1,6 @@
 # SmartRayco — Estado de desarrollo
 
-## App de Campo: devoluciones implementadas y desplegadas (26/10/2026)
+## App de Campo: devoluciones implementadas, desplegadas y validadas (26/10/2026)
 
 Acceso recuperado en Mi custodia para materiales y equipos seriados. La ruta
 `/campo/mi-custodia` publicada retenía la vista antigua «Solo consulta»;
@@ -15,9 +15,16 @@ público PASS con datos ficticios: equipo + material parcial, pendiente de
 recepción y técnico bloqueado de Inventario general. Puntos/Alta/Avería/Rutina,
 panel HTTPS y API PASS; cero mutaciones de negocio reales. Respaldo OCI y
 rollback verificados, no usados.
-**Pendiente aceptación funcional del propietario desde su celular y recepción
-administrativa de una devolución física real autorizada**. No declarar el
-flujo completamente validado todavía. La limitación previa de rechazo/historial
+**Validación del propietario confirmada el 26/10/2026:** probó
+satisfactoriamente la devolución desde App de Campo en Android y la recepción
+administrativa. **Ambas pruebas funcionales COMPLETADAS; flujo probado y
+cerrado.** Devoluciones de materiales y equipos seriados implementadas,
+desplegadas y validadas funcionalmente; frontend `c11f6a8`, backend `16831c6`
+sin cambios. Antecedentes publicados: `c11f6a8` y documentación `6a8dadd`.
+No volver a registrar devolución o recepción como pendientes ni repetir las
+pruebas anteriores. Este cierre sustituye las notas de aceptación pendiente
+de informes previos, conservadas solo como antecedentes. Sin código, pruebas
+u operaciones productivas nuevas en esta actualización. La limitación previa de rechazo/historial
 resuelto de equipos no se amplió. Detalle: `docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`.
 
 ## Estado vigente compartido — Fase 175 operativa (26/10/2026)

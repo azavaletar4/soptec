@@ -26,9 +26,16 @@ vista de solo consulta; se incorporó selectivamente el código ya aprobado
 `fb56057`, con publicación `c11f6a8`. Frontend `smartrayco-campo-returns:c11f6a8-20261026T171151Z`;
 backend `16831c6` conservado sin reinicio. Sin SQL ni permisos nuevos.
 Pruebas de navegador del candidato/publicado con datos ficticios PASS;
-25/25 SQL/unitarias previas conservadas. **Pendiente prueba funcional del
-propietario desde su celular, incluida recepción administrativa real**.
-No declarar la devolución completamente validada antes de esa prueba.
+25/25 SQL/unitarias previas conservadas. **Devoluciones de materiales y
+equipos seriados implementadas, desplegadas y validadas funcionalmente**.
+El propietario confirmó expresamente el **26/10/2026** que probó
+satisfactoriamente la devolución desde App de Campo en Android y su recepción
+administrativa. **Ambas pruebas COMPLETADAS; flujo probado y cerrado.**
+No volver a registrarlas como pendientes ni repetir pruebas anteriores.
+Frontend `c11f6a8`, backend `16831c6` sin cambios; antecedentes publicados:
+`c11f6a8` y documentación `6a8dadd`. Este cierre prevalece sobre las notas
+de aceptación pendiente de informes anteriores, conservadas como antecedentes.
+Sin pruebas nuevas ni operaciones productivas en esta actualización.
 Detalle/rollback: `docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`;
 versiones exactas en `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md`.
 

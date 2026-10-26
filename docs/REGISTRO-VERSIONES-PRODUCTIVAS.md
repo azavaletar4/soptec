@@ -24,11 +24,12 @@ el primer muestreo de contadores; frontend de devoluciones verificado a las
 | Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos y Analítica conservados + acceso a devoluciones desde Mi custodia |
 | Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/recovery/frontend.tar`, tag `smartrayco-campo-returns-rollback:20261026T171151Z` |
 
-### Devoluciones de App de Campo desplegadas — pendiente prueba del propietario
+### Devoluciones implementadas, desplegadas y validadas — flujo cerrado
 
 - Causa: /campo/mi-custodia retenía la vista de solo consulta. La corrección
   fb56057 ya estaba en GitHub; el artefacto selectivo no la había incorporado.
-- Publicado c11f6a8838faade40a605927818df4b67f5e4f11 por push normal.
+- Publicado c11f6a8838faade40a605927818df4b67f5e4f11 por push normal;
+  documentación anterior publicada en `6a8dadd`.
 - Frontend activo: `smartrayco-campo-returns:c11f6a8-20261026T171151Z`; ID `sha256:b6c98bc654906516d8a72eb4d5cdf21d2380d6eda7e1aaffddaff03a0858f84a`.
 - Contenedor: `db47bfa3e71cfcfab8a61dd7a1b1bcb6e0d1e1934cc4a1b8958177438343f533`; arranque `2026-10-26T17:14:07.85212786Z`.
 - Backend conservado: 16831c6; imagen `sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e`;
@@ -39,8 +40,15 @@ el primer muestreo de contadores; frontend de devoluciones verificado a las
   con devoluciones ficticias y bloqueo técnico de Inventario general. Puntos,
   Altas, Averías y Rutinas PASS; panel HTTPS/API sanos. Sin mutaciones reales.
 - Sin SQL/migraciones, permisos nuevos ni reinicio de backend u otros servicios.
-- Estado: implementado y desplegado; falta la prueba funcional desde el celular
-  del propietario y recepción administrativa física real autorizada.
+- Estado: devoluciones de materiales y equipos seriados implementadas,
+  desplegadas y validadas funcionalmente. Frontend `c11f6a8`, backend `16831c6`.
+- Validación expresa del propietario el **26/10/2026**: devolución desde App
+  de Campo en Android y recepción administrativa probadas satisfactoriamente.
+  **Ambas pruebas COMPLETADAS; flujo probado y cerrado.**
+- No registrar devolución o recepción como pendientes ni repetir pruebas
+  anteriores. Las notas antiguas de aceptación pendiente son antecedentes
+  superados por este cierre. No se hicieron nuevas pruebas, despliegues,
+  consultas productivas ni cambios de datos en esta actualización.
 - Rollback preparado, no usado. Conservar toda la cadena existente y añadir
   al final `/opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/frontend.override.json`.
 - Respaldo verificable: `/opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/recovery/frontend.tar`;
