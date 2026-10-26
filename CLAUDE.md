@@ -9,6 +9,21 @@ análisis ya hecho. Mantenlo actualizado al final de cada sesión relevante
 (qué cambió, qué quedó pendiente, próximo paso recomendado) — es la
 referencia compartida entre Claude Code y ChatGPT para este proyecto.
 
+Después consulta `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md` para las versiones
+reales por servicio y `docs/FASE175-CONTADORES-ACTIVADOS-20261026.md` para la
+evidencia de Fase 175. **Fase 175 está desplegada y operativa:** backend
+`16831c6`, muestreo automático recuperado con 360 registros nuevos del
+Administrador. El HTTP 400 por URL excesiva está corregido con lotes de 100;
+los errores y rollbacks anteriores son antecedentes, no incidentes activos.
+Seguimiento de ciclos y certificación integral de 3.000 clientes siguen
+pendientes, pero no invalidan la recuperación real ya confirmada.
+
+## Capacidad mínima (requisito permanente)
+
+SmartRayco debe soportar al menos **3.000 clientes** con estabilidad y
+rendimiento. Distinguir pruebas simuladas de escalabilidad y certificación
+integral con carga real; no declarar una como sustituto de la otra.
+
 ## Contexto
 
 SmartRayco está en fase de pruebas operativas reales (octubre 2026). Técnicos y

@@ -1,5 +1,39 @@
 # SmartRayco — Estado de desarrollo
 
+## Estado vigente compartido — Fase 175 operativa (26/10/2026)
+
+**Problema corregido y funcionalidad desplegada:** backend activo `16831c6`
+(`smartrayco-backend-counters:16831c6-20261026T162650Z`). El HTTP 400 de
+Supabase causado por el filtro con una URL excesiva se corrigió leyendo
+`mikrotik_traffic_counters_state` en lotes de 100 UUID, sin aceptar resultados
+parciales. No tratar esta corrección ni su despliegue como pendientes.
+
+**Validación real:** primer muestreo automático con **360 registros nuevos**
+confirmados en base, 665 contratos comprobados, exclusivamente MikroTik
+Administrador (`pppoe_admin`), sin HTTP 400. Panel, API, Puntos y Balanceador
+operativos; frontend conservado en `99dc78b`, sin reconstrucción ni sustitución
+durante la corrección del backend. Última evidencia registrada: 26/10/2026;
+no equivale a una comprobación nueva en cada sesión de documentación.
+
+**Pruebas simuladas:** 17/17 aprobadas, incluyendo 3.000, 3.001 y 5.000
+contratos ficticios, URLs acotadas y descarte de resultados parciales. No
+constituyen certificación de rendimiento integral con 3.000 clientes reales.
+
+**SQL:** migración de optimización `20261026130000_fase175_traffic_anomalies_lateral.sql`
+preparada, **no aplicada según la evidencia disponible**. No confundirla con
+la corrección del muestreo, que ya está operativa y no requirió SQL.
+
+**Pendientes que no invalidan la recuperación:** seguimiento de ciclos,
+calidad de los primeros deltas tras estados antiguos y certificación integral
+de al menos 3.000 clientes (paginación/límites REST y latencia del watchdog).
+Soportar **al menos 3.000 clientes con estabilidad y rendimiento** es un
+requisito permanente de SmartRayco.
+
+Referencias vigentes: `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md` (imágenes por
+servicio y antecedentes) y `docs/FASE175-CONTADORES-ACTIVADOS-20261026.md`
+(validación y rollback). Los diagnósticos y rollbacks anteriores se conservan
+abajo como historia, no como incidentes activos ni tareas por repetir.
+
 
 ### Historia conservada de origin/main
 
@@ -6288,28 +6322,34 @@ preexistentes no relacionados en tests ajenos).
 
 **Sin tocar**: la Alta real de Diego Villanueva Bernabe sigue exactamente igual (`in_progress`, la fila `pending` intacta) -- no se cerro por SQL ni se anulo el rechazo; eso queda para que el usuario autorice por separado. Sin migracion aplicada, sin push, sin deploy.
 
-## Fase 175 — Analitica de Trafico (MikroTik Administrador) y coordinacion Claude/Codex (2026-10-26)
+## Antecedente de Fase 175 — preparación anterior a la activación (2026-10-26)
 
-Diagnostico completo del muestreo de trafico muerto desde el 15/10: 3
-routers consultados en vez de solo el Administrador, HTTP 400 real en
-`/interface` (causa de fondo sin confirmar al 100%, mitigada con filtro
-`?type=pppoe-in` + log sanitizado con la razon real), watchdog contra un
-colgado silencioso. 4 commits ya en `origin/main` (push autorizado):
+Estado histórico superado por la activación documentada al inicio de este
+archivo. Se conserva para trazabilidad; no describe incidentes activos.
+
+El diagnóstico inicial del muestreo detenido desde el 15/10 encontró tres
+routers consultados en vez de solo el Administrador e investigó un posible
+HTTP 400 de `/interface`; se prepararon el filtro `?type=pppoe-in`, log
+sanitizado y watchdog. Posteriormente se confirmó que la lectura del router
+funcionaba y el HTTP 400 persistente procedía de la URL excesiva de contadores
+en Supabase, corregida y activada con `16831c6`. Los cuatro commits iniciales
+se publicaron en `origin/main` (push autorizado):
 `b4856fd`, `8bfbefd`, `147c515`, `da9a6bc`. Migracion SQL de optimizacion
 (`fn_traffic_anomalies`, Fase 175) preparada con rollback probado, **sin
 aplicar**.
 
-**Hallazgo critico al intentar desplegar**: el VM de produccion tiene
-backend y frontend en commits DISTINTOS -- backend en `b379028` (Fase
-174b), frontend en `87ddfd3` (ya incluye trabajo de "Puntos" desplegado por
+**Hallazgo al preparar el despliegue original**: la VM de producción tenía
+backend y frontend en commits distintos — backend en `b379028` (Fase
+174b), frontend en `87ddfd3` (incluía trabajo de "Puntos" desplegado por
 Codex via un mecanismo de override de 1 solo servicio, no documentado hasta
 ahora). Documentado en detalle, con el mecanismo real verificado por
 lectura directa de la VM (staging dirs, overrides de Compose, multi-stage
 build, recovery con tar de la imagen saliente): ver
 `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md` -- **leer ese archivo antes de
 cualquier despliegue futuro de backend o frontend**, lo mismo aplica para
-Codex. Worktrees aislados con Fase 175 ya verificada sobre AMBAS bases
+Codex. Los worktrees aislados con Fase 175 se verificaron sobre ambas bases
 (backend sobre `b379028`, frontend sobre `87ddfd3`) quedan en
 `scripts/inventory-auth-lab/runtime/fase175-trafico-selective-worktree` y
-`.../fase175-frontend-base-worktree`. Despliegue selectivo NO ejecutado --
-pendiente de autorizacion explicita.
+`.../fase175-frontend-base-worktree`. La autorización y activación selectiva
+se completaron después; las versiones vigentes están en el resumen inicial
+y en el registro de versiones productivas.
