@@ -1,5 +1,7 @@
 # Puntos: riesgo aceptado y recuperación — 25/10/2026
 
+Continuidad posterior: [Preparación final y bloqueo de compatibilidad](PUNTOS-PREPARACION-FINAL-20261025.md). Allí se certifica el artefacto contra la imagen activa, se prueban clientes/colas y recuperación posterior, y se identifica un llamador existente de conversión que omite puntos. Este informe conserva el respaldo aprobado y la aceptación histórica; no implica autorización de despliegue.
+
 ## Decisión del propietario
 
 El propietario retiró expresamente del alcance la corrección de reapertura de órdenes históricas. Acepta el riesgo documentado de que una orden histórica sin registro en la tabla nueva de confirmaciones no sea reconocida como definitiva por las guardas nuevas, y se compromete a no reabrir esas órdenes como SUPERADMIN.
