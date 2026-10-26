@@ -52,6 +52,27 @@ aplicar `20261027010000_asistencia_a0_a1.sql` a Supabase y desplegar el frontend
 requieren autorización explícita separada para cada paso — sin push, sin build,
 sin tocar producción en esta consolidación.
 
+**Preparación de activación selectiva (Claude Code, 26/10/2026):** verificado
+contra `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md` — el commit real del frontend
+en producción (`c11f6a8838faade...`) ya es ancestro de esta rama; el único
+diff de `src/` entre ese commit real y el tip actual (`d984e56`) son
+exactamente los archivos de A0/A1, nada de Puntos/Analítica/devoluciones.
+A0/A1 no toca ningún archivo de `server/src/` — compatible con cualquier
+backend activo sin reconstruirlo. `npm run build` real PASS sobre esta base.
+Dependencias de la migración (`current_user_role()`, `asistencia_registros`,
+`company_settings`, `feriados`, los 4 `mark_attendance_*`, nombres exactos de
+las 2 políticas que reemplaza) confirmadas presentes en Supabase de
+producción por lectura directa (solo lectura, sin escrituras).
+Rollback preparado y verificado end-to-end en Postgres aislado —
+`scripts/sql/asistencia-a0-a1-rollback.sql` (commit `d984e56`): simulando
+marcación+ausencia+aprobación reales antes de revertir, los datos nuevos
+quedan intactos, ADMIN recupera edición de configuración, las RPC nuevas
+quedan sin permiso — nunca se borran `asistencia_solicitudes`/eventos.
+Pantallas de ADMIN/TECNICO_RED revisadas: todos los cambios son aditivos
+(exención visual/filtrado de SUPERADMIN), ninguna función existente se quita.
+**Todavía sin aplicar la migración ni desplegar el frontend** — falta
+autorización explícita productiva para cada paso.
+
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 
 El propietario confirma que el **25/10/2026** se realizaron **tres instalaciones
