@@ -6287,3 +6287,29 @@ preexistentes no relacionados en tests ajenos).
 **Pruebas**: `server/tests/materialRejectionDoesNotBlockClosure.sql.test.ts` (6/6, Postgres real en Docker, mismo harness que Fase 165 -- reproduce el caso real exacto, confirma que Averias/Rutinas comparten la misma funcion sin regresion, confirma rollback exacto) + `npm run test:material-rejection-correction-sql` (15/15, sin regresion sobre Fase 165) + `src/lib/__tests__/materialMovementPresentation.test.ts` (4/4) + `vue-tsc -p tsconfig.app.json` limpio.
 
 **Sin tocar**: la Alta real de Diego Villanueva Bernabe sigue exactamente igual (`in_progress`, la fila `pending` intacta) -- no se cerro por SQL ni se anulo el rechazo; eso queda para que el usuario autorice por separado. Sin migracion aplicada, sin push, sin deploy.
+
+## Fase 175 — Analitica de Trafico (MikroTik Administrador) y coordinacion Claude/Codex (2026-10-26)
+
+Diagnostico completo del muestreo de trafico muerto desde el 15/10: 3
+routers consultados en vez de solo el Administrador, HTTP 400 real en
+`/interface` (causa de fondo sin confirmar al 100%, mitigada con filtro
+`?type=pppoe-in` + log sanitizado con la razon real), watchdog contra un
+colgado silencioso. 4 commits ya en `origin/main` (push autorizado):
+`b4856fd`, `8bfbefd`, `147c515`, `da9a6bc`. Migracion SQL de optimizacion
+(`fn_traffic_anomalies`, Fase 175) preparada con rollback probado, **sin
+aplicar**.
+
+**Hallazgo critico al intentar desplegar**: el VM de produccion tiene
+backend y frontend en commits DISTINTOS -- backend en `b379028` (Fase
+174b), frontend en `87ddfd3` (ya incluye trabajo de "Puntos" desplegado por
+Codex via un mecanismo de override de 1 solo servicio, no documentado hasta
+ahora). Documentado en detalle, con el mecanismo real verificado por
+lectura directa de la VM (staging dirs, overrides de Compose, multi-stage
+build, recovery con tar de la imagen saliente): ver
+`docs/REGISTRO-VERSIONES-PRODUCTIVAS.md` -- **leer ese archivo antes de
+cualquier despliegue futuro de backend o frontend**, lo mismo aplica para
+Codex. Worktrees aislados con Fase 175 ya verificada sobre AMBAS bases
+(backend sobre `b379028`, frontend sobre `87ddfd3`) quedan en
+`scripts/inventory-auth-lab/runtime/fase175-trafico-selective-worktree` y
+`.../fase175-frontend-base-worktree`. Despliegue selectivo NO ejecutado --
+pendiente de autorizacion explicita.
