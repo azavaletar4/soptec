@@ -1,5 +1,124 @@
 # Devoluciones desde Mi custodia — corrección local
 
+## Estado confirmado el 26/10/2026 — acceso todavía pendiente de publicación
+
+**Causa exacta:** el frontend activo
+`smartrayco-frontend-fase175:99dc78b-20261026T154532Z`
+(`sha256:3155f928b6b5492c9f4398e3a7601ad442a0b5b6f866bbbe637d89b7df05d959`)
+conserva `CampoMiCustodiaView.vue` de solo consulta, introducida en
+`377bee4`. La tarjeta Mi custodia del inicio y el menú del técnico conducen
+a `/campo/mi-custodia`. Esa vista no contiene formularios ni llamadas de
+devolución para ninguno de los dos tipos de bienes. El componente anterior
+en `/campo/custodia` conserva las acciones, pero ya no es el destino visible
+del técnico. No es una pérdida de permisos ni depende de tener o no saldo.
+
+La corrección **ya existe en GitHub**, commit `fb56057`, conservada en
+`main` verificado `734c180`. Reutiliza `CampoCustodiaView` desde
+`CampoMiCustodiaView`; no llegó a la fuente real del artefacto publicado.
+La fuente utilizada por Fase 175 copió la de `single-close` y solo cambió
+Analítica; conservó esta discrepancia previa. No se atribuye a un cambio de
+permisos ni a la corrección backend de contadores.
+
+Se contrastaron la fuente del stage real y los chunks referenciados por el
+índice activo: `CampoMiCustodiaView-CTnbAvO2.js` muestra «Solo consulta» y no
+llama a `requestUnitReturn`/`requestMaterialReturn`. Router, menú y tarjeta
+coinciden con GitHub; las dos vistas de custodia son las discrepancias.
+
+### Ubicación y recorrido operativo existentes
+
+- Técnico `TECNICO_RED` activo: App de Campo → **Mi custodia** →
+  `/campo/mi-custodia` → **Solicitar devolución** por cada equipo disponible
+  (`with_technician`) y material con saldo. Puede pedir devolución parcial o
+  total de material hasta su saldo; equipo seriado se solicita por unidad.
+- `/campo/custodia` sigue siendo la ruta anterior autorizada al técnico y
+  conserva los formularios. No se añadió una ruta alternativa.
+- Administración: `/inventario/custodia`, pestaña **Devoluciones**, recibe
+  equipos mediante `receive_unit_return` y materiales mediante
+  `confirm_material_return`. No confundir con devoluciones de clientes.
+- Solicitar material crea una solicitud, sin bajar custodia ni liberar
+  almacén. Solicitar equipo marca `pending_return` y conserva al custodio;
+  no lo convierte en stock disponible. Solo la recepción administrativa
+  descuenta custodia/libera almacén o fija la condición recibida del equipo.
+- `current_stock` de material incluye la custodia; recepción no crea un
+  ingreso adicional que infle ese total. Aumenta almacén libre al bajar
+  custodia. Se mantienen las reglas existentes.
+
+### Permisos productivos verificados, sin escrituras
+
+Lectura acotada de `pg_proc`/`pg_policies` en transacción READ ONLY:
+
+- Las cinco RPC existentes de consulta/solicitud/recepción son SECURITY
+  DEFINER con `search_path=public`, EXECUTE para `authenticated`, sin EXECUTE
+  para `anon`. El rol operativo se obtiene del perfil **activo** de `auth.uid()`.
+- Consulta personal y solicitudes exigen `TECNICO_RED`; las RPC/triggers
+  verifican custodia propia. Recepciones exigen ADMIN/SUPERADMIN.
+- `inventory_products`, `inventory_units`, `inventory_movements` e
+  `inventory_unit_events` mantienen RLS `inventory_admin_only`: el técnico
+  no puede escribir directamente en inventario general.
+- Custodia, eventos y solicitudes de materiales permiten SELECT propio al
+  técnico y consulta administrativa; sin políticas de escritura directa.
+- Los cuerpos vigentes de `request_material_return` y `my_inventory_custody`
+  **coinciden con las salvaguardas del candidato anterior**, incluida fila
+  bloqueada FOR UPDATE, bloqueo de solicitud duplicada e historial resuelto.
+  La nota de 22/10 «SQL candidato sin aplicar» de abajo es histórica: las
+  definiciones actuales ya contienen esa corrección. **No se requiere SQL
+  ni cambio de permisos para recuperar el acceso.** No se infiere cuándo
+  o por quién se instalaron esas definiciones.
+- El store llama directamente a estas RPC con el JWT del usuario; no pasa
+  por una ruta Node de aprobación ni necesita un endpoint backend nuevo.
+
+### Corrección mínima preparada, sin reinventar la función
+
+No se modificó código de producto: el código corrector ya está aprobado en
+GitHub. Se preparó un paquete local con solo tres archivos existentes para
+superponer sobre la fuente real activa, conservando Puntos y Analítica:
+
+1. `src/views/campo/CampoMiCustodiaView.vue`: reutiliza la vista operativa,
+   protegida por identidad de técnico.
+2. `src/views/campo/CampoCustodiaView.vue`: formularios y validaciones ya
+   aprobados, bloqueo de solicitudes pendientes y recarga.
+3. `src/lib/custodyReturns.ts`: validador ya aprobado de cantidad y pendiente.
+
+Paquete y hashes: `scripts/inventory-auth-lab/runtime/campo-returns-candidate/manifest.json`.
+No se construyó una imagen, se hizo push ni se desplegó. Es una preparación
+de fuentes, no un artefacto productivo certificado. No reconstruir todo main
+para recuperarlo ni sustituir el backend actual `16831c6`.
+
+### Pruebas de esta sesión
+
+- Navegador público con identidad y custodia **ficticias**: reproduce cero
+  botones en la vista publicada. No se utilizó la cuenta real del propietario.
+- Navegador local con los componentes existentes de GitHub: dos botones,
+  solicitud de equipo y de 4/10 de material simuladas, estado pendiente,
+  saldo conservado y doble solicitud de material deshabilitada. Cero
+  excepciones. Todas las llamadas de negocio reales y escrituras bloqueadas.
+- SQL/unitarias existentes: **25/25 PASS** en PostgreSQL Docker aislado,
+  sin red: propietario/otro técnico, ADMIN/SUPERADMIN reciben, técnico no
+  aprueba, no doble recepción, stock no inflado, recepción parcial, rechazo,
+  saldo insuficiente y concurrencia. El fixture aplica sus definiciones solo
+  dentro del contenedor temporal; no es una migración productiva.
+- `vue-tsc -p tsconfig.app.json --noEmit`: PASS. No se repitió build completo.
+- Nueva regresión: `scripts/tests/field-custody-returns-browser.mjs`.
+  Reproducir baseline con `--base https://panel.rayconetworks.com --expected readonly`;
+  validar fuente local con `--base http://127.0.0.1:5198 --expected returns`.
+  La expectativa `readonly` es solo la reproducción histórica del defecto;
+  tras un despliegue autorizado debe usarse `returns` también para el público.
+
+### Qué falta, límites y desvíos
+
+Falta autorizar preparación del frontend desplegable desde su fuente real,
+respaldo/rollback y promoción selectiva; luego repetir lectura visual sin
+crear solicitudes con bienes reales. No hubo cambios en existencias,
+custodias, equipos, solicitudes reales ni servicios productivos.
+
+El primer Vite dentro del sandbox no respondió; la prueba pasó usando un
+Vite local accesible fuera del sandbox. Sin cambios de producto adicionales.
+El rechazo/historial resuelto de equipos continúa con la limitación existente;
+no se amplió en esta recuperación. Una futura prueba de recepción física
+debe corresponder a una devolución real autorizada.
+
+## Antecedente del 22/10/2026 (no describe por sí solo el estado actual)
+
 Fecha: 2026-10-22. Sin push, despliegue ni escritura en producción.
 
 ## Causa raíz

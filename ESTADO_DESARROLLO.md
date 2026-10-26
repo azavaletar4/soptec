@@ -1,5 +1,21 @@
 # SmartRayco — Estado de desarrollo
 
+## App de Campo: acceso a devoluciones preparado, no desplegado (26/10/2026)
+
+La ruta visible `/campo/mi-custodia` sigue publicada como «Solo consulta» y
+oculta devoluciones de **materiales y equipos**. La ruta anterior
+`/campo/custodia` conserva los formularios. La corrección ya existe en GitHub
+(`fb56057`): reutilizar la vista operativa desde Mi custodia; el artefacto
+selectivo activo no la incorporó. No es un fallo nuevo de roles ni de Fase 175.
+Se preparó una integración local de solo tres archivos ya aprobados, sin
+código de producto nuevo. RPC y RLS reales verificados por lectura: solicitud
+propia del técnico y recepción exclusiva ADMIN/SUPERADMIN; salvaguardas de
+duplicados ya presentes, sin SQL necesario. 25/25 pruebas SQL/unitarias y
+navegador local PASS; defecto público reproducido con datos ficticios.
+**Pendiente autorización de preparación/activación frontend; no push ni
+despliegue en esta sesión.** Detalle y antecedentes actualizados en
+`docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`.
+
 ## Estado vigente compartido — Fase 175 operativa (26/10/2026)
 
 **Problema corregido y funcionalidad desplegada:** backend activo `16831c6`
