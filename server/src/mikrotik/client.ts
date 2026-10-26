@@ -16,7 +16,7 @@ const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
 class MikrotikConnectionError extends Error {}
 
 /** El router respondio, pero con error HTTP — solo 5xx/429 son reintentables (un 4xx no mejora reintentando). */
-class MikrotikHttpError extends Error {
+export class MikrotikHttpError extends Error {
   status: number;
   constructor(message: string, status: number) {
     super(message);

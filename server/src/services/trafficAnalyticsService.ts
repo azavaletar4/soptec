@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
-import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
+import { mikrotikRequest, MikrotikHttpError, type MikrotikTarget } from '../mikrotik/client';
 
 // Analitica de trafico (Fase 36) — muestrea la interfaz PPPoE dinamica de
 // cada cliente activo (creada por RouterOS con el mismo nombre que el
@@ -107,6 +107,24 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: 
 }
 
 /**
+ * Linea de log estructurada y SANITIZADA para un fallo real contra el
+ * router — origen (nombre de dispositivo, nunca host/credenciales),
+ * operacion (metodo+path, sin query de autenticacion), codigo HTTP (si lo
+ * hubo) y hora real en horario de Peru (regla permanente de
+ * CLAUDE.md), ademas del detalle YA sanitizado que devuelve
+ * extractMikrotikErrorMessage() (nunca la respuesta cruda completa, nunca
+ * Authorization/usuario/password). Pensada para que un HTTP 400 futuro
+ * (ver diagnostico Fase 175) se pueda diagnosticar desde los logs sin
+ * tener que repetir una sesion manual de diagnostico.
+ */
+export function formatMikrotikErrorLogLine(params: { origen: string; operacion: string; error: unknown; at: Date }): string {
+  const codigo = params.error instanceof MikrotikHttpError ? String(params.error.status) : 'sin-respuesta';
+  const detalle = params.error instanceof Error ? params.error.message : 'Error desconocido al consultar el router';
+  const horaPe = params.at.toLocaleString('es-PE', { timeZone: 'America/Lima' });
+  return `[traffic-analytics] HTTP origen="${params.origen}" operacion="${params.operacion}" codigo=${codigo} hora_pe="${horaPe}" detalle="${detalle}"`;
+}
+
+/**
  * Corre un ciclo de muestreo. Pensado para llamarse desde
  * trafficAnalyticsScheduler (setInterval), igual que reconcileMikrotik, y
  * desde el boton manual "Muestrear ahora" (POST /traffic/sample-now).
@@ -161,6 +179,8 @@ async function runSampleOnce(): Promise<TrafficSampleReport> {
       interfaces = await mikrotikRequest<MikrotikInterface[]>(target, '/interface?type=pppoe-in');
     } catch (e) {
       errors.push({ deviceName: device.name, message: e instanceof Error ? e.message : 'Error al consultar el router' });
+      // eslint-disable-next-line no-console
+      console.error(formatMikrotikErrorLogLine({ origen: device.name, operacion: 'GET /interface?type=pppoe-in', error: e, at: now }));
       continue;
     }
 
