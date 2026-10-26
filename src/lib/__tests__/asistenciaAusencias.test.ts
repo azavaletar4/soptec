@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cuentaFalta, exentoDeAsistencia, AUSENCIA_LABEL } from '../asistenciaAusencias';
+import { cuentaFalta, exentoDeAsistencia, AUSENCIA_LABEL, AUSENCIA_LABEL_CORTO, AUSENCIA_BADGE_CLASS } from '../asistenciaAusencias';
 import { fechaLimaISO, formatHora, diasLaborablesEnRango } from '../asistenciaReglas';
 
 test('SUPERADMIN exento de indicadores; ADMIN/técnico conservan obligación laboral', () => {
@@ -32,4 +32,12 @@ test('medianoche de Perú independiente del día UTC', () => {
 });
 test('calendario por fechas: excluye domingo/feriado y cruza mes sin desfases', () => {
   assert.deepEqual(diasLaborablesEnRango('2026-10-30', '2026-11-03', new Set(['2026-11-02'])), ['2026-10-30', '2026-10-31', '2026-11-03']);
+});
+test('etiquetas/colores cortos del widget movil cubren los 3 estados, sin tocar AUSENCIA_LABEL (bandeja admin)', () => {
+  for (const estado of ['pendiente', 'aprobada', 'rechazada'] as const) {
+    assert.ok(AUSENCIA_LABEL_CORTO[estado].length > 0);
+    assert.ok(AUSENCIA_BADGE_CLASS[estado].length > 0);
+  }
+  assert.equal(AUSENCIA_LABEL_CORTO.pendiente, 'Pendiente');
+  assert.equal(AUSENCIA_LABEL.pendiente, 'Pendiente de justificar'); // sin cambios, lo usa la bandeja SUPERADMIN
 });

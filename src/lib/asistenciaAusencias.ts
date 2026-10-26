@@ -10,6 +10,16 @@ export const AUSENCIA_LABEL: Record<AusenciaEstado, string> = {
   pendiente: 'Pendiente de justificar', aprobada: 'Ausencia justificada', rechazada: 'Justificación rechazada',
 };
 
+/** Version corta para el widget personal (movil) — la bandeja admin sigue usando AUSENCIA_LABEL. */
+export const AUSENCIA_LABEL_CORTO: Record<AusenciaEstado, string> = {
+  pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada',
+};
+
+/** Mismo patron de color que ESTADO_BADGE_CLASS (asistenciaReglas.ts) para .badge. */
+export const AUSENCIA_BADGE_CLASS: Record<AusenciaEstado, string> = {
+  pendiente: 'bg-amber-500/15 text-amber-700', aprobada: 'bg-green-500/15 text-green-600', rechazada: 'bg-red-500/15 text-red-600',
+};
+
 /** Exención confirmada por el propietario; no cambia ni borra hechos históricos. */
 export function exentoDeAsistencia(role: string | null): boolean {
   return role === 'SUPERADMIN';

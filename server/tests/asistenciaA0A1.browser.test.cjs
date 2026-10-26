@@ -43,12 +43,28 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
   const evaluate=async expression=>{const r=await c('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
   const wait=async expression=>{for(let i=0;i<100;i++){if(await evaluate(expression))return;await new Promise(r=>setTimeout(r,50));}throw Error('UI timeout: '+expression);};
   const click=label=>evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()===${JSON.stringify(label)}).click()`);
-  const navigate=async (role,surface='')=>{await c('Page.navigate',{url:base+'/server/tests/fixtures/asistencia-a0-a1.html?role='+role+'&surface='+surface});await wait("!!document.querySelector('h2') || document.body.innerText.includes('exento del control de asistencia')");await wait("!document.body.innerText.includes('Cargando')");};
+  const navigate=async (role,surface='')=>{await c('Page.navigate',{url:base+'/server/tests/fixtures/asistencia-a0-a1.html?role='+role+'&surface='+surface});await wait("!!document.querySelector('h2') || document.body.innerText.includes('exento del control de asistencia') || document.body.innerText.includes('Reportar una ausencia')");await wait("!document.body.innerText.includes('Cargando')");};
+  // El formulario y el historial de A1 viven ahora dentro de un desplegable
+  // cerrado por defecto ("📝 Reportar una ausencia") — hay que abrirlo antes
+  // de poder tocar el formulario o leer el historial. El boton incluye un
+  // indicador ▲/▼ pegado al texto, por eso se busca por "incluye" y no por
+  // igualdad exacta (a diferencia de click(), reservado a botones de 1 sola
+  // etiqueta sin ambiguedad).
+  const abrirDesplegable=()=>evaluate("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.includes('Reportar una ausencia')).click()");
   await t.test('técnico reporta; reintento conserva identificador y queda pendiente',async()=>{
-   failReport=true;await navigate('TECNICO_RED');await click('Reportar mi ausencia');await wait("document.body.innerText.includes('Fallo ficticio temporal')");await click('Reportar mi ausencia');await wait("document.body.innerText.includes('Ausencia reportada:')");
+   failReport=true;await navigate('TECNICO_RED');await abrirDesplegable();await wait("!!document.querySelector('form')");
+   await click('Enviar solicitud');await wait("document.body.innerText.includes('Fallo ficticio temporal')");await click('Enviar solicitud');await wait("document.body.innerText.includes('queda pendiente de aprobación')");
    assert.equal(reports.length,2);assert.equal(reports[0].p_operacion_id,reports[1].p_operacion_id);assert.equal(reports[0].p_motivo,'salud');assert.equal(await evaluate("document.body.innerText.includes('Aprobar')"),false);
   });
-  await t.test('ADMIN tiene reporte propio y ve decisión',async()=>{rows=[{...row,estado:'aprobada',decision_motivo:'Justificación revisada'}];await navigate('ADMIN');await wait("document.body.innerText.includes('Ausencia justificada')");assert.equal(await evaluate("!!document.querySelector('form')"),true);});
+  await t.test('abrir y cerrar el desplegable NO borra lo escrito en observación',async()=>{
+   rows=[];await navigate('TECNICO_RED');await abrirDesplegable();await wait("!!document.querySelector('textarea')");
+   await evaluate("const t=document.querySelector('textarea');t.value='Cita medica particular, llego mas tarde.';t.dispatchEvent(new Event('input',{bubbles:true}))");
+   await abrirDesplegable(); // cierra
+   await wait("document.querySelector('textarea').offsetParent===null");
+   await abrirDesplegable(); // reabre
+   assert.equal(await evaluate("document.querySelector('textarea').value"),'Cita medica particular, llego mas tarde.');
+  });
+  await t.test('ADMIN tiene reporte propio y ve decisión',async()=>{rows=[{...row,estado:'aprobada',decision_motivo:'Justificación revisada'}];await navigate('ADMIN');await abrirDesplegable();await wait("document.body.innerText.includes('Aprobada')");assert.equal(await evaluate("document.body.innerText.includes('Justificación revisada')"),true);assert.equal(await evaluate("!!document.querySelector('form')"),true);});
   await t.test('SUPERADMIN aprueba con motivo y versión; no reporta como trabajador',async()=>{
    rows=[row];await navigate('SUPERADMIN');await wait("document.body.innerText.includes('Técnico ficticio')");assert.equal(await evaluate("!!document.querySelector('form')"),false);
    await evaluate("const input=document.querySelector('input');input.value='Revisado';input.dispatchEvent(new Event('input',{bubbles:true}));window.confirm=()=>true");await click('Aprobar');await wait("document.body.innerText.includes('No hay solicitudes')");assert.equal(decisions.at(-1).p_decision,'aprobada');assert.equal(decisions.at(-1).p_version_esperada,1);
@@ -56,7 +72,8 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
   await t.test('SUPERADMIN rechaza por el mismo flujo auditado',async()=>{rows=[row];await navigate('SUPERADMIN');await wait("!!document.querySelector('input')");await evaluate("const input=document.querySelector('input');input.value='Rechazo motivado';input.dispatchEvent(new Event('input',{bubbles:true}));window.confirm=()=>true");await click('Rechazar');await wait("document.body.innerText.includes('No hay solicitudes')");assert.equal(decisions.at(-1).p_decision,'rechazada');});
   for(const role of ['ADMIN'])await t.test(role+' reporta desde el widget compartido del panel web, sin entrar a Campo',async()=>{
    rows=[];await navigate(role,'web');await wait("document.body.innerText.includes('Marcación de Jornada')");
-   const before=reports.length;await click('Reportar mi ausencia');await wait("document.body.innerText.includes('Ausencia reportada:')");
+   await abrirDesplegable();await wait("!!document.querySelector('form')");
+   const before=reports.length;await click('Enviar solicitud');await wait("document.body.innerText.includes('queda pendiente de aprobación')");
    assert.equal(reports.length,before+1);assert.equal('p_user_id' in reports.at(-1),false);
    assert.equal(await evaluate("document.body.innerText.includes('Aprobar')"),false);
    assert.equal(await evaluate("location.pathname.includes('/campo')"),false);
@@ -66,6 +83,7 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
    await wait("document.body.innerText.includes('exento del control de asistencia')");
    assert.equal(await evaluate("!!document.querySelector('form')"),false);
    assert.equal(await evaluate("document.body.innerText.includes('Marcación de Jornada')"),false);
+   assert.equal(await evaluate("document.body.innerText.includes('Reportar una ausencia')"),false);
    assert.equal(reports.length,before);
   });
   assert.deepEqual(errors,[]);

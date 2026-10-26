@@ -147,7 +147,6 @@ function formatCountdown(ms: number): string {
 <template>
   <p v-if="exento" class="text-sm">SUPERADMIN está exento del control de asistencia. Gestiona solicitudes y configuración desde Control de Asistencia.</p>
   <div v-else class="surface p-3.5">
-    <AusenciasPanel />
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-sm font-semibold">🕐 Marcación de Jornada</h2>
       <span v-if="store.hoy" class="badge text-[10px]" :class="ESTADO_BADGE_CLASS[store.hoy.estado]">{{ store.hoy.estado }}</span>
@@ -216,6 +215,8 @@ function formatCountdown(ms: number): string {
 
     <p v-if="actionNotice" class="text-xs text-amber-600 mt-2.5">{{ actionNotice }}</p>
     <p v-if="actionError" class="text-xs text-red-600 mt-2.5">{{ actionError }}</p>
+
+    <AusenciasPanel />
 
     <ConfirmModal
       :open="!!pendingAction"
