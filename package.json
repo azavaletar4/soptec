@@ -39,7 +39,8 @@
     "test:material-rejection-correction-sql": "node --import tsx --test server/tests/materialRejectionCorrection.sql.test.ts",
     "test:material-rejection-no-block-closure-sql": "node --import tsx --test server/tests/materialRejectionDoesNotBlockClosure.sql.test.ts",
     "test:installation-equipment-required-closure-sql": "node --import tsx --test server/tests/installationEquipmentRequiredClosure.sql.test.ts",
-    "test:retry-rejected-material-operation-sql": "node --import tsx --test server/tests/retryRejectedMaterialOperation.sql.test.ts"
+    "test:retry-rejected-material-operation-sql": "node --import tsx --test server/tests/retryRejectedMaterialOperation.sql.test.ts",
+    "test:traffic-anomalies-lateral-sql": "node --import tsx --test server/tests/trafficAnomaliesLateral.sql.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.1",

@@ -12,6 +12,12 @@ export interface TrafficKpis {
   anomalyCount: number;
 }
 
+// Lo que realmente devuelve /api/analytics/traffic/kpis — bottleneckCount/
+// anomalyCount ya no viajan ahi (el backend dejo de recalcular
+// fn_traffic_bottlenecks/fn_traffic_anomalies por segunda vez; fetchAll() ya
+// pide esas 2 listas completas por su cuenta, el conteo es su .length).
+type TrafficKpisResponse = Omit<TrafficKpis, 'bottleneckCount' | 'anomalyCount'>;
+
 export interface MonthlyTotal {
   month_start: string;
   download_bytes: number;
@@ -92,13 +98,13 @@ export const useAnalyticsStore = defineStore('analytics', () => {
     error.value = null;
     try {
       const [kpisRes, monthlyRes, topRes, bottleneckRes, anomalyRes] = await Promise.all([
-        apiFetch<TrafficKpis>('/api/analytics/traffic/kpis'),
+        apiFetch<TrafficKpisResponse>('/api/analytics/traffic/kpis'),
         apiFetch<MonthlyTotal[]>('/api/analytics/traffic/monthly?months=6'),
         apiFetch<TopClient[]>('/api/analytics/traffic/top-clients?limit=10'),
         apiFetch<Bottleneck[]>('/api/analytics/traffic/bottlenecks?threshold=85'),
         apiFetch<Anomaly[]>('/api/analytics/traffic/anomalies'),
       ]);
-      kpis.value = kpisRes;
+      kpis.value = { ...kpisRes, bottleneckCount: bottleneckRes.length, anomalyCount: anomalyRes.length };
       monthly.value = monthlyRes;
       topClients.value = topRes;
       bottlenecks.value = bottleneckRes;

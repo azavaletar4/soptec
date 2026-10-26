@@ -79,19 +79,61 @@ function targetFor(device: MikrotikDeviceRow): MikrotikTarget {
 const MIN_INTERVAL_SECONDS = 30;
 const MAX_INTERVAL_SECONDS = 6 * 60 * 60;
 
+// Tope duro de una corrida completa. El cliente de Supabase (a diferencia de
+// mikrotikRequest, que ya tiene su propio AbortSignal.timeout) no trae
+// timeout propio — un socket colgado contra PostgREST se queda esperando
+// para siempre. Sin este tope, sampleTrafficUsage() podia no resolver NUNCA,
+// dejando `running` (trafficAnalyticsScheduler.ts) en true para siempre y
+// el muestreo muerto en silencio (sin ningun error que avisara) — asi se
+// explica el corte real de muestras del 2026-10-15 16:24 UTC, confirmado
+// contra produccion: ningun otro scheduler del mismo backend se detuvo ese
+// dia, asi que no fue una caida general del proceso.
+const SAMPLE_RUN_TIMEOUT_MS = 2 * 60 * 1000;
+
 /**
- * Corre un ciclo de muestreo contra todos los MikroTik activos. Pensado para
- * llamarse desde trafficAnalyticsScheduler (setInterval), igual que
- * reconcileMikrotik. Sigue con el siguiente router si uno falla.
+ * Carrera entre `promise` y un timeout — nunca cancela la promesa original
+ * (no hay un AbortController conectado a supabase-js), pero garantiza que
+ * quien espera no se quede colgado para siempre. Se adjunta un catch vacio a
+ * la promesa original para que, si termina despues del timeout, no dispare
+ * un "unhandled rejection".
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+  });
+  promise.catch(() => {});
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
+/**
+ * Corre un ciclo de muestreo. Pensado para llamarse desde
+ * trafficAnalyticsScheduler (setInterval), igual que reconcileMikrotik, y
+ * desde el boton manual "Muestrear ahora" (POST /traffic/sample-now).
  */
 export async function sampleTrafficUsage(): Promise<TrafficSampleReport> {
+  return withTimeout(
+    runSampleOnce(),
+    SAMPLE_RUN_TIMEOUT_MS,
+    'El muestreo de tráfico tardó más de 2 minutos (posible conexión colgada con Supabase o con el router) y se interrumpió automáticamente.',
+  );
+}
+
+async function runSampleOnce(): Promise<TrafficSampleReport> {
   const runId = randomUUID();
   const now = new Date();
 
+  // Solo el Administrador PPPoE (device_role='pppoe_admin') tiene clientes
+  // reales con sesion PPPoE — el Balanceador y el Borde Dedicado (Fase
+  // 171/172/174) son solo lectura de sus propias interfaces WAN, nunca
+  // tienen contratos vinculados. Consultarlos aqui era trabajo de red
+  // innecesario (mismo criterio que mikrotikReconcileService.ts y
+  // debtHoldService.ts, que ya filtran por este rol).
   const { data: devices, error: devErr } = await supabaseAdmin
     .from('mikrotik_devices')
     .select('id, name, host, port, use_tls, username, password')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('device_role', 'pppoe_admin');
   if (devErr) throw new Error(devErr.message);
 
   const errors: { deviceName: string; message: string }[] = [];
@@ -304,22 +346,25 @@ export async function getAnomalies(): Promise<Anomaly[]> {
   return (data ?? []) as Anomaly[];
 }
 
+// bottleneckCount/anomalyCount NO viven aqui (antes llamaban getBottlenecks()/
+// getAnomalies() por dentro, duplicando exactamente las mismas 2 RPC mas
+// caras de todo el modulo — ver fn_traffic_anomalies/fn_traffic_bottlenecks
+// en la migracion de Fase 36 — contra las que YA pide /api/analytics por
+// separado en el mismo refresco de 60s de AnaliticaView.vue). El frontend
+// (stores/analytics.ts) ya tiene esas 2 listas completas de la misma
+// corrida de fetchAll() — el conteo es su `.length`, sin pedirlas 2 veces.
 export interface TrafficKpis {
   monthDownloadBytes: number;
   monthUploadBytes: number;
   monthTotalBytes: number;
   peakTotalBps: number;
   peakAt: string | null;
-  bottleneckCount: number;
-  anomalyCount: number;
 }
 export async function getTrafficKpis(): Promise<TrafficKpis> {
   const since = monthStartIso();
-  const [monthly, peakRes, bottlenecks, anomalies] = await Promise.all([
+  const [monthly, peakRes] = await Promise.all([
     getMonthlyTotals(1),
     supabaseAdmin.rpc('fn_traffic_peak', { p_since: since }),
-    getBottlenecks(85),
-    getAnomalies(),
   ]);
   if (peakRes.error) throw new Error(peakRes.error.message);
   const peak = (peakRes.data as { total_bps: number; sampled_at: string }[] | null)?.[0] ?? null;
@@ -331,7 +376,5 @@ export async function getTrafficKpis(): Promise<TrafficKpis> {
     monthTotalBytes: (thisMonth?.download_bytes ?? 0) + (thisMonth?.upload_bytes ?? 0),
     peakTotalBps: peak?.total_bps ?? 0,
     peakAt: peak?.sampled_at ?? null,
-    bottleneckCount: bottlenecks.length,
-    anomalyCount: anomalies.length,
   };
 }
