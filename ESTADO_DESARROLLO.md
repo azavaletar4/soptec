@@ -1,5 +1,28 @@
 # SmartRayco — Estado de desarrollo
 
+## Equipos seriados, custodia e instalación — fase cerrada operativamente
+
+El propietario confirma que el **25/10/2026** se realizaron **tres instalaciones
+reales exitosas** con instalación de equipos desde App de Campo. El circuito
+está implementado y desplegado: **entrega al técnico → custodia → instalación
+y devolución**, operativo y **sin defectos reportados**. Devolución y recepción
+administrativa ya fueron validadas y cerradas por el propietario el 26/10/2026.
+No volver a tratar esta fase como desarrollo pendiente ni exigir repetir las
+pruebas anteriores para reconocer su cierre operativo.
+
+Alcance de la evidencia: es la confirmación expresa del propietario sobre las
+tres instalaciones. No acredita por separado cada categoría ONT, Mesh y TV Box,
+ni verificaciones individuales de serie/MAC, contrato o movimientos de custodia.
+No inventar esos detalles ni confundir cierre operativo con certificación
+individual por categoría. Versiones productivas documentadas conservadas:
+frontend `c11f6a8`, backend `16831c6`. La meta permanente de estabilidad y
+rendimiento para al menos **3.000 clientes** se mantiene como requisito
+transversal; no reabre esta fase operativa.
+
+Esta actualización es solo documental: sin pruebas, auditorías, código,
+consultas productivas, migraciones ni cambios de inventario/contratos.
+
+
 ## App de Campo: devoluciones implementadas, desplegadas y validadas (26/10/2026)
 
 Acceso recuperado en Mi custodia para materiales y equipos seriados. La ruta

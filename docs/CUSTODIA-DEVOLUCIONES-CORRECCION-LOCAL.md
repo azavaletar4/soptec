@@ -1,6 +1,30 @@
 # Devoluciones desde Mi custodia — recuperación y despliegue
 
-## Estado vigente: desplegado el 26/10/2026, pendiente aceptación desde celular
+## Equipos seriados, custodia e instalación — fase cerrada operativamente
+
+El propietario confirma que el **25/10/2026** se realizaron **tres instalaciones
+reales exitosas** con instalación de equipos desde App de Campo. El circuito
+está implementado y desplegado: **entrega al técnico → custodia → instalación
+y devolución**, operativo y **sin defectos reportados**. Devolución y recepción
+administrativa ya fueron validadas y cerradas por el propietario el 26/10/2026.
+No volver a tratar esta fase como desarrollo pendiente ni exigir repetir las
+pruebas anteriores para reconocer su cierre operativo.
+
+Alcance de la evidencia: es la confirmación expresa del propietario sobre las
+tres instalaciones. No acredita por separado cada categoría ONT, Mesh y TV Box,
+ni verificaciones individuales de serie/MAC, contrato o movimientos de custodia.
+No inventar esos detalles ni confundir cierre operativo con certificación
+individual por categoría. Versiones productivas documentadas conservadas:
+frontend `c11f6a8`, backend `16831c6`. La meta permanente de estabilidad y
+rendimiento para al menos **3.000 clientes** se mantiene como requisito
+transversal; no reabre esta fase operativa.
+
+Esta actualización es solo documental: sin pruebas, auditorías, código,
+consultas productivas, migraciones ni cambios de inventario/contratos.
+
+
+
+## Antecedente: despliegue del 26/10/2026, anterior a la aceptación del propietario
 
 La publicación aprobada `c11f6a8838faade40a605927818df4b67f5e4f11` está en
 GitHub main mediante push normal. Se desplegó solo el frontend:
@@ -29,10 +53,11 @@ Alta, Avería y Rutina PASS, sin excepciones. Panel/9 rutas HTTP 200 y API ok;
 backend, Caddy, Mongo y GenieACS conservaron imagen, contenedor y arranque.
 Cero errores críticos. Sin SQL, tablas, rutas, permisos o datos reales cambiados.
 
-**Implementado y desplegado; todavía no completamente validado funcionalmente.**
-El propietario debe probar desde su celular Mi custodia → Solicitar devolución
-con un sobrante físico real, y administración debe confirmar su recepción.
-No se creó ni confirmó una devolución real durante estas pruebas. Rechazo e
+**Aceptación posterior COMPLETADA:** el propietario confirmó el 26/10/2026
+la devolución desde App de Campo y su recepción administrativa satisfactorias.
+Ambas pruebas están cerradas; no siguen pendientes. La sesión técnica del
+despliegue no creó ni confirmó devoluciones reales; la validación operativa
+posterior corresponde al propietario. Rechazo e
 historial resuelto de equipos mantienen su limitación anterior. Se mantienen
 los riesgos separados de escala/seguimiento de Analítica de Fase 175.
 
