@@ -1,0 +1,53 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Laboratorio: cierre único</title></head><body><div id="app"></div>
+<script type="module">
+import {createApp,reactive,h} from 'vue';
+import {createPinia} from 'pinia';
+import {useAuthStore} from '/src/stores/auth.ts';
+import {supabase} from '/src/lib/supabase.ts';
+import Editor from '/src/components/soporte/WorkOrderPointsEditor.vue';
+const pinia=createPinia(),auth=useAuthStore(pinia),state=reactive({nonce:0,type:'ticket',points:2});
+const actor='00000000-0000-0000-0000-000000000002';
+window.calls=[];window.queries=[];window.emitted=[];
+const crew=()=>Array.from({length:model.crewSize},(_,i)=>({technicianId:i?'00000000-0000-0000-0000-000000000007':'00000000-0000-0000-0000-000000000003',name:i?'Luis Técnico':'Ana Técnica',role:i?'support':'leader'}));
+const closeData=()=>({id:'closure-fixture',points:model.points,crew:crew().map(c=>({...c,points:model.points/model.crewSize,netPoints:model.points/model.crewSize})),confirmed_by:actor,confirmed_at:'2026-10-26T12:00:00Z',invalidated_at:null});
+window.resetCase=(type='ticket',role='ADMIN',crewSize=2)=>{
+ window.model={points:2,version:1,confirmed:false,crewSize,history:[],fail:null,reviewUnavailable:false,canAdjust:true,finished:true,profileError:false,auditError:false};
+ window.calls=[];window.queries=[];window.emitted=[];auth.role=role;auth.user={id:actor};state.type=type;state.points=2;state.nonce++;
+};
+window.seedClosedHistory=()=>{
+ model.history=Array.from({length:21},(_,i)=>({id:String(i).padStart(3,'0'),old_points:2+i,new_points:3+i,changed_by:actor,changed_at:new Date(Date.UTC(2026,9,26,10,i)).toISOString(),reason:'Revisión registrada'}));
+ model.points=23;model.confirmed=true;model.closure=closeData();state.points=23;state.nonce++;
+};
+supabase.rpc=async(name,args)=>{
+ calls.push({name,args});await new Promise(r=>setTimeout(r,20));
+ if(name==='work_order_point_review'){
+  if(model.reviewUnavailable)return {data:null,error:{message:'No hay conexión'}};
+  return {data:{points:model.points,status:state.type==='ticket'?'resolved':'completed',finished:model.finished,technicalCompletedAt:'2026-10-26T06:00:00Z',crew:crew(),historical:true,canAdjustPoints:model.canAdjust&&!model.confirmed,prospectPointsPending:model.points===0,definitiveClosure:true,token:'revision-'+model.version,confirmation:model.confirmed?model.closure:null,lastConfirmation:null},error:null};
+ }
+ if(name!=='confirm_work_order_points')throw Error('Unexpected mutation: '+name);
+ if(model.fail==='before')return {data:null,error:{message:'Error temporal. Intenta nuevamente.'}};
+ if(model.confirmed){if(args.p_expected_token===model.closure.review_token&&args.p_points===model.points)return {data:model.closure,error:null};return {data:null,error:{message:'La orden ya está cerrada'}};}
+ if(args.p_expected_token!=='revision-'+model.version)return {data:null,error:{message:'La orden cambió. Revisa el reparto antes de reintentar.'}};
+ if(!args.p_confirmed)return {data:null,error:{message:'Confirmación requerida'}};
+ if(args.p_points!==model.points&&!args.p_reason?.trim())return {data:null,error:{message:'Motivo obligatorio'}};
+ if(args.p_points!==model.points)model.history.push({id:'001',old_points:model.points,new_points:args.p_points,changed_by:actor,changed_at:'2026-10-26T12:00:00Z',reason:args.p_reason});
+ model.points=args.p_points;model.confirmed=true;model.closure={...closeData(),review_token:args.p_expected_token};model.version++;
+ if(model.fail==='after-offline')model.reviewUnavailable=true;
+ if(model.fail==='after'||model.fail==='after-offline')return {data:null,error:{message:'Respuesta perdida'}};
+ return {data:model.closure,error:null};
+};
+supabase.from=table=>{
+ const q={table,fields:'',eqs:[],orders:[],max:null,ids:null};queries.push(q);
+ const builder={select(s){q.fields=s;return this;},eq(k,v){q.eqs.push([k,v]);return this;},in(k,v){q.ids=v;return this;},order(k,v){q.orders.push([k,v]);return this;},limit(n){q.max=n;return this;},then(resolve,reject){
+  return new Promise(r=>setTimeout(r,5)).then(()=>{
+   if(table==='profiles')return model.profileError?{data:null,error:{message:'Acceso denegado'}}:{data:(q.ids||[]).map(id=>({id,full_name:'María Administradora'})),error:null};
+   if(table!=='work_order_point_changes')throw Error('Unexpected table: '+table);
+   if(model.auditError)return {data:null,error:{message:'Historial no disponible'}};
+   const sorted=[...model.history].sort((a,b)=>a.changed_at.localeCompare(b.changed_at));if(q.orders[0]?.[1]?.ascending===false)sorted.reverse();return {data:sorted.slice(0,q.max??sorted.length),error:null};
+  }).then(resolve,reject);
+ }};return builder;
+};
+resetCase();
+createApp({render:()=>h(Editor,{key:state.nonce,jobType:state.type,jobId:'10000000-0000-0000-0000-000000000001',status:state.type==='ticket'?'resolved':'completed',points:state.points,onSaved:p=>{state.points=p;emitted.push(['saved',p]);},onConfirmed:c=>emitted.push(['confirmed',c.id])})}).use(pinia).mount('#app');
+window.ready=true;
+</script></body></html>

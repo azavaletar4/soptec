@@ -78,6 +78,22 @@ test('Ajuste pendiente: piloto tras terminación técnica, sin tocar históricos
     const c=JSON.parse(as(confirm(kind,id,r.token,5,"'Revisión en modal'"),root));assert.equal(c.points,5);assert.deepEqual(c.crew.map((m:{points:number})=>m.points),[2.5,2.5]);
     assert.equal(sql(`select count(*) from work_order_point_changes where job_id='${id}' and changed_by='${root}';`),'1');
    });
+   await t.test(`${kind}: un cierre sin ajuste ni motivo, con un técnico, es único`,()=>{
+    const id=order(table,kind);sql(`delete from job_assignees where job_type='${kind}' and job_id='${id}' and technician_id='${helper}';`);
+    const r=read(kind,id),request=confirm(kind,id,r.token,2),c=JSON.parse(as(request));
+    assert.equal(c.points,2);assert.equal(c.crew.length,1);assert.equal(c.crew[0].points,2);
+    assert.equal(JSON.parse(as(request)).id,c.id);assert.equal(sql(`select count(*) from work_order_point_changes where job_id='${id}';`),'0');
+   });
+   await t.test(`${kind}: fallo final revierte ajuste/auditoría; reintento conserva una sola confirmación`,()=>{
+    const id=order(table,kind),r=read(kind,id),request=confirm(kind,id,r.token,5,"'Cierre único revisado'");
+    sql("create function fail_single_closure_lab() returns trigger language plpgsql as $$begin raise exception 'Fallo final de laboratorio';end$$;create trigger fail_single_closure_lab before insert on work_order_point_confirmations for each row execute function fail_single_closure_lab();");
+    try{
+     assert.throws(()=>as(request),/Fallo final de laboratorio/);assert.equal(sql(`select points from ${table} where id='${id}';`),'2');
+     assert.equal(sql(`select count(*) from work_order_point_changes where job_id='${id}';`),'0');assert.equal(sql(`select count(*) from work_order_point_confirmations where job_id='${id}';`),'0');
+    }finally{sql('drop trigger fail_single_closure_lab on work_order_point_confirmations;drop function fail_single_closure_lab();');}
+    const c=JSON.parse(as(request));assert.equal(c.points,5);assert.equal(JSON.parse(as(request)).id,c.id);
+    assert.equal(sql(`select count(*) from work_order_point_changes where job_id='${id}';`),'1');assert.equal(sql(`select count(*) from work_order_point_confirmations where job_id='${id}';`),'1');
+   });
    await t.test(`${kind}: terminaciones anteriores a activación permanecen protegidas e idénticas`,()=>{
     const id=historic[kind],r=read(kind,id);assert.equal(r.canAdjustPoints,false);
     assert.throws(()=>as(adjust(kind,id)),/históricos anteriores a la activación/);assert.throws(()=>as(confirm(kind,id,r.token,5,"'Intento histórico rechazado'")),/históricos anteriores a la activación/);
