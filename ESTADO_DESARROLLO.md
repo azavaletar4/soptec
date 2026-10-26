@@ -98,18 +98,29 @@ solo servicio, sin push a GitHub):
    Compose (ambos overrides) antes de aplicar — backend confirmado
    `Running` (no recreado) en el propio log del despliegue, ID de
    contenedor y `StartedAt` idénticos antes/después.
+3. `smartrayco-asistencia-approve:263f66e-20261026T213734Z` (commit
+   `263f66e` — corrige que SUPERADMIN no podía aprobar/rechazar: el
+   campo de comentario no era identificable, bloqueaba ambos botones sin
+   explicación visible) sobre el paso anterior. Confirmado antes de
+   promover que la imagen conserva simplificación visual (4db50f9), A0/A1
+   y Devoluciones (`grep` directo sobre el JS compilado). Misma disciplina
+   del paso 2: configuración efectiva verificada antes, `backend Running`
+   (no recreado) en el log, ID de contenedor y `StartedAt` idénticos.
 
 **Backend: nunca reconstruido ni reiniciado** en ningún paso de Asistencia
 — sigue en `smartrayco-backend-counters:16831c6-...`, mismo contenedor
-desde la corrección de Fase 175. Confirmado también que Analítica de
-Tráfico sigue operativa (ciclos de ~670+ muestras sin error, solo
-Administrador) después de ambos despliegues de frontend.
+desde la corrección de Fase 175 (confirmado también tras el paso 3).
+Analítica de Tráfico sigue operativa (ciclos de ~670+ muestras sin error,
+solo Administrador) después de los 3 despliegues de frontend.
 
 Rollback del frontend preparado, no usado:
-`smartrayco-asistencia-visual-rollback:20261026T211911Z` →
-`/opt/smartrayco-staging/asistencia-visual-4db50f9-20261026T211911Z/recovery/frontend.tar`.
+`smartrayco-asistencia-approve-rollback:20261026T213734Z` →
+`/opt/smartrayco-staging/asistencia-approve-263f66e-20261026T213734Z/recovery/frontend.tar`.
 
-Pruebas (commit `4db50f9`): 7/7 unitarias + 8/8 navegador + `vue-tsc`
+Pruebas (commit `263f66e`, datos ficticios/Postgres aislado, ninguna
+solicitud real resuelta): 9/9 unitarias + 9/9 navegador (incluye el caso
+exacto reportado por el propietario: aprobar sin escribir nada, rechazar
+bloqueado con aviso visible, quién/cuándo tras resolver) + `vue-tsc`
 limpio. **Pendiente**: validación funcional real del propietario desde
 panel web y celular (Android, App de Campo).
 

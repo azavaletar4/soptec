@@ -17,25 +17,31 @@ intactas. ADMIN marca/reporta desde el panel web y técnico desde Campo
   de marcación siguen abiertas a `authenticated`/cerradas a `anon`; las 3
   RPC nuevas solo `authenticated`; escritura directa de
   `asistencia_registros` cerrada para todos (solo vía RPC).
-- **Frontend: ACTIVO**, imagen `smartrayco-asistencia-visual:4db50f9-20261026T211911Z`
-  (commit `4db50f9`, simplificación visual móvil de "Reportar ausencia" —
-  colapsable, sin perder funciones; ver commit para detalle). Construido
-  sobre `smartrayco-asistencia-a0a1:711a7fc-...` (commit `711a7fc`, A0/A1 +
-  exclusión real de SUPERADMIN), que ya incluía Puntos y Devoluciones.
+- **Frontend: ACTIVO**, imagen `smartrayco-asistencia-approve:263f66e-20261026T213734Z`
+  (commit `263f66e` — corrige que SUPERADMIN no podía aprobar/rechazar
+  ausencias: el campo de comentario no era identificable y bloqueaba
+  ambos botones sin explicación; ver commit para detalle). Construido
+  sobre `smartrayco-asistencia-visual:4db50f9-...` (simplificación visual
+  móvil), que a su vez ya incluía A0/A1, Puntos y Devoluciones — todo
+  conservado y confirmado presente en la imagen antes de promoverla.
 - **Backend: SIN TOCAR** — sigue en `smartrayco-backend-counters:16831c6-...`
   (misma corrección de contadores de Fase 175). Confirmado por ID de
-  contenedor y `StartedAt` idénticos antes/después de ambos despliegues de
-  frontend de A0/A1 (el de `711a7fc` y el de `4db50f9`).
-- Rollback del frontend preparado y sin usar: `smartrayco-asistencia-visual-rollback:20261026T211911Z`
-  (imagen anterior `711a7fc` respaldada en
-  `/opt/smartrayco-staging/asistencia-visual-4db50f9-20261026T211911Z/recovery/frontend.tar`).
+  contenedor y `StartedAt` idénticos antes/después de los 3 despliegues de
+  frontend de Asistencia (`711a7fc`, `4db50f9`, `263f66e`).
+- Rollback del frontend preparado y sin usar: `smartrayco-asistencia-approve-rollback:20261026T213734Z`
+  (imagen anterior `4db50f9` respaldada en
+  `/opt/smartrayco-staging/asistencia-approve-263f66e-20261026T213734Z/recovery/frontend.tar`).
 - Rama `feature/asistencia-a0-a1-local`, commits `1fa2c59` → `fb7c3e2` →
-  `0dfecfa` → `d984e56` → `711a7fc` → `4db50f9`. **Sin push a GitHub** —
-  el despliegue usó el mecanismo selectivo (override de 1 solo servicio),
-  no el checkout de `/opt/smartrayco`. A2/A3 no iniciadas.
-- Pruebas (commit `4db50f9`): 7/7 unitarias, 8/8 navegador, `vue-tsc`
-  limpio. Validación funcional real desde panel/celular: **pendiente del
-  propietario**.
+  `0dfecfa` → `d984e56` → `711a7fc` → `4db50f9` → `0143c5c` → `263f66e`.
+  **Sin push a GitHub** — el despliegue usó el mecanismo selectivo
+  (override de 1 solo servicio), no el checkout de `/opt/smartrayco`.
+  A2/A3 no iniciadas.
+- Pruebas (commit `263f66e`, previas al despliegue, datos ficticios/Postgres
+  aislado): 9/9 unitarias, 9/9 navegador (incluye el caso exacto reportado:
+  aprobar sin escribir nada, rechazar bloqueado con aviso visible, quién/
+  cuándo tras resolver), `vue-tsc` limpio. No se resolvió ninguna solicitud
+  real en esta verificación. Validación funcional real desde panel/celular:
+  **pendiente del propietario**.
 
 ## Antes de empezar
 

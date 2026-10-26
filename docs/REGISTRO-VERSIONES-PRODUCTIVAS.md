@@ -16,13 +16,13 @@ el primer muestreo de contadores; frontend de devoluciones verificado a las
 
 | | Backend | Frontend |
 |---|---|---|
-| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` |
-| Commit anterior | `53f284c` | `711a7fc` |
-| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-asistencia-visual:4db50f9-20261026T211911Z` |
-| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Fuente real (`711a7fc`, ya con Puntos/Devoluciones/A0-A1) + simplificación visual móvil de "Reportar ausencia"; nada más tocado |
-| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 21:20:41 UTC |
-| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1 (con exclusión SUPERADMIN) + desplegable móvil compacto |
-| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-visual-4db50f9-20261026T211911Z/recovery/frontend.tar`, tag `smartrayco-asistencia-visual-rollback:20261026T211911Z` |
+| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` + aprobación `263f66e` |
+| Commit anterior | `53f284c` | `4db50f9` |
+| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-asistencia-approve:263f66e-20261026T213734Z` |
+| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Fuente real (`4db50f9`, ya con Puntos/Devoluciones/A0-A1/visual móvil) + corrección de aprobación/rechazo SUPERADMIN; nada más tocado |
+| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 21:38:39 UTC |
+| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1 (exclusión SUPERADMIN, desplegable móvil, aprobación/rechazo corregidos) |
+| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-approve-263f66e-20261026T213734Z/recovery/frontend.tar`, tag `smartrayco-asistencia-approve-rollback:20261026T213734Z` |
 
 ### Asistencia A0/A1 — migración aplicada y frontend desplegado (2026-10-26)
 
@@ -46,16 +46,36 @@ el primer muestreo de contadores; frontend de devoluciones verificado a las
   recreado), ID de contenedor y `StartedAt` idénticos antes/después.
 - Backend nunca reconstruido ni reiniciado en ningún paso de Asistencia.
   Analítica de Tráfico confirmada operativa (~670+ muestras por ciclo, sin
-  error) después de ambos despliegues de frontend.
-- Rollback del frontend preparado, no usado: tag
-  `smartrayco-asistencia-visual-rollback:20261026T211911Z` (imagen
-  `711a7fc` respaldada en
-  `/opt/smartrayco-staging/asistencia-visual-4db50f9-20261026T211911Z/recovery/frontend.tar`).
-  Rollback de la migración preparado y verificado en Postgres aislado:
+  error) después de los 3 despliegues de frontend.
+- Rollback de la migración preparado y verificado en Postgres aislado:
   `scripts/sql/asistencia-a0-a1-rollback.sql` (no usado, no aplicado).
-- Pruebas (commit `4db50f9`): 7/7 unitarias + 8/8 navegador + `vue-tsc`
-  limpio. **Pendiente**: validación funcional real del propietario desde
-  panel web y celular Android (App de Campo).
+
+#### Paso 3: corrección de aprobación/rechazo SUPERADMIN (2026-10-26 ~21:38 UTC)
+
+Problema real reportado: solicitud "Pendiente de justificar" visible, pero
+Aprobar/Rechazar deshabilitados sin explicación — el campo de comentario
+exigido por `resolver_ausencia()` (igual para ambas decisiones) no era
+identificable en el formulario. Corrección 100% frontend, **sin
+migración**: Aprobar ya no exige texto (usa un comentario por defecto que
+sigue cumpliendo la regla de auditoría del backend); Rechazar sigue
+exigiendo texto real, ahora con aviso visible; se agrega quién
+aprobó/rechazó y cuándo (hora de Perú).
+
+- `263f66e` sobre `4db50f9` → `smartrayco-asistencia-approve:263f66e-20261026T213734Z`.
+  Confirmado antes de promover (grep sobre el JS compilado) que la imagen
+  conserva simplificación visual, A0/A1 y Devoluciones.
+- Misma disciplina que el paso 2: configuración efectiva verificada antes
+  de aplicar, `backend Running` (no recreado) en el log del despliegue, ID
+  de contenedor y `StartedAt` idénticos antes/después.
+- Rollback del frontend preparado, no usado: tag
+  `smartrayco-asistencia-approve-rollback:20261026T213734Z` (imagen
+  `4db50f9` respaldada en
+  `/opt/smartrayco-staging/asistencia-approve-263f66e-20261026T213734Z/recovery/frontend.tar`).
+- Pruebas (commit `263f66e`, previas al despliegue, datos ficticios/Postgres
+  aislado, ninguna solicitud real resuelta): 9/9 unitarias + 9/9 navegador
+  (incluye el caso exacto reportado) + `vue-tsc` limpio. **Pendiente**:
+  validación funcional real del propietario desde panel web y celular
+  Android (App de Campo).
 
 ### Devoluciones implementadas, desplegadas y validadas — flujo cerrado
 
