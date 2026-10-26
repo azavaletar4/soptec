@@ -4,7 +4,10 @@
 
 A0/A1 implementadas localmente por autorización del propietario el 26/10/2026.
 Consultar primero `docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md`, sección
-«Estado vigente»: permisos SUPERADMIN en RPC/RLS, reporte propio ADMIN/técnico,
+«Estado vigente»: SUPERADMIN gestiona configuración y aprueba/rechaza, pero está
+**exento de asistencia**: no tiene horario, marcación ni reporte personal; no suma
+faltas, tardanzas ni pendientes de marcación. Sus marcas históricas se conservan.
+ADMIN marca/reporta desde el panel web y técnico desde Campo (mismo widget/RPC),
 resolución auditada, protección del historial y pruebas aisladas. Migración
 `20261027010000_asistencia_a0_a1.sql` **no aplicada a producción**; sin push ni
 despliegue. A2/A3 no iniciadas. No confundir justificaciones con marcaciones.

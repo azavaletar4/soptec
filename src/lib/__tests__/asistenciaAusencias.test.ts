@@ -1,7 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cuentaFalta, AUSENCIA_LABEL } from '../asistenciaAusencias';
+import { cuentaFalta, exentoDeAsistencia, AUSENCIA_LABEL } from '../asistenciaAusencias';
 import { fechaLimaISO, formatHora, diasLaborablesEnRango } from '../asistenciaReglas';
+
+test('SUPERADMIN exento de indicadores; ADMIN/técnico conservan obligación laboral', () => {
+  assert.equal(exentoDeAsistencia('SUPERADMIN'), true);
+  for (const rol of ['ADMIN', 'TECNICO_RED']) {
+    assert.equal(exentoDeAsistencia(rol), false);
+    assert.equal(cuentaFalta(false, undefined, '2026-10-26', '2026-10-27', true, !exentoDeAsistencia(rol)), true);
+  }
+  assert.equal(cuentaFalta(false, undefined, '2026-10-26', '2026-10-27', true, !exentoDeAsistencia('SUPERADMIN')), false);
+});
 
 test('pendiente y aprobada no generan falta; rechazo pasado genera una sola falta derivada', () => {
   for (const estado of ['pendiente', 'aprobada'] as const) assert.equal(cuentaFalta(false, estado, '2026-10-26', '2026-10-27', true, true), false);

@@ -425,6 +425,7 @@ async function handleLogout() {
           <div class="text-[11px] text-slate-500">{{ roleLabel }}</div>
         </div>
         <button
+          v-if="auth.role !== 'SUPERADMIN'"
           class="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-500/10 transition-colors"
           aria-label="Marcar asistencia"
           title="Marcar asistencia"
@@ -475,7 +476,7 @@ async function handleLogout() {
             <h2 class="text-sm font-semibold">Mi asistencia</h2>
             <button type="button" class="text-slate-400 hover:text-slate-600" @click="showAsistenciaModal = false">✕</button>
           </div>
-          <div class="p-3.5">
+          <div class="p-3.5 max-h-[75dvh] overflow-y-auto">
             <AsistenciaPanel />
           </div>
         </div>

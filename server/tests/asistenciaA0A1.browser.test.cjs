@@ -33,6 +33,8 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
     if(request.method==='OPTIONS')body={};
     else if(u.pathname.endsWith('/rpc/reportar_ausencia_hoy')){reports.push(JSON.parse(request.postData));if(failReport){failReport=false;code=503;body={message:'Fallo ficticio temporal'};}else{rows=[{...row,id:reports.at(-1).p_operacion_id}];body=rows[0];}}
     else if(u.pathname.endsWith('/rpc/resolver_ausencia')){const p=JSON.parse(request.postData);decisions.push(p);rows=[];body={...row,estado:p.p_decision};}
+    else if(u.pathname.endsWith('/company_settings'))body={id:1,lunes_hora_ingreso:'07:30:00',resto_hora_ingreso:'08:00:00',tolerancia_min:5,almuerzo_min:120,oficina_lat:0,oficina_lng:0,oficina_radio_m:100};
+    else if(u.pathname.endsWith('/feriados'))body=[];
     else if(!u.pathname.endsWith('/asistencia_solicitudes'))throw Error('Endpoint ficticio no previsto: '+u.pathname);
     await c('Fetch.fulfillRequest',{requestId,responseCode:code,responseHeaders:[{name:'Content-Type',value:'application/json'},{name:'Access-Control-Allow-Origin',value:'*'},{name:'Access-Control-Allow-Headers',value:'*'},{name:'Access-Control-Allow-Methods',value:'GET,POST,OPTIONS'}],body:Buffer.from(JSON.stringify(body)).toString('base64')});
    }catch(e){errors.push(String(e));await c('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'});}
@@ -41,7 +43,7 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
   const evaluate=async expression=>{const r=await c('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
   const wait=async expression=>{for(let i=0;i<100;i++){if(await evaluate(expression))return;await new Promise(r=>setTimeout(r,50));}throw Error('UI timeout: '+expression);};
   const click=label=>evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()===${JSON.stringify(label)}).click()`);
-  const navigate=async role=>{await c('Page.navigate',{url:base+'/server/tests/fixtures/asistencia-a0-a1.html?role='+role});await wait("!!document.querySelector('h2')");await wait("!document.body.innerText.includes('Cargando')");};
+  const navigate=async (role,surface='')=>{await c('Page.navigate',{url:base+'/server/tests/fixtures/asistencia-a0-a1.html?role='+role+'&surface='+surface});await wait("!!document.querySelector('h2') || document.body.innerText.includes('exento del control de asistencia')");await wait("!document.body.innerText.includes('Cargando')");};
   await t.test('técnico reporta; reintento conserva identificador y queda pendiente',async()=>{
    failReport=true;await navigate('TECNICO_RED');await click('Reportar mi ausencia');await wait("document.body.innerText.includes('Fallo ficticio temporal')");await click('Reportar mi ausencia');await wait("document.body.innerText.includes('Ausencia reportada:')");
    assert.equal(reports.length,2);assert.equal(reports[0].p_operacion_id,reports[1].p_operacion_id);assert.equal(reports[0].p_motivo,'salud');assert.equal(await evaluate("document.body.innerText.includes('Aprobar')"),false);
@@ -52,6 +54,20 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
    await evaluate("const input=document.querySelector('input');input.value='Revisado';input.dispatchEvent(new Event('input',{bubbles:true}));window.confirm=()=>true");await click('Aprobar');await wait("document.body.innerText.includes('No hay solicitudes')");assert.equal(decisions.at(-1).p_decision,'aprobada');assert.equal(decisions.at(-1).p_version_esperada,1);
   });
   await t.test('SUPERADMIN rechaza por el mismo flujo auditado',async()=>{rows=[row];await navigate('SUPERADMIN');await wait("!!document.querySelector('input')");await evaluate("const input=document.querySelector('input');input.value='Rechazo motivado';input.dispatchEvent(new Event('input',{bubbles:true}));window.confirm=()=>true");await click('Rechazar');await wait("document.body.innerText.includes('No hay solicitudes')");assert.equal(decisions.at(-1).p_decision,'rechazada');});
+  for(const role of ['ADMIN'])await t.test(role+' reporta desde el widget compartido del panel web, sin entrar a Campo',async()=>{
+   rows=[];await navigate(role,'web');await wait("document.body.innerText.includes('Marcación de Jornada')");
+   const before=reports.length;await click('Reportar mi ausencia');await wait("document.body.innerText.includes('Ausencia reportada:')");
+   assert.equal(reports.length,before+1);assert.equal('p_user_id' in reports.at(-1),false);
+   assert.equal(await evaluate("document.body.innerText.includes('Aprobar')"),false);
+   assert.equal(await evaluate("location.pathname.includes('/campo')"),false);
+  });
+  await t.test('SUPERADMIN ve exención personal y no envía reportes ni muestra acciones de marcar',async()=>{
+   rows=[];const before=reports.length;await navigate('SUPERADMIN','web');
+   await wait("document.body.innerText.includes('exento del control de asistencia')");
+   assert.equal(await evaluate("!!document.querySelector('form')"),false);
+   assert.equal(await evaluate("document.body.innerText.includes('Marcación de Jornada')"),false);
+   assert.equal(reports.length,before);
+  });
   assert.deepEqual(errors,[]);
  }finally{if(ws)ws.close();if(chrome)chrome.kill();vite.kill();await new Promise(r=>setTimeout(r,500));if(path.dirname(path.resolve(profile))!==path.resolve(tmpdir()) || !path.basename(profile).startsWith('attendance-a1-'))throw Error('Directorio temporal no válido');await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});}
 });

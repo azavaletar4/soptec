@@ -77,7 +77,9 @@ begin
  if p_desde is null or p_hasta is null or p_hasta<p_desde or p_hasta-p_desde>62 or (p_cursor_fecha is null)<>(p_cursor_usuario is null) then raise exception 'Rango o cursor inválido'; end if;
  return query select s.user_id,s.fecha,s.estado from (
   select distinct on (a.fecha,a.user_id) a.user_id,a.fecha,a.estado from public.asistencia_solicitudes a
-  where a.fecha between p_desde and p_hasta order by a.fecha,a.user_id,a.created_at desc,a.id desc
+  where a.fecha between p_desde and p_hasta
+   and exists(select 1 from public.profiles p where p.id=a.user_id and p.role<>'SUPERADMIN')
+  order by a.fecha,a.user_id,a.created_at desc,a.id desc
  ) s where p_cursor_fecha is null or (s.fecha,s.user_id)>(p_cursor_fecha,p_cursor_usuario)
  order by s.fecha,s.user_id limit 500;
 end $$;
@@ -86,7 +88,7 @@ end $$;
 create function public.asistencia_guardar_historial() returns trigger language plpgsql security definer set search_path=public as $$
 begin
  if tg_op='DELETE' then raise exception 'No se permite borrar marcaciones'; end if;
- if public.current_user_role() is null or public.current_user_role() not in ('SUPERADMIN','ADMIN','TECNICO_RED','SOPORTE','FACTURACION') or new.user_id is distinct from auth.uid() then raise exception 'Marcación no autorizada' using errcode='42501'; end if;
+ if public.current_user_role() is null or public.current_user_role() not in ('ADMIN','TECNICO_RED','SOPORTE','FACTURACION') or new.user_id is distinct from auth.uid() then raise exception 'Marcación no autorizada' using errcode='42501'; end if;
  if new.fecha<>(now() at time zone 'America/Lima')::date then raise exception 'No se permite modificar marcaciones históricas'; end if;
  if tg_op='UPDATE' and (old.fecha<>new.fecha or old.user_id<>new.user_id or old.id<>new.id) then raise exception 'Identidad de marcación inmutable'; end if;
  perform pg_advisory_xact_lock(hashtextextended(new.user_id::text||new.fecha::text,0));

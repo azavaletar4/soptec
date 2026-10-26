@@ -29,12 +29,20 @@ test('A0/A1 PostgreSQL aislado: permisos, historial, duplicados, auditoría y co
   sql(read('../../supabase/migrations/20260919020000_fase13_gestion_usuarios.sql').match(/create or replace function public\.current_user_role\(\)[\s\S]*?\$\$;/)[0]);
   sql(read('../../supabase/migrations/20261006020000_fase117_control_asistencia.sql'));
   sql(`insert into profiles(id,role,active) values('${id(1)}','SUPERADMIN',true),('${id(2)}','ADMIN',true),('${id(3)}','TECNICO_RED',true),('${id(4)}','TECNICO_RED',false),('${id(5)}','CLIENTE',true),('${id(6)}','TECNICO_RED',true),('${id(7)}','ADMIN',true);
-   insert into asistencia_registros(user_id,fecha,hora_ingreso) values('${id(3)}',${today}-2,now()-interval '2 days');
+   insert into asistencia_registros(user_id,fecha,hora_ingreso,estado,minutos_tardanza,inicio_almuerzo) values
+   ('${id(3)}',${today}-2,now()-interval '2 days','Puntual',0,null),
+   ('${id(1)}',${today}-2,now()-interval '2 days','Tardanza',60,null),
+   ('${id(1)}',${today},now()-interval '2 hours','Tardanza',60,now()-interval '1 hour');
    grant select,insert,update,delete on all tables in schema public to authenticated;
    grant usage on all sequences in schema public to authenticated;`);
-  const snapshot = sql(`select row_to_json(r)::text from asistencia_registros r;`);
+  const history = `select json_agg(r order by r.id)::text from asistencia_registros r where fecha<${today};`;
+  const snapshot = sql(history);
+  const superSnapshot = sql(`select json_agg(r order by r.id)::text from asistencia_registros r where user_id='${id(1)}';`);
   sql(read('../../supabase/migrations/20261027010000_asistencia_a0_a1.sql'));
-  await t.test('migración conserva íntegra la marcación histórica',()=>assert.equal(sql('select row_to_json(r)::text from asistencia_registros r;'),snapshot));
+  await t.test('migración conserva íntegras marcaciones históricas, incluyendo SUPERADMIN con tardanza previa',()=>{
+   assert.equal(sql(history),snapshot);
+   assert.equal(sql(`select json_agg(r order by r.id)::text from asistencia_registros r where user_id='${id(1)}';`),superSnapshot);
+  });
   await t.test('ADMIN lee configuración pero no puede modificarla ni crear feriados',()=>{
    assert.equal(as(2,'select count(*) from company_settings;'),'1');
    as(2,'update company_settings set tolerancia_min=99;');
@@ -50,7 +58,7 @@ test('A0/A1 PostgreSQL aislado: permisos, historial, duplicados, auditoría y co
   });
   await t.test('ADMIN y técnico reportan ausencia propia pendiente sin marcar',()=>{
    assert.equal(as(2,report(20)),'pendiente');assert.equal(as(3,report(30)),'pendiente');
-   assert.equal(sql(`select count(*) from asistencia_registros where fecha=${today};`),'0');
+   assert.equal(sql(`select count(*) from asistencia_registros where fecha=${today} and user_id<>'${id(1)}';`),'0');
    assert.equal(sql('select count(*) from asistencia_solicitud_eventos;'),'2');
   });
   await t.test('idempotencia y rechazo de duplicados, payload distinto y fecha retroactiva',()=>{
@@ -104,7 +112,7 @@ test('A0/A1 PostgreSQL aislado: permisos, historial, duplicados, auditoría y co
    assert.throws(()=>sql(`update asistencia_registros set estado='Falta' where fecha<${today};`));
    assert.throws(()=>sql('delete from asistencia_registros;'));
    assert.throws(()=>sql(`delete from profiles where id='${id(3)}';`));
-   assert.equal(sql(`select row_to_json(r)::text from asistencia_registros r where fecha<${today};`),snapshot);
+   assert.equal(sql(history),snapshot);
   });
   await t.test('validación de motivo/observación y fecha Perú aun con sesión en otro huso',()=>{
    assert.throws(()=>as(7,report(70,'no_permitido')));
@@ -119,6 +127,16 @@ test('A0/A1 PostgreSQL aislado: permisos, historial, duplicados, auditoría y co
    assert.throws(()=>as(1,resolve(60)));
    assert.equal(sql(`select estado from asistencia_solicitudes where id='${id(60)}';`),'pendiente');
    assert.equal(sql(`select count(*) from asistencia_registros where user_id='${id(6)}';`),'1');
+  });
+  await t.test('SUPERADMIN exento: no reporta ni modifica marcas por RPC; conserva lectura e historial',()=>{
+   assert.throws(()=>as(1,report(10)),/No autorizado/);
+   assert.equal(sql(`select count(*) from asistencia_solicitudes where user_id='${id(1)}';`),'0');
+   // Solicitud previa ficticia: se conserva para auditoría, fuera del resumen laboral.
+   sql(`insert into asistencia_solicitudes(id,user_id,fecha,motivo) values('${id(10)}','${id(1)}',${today},'salud');`);
+   assert.throws(()=>as(1,'select * from mark_attendance_fin_almuerzo(null,null);'),/Marcación no autorizada/);
+   assert.throws(()=>as(1,'select * from mark_attendance_salida(null,null);'),/Marcación no autorizada/);
+   assert.equal(as(1,`select json_agg(r order by r.id)::text from asistencia_registros r where user_id='${id(1)}';`),superSnapshot);
+   assert.equal(as(1,`select count(*) from asistencia_ausencias_resumen(${today},${today}) where user_id='${id(1)}';`),'0');
   });
   await t.test('ADMIN conserva RPC de marcación y técnico también',()=>{
    // Domingo/feriado podrían bloquear ingreso legítimamente: se comprueban

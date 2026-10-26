@@ -3,8 +3,12 @@
 ## Asistencia semiautomática A0/A1 — implementada localmente (26/10/2026)
 
 Solo SUPERADMIN configura horarios/geocerca/tolerancias/feriados (RLS y auditoría).
-ADMIN mantiene consulta/marcación y, con TECNICO_RED, reporta su propia ausencia
-de hoy Perú desde el widget de Campo/panel. Estado inicial «Pendiente de justificar»;
+ADMIN marca y reporta su propia ausencia desde el panel web; TECNICO_RED lo hace
+desde Campo. SUPERADMIN no tiene horario laboral ni está sujeto a asistencia:
+gestiona/aprueba, sin marcación ni reporte personal. Está excluido del tablero,
+agregados diarios y reporte mensual/CSV: no genera faltas, tardanzas ni «Sin marcar».
+Sus filas históricas se conservan íntegras y consultables, sin recalcularlas.
+Se reutiliza el mismo widget/RPC. Estado inicial «Pendiente de justificar»;
 SUPERADMIN aprueba/rechaza con motivo, versión y bloqueo concurrente. Solicitudes y
 eventos separados de marcaciones; historial protegido. Tablero/reporte/CSV distinguen
 pendientes, justificadas y rechazadas sin duplicar faltas; motivos privados no se
@@ -16,8 +20,28 @@ Detalle, archivos, comandos de pruebas y riesgos:
 `docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md` (estado vigente, no el antecedente).
 Pendiente revisión/aceptación del propietario y autorización separada de SQL y
 despliegue. **Sin push ni cambios productivos; A2/A3 no iniciadas.** Frontend activo
-`c11f6a8`, backend `16831c6` conservados. Cierres de devoluciones/equipos intactos y
-requisito permanente de al menos **3.000 clientes** vigente.
+`c11f6a8`, backend `16831c6` conservados. Cierres de devoluciones/equipos intactos.
+**Control de Asistencia: máximo 30 usuarios internos.** La meta permanente de
+al menos **3.000 clientes y contratos del ISP** no corresponde a trabajadores
+ni usuarios de asistencia, ni implica una certificación de ese volumen en A0/A1.
+Se mantienen las pruebas aprobadas (incluida la prueba sintética de paginación
+con 550 colaboradores), sin nuevas auditorías ni pruebas de 3.000 usuarios.
+La paginación ya implementada se conserva como protección de integridad de
+resultados; no se introdujeron estructuras o límites para 3.000 trabajadores.
+
+Verificación puntual de acceso: el router sí permite ADMIN en `/campo`, pero el
+flujo administrativo de asistencia no depende de esa ruta. El botón «Marcar
+asistencia» del panel abre el widget compartido con reporte personal ADMIN ya
+disponible. La habilitación local anterior del reporte propio SUPERADMIN queda
+sustituida por la exención confirmada por el propietario, antes de desplegar.
+La configuración actual es global y no ofrece exención por rol: ajuste mínimo
+en widget/reportes y guard de escritura/RPC de la migración aún pendiente.
+SUPERADMIN mantiene lectura histórica y gestión; sus nuevas escrituras personales
+se rechazan. No se crean tablas ni permisos adicionales para esta exención. Modal web con
+desplazamiento para mantener accesibles marcación y solicitudes. Configuración y
+resolución siguen exclusivas de SUPERADMIN. Pruebas actualizadas: 17/17 SQL,
+7/7 navegador; 11/11 unitarias (incluye nueva exención). Sin SQL aplicado, push ni
+despliegue. Detalle y alcance en el documento A0/A1 citado.
 
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 

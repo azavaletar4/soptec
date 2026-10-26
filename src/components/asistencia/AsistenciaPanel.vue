@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useAsistenciaStore } from '@/stores/asistencia';
+import { useAuthStore } from '@/stores/auth';
+import { exentoDeAsistencia } from '@/lib/asistenciaAusencias';
 import {
   diaSemanaLima,
   esDiaLaborable,
@@ -19,6 +21,8 @@ import ConfirmModal from '@/components/ConfirmModal.vue';
 // Web (resto del staff): misma logica de GPS/cronometro en un solo lugar en
 // vez de duplicarla en dos pantallas.
 const store = useAsistenciaStore();
+const auth = useAuthStore();
+const exento = computed(() => exentoDeAsistencia(auth.role));
 const loading = ref(false);
 const actionError = ref<string | null>(null);
 const actionNotice = ref<string | null>(null);
@@ -27,6 +31,7 @@ const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
+  if (exento.value) return;
   timer = setInterval(() => {
     now.value = Date.now();
   }, 1000);
@@ -140,7 +145,8 @@ function formatCountdown(ms: number): string {
 </script>
 
 <template>
-  <div class="surface p-3.5">
+  <p v-if="exento" class="text-sm">SUPERADMIN está exento del control de asistencia. Gestiona solicitudes y configuración desde Control de Asistencia.</p>
+  <div v-else class="surface p-3.5">
     <AusenciasPanel />
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-sm font-semibold">🕐 Marcación de Jornada</h2>

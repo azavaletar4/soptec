@@ -4,7 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '@/stores/auth';
 import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
-import { AUSENCIA_LABEL, cuentaFalta, fetchAusenciasResumen, type AusenciaResumen } from '@/lib/asistenciaAusencias';
+import { AUSENCIA_LABEL, cuentaFalta, exentoDeAsistencia, fetchAusenciasResumen, type AusenciaResumen } from '@/lib/asistenciaAusencias';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useAsistenciaStore } from '@/stores/asistencia';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -71,6 +71,7 @@ const filas = computed<FilaTablero[]>(() => {
   if (!tableroReady.value) return [];
   const q = search.value.trim().toLowerCase();
   return catalogs.staff
+    .filter(p => !exentoDeAsistencia(p.role))
     .filter((p) => !q || (p.full_name ?? p.email).toLowerCase().includes(q))
     .map((p) => {
       const registro = store.tablero.find((r) => r.user_id === p.id) ?? null;
@@ -200,6 +201,7 @@ const reporte = computed<FilaReporte[]>(() => {
   const diasLaborables = desde <= hastaCorte ? diasLaborablesEnRango(desde, hastaCorte, feriadosSet) : [];
 
   return catalogs.staff
+    .filter(p => !exentoDeAsistencia(p.role))
     .map((p) => {
       const propios = rangoRows.value.filter((r) => r.user_id === p.id);
       const diasConIngreso = new Set(propios.filter((r) => r.hora_ingreso).map((r) => r.fecha));
@@ -305,6 +307,7 @@ async function handleSaveSettings() {
     </div>
 
     <AusenciasPanel administracion @changed="loadTablero(); cargarReporte()" />
+    <p class="text-sm mb-3">SUPERADMIN está exento: no se incluye en indicadores laborales ni pendientes de marcación. Sus marcaciones históricas se conservan.</p>
     <p class="text-sm mb-3">Ausencias: {{ ausenciasDia.filter(a => a.estado === 'pendiente').length }} pendientes · {{ ausenciasDia.filter(a => a.estado === 'aprobada').length }} justificadas · {{ ausenciasDia.filter(a => a.estado === 'rechazada').length }} rechazadas. Las justificaciones no alteran las marcaciones.</p>
     <!-- Configuracion de geocerca/horarios -->
     <fieldset v-if="showSettings" :disabled="!canConfigure" class="surface p-4 mb-6">

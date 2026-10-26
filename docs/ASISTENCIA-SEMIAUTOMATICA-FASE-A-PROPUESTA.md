@@ -6,6 +6,58 @@ Autorización del propietario: implementar A0/A1, preparar migración y pruebas,
 crear commit local **sin push**, sin aplicar SQL ni desplegar. A2 y A3 no iniciadas.
 Este estado prevalece sobre el diagnóstico original conservado más abajo.
 
+### Verificación puntual de acceso y ajuste local posterior
+
+Código verificado: `src/router/index.ts` permite ADMIN y SUPERADMIN en `/campo`
+mediante `meta.roles`; el guard global aplica esa lista. Su inicio habitual es
+Dashboard del panel, mientras TECNICO_RED se redirige a Campo. No se modifican
+estas rutas ni se obliga a ADMIN a entrar a Campo.
+
+En `src/components/layout/AppLayout.vue`, el botón «Marcar asistencia» abre
+«Mi asistencia» y monta el mismo `AsistenciaPanel.vue` que usa Campo. Por ello
+ADMIN **ya podía marcar y reportar ausencias desde el panel web con A1**.
+Se limita la altura del cuerpo del modal y se habilita desplazamiento para
+mantener accesibles las marcaciones y el historial personal de solicitudes.
+
+**Regla vigente aclarada por el propietario:** SUPERADMIN no tiene horario laboral
+ni está sujeto al control de asistencia. Gestiona configuración y aprueba/rechaza,
+pero no marca ni reporta ausencia personal. La habilitación local de su reporte
+en la revisión anterior queda sustituida por esta exención antes de cualquier
+despliegue; nunca se aplicó a producción.
+
+La configuración existente es global (horarios, tolerancias, geocerca y feriados),
+sin opción de exención por rol. Se requiere un ajuste mínimo de código y de la
+migración local pendiente; no una nueva configuración, tabla, ruta o flujo:
+
+- Widget compartido: SUPERADMIN muestra aviso de exención, sin acciones de marcar
+  ni reportar; el panel web oculta su botón personal. ADMIN conserva ambas acciones
+  desde el panel y TECNICO_RED desde Campo. Gestión SUPERADMIN permanece intacta.
+- Reportes: SUPERADMIN se excluye de filas del tablero, agregados diarios y
+  reporte mensual/CSV; no aparece como «Sin marcar», ni suma faltas o tardanzas.
+  El resumen RPC también excluye sus eventuales solicitudes previas de indicadores.
+- Backend/RPC: `reportar_ausencia_hoy` admite solo ADMIN/TECNICO_RED. El trigger
+  compartido de escritura de marcaciones excluye SUPERADMIN, por lo que sus RPC
+  tampoco pueden crear/modificar marcas. Mantiene permiso de lectura y de gestión;
+  RLS de configuración/resolución continúa exclusiva de SUPERADMIN.
+- No se borran ni recalculan filas históricas, ni se ponen tardanzas previas a cero.
+  Permanecen consultables mediante la lectura existente de PostgreSQL/RLS; se
+  excluyen de indicadores laborales, sin crear otra pantalla de historial.
+
+Comprobación backend: asistencia se escribe mediante los RPC de PostgreSQL
+existentes, no mediante endpoints Node nuevos. `current_user_role()` consulta
+perfil activo; el reporte deriva el usuario de la sesión y permanece pendiente.
+Las marcaciones siguen con los cuatro RPC existentes, sin crear registros de
+ingreso por reportar ausencia. Sin aplicación de SQL ni comprobaciones productivas.
+
+Pruebas puntuales actualizadas para la exención: SUPERADMIN sin acciones personales
+en navegador, RPC que rechazan sus escrituras, preservación literal de marcas
+ficticias previas (incluida tardanza), lectura conservada y exclusión del resumen.
+Se conservan las pruebas ADMIN/técnico y de gestión SUPERADMIN. Resultado:
+**17/17 SQL, 7/7 navegador y 11/11 unitarias PASS**. No se crea otro flujo ni se
+duplican registros. No se repiten auditorías generales.
+
+### Implementación A0/A1
+
 - **A0:** RLS limita cambios de `company_settings` y `feriados` a SUPERADMIN;
   un trigger valida también al actor y audita valores anteriores/nuevos.
   ADMIN mantiene consulta (configuración deshabilitada para edición) y marcación;
@@ -61,8 +113,9 @@ Este estado prevalece sobre el diagnóstico original conservado más abajo.
 
 ### Validación local y pendientes
 
-Resultado final: **16/16 SQL, 5/5 navegador y 10/10 unitarias PASS**
-(el conteo de Node incluye los dos contenedores de suite: 29 casos y 2 suites).
+Resultado vigente: **17/17 SQL, 7/7 navegador y 11/11 unitarias PASS** tras la
+exención SUPERADMIN (conserva casos anteriores y añade comprobación de exención).
+El conteo de Node incluye los contenedores de suite.
 `npm run build` PASS (vue-tsc + Vite); `git diff --check` PASS.
 Vite conserva aviso de chunks grandes de librerías existentes; no se rediseñan
 ni reconstruyen módulos ajenos para resolver ese aviso.
@@ -96,9 +149,17 @@ perfiles actuales; no reconstruye altas/bajas o cambios históricos de rol. No s
 implementan calendarios individuales, vacaciones, descansos, medios días ni A2/A3.
 El trigger de historial hará fallar un borrado futuro de perfil que intente borrar
 marcaciones en cascada; se debe conservar/desactivar el perfil. La prueba de 550
-colaboradores valida paginación, no certifica rendimiento integral. SmartRayco debe
-soportar **al menos 3.000 clientes** de forma estable; esa certificación transversal
-sigue pendiente. Versiones productivas conservadas: frontend `c11f6a8`, backend
+colaboradores valida paginación como prueba sintética de regresión, no representa
+la dotación prevista. **Control de Asistencia tendrá como máximo 30 usuarios
+internos.** La meta de **al menos 3.000 clientes y contratos del ISP** corresponde
+al negocio ISP, no a trabajadores ni usuarios de asistencia; no es un requisito
+de capacidad ni una certificación pendiente de A0/A1. Se mantienen las pruebas
+aprobadas, sin repetir auditorías ni pruebas de 3.000 usuarios de asistencia.
+La referencia no introdujo límites ni estructuras para 3.000 trabajadores;
+se incorporaron paginación de consultas/reportes y la prueba sintética de 550
+colaboradores para comprobar integridad de resultados. Se conservan como
+protecciones de lectura, sin exigir ese volumen de personal.
+Versiones productivas conservadas: frontend `c11f6a8`, backend
 `16831c6`; devoluciones y equipos seriados siguen cerrados operativamente.
 
 ## Antecedente: diagnóstico y propuesta inicial, anterior a esta implementación
@@ -387,8 +448,10 @@ una guarda de Vue o un filtro de menú no sustituye permisos de servidor.
   obligación histórica al cambiarle hoy el rol; preparar elegibilidad efectiva
   por fecha en el resolvedor, sin alterar registros de marcación.
 - Escala: lecturas de solicitudes y mensual paginadas por fecha/usuario, con
-  índices y sin una consulta por colaborador/día. La meta de 3.000 clientes
-  sigue vigente; clientes no equivalen a 3.000 empleados ni a carga ya certificada.
+  índices y sin una consulta por colaborador/día. Capacidad aclarada por el
+  propietario: máximo 30 usuarios internos de asistencia. La meta de 3.000
+  clientes y contratos es del ISP; no exige 3.000 trabajadores ni pruebas de
+  ese volumen para asistencia. Se conservan las pruebas ya aprobadas.
 - Rollback futuro: desactivar entradas y RPC nuevas de escritura conservando
   solicitudes/eventos; no DROP de evidencias ni restauración destructiva de tablas.
 

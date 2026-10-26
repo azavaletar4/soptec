@@ -10,6 +10,11 @@ export const AUSENCIA_LABEL: Record<AusenciaEstado, string> = {
   pendiente: 'Pendiente de justificar', aprobada: 'Ausencia justificada', rechazada: 'Justificación rechazada',
 };
 
+/** Exención confirmada por el propietario; no cambia ni borra hechos históricos. */
+export function exentoDeAsistencia(role: string | null): boolean {
+  return role === 'SUPERADMIN';
+}
+
 export async function fetchAusenciasResumen(desde: string, hasta: string): Promise<AusenciaResumen[]> {
   const { supabase } = await import('@/lib/supabase');
   const rows: AusenciaResumen[] = [];
