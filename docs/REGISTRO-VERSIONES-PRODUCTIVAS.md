@@ -16,13 +16,46 @@ el primer muestreo de contadores; frontend de devoluciones verificado a las
 
 | | Backend | Frontend |
 |---|---|---|
-| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia aprobada `fb56057` (publicación `c11f6a8`) |
-| Commit anterior | `53f284c` | `99dc78b` |
-| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-campo-returns:c11f6a8-20261026T171151Z` |
-| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Fuente real frontend Fase 175 + tres archivos de custodia aprobados; Puntos/Analítica y runtime nginx conservados |
-| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 17:14:07 UTC |
-| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos y Analítica conservados + acceso a devoluciones desde Mi custodia |
-| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/recovery/frontend.tar`, tag `smartrayco-campo-returns-rollback:20261026T171151Z` |
+| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` |
+| Commit anterior | `53f284c` | `711a7fc` |
+| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-asistencia-visual:4db50f9-20261026T211911Z` |
+| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Fuente real (`711a7fc`, ya con Puntos/Devoluciones/A0-A1) + simplificación visual móvil de "Reportar ausencia"; nada más tocado |
+| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 21:20:41 UTC |
+| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1 (con exclusión SUPERADMIN) + desplegable móvil compacto |
+| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-visual-4db50f9-20261026T211911Z/recovery/frontend.tar`, tag `smartrayco-asistencia-visual-rollback:20261026T211911Z` |
+
+### Asistencia A0/A1 — migración aplicada y frontend desplegado (2026-10-26)
+
+- Migración `supabase/migrations/20261027010000_asistencia_a0_a1.sql`
+  **APLICADA** a Supabase de producción ~20:27 UTC. 113 marcaciones
+  históricas verificadas idénticas antes/después (mismo hash); permisos
+  re-verificados de solo lectura tras aplicar.
+- Frontend en 2 pasos selectivos, sin push a GitHub:
+  1. `711a7fc` (A0/A1 + exclusión SUPERADMIN) sobre `c11f6a8` →
+     `smartrayco-asistencia-a0a1:711a7fc-20261026T203334Z`.
+  2. `4db50f9` (simplificación visual móvil) sobre el paso 1 →
+     `smartrayco-asistencia-visual:4db50f9-20261026T211911Z`.
+- **Incidente real en el paso 1**: la primera promoción omitió el override
+  del backend (`backend.override.json`) y Compose regresionó el backend a
+  `smartrayco-backend:latest`, perdiendo la corrección de contadores de
+  Fase 175. Sin caída de API, sin pérdida de datos. Corregido reaplicando
+  con ambos overrides juntos. **Lección aplicada en el paso 2**: siempre
+  pasar `-f <backend.override.json> -f <frontend.override.json>` juntos y
+  verificar `docker compose ... config` ANTES de aplicar — en el paso 2 se
+  confirmó así, y el log del despliegue mostró `backend Running` (no
+  recreado), ID de contenedor y `StartedAt` idénticos antes/después.
+- Backend nunca reconstruido ni reiniciado en ningún paso de Asistencia.
+  Analítica de Tráfico confirmada operativa (~670+ muestras por ciclo, sin
+  error) después de ambos despliegues de frontend.
+- Rollback del frontend preparado, no usado: tag
+  `smartrayco-asistencia-visual-rollback:20261026T211911Z` (imagen
+  `711a7fc` respaldada en
+  `/opt/smartrayco-staging/asistencia-visual-4db50f9-20261026T211911Z/recovery/frontend.tar`).
+  Rollback de la migración preparado y verificado en Postgres aislado:
+  `scripts/sql/asistencia-a0-a1-rollback.sql` (no usado, no aplicado).
+- Pruebas (commit `4db50f9`): 7/7 unitarias + 8/8 navegador + `vue-tsc`
+  limpio. **Pendiente**: validación funcional real del propietario desde
+  panel web y celular Android (App de Campo).
 
 ### Devoluciones implementadas, desplegadas y validadas — flujo cerrado
 

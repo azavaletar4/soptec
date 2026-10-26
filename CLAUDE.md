@@ -1,27 +1,41 @@
 # SmartRayco — guía para Claude Code
 
-## Asistencia semiautomática A0/A1 — implementación local, sin despliegue
+## Asistencia semiautomática A0/A1 — ACTIVA en producción (26/10/2026)
 
-A0/A1 implementadas localmente por autorización del propietario el 26/10/2026.
-Consultar primero `docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md`, sección
-«Estado vigente»: SUPERADMIN gestiona configuración y aprueba/rechaza, pero está
-**exento de asistencia**: no tiene horario, marcación ni reporte personal; no suma
-faltas, tardanzas ni pendientes de marcación. Sus marcas históricas se conservan.
-ADMIN marca/reporta desde el panel web y técnico desde Campo (mismo widget/RPC),
-resolución auditada, protección del historial y pruebas aisladas. Migración
-`20261027010000_asistencia_a0_a1.sql` **no aplicada a producción**; sin push ni
-despliegue. A2/A3 no iniciadas. No confundir justificaciones con marcaciones.
-Producción conservada: frontend `c11f6a8`, backend `16831c6`; no reabrir devoluciones
-ni equipos seriados. Permanece la meta de al menos 3.000 clientes.
+A0/A1 desplegadas y operativas. SUPERADMIN gestiona configuración y
+aprueba/rechaza, pero está **exento de asistencia**: no tiene horario,
+marcación ni reporte personal; no suma faltas, tardanzas ni pendientes de
+marcación — confirmado por `asistencia_ausencias_resumen` y el trigger de
+marcación, que rechaza sus escrituras. Sus marcas históricas se conservan
+intactas. ADMIN marca/reporta desde el panel web y técnico desde Campo
+(mismo widget/RPC), resolución auditada, protección del historial.
 
-**Commit definitivo (local, sin push):** `fb7c3e247f56f901cf148e066246f760b874315f`
-en `feature/asistencia-a0-a1-local` (worktree
-`scripts/inventory-auth-lab/runtime/asistencia-a0-a1-worktree`), sobre `1fa2c59`
-— agrega la exclusión real de SUPERADMIN (migración + frontend). Verificado por
-Claude Code el 2026-10-26: 17/17 SQL, 7/7 navegador, 11/11 unitarias, `vue-tsc`
-limpio. **Pendiente de activación**: aplicar la migración a Supabase y
-desplegar el frontend requieren autorización explícita separada — ninguna de
-las dos cosas ocurrió todavía.
+- **Migración `20261027010000_asistencia_a0_a1.sql`: APLICADA** a Supabase
+  de producción el 2026-10-26 ~20:27 UTC. Verificado de solo lectura antes
+  y después: 113 marcaciones históricas, mismo hash — ninguna fila se
+  alteró. Permisos re-verificados (`has_function_privilege`): las 4 RPC
+  de marcación siguen abiertas a `authenticated`/cerradas a `anon`; las 3
+  RPC nuevas solo `authenticated`; escritura directa de
+  `asistencia_registros` cerrada para todos (solo vía RPC).
+- **Frontend: ACTIVO**, imagen `smartrayco-asistencia-visual:4db50f9-20261026T211911Z`
+  (commit `4db50f9`, simplificación visual móvil de "Reportar ausencia" —
+  colapsable, sin perder funciones; ver commit para detalle). Construido
+  sobre `smartrayco-asistencia-a0a1:711a7fc-...` (commit `711a7fc`, A0/A1 +
+  exclusión real de SUPERADMIN), que ya incluía Puntos y Devoluciones.
+- **Backend: SIN TOCAR** — sigue en `smartrayco-backend-counters:16831c6-...`
+  (misma corrección de contadores de Fase 175). Confirmado por ID de
+  contenedor y `StartedAt` idénticos antes/después de ambos despliegues de
+  frontend de A0/A1 (el de `711a7fc` y el de `4db50f9`).
+- Rollback del frontend preparado y sin usar: `smartrayco-asistencia-visual-rollback:20261026T211911Z`
+  (imagen anterior `711a7fc` respaldada en
+  `/opt/smartrayco-staging/asistencia-visual-4db50f9-20261026T211911Z/recovery/frontend.tar`).
+- Rama `feature/asistencia-a0-a1-local`, commits `1fa2c59` → `fb7c3e2` →
+  `0dfecfa` → `d984e56` → `711a7fc` → `4db50f9`. **Sin push a GitHub** —
+  el despliegue usó el mecanismo selectivo (override de 1 solo servicio),
+  no el checkout de `/opt/smartrayco`. A2/A3 no iniciadas.
+- Pruebas (commit `4db50f9`): 7/7 unitarias, 8/8 navegador, `vue-tsc`
+  limpio. Validación funcional real desde panel/celular: **pendiente del
+  propietario**.
 
 ## Antes de empezar
 

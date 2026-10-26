@@ -70,8 +70,48 @@ quedan intactos, ADMIN recupera edición de configuración, las RPC nuevas
 quedan sin permiso — nunca se borran `asistencia_solicitudes`/eventos.
 Pantallas de ADMIN/TECNICO_RED revisadas: todos los cambios son aditivos
 (exención visual/filtrado de SUPERADMIN), ninguna función existente se quita.
-**Todavía sin aplicar la migración ni desplegar el frontend** — falta
-autorización explícita productiva para cada paso.
+
+## Asistencia A0/A1 — DESPLEGADA (Claude Code, 26/10/2026 ~21:21 UTC)
+
+**Migración aplicada a Supabase de producción** (~20:27 UTC): 113 marcaciones
+históricas verificadas idénticas antes/después (mismo hash); permisos
+re-verificados de solo lectura (RPC de marcación siguen abiertas a
+`authenticated`, cerradas a `anon`; las 3 RPC nuevas solo `authenticated`;
+escritura directa de `asistencia_registros` cerrada para todos). Nota: el
+hash de la tabla completa cambió entre dos verificaciones posteriores por
+uso real legítimo del día (el trigger permite escribir solo la fila de
+hoy) — el histórico (`fecha < hoy`) queda protegido por el propio trigger,
+no solo por observación puntual.
+
+**Frontend desplegado en 2 pasos selectivos** (mecanismo de override de 1
+solo servicio, sin push a GitHub):
+1. `smartrayco-asistencia-a0a1:711a7fc-20261026T203334Z` (commit `711a7fc`
+   — A0/A1 + exclusión SUPERADMIN) sobre la base real (`c11f6a8`, ya con
+   Puntos y Devoluciones). **Incidente real en este paso**: el primer
+   intento de promoción omitió el override del backend y lo regresionó a
+   `smartrayco-backend:latest` (perdiendo la corrección de contadores de
+   Fase 175) — corregido de inmediato reaplicando con ambos overrides;
+   sin pérdida de datos, sin caída de API.
+2. `smartrayco-asistencia-visual:4db50f9-20261026T211911Z` (commit
+   `4db50f9` — simplificación visual móvil de "Reportar ausencia") sobre
+   el paso anterior. Esta vez se verificó la configuración EFECTIVA de
+   Compose (ambos overrides) antes de aplicar — backend confirmado
+   `Running` (no recreado) en el propio log del despliegue, ID de
+   contenedor y `StartedAt` idénticos antes/después.
+
+**Backend: nunca reconstruido ni reiniciado** en ningún paso de Asistencia
+— sigue en `smartrayco-backend-counters:16831c6-...`, mismo contenedor
+desde la corrección de Fase 175. Confirmado también que Analítica de
+Tráfico sigue operativa (ciclos de ~670+ muestras sin error, solo
+Administrador) después de ambos despliegues de frontend.
+
+Rollback del frontend preparado, no usado:
+`smartrayco-asistencia-visual-rollback:20261026T211911Z` →
+`/opt/smartrayco-staging/asistencia-visual-4db50f9-20261026T211911Z/recovery/frontend.tar`.
+
+Pruebas (commit `4db50f9`): 7/7 unitarias + 8/8 navegador + `vue-tsc`
+limpio. **Pendiente**: validación funcional real del propietario desde
+panel web y celular (Android, App de Campo).
 
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 
