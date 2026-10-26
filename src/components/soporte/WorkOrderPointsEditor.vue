@@ -16,7 +16,7 @@ const reviewError = ref('');
 const currentPoints = computed(() => review.value ? review.value.points : props.points);
 let reviewGeneration = 0;
 const allowed = computed(() => isAdmin.value && !reviewLoading.value && !!review.value && !review.value.confirmation &&
-  !review.value.historical && (pointsAreEditable(review.value.status) || review.value.finished));
+  (!review.value.historical || review.value.prospectPointsPending === true) && (pointsAreEditable(review.value.status) || review.value.finished));
 const canConfirm = computed(() => isAdmin.value && !reviewLoading.value && !!review.value?.finished &&
   !review.value.confirmation && !!review.value.technicalCompletedAt && !!review.value.crew.length);
 const showConfirmation = ref(false);
@@ -124,7 +124,8 @@ const formatPoints = (points: number) => new Intl.NumberFormat('es-PE', { maximu
     <p v-if="reviewLoading" class="text-xs mt-2">Consultando confirmación administrativa…</p>
     <p v-if="reviewError" role="alert" class="text-xs text-red-600 mt-2">{{ reviewError }}</p>
     <button v-if="isAdmin" type="button" class="text-xs text-sky-700 mt-2" :disabled="saving || reviewLoading" @click="loadReview">Actualizar revisión de puntos</button>
-    <p v-if="review?.historical" class="text-xs text-amber-700 mt-2">Prueba de octubre: puntaje histórico protegido. Esta confirmación no acredita puntos oficiales.</p>
+    <p v-if="review?.prospectPointsPending" class="text-xs text-amber-700 mt-2">Alta de Prospecto con puntos pendientes: ADMIN/SUPERADMIN debe asignar y confirmar un valor mayor que 0 antes del cierre administrativo definitivo.</p>
+    <p v-else-if="review?.historical" class="text-xs text-amber-700 mt-2">Prueba de octubre: puntaje histórico protegido. Esta confirmación no acredita puntos oficiales.</p>
     <form v-if="allowed" class="mt-2 space-y-2" @submit.prevent="save">
       <label class="block text-xs">Nuevo puntaje
         <input v-model.number="draft" type="number" :step="jobType === 'ticket' ? '1' : 'any'" :min="jobType === 'ticket' ? 1 : 0" required class="field-input" :disabled="saving" />

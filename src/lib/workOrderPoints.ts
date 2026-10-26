@@ -21,6 +21,8 @@ export interface WorkOrderPointReview {
   confirmation: PointConfirmation | null; lastConfirmation: PointConfirmation | null;
   recurrencePenalty?: number;
   definitiveClosure?: boolean;
+  /** Origen comprobado por la RPC: Alta nueva de Prospecto aún con cero inicial. */
+  prospectPointsPending?: boolean;
 }
 
 /** El selector del reporte entrega horas sin zona. Conservar históricos;

@@ -1,5 +1,7 @@
 # Puntos: preparación final y bloqueo de compatibilidad — 25/10/2026 Lima
 
+Actualización posterior por excepción autorizada: [Alta automática de Prospectos con 0 inicial](PUNTOS-EXCEPCION-PROSPECTOS-20261025.md). La implementación sustituye solo esa conversión por una RPC atómica con origen validado en backend; añade la candidata 210000, sin modificar las tres originales ni ejecutar producción. El bloqueo descrito abajo corresponde al estado previo y se conserva como evidencia.
+
 ## Dictamen
 
 **No recomiendo todavía autorizar la ejecución productiva.** El artefacto quedó certificado contra el frontend realmente desplegado; las colas del cliente desplegado pasan al cliente nuevo sin pérdida; el ensayo de recuperación conserva escrituras posteriores mediante una pausa coordinada y una copia reciente B1. Se encontró, sin embargo, una incompatibilidad concreta en una creación de Alta iniciada por el módulo de Clientes, que está fuera del alcance autorizado para correcciones.

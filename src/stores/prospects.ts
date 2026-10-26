@@ -1,7 +1,17 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
-import type { Prospect, ProspectFollowup } from '@/types/domain';
+import type { Client, Prospect, ProspectFollowup } from '@/types/domain';
+
+export interface ProspectConversionReceipt {
+  prospect_id: string;
+  client_id: string;
+  contract_id: string;
+  installation_id: string;
+  initial_points: 0;
+  replayed: boolean;
+}
+type ConversionClient = Pick<Client, 'document_type' | 'document_number' | 'first_name' | 'last_name' | 'phone' | 'phone_2' | 'email' | 'address' | 'status'>;
 
 const PROSPECT_SELECT = '*, zones(id, name), plans(id, name)';
 
@@ -29,6 +39,21 @@ export const useProspectsStore = defineStore('prospects', () => {
     const created = data as unknown as Prospect;
     prospects.value.unshift(created);
     return created;
+  }
+
+  /** Una sola transacción y recibo por Prospecto; nunca crear las tres filas desde el navegador. */
+  async function convertToClient(prospectId: string, client: ConversionClient, referrerId: string | null = null) {
+    const { data, error } = await supabase.rpc('convert_prospect_with_installation', {
+      p_prospect_id: prospectId, p_client: client, p_referrer_id: referrerId,
+    });
+    if (error) throw error;
+    const receipt = data as unknown as ProspectConversionReceipt;
+    if (!receipt?.client_id || !receipt.contract_id || !receipt.installation_id || receipt.prospect_id !== prospectId || receipt.initial_points !== 0) {
+      throw new Error('No se recibió el recibo de conversión. Reintenta el mismo Prospecto para recuperar su resultado.');
+    }
+    const existing = prospects.value.find(p => p.id === prospectId);
+    if (existing) { existing.estado = 'convertido'; existing.converted_client_id = receipt.client_id; }
+    return receipt;
   }
 
   async function updateProspect(id: string, payload: Partial<Prospect>) {
@@ -79,6 +104,7 @@ export const useProspectsStore = defineStore('prospects', () => {
     loading,
     fetchProspects,
     createProspect,
+    convertToClient,
     updateProspect,
     markConverted,
     fetchFollowups,

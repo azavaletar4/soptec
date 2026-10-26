@@ -386,7 +386,7 @@ async function handleSubmit() {
   // normal, pero handleSubmit no se auto-protegia si se disparaba por otra
   // via mientras una llamada anterior seguia en vuelo.
   if (saving.value) return;
-  if (duplicateClient.value) {
+  if (duplicateClient.value && !convertingProspectId.value) {
     formError.value = `Ya existe un cliente con ese documento (${duplicateClient.value.first_name} ${duplicateClient.value.last_name}). Consulta su ficha existente para conservar sus relaciones e historial.`;
     return;
   }
@@ -397,7 +397,7 @@ async function handleSubmit() {
   // en vez de "sin validacion". Solo aplica al convertir un prospecto: en
   // el alta manual normal dos clientes pueden compartir telefono a
   // proposito (pareja, oficina) y no corresponde interrumpirla.
-  if (!editing.value && convertingProspectId.value && form.value.phone) {
+  if (!editing.value && convertingProspectId.value && form.value.phone && !duplicateClient.value) {
     const dupPhone = clientsStore.clients.find(
       (c) => c.phone === form.value.phone || c.phone_2 === form.value.phone,
     );
@@ -422,6 +422,21 @@ async function handleSubmit() {
       email: form.value.email || null,
       address: form.value.address || null,
     };
+    if (!editing.value && convertingProspectId.value) {
+      // El backend acredita el Prospecto y confirma cliente/contrato/Alta juntos.
+      // Un reintento recupera el recibo; no repite escrituras parciales.
+      const receipt = await prospectsStore.convertToClient(convertingProspectId.value, payload, referenteId.value || null);
+      toast.success(receipt.replayed
+        ? 'Conversión ya completada: se recuperó la misma ficha y orden de Alta.'
+        : 'Prospecto convertido: cliente, servicio y Alta con 0 puntos iniciales. Asigna puntos antes del cierre administrativo.');
+      convertingProspectId.value = null;
+      convertingProspectName.value = null;
+      convertingZoneId.value = null;
+      convertingPlanId.value = null;
+      showModal.value = false;
+      router.push(`/clientes/${receipt.client_id}`);
+      return;
+    }
     let savedId: string;
     if (editing.value) {
       const saved = await clientsStore.updateClient(editing.value.id, payload);
@@ -440,91 +455,7 @@ async function handleSubmit() {
         }
       }
 
-      // Fase 146 — al convertir un prospecto, ademas del cliente se genera
-      // el contrato (plan/tarifa/zona) y la orden de Alta, para que ese
-      // plan y tarifa realmente lleguen a la orden -- antes la Alta se
-      // creaba sin contrato (Fase 145) y quedaba sin plan ni tarifa. Mismo
-      // criterio que "+ Nuevo servicio" de la ficha del cliente
-      // (ClientDetailView.vue): monthly_fee se toma del plan elegido,
-      // installation_address parte de la direccion del cliente (se ajusta
-      // despues en la ficha del servicio si hace falta, igual que alli).
-      // No se toca pppoe_username/mikrotik_* -- esa vinculacion sigue
-      // siendo un paso aparte, manual, via el flujo de provision existente.
-      let contractId: string | null = null;
-      let installationCreated = false;
-      if (convertingProspectId.value) {
-        try {
-          const plan = convertingPlanId.value ? catalogs.plans.find((p) => p.id === convertingPlanId.value) : null;
-          const contract = await contractsStore.createContract({
-            client_id: savedId,
-            plan_id: convertingPlanId.value || null,
-            monthly_fee: plan ? Number(plan.price) : 0,
-            installation_address: form.value.address || null,
-            zone_id: convertingZoneId.value || null,
-          });
-          contractId = contract.id;
-        } catch (e) {
-          toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo generar el contrato/servicio. Puedes crearlo manualmente desde la ficha del cliente.'));
-        }
 
-        // Orden de Alta — mismo store/flujo que "Nueva instalación" en
-        // Soporte (InstalacionesView.vue): mismos defaults reales de la
-        // tabla (status 'pending', priority 'medium'), sin agendar fecha
-        // ni asignar tecnico (eso lo decide el staff despues, por el
-        // procedimiento normal). Si algo de esto falla, el cliente igual
-        // queda creado (mismo criterio que el referido arriba) — se avisa
-        // y se puede completar a mano desde Soporte → Instalaciones.
-        try {
-          // Conversión automática: conservar explícitamente la regla vigente de Alta (10).
-          await installationsStore.createInstallation({ client_id: savedId, contract_id: contractId, points: 10 });
-          installationCreated = true;
-        } catch (e) {
-          toast.error(getErrorMessage(e, 'El cliente se creó, pero no se pudo generar la orden de Alta. Puedes crearla manualmente desde Soporte → Instalaciones.'));
-        }
-      }
-
-      // Fase 147 — el prospecto SOLO se marca 'convertido' si las TRES
-      // escrituras (cliente, contrato, instalacion) terminaron bien --
-      // antes (Fase 145/146) se marcaba apenas el cliente existia, aunque
-      // el contrato y la instalacion hubieran fallado los dos. Si algo
-      // fallo, el cliente (y el contrato, si llego a crearse) quedan en
-      // pie -- no se borran ni revierten, eso requeriria un borrado
-      // compensatorio sobre datos reales -- pero el prospecto sigue
-      // apareciendo como "por convertir" en Prospectos. Un reintento desde
-      // ahi vuelve a pasar por el chequeo de documento (arriba, bloquea si
-      // coincide) y de telefono (arriba, avisa y pide confirmar si
-      // coincide) de este mismo formulario -- protege contra el caso
-      // comun (reintentar con los mismos datos), no es una garantia de
-      // unicidad a nivel de base de datos; completar el contrato/
-      // instalacion que falto queda a mano, desde la ficha del cliente o
-      // Soporte.
-      if (convertingProspectId.value) {
-        const conversionComplete = contractId !== null && installationCreated;
-        if (conversionComplete) {
-          try {
-            await prospectsStore.markConverted(convertingProspectId.value, savedId);
-            toast.success('Prospecto convertido: se creó el cliente, su servicio y su orden de Alta.');
-          } catch (e) {
-            toast.error(
-              getErrorMessage(
-                e,
-                'El cliente, el servicio y la orden de Alta se crearon, pero no se pudo marcar el prospecto como convertido. Puedes reintentar la conversión desde Prospectos: te avisaremos si detectamos que ya existe un cliente con ese documento o teléfono.',
-              ),
-            );
-          }
-        } else {
-          toast.error(
-            'El cliente se creó, pero falta completar el servicio o la orden de Alta — revísalo en su ficha. El prospecto sigue pendiente de convertir en Prospectos: si reintentas, te avisaremos si detectamos que ya existe un cliente con ese documento o teléfono.',
-          );
-        }
-        convertingProspectId.value = null;
-        convertingProspectName.value = null;
-        convertingZoneId.value = null;
-        convertingPlanId.value = null;
-        showModal.value = false;
-        router.push(`/clientes/${savedId}`);
-        return;
-      }
     }
 
     showModal.value = false;
