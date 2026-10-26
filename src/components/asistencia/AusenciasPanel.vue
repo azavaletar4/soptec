@@ -90,18 +90,20 @@ onMounted(load);
       <span class="text-slate-400">{{ abierto ? '▲' : '▼' }}</span>
     </button>
     <div v-show="abierto" class="mt-2.5 space-y-2.5">
-      <form class="grid gap-2" @submit.prevent="reportar">
+      <form class="grid gap-2.5" @submit.prevent="reportar">
         <p class="text-xs text-slate-500">Fecha: {{ fecha }}</p>
-        <label class="text-xs text-slate-600">Motivo
-          <select v-model="motivo" class="input" @change="nuevaOperacion">
+        <label class="block">
+          <span class="field-label">Motivo</span>
+          <select v-model="motivo" class="field-input" @change="nuevaOperacion">
             <option value="salud">Salud</option>
             <option value="asuntos_personales">Asuntos personales</option>
             <option value="emergencia">Emergencia</option>
             <option value="otros">Otros</option>
           </select>
         </label>
-        <label class="text-xs text-slate-600">Observación (opcional)
-          <textarea v-model="observacion" maxlength="1000" class="input" rows="2" @input="nuevaOperacion" />
+        <label class="block">
+          <span class="field-label">Observación (opcional)</span>
+          <textarea v-model="observacion" maxlength="1000" class="field-input w-full resize-none" rows="2" @input="nuevaOperacion" />
         </label>
         <button class="btn-primary w-full text-sm" :disabled="busy">{{ busy ? 'Enviando...' : 'Enviar solicitud' }}</button>
       </form>
