@@ -5,6 +5,24 @@ export interface Ausencia extends AusenciaResumen {
   id: string; motivo: string; observacion: string | null; version: number;
   created_at: string; decision_motivo: string | null; resolved_at: string | null;
   profile?: { full_name: string | null; email: string } | null;
+  /** Quien resolvio (aprobo/rechazo) — solo se pide/llena cuando se lee como SUPERADMIN. */
+  resolver?: { full_name: string | null; email: string } | null;
+}
+
+/**
+ * Comentario que viaja al aprobar si SUPERADMIN no escribio uno propio — el
+ * backend (resolver_ausencia) exige un p_motivo no vacio para CUALQUIER
+ * decision (RPC sin distincion aprobada/rechazada, ver migracion A0/A1), asi
+ * que esto cumple esa regla de auditoria sin forzar a escribir nada para un
+ * caso simple. Rechazar NUNCA usa este default — siempre pide un motivo real.
+ */
+export const DECISION_MOTIVO_APROBAR_DEFAULT = 'Aprobado sin observaciones adicionales';
+
+/** Texto efectivo que se enviaria al backend para una decision dada. */
+export function decisionMotivoEfectivo(decision: 'aprobada' | 'rechazada', escrito: string): string {
+  const limpio = escrito.trim();
+  if (limpio) return limpio;
+  return decision === 'aprobada' ? DECISION_MOTIVO_APROBAR_DEFAULT : '';
 }
 export const AUSENCIA_LABEL: Record<AusenciaEstado, string> = {
   pendiente: 'Pendiente de justificar', aprobada: 'Ausencia justificada', rechazada: 'Justificación rechazada',

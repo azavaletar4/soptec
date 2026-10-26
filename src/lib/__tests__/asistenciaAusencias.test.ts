@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cuentaFalta, exentoDeAsistencia, AUSENCIA_LABEL, AUSENCIA_LABEL_CORTO, AUSENCIA_BADGE_CLASS } from '../asistenciaAusencias';
-import { fechaLimaISO, formatHora, diasLaborablesEnRango } from '../asistenciaReglas';
+import { cuentaFalta, exentoDeAsistencia, AUSENCIA_LABEL, AUSENCIA_LABEL_CORTO, AUSENCIA_BADGE_CLASS, decisionMotivoEfectivo, DECISION_MOTIVO_APROBAR_DEFAULT } from '../asistenciaAusencias';
+import { fechaLimaISO, formatHora, formatFechaHora, diasLaborablesEnRango } from '../asistenciaReglas';
 
 test('SUPERADMIN exento de indicadores; ADMIN/técnico conservan obligación laboral', () => {
   assert.equal(exentoDeAsistencia('SUPERADMIN'), true);
@@ -40,4 +40,17 @@ test('etiquetas/colores cortos del widget movil cubren los 3 estados, sin tocar 
   }
   assert.equal(AUSENCIA_LABEL_CORTO.pendiente, 'Pendiente');
   assert.equal(AUSENCIA_LABEL.pendiente, 'Pendiente de justificar'); // sin cambios, lo usa la bandeja SUPERADMIN
+});
+test('aprobar admite comentario vacío (usa un valor por defecto); rechazar SIEMPRE exige texto real', () => {
+  assert.equal(decisionMotivoEfectivo('aprobada', ''), DECISION_MOTIVO_APROBAR_DEFAULT);
+  assert.equal(decisionMotivoEfectivo('aprobada', '   '), DECISION_MOTIVO_APROBAR_DEFAULT);
+  assert.equal(decisionMotivoEfectivo('aprobada', 'Coordinado con el equipo'), 'Coordinado con el equipo');
+  assert.equal(decisionMotivoEfectivo('rechazada', ''), ''); // cadena vacía -> el boton de Rechazar debe seguir deshabilitado
+  assert.equal(decisionMotivoEfectivo('rechazada', '   '), '');
+  assert.equal(decisionMotivoEfectivo('rechazada', 'No hay cobertura ese día'), 'No hay cobertura ese día');
+});
+test('formatFechaHora: fecha y hora real del evento, siempre en horario de Perú (nunca la de renderizado)', () => {
+  assert.equal(formatFechaHora(null), '—');
+  assert.match(formatFechaHora('2026-10-26T20:35:00Z'), /2026/); // nunca ambiguo: ano completo visible
+  assert.match(formatFechaHora('2026-10-26T20:35:00Z'), /15:35|3:35/); // 20:35 UTC = 15:35 Lima
 });

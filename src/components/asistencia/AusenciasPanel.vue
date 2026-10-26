@@ -2,8 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { supabase } from '@/lib/supabase';
-import { fechaLimaISO } from '@/lib/asistenciaReglas';
-import { AUSENCIA_BADGE_CLASS, AUSENCIA_LABEL, AUSENCIA_LABEL_CORTO, type Ausencia } from '@/lib/asistenciaAusencias';
+import { fechaLimaISO, formatFechaHora } from '@/lib/asistenciaReglas';
+import { AUSENCIA_BADGE_CLASS, AUSENCIA_LABEL, AUSENCIA_LABEL_CORTO, decisionMotivoEfectivo, type Ausencia } from '@/lib/asistenciaAusencias';
 import { getErrorMessage } from '@/lib/errors';
 
 const props = defineProps<{ administracion?: boolean }>();
@@ -35,7 +35,7 @@ async function load() {
   error.value = '';
   try {
     if (!canReport.value && !canResolve.value) { rows.value = []; return; }
-    let query = supabase.from('asistencia_solicitudes').select(canResolve.value ? '*, profile:profiles!asistencia_solicitudes_user_id_fkey(full_name,email)' : '*').order('created_at', { ascending: false }).order('id').range(page.value * 25, page.value * 25 + 25);
+    let query = supabase.from('asistencia_solicitudes').select(canResolve.value ? '*, profile:profiles!asistencia_solicitudes_user_id_fkey(full_name,email), resolver:profiles!asistencia_solicitudes_resolved_by_fkey(full_name,email)' : '*').order('created_at', { ascending: false }).order('id').range(page.value * 25, page.value * 25 + 25);
     if (canReport.value) query = query.eq('user_id', auth.user!.id);
     if (canResolve.value && filtro.value) query = query.eq('estado', filtro.value);
     const { data, error: e } = await query;
@@ -62,12 +62,17 @@ async function reportar() {
 }
 function nuevaOperacion() { operacion = null; error.value = ''; }
 async function resolver(row: Ausencia, decision: 'aprobada' | 'rechazada') {
-  if (!window.confirm(`¿Confirmar solicitud ${decision}?`)) return;
+  // Rechazar siempre exige un motivo real escrito por SUPERADMIN — el boton
+  // ya queda deshabilitado sin texto, pero se revalida aqui por si acaso.
+  const motivoEfectivo = decisionMotivoEfectivo(decision, decisionMotivos.value[row.id] ?? '');
+  if (!motivoEfectivo) return;
+  if (!window.confirm(decision === 'aprobada' ? '¿Aprobar esta ausencia?' : '¿Rechazar esta ausencia?')) return;
   busy.value = true; error.value = '';
   let failure = '';
   try {
-    const { error: e } = await supabase.rpc('resolver_ausencia', { p_solicitud_id: row.id, p_version_esperada: row.version, p_decision: decision, p_motivo: decisionMotivos.value[row.id] ?? '' });
+    const { error: e } = await supabase.rpc('resolver_ausencia', { p_solicitud_id: row.id, p_version_esperada: row.version, p_decision: decision, p_motivo: motivoEfectivo });
     if (e) throw e;
+    delete decisionMotivos.value[row.id];
     emit('changed');
   } catch (e) { failure = getErrorMessage(e, 'No se pudo resolver'); }
   finally { await load(); if (failure) error.value = failure; busy.value = false; }
@@ -132,11 +137,21 @@ onMounted(load);
       <p><strong>{{ row.fecha }} · {{ AUSENCIA_LABEL[row.estado] }}</strong></p>
       <p class="text-xs">Usuario: {{ row.profile?.full_name || row.profile?.email || row.user_id }}</p>
       <p>{{ row.motivo }} · {{ row.observacion || 'Sin observación' }}</p>
-      <p v-if="row.decision_motivo">Decisión: {{ row.decision_motivo }}</p>
-      <div v-if="row.estado === 'pendiente'" class="flex flex-wrap gap-2">
-        <input v-model="decisionMotivos[row.id]" placeholder="Motivo obligatorio de la decisión" maxlength="1000" class="input" />
-        <button class="btn-primary" :disabled="busy || !decisionMotivos[row.id]?.trim()" @click="resolver(row, 'aprobada')">Aprobar</button>
-        <button class="btn-secondary" :disabled="busy || !decisionMotivos[row.id]?.trim()" @click="resolver(row, 'rechazada')">Rechazar</button>
+      <!-- Quien decidio y cuando, en hora real de Peru — nunca la hora de renderizado. -->
+      <p v-if="row.estado !== 'pendiente'" class="text-xs text-slate-500">
+        {{ row.estado === 'aprobada' ? 'Aprobado' : 'Rechazado' }} por {{ row.resolver?.full_name || row.resolver?.email || 'SUPERADMIN' }} el {{ formatFechaHora(row.resolved_at) }}
+      </p>
+      <p v-if="row.decision_motivo">Comentario: {{ row.decision_motivo }}</p>
+      <div v-if="row.estado === 'pendiente'" class="grid gap-1.5 mt-1.5">
+        <label class="text-xs text-slate-600">
+          Comentario — opcional para aprobar, obligatorio para rechazar
+          <input v-model="decisionMotivos[row.id]" placeholder="Ej: coordinado con el equipo" maxlength="1000" class="input" />
+        </label>
+        <div class="flex flex-wrap items-center gap-2">
+          <button class="btn-primary" :disabled="busy" @click="resolver(row, 'aprobada')">Aprobar</button>
+          <button class="btn-secondary" :disabled="busy || !decisionMotivos[row.id]?.trim()" @click="resolver(row, 'rechazada')">Rechazar</button>
+          <span v-if="!decisionMotivos[row.id]?.trim()" class="text-xs text-slate-400">Escribe un comentario arriba para poder rechazar</span>
+        </div>
       </div>
     </article>
     <div class="flex gap-2"><button class="btn-secondary" :disabled="page === 0 || busy" @click="page--">Anterior</button><button class="btn-secondary" :disabled="!hasMore || busy" @click="page++">Siguiente</button></div>

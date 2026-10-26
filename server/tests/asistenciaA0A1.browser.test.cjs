@@ -65,11 +65,32 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
    assert.equal(await evaluate("document.querySelector('textarea').value"),'Cita medica particular, llego mas tarde.');
   });
   await t.test('ADMIN tiene reporte propio y ve decisión',async()=>{rows=[{...row,estado:'aprobada',decision_motivo:'Justificación revisada'}];await navigate('ADMIN');await abrirDesplegable();await wait("document.body.innerText.includes('Aprobada')");assert.equal(await evaluate("document.body.innerText.includes('Justificación revisada')"),true);assert.equal(await evaluate("!!document.querySelector('form')"),true);});
-  await t.test('SUPERADMIN aprueba con motivo y versión; no reporta como trabajador',async()=>{
+  // Caso real reportado en producción: Alex Prueba reportó una ausencia,
+  // SUPERADMIN entró a aprobarla y los botones aparecían deshabilitados sin
+  // explicación visible (exigían un comentario sin dejarlo claro).
+  await t.test('SUPERADMIN aprueba SIN escribir nada — ya no queda bloqueado por un comentario obligatorio',async()=>{
    rows=[row];await navigate('SUPERADMIN');await wait("document.body.innerText.includes('Técnico ficticio')");assert.equal(await evaluate("!!document.querySelector('form')"),false);
-   await evaluate("const input=document.querySelector('input');input.value='Revisado';input.dispatchEvent(new Event('input',{bubbles:true}));window.confirm=()=>true");await click('Aprobar');await wait("document.body.innerText.includes('No hay solicitudes')");assert.equal(decisions.at(-1).p_decision,'aprobada');assert.equal(decisions.at(-1).p_version_esperada,1);
+   assert.equal(await evaluate("document.querySelector('input').value"),''); // nada escrito
+   assert.equal(await evaluate("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Aprobar').disabled"),false);
+   await evaluate("window.confirm=()=>true");await click('Aprobar');await wait("document.body.innerText.includes('No hay solicitudes')");
+   assert.equal(decisions.at(-1).p_decision,'aprobada');assert.equal(decisions.at(-1).p_version_esperada,1);
+   assert.ok(decisions.at(-1).p_motivo.length>0,'el backend sigue recibiendo un motivo no vacío (regla de auditoría intacta)');
   });
-  await t.test('SUPERADMIN rechaza por el mismo flujo auditado',async()=>{rows=[row];await navigate('SUPERADMIN');await wait("!!document.querySelector('input')");await evaluate("const input=document.querySelector('input');input.value='Rechazo motivado';input.dispatchEvent(new Event('input',{bubbles:true}));window.confirm=()=>true");await click('Rechazar');await wait("document.body.innerText.includes('No hay solicitudes')");assert.equal(decisions.at(-1).p_decision,'rechazada');});
+  await t.test('SUPERADMIN NO puede rechazar sin escribir un motivo — botón deshabilitado CON explicación visible',async()=>{
+   rows=[row];await navigate('SUPERADMIN');await wait("!!document.querySelector('input')");
+   assert.equal(await evaluate("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Rechazar').disabled"),true);
+   assert.equal(await evaluate("document.body.innerText.includes('Escribe un comentario arriba para poder rechazar')"),true);
+   await evaluate("const input=document.querySelector('input');input.value='Rechazo motivado';input.dispatchEvent(new Event('input',{bubbles:true}));window.confirm=()=>true");
+   assert.equal(await evaluate("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Rechazar').disabled"),false);
+   await click('Rechazar');await wait("document.body.innerText.includes('No hay solicitudes')");
+   assert.equal(decisions.at(-1).p_decision,'rechazada');assert.equal(decisions.at(-1).p_motivo,'Rechazo motivado');
+  });
+  await t.test('tras resolver, se ve quién decidió y cuándo (hora de Perú)',async()=>{
+   rows=[{...row,estado:'aprobada',decision_motivo:'Aprobado sin observaciones adicionales',resolved_at:'2026-10-26T20:00:00Z',resolver:{full_name:'Super Admin Ficticio',email:'super@example.invalid'}}];
+   await navigate('SUPERADMIN');await wait("document.body.innerText.includes('Super Admin Ficticio')");
+   assert.equal(await evaluate("document.body.innerText.includes('Aprobado por Super Admin Ficticio')"),true);
+   assert.equal(await evaluate("document.body.innerText.includes('2026')"),true); // hora real del evento, no la de renderizado
+  });
   for(const role of ['ADMIN'])await t.test(role+' reporta desde el widget compartido del panel web, sin entrar a Campo',async()=>{
    rows=[];await navigate(role,'web');await wait("document.body.innerText.includes('Marcación de Jornada')");
    await abrirDesplegable();await wait("!!document.querySelector('form')");

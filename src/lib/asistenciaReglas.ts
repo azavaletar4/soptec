@@ -45,6 +45,12 @@ export function formatHora(iso: string | null): string {
   return new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
 }
 
+/** Fecha y hora real del evento (nunca la de renderizado), siempre en horario de Peru. */
+export function formatFechaHora(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'medium', timeStyle: 'short' });
+}
+
 /** Fechas ISO (YYYY-MM-DD) laborables entre desde/hasta inclusive — excluye domingos y feriados, usado para calcular faltas del reporte mensual. */
 export function diasLaborablesEnRango(desde: string, hasta: string, feriadosSet: Set<string>): string[] {
   const dias: string[] = [];
