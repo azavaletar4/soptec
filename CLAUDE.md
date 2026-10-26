@@ -18,6 +18,20 @@ los errores y rollbacks anteriores son antecedentes, no incidentes activos.
 Seguimiento de ciclos y certificación integral de 3.000 clientes siguen
 pendientes, pero no invalidan la recuperación real ya confirmada.
 
+## Devoluciones de App de Campo — estado vigente (26/10/2026)
+
+Acceso implementado y desplegado en `/campo/mi-custodia`: «Solicitar devolución»
+para materiales y equipos bajo custodia. El artefacto anterior conservaba una
+vista de solo consulta; se incorporó selectivamente el código ya aprobado
+`fb56057`, con publicación `c11f6a8`. Frontend `smartrayco-campo-returns:c11f6a8-20261026T171151Z`;
+backend `16831c6` conservado sin reinicio. Sin SQL ni permisos nuevos.
+Pruebas de navegador del candidato/publicado con datos ficticios PASS;
+25/25 SQL/unitarias previas conservadas. **Pendiente prueba funcional del
+propietario desde su celular, incluida recepción administrativa real**.
+No declarar la devolución completamente validada antes de esa prueba.
+Detalle/rollback: `docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`;
+versiones exactas en `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md`.
+
 ## Capacidad mínima (requisito permanente)
 
 SmartRayco debe soportar al menos **3.000 clientes** con estabilidad y

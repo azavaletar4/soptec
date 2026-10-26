@@ -9,19 +9,44 @@ producción).
 
 Verificado por lectura directa de los contenedores/imágenes reales de la VM
 el 2026-10-26; actualizado tras activar la corrección de contadores y verificar
-el primer muestreo a las 16:28:52 UTC — no es una suposición desde git.
+el primer muestreo de contadores; frontend de devoluciones verificado a las
+17:16 UTC — no es una suposición desde git.
 
 ## Estado actual (2026-10-26)
 
 | | Backend | Frontend |
 |---|---|---|
-| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 (worktree `99dc78b`) |
-| Commit anterior | `53f284c` | `397484c` |
-| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-frontend-fase175:99dc78b-20261026T154532Z` |
-| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Build de fuente real de `single-close` con solo `src/stores/analytics.ts` actualizado; runtime nginx conservado |
-| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 15:57:46 UTC |
-| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos hasta `87ddfd3` conservado + store Analítica de Fase 175 |
-| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `fase175-20261026T154532Z/recovery/frontend.tar`, tag `smartrayco-frontend-fase175-rollback:20261026T154532Z` |
+| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia aprobada `fb56057` (publicación `c11f6a8`) |
+| Commit anterior | `53f284c` | `99dc78b` |
+| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-campo-returns:c11f6a8-20261026T171151Z` |
+| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Fuente real frontend Fase 175 + tres archivos de custodia aprobados; Puntos/Analítica y runtime nginx conservados |
+| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 17:14:07 UTC |
+| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos y Analítica conservados + acceso a devoluciones desde Mi custodia |
+| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/recovery/frontend.tar`, tag `smartrayco-campo-returns-rollback:20261026T171151Z` |
+
+### Devoluciones de App de Campo desplegadas — pendiente prueba del propietario
+
+- Causa: /campo/mi-custodia retenía la vista de solo consulta. La corrección
+  fb56057 ya estaba en GitHub; el artefacto selectivo no la había incorporado.
+- Publicado c11f6a8838faade40a605927818df4b67f5e4f11 por push normal.
+- Frontend activo: `smartrayco-campo-returns:c11f6a8-20261026T171151Z`; ID `sha256:b6c98bc654906516d8a72eb4d5cdf21d2380d6eda7e1aaffddaff03a0858f84a`.
+- Contenedor: `db47bfa3e71cfcfab8a61dd7a1b1bcb6e0d1e1934cc4a1b8958177438343f533`; arranque `2026-10-26T17:14:07.85212786Z`.
+- Backend conservado: 16831c6; imagen `sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e`;
+  mismo contenedor y arranque `2026-10-26T16:27:41.085443964Z`.
+- Solo tres fuentes modificadas: CampoMiCustodiaView.vue, CampoCustodiaView.vue
+  y custodyReturns.ts. Otros archivos fuente, Puntos, Analítica y nginx intactos.
+- 25/25 SQL/unitarias previas reutilizadas; candidato compilado y público PASS
+  con devoluciones ficticias y bloqueo técnico de Inventario general. Puntos,
+  Altas, Averías y Rutinas PASS; panel HTTPS/API sanos. Sin mutaciones reales.
+- Sin SQL/migraciones, permisos nuevos ni reinicio de backend u otros servicios.
+- Estado: implementado y desplegado; falta la prueba funcional desde el celular
+  del propietario y recepción administrativa física real autorizada.
+- Rollback preparado, no usado. Conservar toda la cadena existente y añadir
+  al final `/opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/frontend.override.json`.
+- Respaldo verificable: `/opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/recovery/frontend.tar`;
+  SHA256 `bf917fd96b749f9c9ff97816c1c76496537063260324fb6456ad31cd6edb8f58`. Candidato y respaldo OCI verificados.
+- Informe y comando exacto de rollback:
+  `docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`.
 
 ### Resultado vigente: corrección de contadores activada (2026-10-26 16:28 UTC)
 

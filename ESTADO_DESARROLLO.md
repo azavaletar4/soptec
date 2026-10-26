@@ -1,20 +1,24 @@
 # SmartRayco — Estado de desarrollo
 
-## App de Campo: acceso a devoluciones preparado, no desplegado (26/10/2026)
+## App de Campo: devoluciones implementadas y desplegadas (26/10/2026)
 
-La ruta visible `/campo/mi-custodia` sigue publicada como «Solo consulta» y
-oculta devoluciones de **materiales y equipos**. La ruta anterior
-`/campo/custodia` conserva los formularios. La corrección ya existe en GitHub
-(`fb56057`): reutilizar la vista operativa desde Mi custodia; el artefacto
-selectivo activo no la incorporó. No es un fallo nuevo de roles ni de Fase 175.
-Se preparó una integración local de solo tres archivos ya aprobados, sin
-código de producto nuevo. RPC y RLS reales verificados por lectura: solicitud
-propia del técnico y recepción exclusiva ADMIN/SUPERADMIN; salvaguardas de
-duplicados ya presentes, sin SQL necesario. 25/25 pruebas SQL/unitarias y
-navegador local PASS; defecto público reproducido con datos ficticios.
-**Pendiente autorización de preparación/activación frontend; no push ni
-despliegue en esta sesión.** Detalle y antecedentes actualizados en
-`docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`.
+Acceso recuperado en Mi custodia para materiales y equipos seriados. La ruta
+`/campo/mi-custodia` publicada retenía la vista antigua «Solo consulta»;
+ahora reutiliza los formularios existentes. Código previo `fb56057`,
+publicación aprobada `c11f6a8`. Frontend activo `smartrayco-campo-returns:c11f6a8-20261026T171151Z`,
+imagen `sha256:b6c98bc654906516d8a72eb4d5cdf21d2380d6eda7e1aaffddaff03a0858f84a`, arranque `2026-10-26T17:14:07.85212786Z`.
+Backend `16831c6` intacto, sin reconstruir ni reiniciar; Puntos y Analítica
+conservados. Sin SQL, tablas, rutas o permisos nuevos ni cambios de datos reales.
+
+25/25 pruebas SQL/unitarias previas aplicables; candidato compilado y dominio
+público PASS con datos ficticios: equipo + material parcial, pendiente de
+recepción y técnico bloqueado de Inventario general. Puntos/Alta/Avería/Rutina,
+panel HTTPS y API PASS; cero mutaciones de negocio reales. Respaldo OCI y
+rollback verificados, no usados.
+**Pendiente aceptación funcional del propietario desde su celular y recepción
+administrativa de una devolución física real autorizada**. No declarar el
+flujo completamente validado todavía. La limitación previa de rechazo/historial
+resuelto de equipos no se amplió. Detalle: `docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`.
 
 ## Estado vigente compartido — Fase 175 operativa (26/10/2026)
 

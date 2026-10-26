@@ -1,6 +1,67 @@
-# Devoluciones desde Mi custodia — corrección local
+# Devoluciones desde Mi custodia — recuperación y despliegue
 
-## Estado confirmado el 26/10/2026 — acceso todavía pendiente de publicación
+## Estado vigente: desplegado el 26/10/2026, pendiente aceptación desde celular
+
+La publicación aprobada `c11f6a8838faade40a605927818df4b67f5e4f11` está en
+GitHub main mediante push normal. Se desplegó solo el frontend:
+
+- Tag: `smartrayco-campo-returns:c11f6a8-20261026T171151Z`.
+- ID: `sha256:b6c98bc654906516d8a72eb4d5cdf21d2380d6eda7e1aaffddaff03a0858f84a`.
+- Contenedor: `db47bfa3e71cfcfab8a61dd7a1b1bcb6e0d1e1934cc4a1b8958177438343f533`.
+- Arranque UTC: `2026-10-26T17:14:07.85212786Z`.
+- Backend 16831c6 conservado: `sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e`, contenedor
+  `1a0c00376d3b2cd5ff623e90e8050bc092deb7602976b35d852179cb54f360a9`, mismo arranque `2026-10-26T16:27:41.085443964Z`.
+
+Se copió la fuente REAL del frontend activo (Fase 175) y se superpusieron
+exclusivamente las dos vistas de custodia y su validador existentes. Comparación
+completa de fuentes: exactamente tres diferencias; ningún otro archivo cambió.
+Build PASS. Runtime, argumentos originales, nginx, Puntos y Analítica conservados;
+se conservaron también los recursos estáticos anteriores salvo el índice nuevo.
+Los 582 archivos del artefacto extraído se verificaron por SHA256 antes del
+navegador. No se compiló desde todo main ni se reconstruyó o reinició backend.
+
+Pruebas previas 25/25 SQL/unitarias reutilizadas (código y RPC sin cambios).
+Navegador sobre candidato compilado y dominio público, con datos ficticios:
+PASS, dos botones de solicitud, equipo y material parcial, espera de recepción,
+saldo material intacto hasta recepción y cero mutaciones reales. El técnico
+queda redirigido al Campo si intenta entrar a Inventario general. Puntos,
+Alta, Avería y Rutina PASS, sin excepciones. Panel/9 rutas HTTP 200 y API ok;
+backend, Caddy, Mongo y GenieACS conservaron imagen, contenedor y arranque.
+Cero errores críticos. Sin SQL, tablas, rutas, permisos o datos reales cambiados.
+
+**Implementado y desplegado; todavía no completamente validado funcionalmente.**
+El propietario debe probar desde su celular Mi custodia → Solicitar devolución
+con un sobrante físico real, y administración debe confirmar su recepción.
+No se creó ni confirmó una devolución real durante estas pruebas. Rechazo e
+historial resuelto de equipos mantienen su limitación anterior. Se mantienen
+los riesgos separados de escala/seguimiento de Analítica de Fase 175.
+
+### Respaldo y rollback de este despliegue
+
+- Stage: `/opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z`.
+- Imagen anterior: `smartrayco-frontend-fase175:99dc78b-20261026T154532Z`, ID `sha256:3155f928b6b5492c9f4398e3a7601ad442a0b5b6f866bbbe637d89b7df05d959`.
+- Tag de respaldo: `smartrayco-campo-returns-rollback:20261026T171151Z`.
+- Archivo: `recovery/frontend.tar`; SHA256 `bf917fd96b749f9c9ff97816c1c76496537063260324fb6456ad31cd6edb8f58`.
+- Candidato: `candidate.image.tar`; SHA256 `642861ebe079bff4d566aa8e773ffac9cd4b0afa49e88d7c7fd0830b491438c1`.
+- Ambos archivos OCI tienen identidad, descriptores y blobs verificados.
+- Rollback preparado y **no ejecutado**; ningún fallo crítico ni desvío de alcance.
+
+Ejecutar desde /opt/smartrayco, conservando todos los overrides:
+
+```bash
+docker compose -p smartrayco --project-directory /opt/smartrayco -f /opt/smartrayco/docker-compose.onprem.yml -f /opt/smartrayco-staging/points-final-20261026T001656Z/points-approved-activation.override.json -f /opt/smartrayco-staging/points-fix-397484c-20261026T050348Z/points-fix.override.json -f /opt/smartrayco-staging/single-close-87ddfd3-20261026T054949Z/single-close.override.json -f /opt/smartrayco-staging/fase175-20261026T154532Z/backend.override.json -f /opt/smartrayco-staging/fase175-20261026T154532Z/frontend.override.json -f /opt/smartrayco-staging/fase175-20261026T154532Z/backend.rollback.json -f /opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json -f /opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/frontend.override.json -f /opt/smartrayco-staging/campo-returns-c11f6a8-20261026T171151Z/frontend.rollback.json up -d --no-deps --no-build --pull never frontend
+```
+
+Si el tag de respaldo faltara, cargar primero el tar con docker load -i.
+El rollback solo sustituye frontend y vuelve a la vista anterior de solo
+consulta; no modifica solicitudes, custodias o inventario. Antes de cualquier
+operación futura revalidar imágenes, hashes y estado activo. No safe-update.sh.
+Evidencias privadas en el stage: prepared.json, deployed.json, verified.json,
+recovery/ y logs; resultados ficticios locales en scripts/inventory-auth-lab/runtime/.
+
+
+
+## Antecedente del 26/10/2026 — diagnóstico previo al despliegue
 
 **Causa exacta:** el frontend activo
 `smartrayco-frontend-fase175:99dc78b-20261026T154532Z`
