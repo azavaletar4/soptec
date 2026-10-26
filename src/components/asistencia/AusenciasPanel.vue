@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { supabase } from '@/lib/supabase';
 import { fechaLimaISO, formatFechaHora } from '@/lib/asistenciaReglas';
-import { AUSENCIA_BADGE_CLASS, AUSENCIA_LABEL, AUSENCIA_LABEL_CORTO, decisionMotivoEfectivo, type Ausencia } from '@/lib/asistenciaAusencias';
+import { AUSENCIA_BADGE_CLASS, AUSENCIA_LABEL_CORTO, decisionMotivoEfectivo, type Ausencia } from '@/lib/asistenciaAusencias';
 import { getErrorMessage } from '@/lib/errors';
 
 const props = defineProps<{ administracion?: boolean }>();
@@ -125,35 +125,73 @@ onMounted(load);
     </div>
   </section>
 
-  <!-- Bandeja de administracion (SUPERADMIN) — sin cambios de layout. -->
-  <section v-else-if="canResolve" class="surface p-4 my-4">
-    <h2 class="font-semibold">Solicitudes de ausencia · SUPERADMIN</h2>
-    <p class="text-sm">Fecha de Perú. La solicitud requiere justificación y decisión de SUPERADMIN; no sustituye una marcación.</p>
-    <p v-if="error" role="alert" class="text-red-600">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
-    <label>Estado <select v-model="filtro" class="input"><option value="pendiente">Pendientes de justificar</option><option value="aprobada">Justificadas</option><option value="rechazada">Rechazadas</option><option value="">Todas</option></select></label>
-    <button class="btn-secondary my-2" :disabled="busy" @click="load">Actualizar solicitudes</button>
-    <p v-if="!rows.length">No hay solicitudes en esta página.</p>
-    <article v-for="row in rows" :key="row.id" class="border-t py-3">
-      <p><strong>{{ row.fecha }} · {{ AUSENCIA_LABEL[row.estado] }}</strong></p>
-      <p class="text-xs">Usuario: {{ row.profile?.full_name || row.profile?.email || row.user_id }}</p>
-      <p>{{ row.motivo }} · {{ row.observacion || 'Sin observación' }}</p>
-      <!-- Quien decidio y cuando, en hora real de Peru — nunca la hora de renderizado. -->
-      <p v-if="row.estado !== 'pendiente'" class="text-xs text-slate-500">
-        {{ row.estado === 'aprobada' ? 'Aprobado' : 'Rechazado' }} por {{ row.resolver?.full_name || row.resolver?.email || 'SUPERADMIN' }} el {{ formatFechaHora(row.resolved_at) }}
-      </p>
-      <p v-if="row.decision_motivo">Comentario: {{ row.decision_motivo }}</p>
-      <div v-if="row.estado === 'pendiente'" class="grid gap-1.5 mt-1.5">
-        <label class="text-xs text-slate-600">
-          Comentario — opcional para aprobar, obligatorio para rechazar
-          <input v-model="decisionMotivos[row.id]" placeholder="Ej: coordinado con el equipo" maxlength="1000" class="input" />
-        </label>
-        <div class="flex flex-wrap items-center gap-2">
-          <button class="btn-primary" :disabled="busy" @click="resolver(row, 'aprobada')">Aprobar</button>
-          <button class="btn-secondary" :disabled="busy || !decisionMotivos[row.id]?.trim()" @click="resolver(row, 'rechazada')">Rechazar</button>
-          <span v-if="!decisionMotivos[row.id]?.trim()" class="text-xs text-slate-400">Escribe un comentario arriba para poder rechazar</span>
-        </div>
+  <!-- Bandeja de administracion (SUPERADMIN): tarjetas anchas, 1 por -->
+  <!-- solicitud. Antes usaba `class="input"` — una clase que no existe en -->
+  <!-- style.css (la real es field-input/field-label) — por eso se veia sin -->
+  <!-- estilo, diminuto y amontonado a la izquierda. Misma logica/RPC/RLS. -->
+  <section v-else-if="canResolve" class="my-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">Solicitudes de ausencia</h2>
+        <p class="text-sm text-slate-500">Aprueba o rechaza las ausencias reportadas por el equipo.</p>
       </div>
-    </article>
-    <div class="flex gap-2"><button class="btn-secondary" :disabled="page === 0 || busy" @click="page--">Anterior</button><button class="btn-secondary" :disabled="!hasMore || busy" @click="page++">Siguiente</button></div>
+      <div class="flex items-center gap-2">
+        <select v-model="filtro" class="field-input" style="width: auto">
+          <option value="pendiente">Pendientes</option>
+          <option value="aprobada">Aprobadas</option>
+          <option value="rechazada">Rechazadas</option>
+          <option value="">Todas</option>
+        </select>
+        <button class="btn-secondary text-sm" :disabled="busy" @click="load">Actualizar</button>
+      </div>
+    </div>
+
+    <p v-if="error" role="alert" class="text-sm text-red-600 mb-3">{{ error }}</p>
+    <p v-if="notice" role="status" class="text-sm text-amber-600 mb-3">{{ notice }}</p>
+    <p v-if="!rows.length" class="surface text-sm text-slate-500 py-10 text-center">No hay solicitudes en esta página.</p>
+
+    <div class="grid gap-4">
+      <article v-for="row in rows" :key="row.id" class="surface p-5">
+        <!-- Identidad + estado: jerarquia clara, nombre primero. -->
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="font-semibold text-slate-900">{{ row.profile?.full_name || row.profile?.email || row.user_id }}</p>
+            <p class="text-sm text-slate-500 mt-0.5">{{ row.fecha }} · {{ row.motivo }}</p>
+          </div>
+          <span class="badge" :class="AUSENCIA_BADGE_CLASS[row.estado]">{{ AUSENCIA_LABEL_CORTO[row.estado] }}</span>
+        </div>
+        <p v-if="row.observacion" class="text-sm text-slate-600 mt-3">{{ row.observacion }}</p>
+
+        <!-- Ya resuelta: quien y cuando, hora real de Peru. -->
+        <div v-if="row.estado !== 'pendiente'" class="text-sm text-slate-500 border-t border-slate-100 mt-4 pt-3">
+          <p>{{ row.estado === 'aprobada' ? 'Aprobado' : 'Rechazado' }} por {{ row.resolver?.full_name || row.resolver?.email || 'SUPERADMIN' }} · {{ formatFechaHora(row.resolved_at) }}</p>
+          <p v-if="row.decision_motivo" class="mt-1 text-slate-600">«{{ row.decision_motivo }}»</p>
+        </div>
+
+        <!-- Pendiente: panel de decision, usa el ancho completo de la tarjeta. -->
+        <div v-else class="border-t border-slate-100 mt-4 pt-4 grid gap-3 md:grid-cols-[2fr_1fr] md:items-end">
+          <label class="block">
+            <span class="field-label">Comentario de la decisión</span>
+            <textarea
+              v-model="decisionMotivos[row.id]"
+              maxlength="1000"
+              rows="3"
+              class="field-input w-full resize-none"
+              placeholder="Ej: coordinado con el equipo (opcional para aprobar, obligatorio para rechazar)"
+            />
+          </label>
+          <div class="flex gap-3 md:flex-col">
+            <button class="btn-primary flex-1 md:flex-none" :disabled="busy" @click="resolver(row, 'aprobada')">Aprobar</button>
+            <button class="btn-secondary flex-1 md:flex-none" :disabled="busy || !decisionMotivos[row.id]?.trim()" @click="resolver(row, 'rechazada')">Rechazar</button>
+          </div>
+          <p v-if="!decisionMotivos[row.id]?.trim()" class="text-xs text-slate-400 md:col-span-2">Escribe un comentario arriba para poder rechazar — aprobar no lo necesita.</p>
+        </div>
+      </article>
+    </div>
+
+    <div class="flex gap-2 mt-4">
+      <button class="btn-secondary" :disabled="page === 0 || busy" @click="page--">Anterior</button>
+      <button class="btn-secondary" :disabled="!hasMore || busy" @click="page++">Siguiente</button>
+    </div>
   </section>
 </template>
