@@ -147,9 +147,18 @@ async function runSampleOnce(): Promise<TrafficSampleReport> {
   for (const device of (devices ?? []) as MikrotikDeviceRow[]) {
     const target = targetFor(device);
 
+    // Filtro por tipo del lado del router (?type=pppoe-in), no solo del
+    // lado del cliente: antes se pedia TODA la tabla de interfaces (694 en
+    // el Administrador real: ether, bridge, vlan, pppoe-in...) para despues
+    // quedarse solo con las pppoe-in (666) — verificado contra el router
+    // real el 2026-10-26 que RouterOS acepta este filtro (?type=pppoe-in)
+    // igual que el resto de consultas de este modulo. No cambia el
+    // resultado (el codigo ya descartaba cualquier tipo que no fuera
+    // pppoe-in), solo evita que el router tenga que armar y mandar las
+    // ~30 interfaces que nunca se iban a usar.
     let interfaces: MikrotikInterface[];
     try {
-      interfaces = await mikrotikRequest<MikrotikInterface[]>(target, '/interface');
+      interfaces = await mikrotikRequest<MikrotikInterface[]>(target, '/interface?type=pppoe-in');
     } catch (e) {
       errors.push({ deviceName: device.name, message: e instanceof Error ? e.message : 'Error al consultar el router' });
       continue;

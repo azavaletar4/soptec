@@ -67,14 +67,27 @@ async function mikrotikRequestOnce<T>(
   const data = text ? JSON.parse(text) : null;
 
   if (!res.ok) {
-    const message =
-      data && typeof data === 'object' && ('message' in data || 'detail' in data)
-        ? String((data as Record<string, unknown>).message ?? (data as Record<string, unknown>).detail)
-        : `MikroTik respondio ${res.status}`;
-    throw new MikrotikHttpError(message, res.status);
+    throw new MikrotikHttpError(extractMikrotikErrorMessage(data, res.status), res.status);
   }
 
   return data as T;
+}
+
+/**
+ * RouterOS casi siempre manda `detail` (la razon ESPECIFICA del rechazo) Y
+ * `message` (solo la frase generica del codigo HTTP: "Bad Request", "Not
+ * Found"...) en el mismo cuerpo de error. Hasta el 2026-10-26 este cliente
+ * mostraba `message` cuando ambos estaban presentes — practicamente inutil
+ * para diagnosticar (todo 400 se veia igual: "Bad Request") — en vez de
+ * `detail`, que es la razon real. Confirmado contra el router real:
+ * {"detail":"no such command or directory (pppoe-in)","error":400,"message":"Bad Request"}.
+ */
+export function extractMikrotikErrorMessage(data: unknown, status: number): string {
+  if (data && typeof data === 'object' && ('detail' in data || 'message' in data)) {
+    const obj = data as Record<string, unknown>;
+    return String(obj.detail ?? obj.message);
+  }
+  return `MikroTik respondio ${status}`;
 }
 
 /**
