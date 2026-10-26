@@ -1,5 +1,7 @@
 # Validación final para activación — 25/10/2026
 
+Actualización de continuidad: el propietario aceptó el riesgo de reapertura histórica sin cambiar esa funcionalidad. Se completó un respaldo lógico recuperable y su restauración aislada; resultados, límites y pendientes vigentes en [Riesgo aceptado y recuperación](PUNTOS-RIESGO-ACEPTADO-Y-RECUPERACION-20261025.md). El informe siguiente conserva la evidencia y el dictamen de su sesión original.
+
 Base limpia `e644158940a3a640a5dfc940c56d02ca00921808`; GitHub consultado directamente y sin avance al preparar esta entrega. Se reutiliza el [procedimiento](PUNTOS-ACTIVACION-PROCEDIMIENTO-20261026.md), la [validación de Campo](PUNTOS-CAMPO-VALIDACION-20261025.md) y la evidencia previa. No se repitieron integración Git, las 139 pruebas anteriores ni las 87 comprobaciones de navegador ya acreditadas.
 
 ## Prueba nueva ejecutada
