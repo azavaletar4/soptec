@@ -1,5 +1,24 @@
 # SmartRayco — Estado de desarrollo
 
+## Asistencia semiautomática A0/A1 — implementada localmente (26/10/2026)
+
+Solo SUPERADMIN configura horarios/geocerca/tolerancias/feriados (RLS y auditoría).
+ADMIN mantiene consulta/marcación y, con TECNICO_RED, reporta su propia ausencia
+de hoy Perú desde el widget de Campo/panel. Estado inicial «Pendiente de justificar»;
+SUPERADMIN aprueba/rechaza con motivo, versión y bloqueo concurrente. Solicitudes y
+eventos separados de marcaciones; historial protegido. Tablero/reporte/CSV distinguen
+pendientes, justificadas y rechazadas sin duplicar faltas; motivos privados no se
+exponen al ADMIN sobre otros trabajadores.
+
+Migración preparada: `supabase/migrations/20261027010000_asistencia_a0_a1.sql`.
+Probada solo en PostgreSQL efímero sin red, navegador con API ficticia y unitarias.
+Detalle, archivos, comandos de pruebas y riesgos:
+`docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md` (estado vigente, no el antecedente).
+Pendiente revisión/aceptación del propietario y autorización separada de SQL y
+despliegue. **Sin push ni cambios productivos; A2/A3 no iniciadas.** Frontend activo
+`c11f6a8`, backend `16831c6` conservados. Cierres de devoluciones/equipos intactos y
+requisito permanente de al menos **3.000 clientes** vigente.
+
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 
 El propietario confirma que el **25/10/2026** se realizaron **tres instalaciones

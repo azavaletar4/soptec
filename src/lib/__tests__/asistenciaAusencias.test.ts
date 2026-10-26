@@ -1,0 +1,26 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { cuentaFalta, AUSENCIA_LABEL } from '../asistenciaAusencias';
+import { fechaLimaISO, formatHora, diasLaborablesEnRango } from '../asistenciaReglas';
+
+test('pendiente y aprobada no generan falta; rechazo pasado genera una sola falta derivada', () => {
+  for (const estado of ['pendiente', 'aprobada'] as const) assert.equal(cuentaFalta(false, estado, '2026-10-26', '2026-10-27', true, true), false);
+  assert.equal(cuentaFalta(false, 'rechazada', '2026-10-26', '2026-10-27', true, true), true);
+  assert.equal(AUSENCIA_LABEL.pendiente, 'Pendiente de justificar');
+});
+test('hoy, futuro, no laborables y roles no obligatorios no son faltas', () => {
+  for (const dia of ['2026-10-26', '2026-10-27']) assert.equal(cuentaFalta(false, undefined, dia, '2026-10-26', true, true), false);
+  assert.equal(cuentaFalta(false, undefined, '2026-10-25', '2026-10-26', false, true), false);
+  assert.equal(cuentaFalta(false, undefined, '2026-10-24', '2026-10-26', true, false), false);
+});
+test('marcación real tiene precedencia sin borrar el estado de justificación', () => {
+  for (const estado of ['pendiente', 'aprobada', 'rechazada'] as const) assert.equal(cuentaFalta(true, estado, '2026-10-26', '2026-10-27', true, true), false);
+});
+test('medianoche de Perú independiente del día UTC', () => {
+  assert.equal(fechaLimaISO(new Date('2026-10-27T04:59:59Z')), '2026-10-26');
+  assert.equal(fechaLimaISO(new Date('2026-10-27T05:00:00Z')), '2026-10-27');
+  assert.match(formatHora('2026-10-27T04:30:00Z'), /11:30|23:30/);
+});
+test('calendario por fechas: excluye domingo/feriado y cruza mes sin desfases', () => {
+  assert.deepEqual(diasLaborablesEnRango('2026-10-30', '2026-11-03', new Set(['2026-11-02'])), ['2026-10-30', '2026-10-31', '2026-11-03']);
+});

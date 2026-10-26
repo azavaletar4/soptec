@@ -11,6 +11,7 @@ import {
   horaIngresoEsperadaLabel,
 } from '@/lib/asistenciaReglas';
 import { getErrorMessage } from '@/lib/errors';
+import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 
 // Widget de marcacion de jornada (Fase 117) — un solo componente compartido
@@ -140,6 +141,7 @@ function formatCountdown(ms: number): string {
 
 <template>
   <div class="surface p-3.5">
+    <AusenciasPanel />
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-sm font-semibold">🕐 Marcación de Jornada</h2>
       <span v-if="store.hoy" class="badge text-[10px]" :class="ESTADO_BADGE_CLASS[store.hoy.estado]">{{ store.hoy.estado }}</span>

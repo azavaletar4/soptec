@@ -2,6 +2,9 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useAuthStore } from '@/stores/auth';
+import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
+import { AUSENCIA_LABEL, cuentaFalta, fetchAusenciasResumen, type AusenciaResumen } from '@/lib/asistenciaAusencias';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useAsistenciaStore } from '@/stores/asistencia';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -18,6 +21,12 @@ import {
 import type { AsistenciaRegistro, StaffProfile } from '@/types/domain';
 
 const store = useAsistenciaStore();
+const auth = useAuthStore();
+const canConfigure = computed(() => auth.role === 'SUPERADMIN');
+const ausenciasDia = ref<AusenciaResumen[]>([]);
+const ausenciasMes = ref<AusenciaResumen[]>([]);
+const tableroError = ref<string | null>(null);
+const tableroReady = ref(false);
 const catalogs = useCatalogsStore();
 
 onMounted(async () => {
@@ -29,12 +38,25 @@ onMounted(async () => {
 const fecha = ref(fechaLimaISO());
 const search = ref('');
 
+let tableroRequest = 0;
 async function loadTablero() {
-  await store.fetchTablero(fecha.value);
+  const request = ++tableroRequest;
+  const dia = fecha.value;
+  tableroReady.value = false; tableroError.value = null;
+  try {
+    const [, rows] = await Promise.all([store.fetchTablero(dia), fetchAusenciasResumen(dia, dia)]);
+    if (request !== tableroRequest) return;
+    ausenciasDia.value = rows;
+    tableroReady.value = true;
+  } catch (e) {
+    if (request !== tableroRequest) return;
+    ausenciasDia.value = [];
+    tableroError.value = getErrorMessage(e, 'No se pudo cargar el tablero completo');
+  }
 }
 watch(fecha, loadTablero);
 
-const esPasado = computed(() => fecha.value < fechaLimaISO());
+
 const esFeriado = computed(() => store.feriados.some((f) => f.fecha === fecha.value));
 const esDomingo = computed(() => new Date(`${fecha.value}T00:00:00`).getDay() === 0);
 const esLaborable = computed(() => !esDomingo.value && !esFeriado.value);
@@ -43,8 +65,10 @@ interface FilaTablero {
   profile: StaffProfile;
   registro: AsistenciaRegistro | null;
   falta: boolean;
+  ausencia?: AusenciaResumen;
 }
 const filas = computed<FilaTablero[]>(() => {
+  if (!tableroReady.value) return [];
   const q = search.value.trim().toLowerCase();
   return catalogs.staff
     .filter((p) => !q || (p.full_name ?? p.email).toLowerCase().includes(q))
@@ -53,8 +77,9 @@ const filas = computed<FilaTablero[]>(() => {
       // "Falta" solo tiene sentido para un dia laborable ya pasado (o de hoy,
       // una vez transcurrido el dia) sin ningun ingreso marcado — un dia de
       // hoy a media mañana sin marcar todavia no es una falta, es "sin marcar".
-      const falta = esLaborable.value && esPasado.value && !registro?.hora_ingreso;
-      return { profile: p, registro, falta };
+      const ausencia = ausenciasDia.value.find(a => a.user_id === p.id);
+      const falta = cuentaFalta(!!registro?.hora_ingreso, ausencia?.estado, fecha.value, fechaLimaISO(), esLaborable.value, ['ADMIN', 'TECNICO_RED'].includes(p.role));
+      return { profile: p, registro, falta, ausencia };
     })
     .sort((a, b) => (a.profile.full_name ?? a.profile.email).localeCompare(b.profile.full_name ?? b.profile.email));
 });
@@ -133,15 +158,19 @@ const mesSeleccionado = ref(fechaLimaISO().slice(0, 7)); // YYYY-MM
 const rangoRows = ref<AsistenciaRegistro[]>([]);
 const loadingReporte = ref(false);
 const reporteError = ref<string | null>(null);
+const reporteReady = ref(false);
 
 async function cargarReporte() {
+  reporteReady.value = false;
   loadingReporte.value = true;
   reporteError.value = null;
   try {
     const [year, month] = mesSeleccionado.value.split('-').map(Number);
     const desde = `${mesSeleccionado.value}-01`;
-    const hasta = new Date(year, month, 0).toISOString().slice(0, 10); // ultimo dia del mes
-    rangoRows.value = await store.fetchRango(desde, hasta);
+    const hasta = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // ultimo dia del mes
+    const [marcaciones, ausencias] = await Promise.all([store.fetchRango(desde, hasta), fetchAusenciasResumen(desde, hasta)]);
+    rangoRows.value = marcaciones; ausenciasMes.value = ausencias;
+    reporteReady.value = true;
   } catch (e) {
     reporteError.value = getErrorMessage(e, 'Error al cargar el reporte');
   } finally {
@@ -156,11 +185,15 @@ interface FilaReporte {
   excesoAlmuerzoMin: number;
   faltas: number;
   diasTrabajados: number;
+  pendientes: number;
+  justificadas: number;
+  rechazadas: number;
 }
 const reporte = computed<FilaReporte[]>(() => {
+  if (!reporteReady.value) return [];
   const [year, month] = mesSeleccionado.value.split('-').map(Number);
   const desde = `${mesSeleccionado.value}-01`;
-  const hastaFull = new Date(year, month, 0).toISOString().slice(0, 10);
+  const hastaFull = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
   // No se cuentan como "falta" los dias laborables todavia no transcurridos del mes en curso.
   const hastaCorte = hastaFull < fechaLimaISO() ? hastaFull : fechaLimaISO();
   const feriadosSet = new Set(store.feriados.map((f) => f.fecha));
@@ -170,20 +203,24 @@ const reporte = computed<FilaReporte[]>(() => {
     .map((p) => {
       const propios = rangoRows.value.filter((r) => r.user_id === p.id);
       const diasConIngreso = new Set(propios.filter((r) => r.hora_ingreso).map((r) => r.fecha));
+      const solicitudes = ausenciasMes.value.filter(a => a.user_id === p.id);
       return {
         profile: p,
         tardanzaMin: propios.reduce((sum, r) => sum + (r.minutos_tardanza || 0), 0),
         excesoAlmuerzoMin: propios.reduce((sum, r) => sum + (r.exceso_almuerzo_min || 0), 0),
         diasTrabajados: diasConIngreso.size,
-        faltas: diasLaborables.filter((d) => !diasConIngreso.has(d)).length,
+        pendientes: solicitudes.filter(a => a.estado === 'pendiente').length,
+        justificadas: solicitudes.filter(a => a.estado === 'aprobada').length,
+        rechazadas: solicitudes.filter(a => a.estado === 'rechazada').length,
+        faltas: diasLaborables.filter(d => cuentaFalta(diasConIngreso.has(d), ausenciasMes.value.find(a => a.user_id === p.id && a.fecha === d)?.estado, d, fechaLimaISO(), true, ['ADMIN', 'TECNICO_RED'].includes(p.role))).length,
       };
     })
     .sort((a, b) => b.tardanzaMin - a.tardanzaMin);
 });
 
 function exportReporteCsv() {
-  const header = ['Colaborador', 'Días trabajados', 'Minutos de tardanza (total)', 'Minutos de exceso de almuerzo (total)', 'Faltas'];
-  const rows = reporte.value.map((f) => [f.profile.full_name || f.profile.email, f.diasTrabajados, f.tardanzaMin, f.excesoAlmuerzoMin, f.faltas]);
+  const header = ['Colaborador', 'Días trabajados', 'Minutos de tardanza (total)', 'Minutos de exceso de almuerzo (total)', 'Faltas', 'Ausencias pendientes', 'Ausencias justificadas', 'Ausencias rechazadas'];
+  const rows = reporte.value.map((f) => [f.profile.full_name || f.profile.email, f.diasTrabajados, f.tardanzaMin, f.excesoAlmuerzoMin, f.faltas, f.pendientes, f.justificadas, f.rechazadas]);
   const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -264,11 +301,13 @@ async function handleSaveSettings() {
         <h1 class="text-2xl font-semibold">🕐 Control de Asistencia</h1>
         <p class="text-slate-600 text-sm mt-1">Marcación de ingreso, almuerzo y salida del staff interno.</p>
       </div>
-      <button class="btn-secondary" @click="showSettings = !showSettings">⚙️ Configuración</button>
+      <button class="btn-secondary" @click="showSettings = !showSettings">{{ canConfigure ? 'Configuración' : 'Consultar configuración' }}</button>
     </div>
 
+    <AusenciasPanel administracion @changed="loadTablero(); cargarReporte()" />
+    <p class="text-sm mb-3">Ausencias: {{ ausenciasDia.filter(a => a.estado === 'pendiente').length }} pendientes · {{ ausenciasDia.filter(a => a.estado === 'aprobada').length }} justificadas · {{ ausenciasDia.filter(a => a.estado === 'rechazada').length }} rechazadas. Las justificaciones no alteran las marcaciones.</p>
     <!-- Configuracion de geocerca/horarios -->
-    <div v-if="showSettings" class="surface p-4 mb-6">
+    <fieldset v-if="showSettings" :disabled="!canConfigure" class="surface p-4 mb-6">
       <h2 class="text-sm font-semibold mb-3">Geocerca y horarios</h2>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         <div>
@@ -325,9 +364,10 @@ async function handleSaveSettings() {
         </li>
       </ul>
       <p v-else class="text-xs text-slate-400">Sin feriados registrados.</p>
-    </div>
+    </fieldset>
 
     <!-- Tablero en vivo -->
+    <p v-if="tableroError" role="alert" class="text-red-600">{{ tableroError }}</p>
     <div class="surface p-4 mb-6">
       <div class="flex flex-wrap items-end justify-between gap-3 mb-3">
         <div class="flex flex-wrap items-end gap-3">
@@ -374,9 +414,10 @@ async function handleSaveSettings() {
             <tr v-for="f in filas" :key="f.profile.id" class="border-t border-slate-200 hover:bg-slate-50">
               <td class="px-4 py-3 text-slate-800">{{ f.profile.full_name || f.profile.email }}</td>
               <td class="px-4 py-3">
+                <span v-if="f.ausencia" class="badge">{{ AUSENCIA_LABEL[f.ausencia.estado] }}{{ f.registro?.hora_ingreso ? ' - Con ingreso: revisar coincidencia' : '' }}</span>
                 <span v-if="f.registro" class="badge" :class="ESTADO_BADGE_CLASS[f.registro.estado]">{{ f.registro.estado }}</span>
                 <span v-else-if="f.falta" class="badge" :class="ESTADO_BADGE_CLASS.Falta">Falta</span>
-                <span v-else class="text-xs text-slate-400">Sin marcar</span>
+                <span v-else-if="!f.ausencia" class="text-xs text-slate-400">Sin marcar</span>
               </td>
               <td class="px-4 py-3 text-xs">
                 <template v-if="f.registro?.hora_ingreso">
@@ -433,11 +474,12 @@ async function handleSaveSettings() {
               <th class="text-right px-4 py-3">Tardanzas acumuladas</th>
               <th class="text-right px-4 py-3">Exceso de almuerzo acumulado</th>
               <th class="text-right px-4 py-3">Faltas</th>
+              <th class="text-right px-4 py-3">Ausencias pendientes / justificadas / rechazadas</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loadingReporte">
-              <td colspan="5" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+              <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
             </tr>
             <tr v-for="f in reporte" :key="f.profile.id" class="border-t border-slate-200">
               <td class="px-4 py-3 text-slate-800">{{ f.profile.full_name || f.profile.email }}</td>
@@ -445,6 +487,7 @@ async function handleSaveSettings() {
               <td class="px-4 py-3 text-right font-mono" :class="f.tardanzaMin > 0 ? 'text-amber-700' : ''">{{ formatMinutos(f.tardanzaMin) }}</td>
               <td class="px-4 py-3 text-right font-mono" :class="f.excesoAlmuerzoMin > 0 ? 'text-amber-700' : ''">{{ formatMinutos(f.excesoAlmuerzoMin) }}</td>
               <td class="px-4 py-3 text-right font-mono" :class="f.faltas > 0 ? 'text-red-600' : ''">{{ f.faltas }}</td>
+              <td class="px-4 py-3 text-right font-mono">{{ f.pendientes }} / {{ f.justificadas }} / {{ f.rechazadas }}</td>
             </tr>
           </tbody>
         </table>

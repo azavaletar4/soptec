@@ -1,5 +1,16 @@
 # SmartRayco — guía para Claude Code
 
+## Asistencia semiautomática A0/A1 — implementación local, sin despliegue
+
+A0/A1 implementadas localmente por autorización del propietario el 26/10/2026.
+Consultar primero `docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md`, sección
+«Estado vigente»: permisos SUPERADMIN en RPC/RLS, reporte propio ADMIN/técnico,
+resolución auditada, protección del historial y pruebas aisladas. Migración
+`20261027010000_asistencia_a0_a1.sql` **no aplicada a producción**; sin push ni
+despliegue. A2/A3 no iniciadas. No confundir justificaciones con marcaciones.
+Producción conservada: frontend `c11f6a8`, backend `16831c6`; no reabrir devoluciones
+ni equipos seriados. Permanece la meta de al menos 3.000 clientes.
+
 ## Antes de empezar
 
 Lee primero `ESTADO_DESARROLLO.md` (raíz del repo) — tiene el estado real

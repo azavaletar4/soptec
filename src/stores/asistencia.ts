@@ -97,27 +97,29 @@ export const useAsistenciaStore = defineStore('asistencia', () => {
   }
 
   /** Tablero en vivo (SUPERADMIN/ADMIN): todas las marcaciones de un dia puntual. */
+  let tableroRequest = 0;
   async function fetchTablero(fecha: string) {
+    const request = ++tableroRequest;
     loadingTablero.value = true;
     try {
       const { data, error } = await supabase.from('asistencia_registros').select(REGISTRO_SELECT).eq('fecha', fecha);
       if (error) throw error;
-      tablero.value = (data ?? []) as unknown as AsistenciaRegistro[];
+      if (request === tableroRequest) tablero.value = (data ?? []) as unknown as AsistenciaRegistro[];
     } finally {
-      loadingTablero.value = false;
+      if (request === tableroRequest) loadingTablero.value = false;
     }
   }
 
   /** Reporte mensual (SUPERADMIN/ADMIN): filas crudas del rango — la agregacion por colaborador se arma en la vista. */
   async function fetchRango(desde: string, hasta: string) {
-    const { data, error } = await supabase
-      .from('asistencia_registros')
-      .select(REGISTRO_SELECT)
-      .gte('fecha', desde)
-      .lte('fecha', hasta)
-      .order('fecha');
-    if (error) throw error;
-    return (data ?? []) as unknown as AsistenciaRegistro[];
+    const rows: AsistenciaRegistro[] = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from('asistencia_registros').select(REGISTRO_SELECT)
+        .gte('fecha', desde).lte('fecha', hasta).order('fecha').order('id').range(offset, offset + 499);
+      if (error) throw error;
+      rows.push(...((data ?? []) as unknown as AsistenciaRegistro[]));
+      if ((data?.length ?? 0) < 500) return rows;
+    }
   }
 
   let tableroChannel: ReturnType<typeof supabase.channel> | null = null;
