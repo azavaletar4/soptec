@@ -43,6 +43,15 @@ resolución siguen exclusivas de SUPERADMIN. Pruebas actualizadas: 17/17 SQL,
 7/7 navegador; 11/11 unitarias (incluye nueva exención). Sin SQL aplicado, push ni
 despliegue. Detalle y alcance en el documento A0/A1 citado.
 
+**Consolidado por Claude Code (26/10/2026):** los 12 archivos pendientes (incluida
+la exclusión de SUPERADMIN descrita arriba) quedaron en un commit local, exclusivo
+de este worktree/rama: `fb7c3e247f56f901cf148e066246f760b874315f` sobre `1fa2c59`,
+en `feature/asistencia-a0-a1-local`. Re-verificado sin cambiar código: 17/17 SQL,
+7/7 navegador, 11/11 unitarias, `vue-tsc` limpio. **Pendiente de activación**:
+aplicar `20261027010000_asistencia_a0_a1.sql` a Supabase y desplegar el frontend
+requieren autorización explícita separada para cada paso — sin push, sin build,
+sin tocar producción en esta consolidación.
+
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 
 El propietario confirma que el **25/10/2026** se realizaron **tres instalaciones

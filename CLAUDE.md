@@ -14,6 +14,15 @@ despliegue. A2/A3 no iniciadas. No confundir justificaciones con marcaciones.
 Producción conservada: frontend `c11f6a8`, backend `16831c6`; no reabrir devoluciones
 ni equipos seriados. Permanece la meta de al menos 3.000 clientes.
 
+**Commit definitivo (local, sin push):** `fb7c3e247f56f901cf148e066246f760b874315f`
+en `feature/asistencia-a0-a1-local` (worktree
+`scripts/inventory-auth-lab/runtime/asistencia-a0-a1-worktree`), sobre `1fa2c59`
+— agrega la exclusión real de SUPERADMIN (migración + frontend). Verificado por
+Claude Code el 2026-10-26: 17/17 SQL, 7/7 navegador, 11/11 unitarias, `vue-tsc`
+limpio. **Pendiente de activación**: aplicar la migración a Supabase y
+desplegar el frontend requieren autorización explícita separada — ninguna de
+las dos cosas ocurrió todavía.
+
 ## Antes de empezar
 
 Lee primero `ESTADO_DESARROLLO.md` (raíz del repo) — tiene el estado real
