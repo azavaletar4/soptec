@@ -1,0 +1,25 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Laboratorio: puntos pendientes</title></head><body><div id="app"></div>
+<script type="module">
+import {createApp,reactive,h} from 'vue';
+import {createPinia} from 'pinia';
+import {useAuthStore} from '/src/stores/auth.ts';
+import {supabase} from '/src/lib/supabase.ts';
+import Editor from '/src/components/soporte/WorkOrderPointsEditor.vue';
+import Points from '/src/components/campo/CampoJobPoints.vue';
+import campoDetailSource from '/src/views/campo/CampoTrabajoDetailView.vue?raw';
+const pinia=createPinia(),auth=useAuthStore(pinia);
+const state=reactive({mode:'admin',nonce:0,jobType:'ticket',jobId:'10000000-0000-0000-0000-000000000001',status:'resolved',points:2});
+window.channels=[];
+supabase.channel=name=>{const ch={name,removed:false,handlers:[],on(event,filter,callback){this.handlers.push(callback);return this;},subscribe(callback){callback('SUBSCRIBED');return this;}};window.channels.push(ch);return ch;};
+supabase.removeChannel=async ch=>{ch.removed=true;return 'ok';};
+window.emitFieldUpdate=()=>window.channels.filter(c=>!c.removed).forEach(c=>c.handlers.forEach(fn=>fn({})));
+window.campoPointsWiring={orderCards:(campoDetailSource.match(/<CampoJobPoints\b/g)||[]).length,contributionCards:(campoDetailSource.match(/<CampoJobContribution\b/g)||[]).length};
+window.resetCase=(type='ticket',role='ADMIN',mode='admin',uid='00000000-0000-0000-0000-000000000003')=>{
+ window.model={points:2,version:1,confirmed:false,historical:true,canAdjust:true,type,history:[]};window.calls=[];
+ auth.role=role;auth.user={id:uid};state.mode=mode;state.jobType=type;state.status=type==='ticket'?'resolved':'completed';state.points=2;state.nonce++;
+};
+window.staleProps=()=>{window.model.points=3;state.nonce++;};
+window.resetCase();
+const app=createApp({render:()=>state.mode==='admin'?h(Editor,{key:state.nonce,jobType:state.jobType,jobId:state.jobId,status:state.status,points:state.points,onSaved:p=>state.points=p}):h(Points,{key:state.nonce,jobType:state.jobType,jobId:state.jobId})}).use(pinia);
+app.mount('#app');window.ready=true;
+</script></body></html>

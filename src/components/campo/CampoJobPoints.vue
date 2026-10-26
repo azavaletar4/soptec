@@ -59,10 +59,8 @@ onBeforeUnmount(() => {
     <p v-else-if="error" class="text-red-700">No se pudieron consultar los puntos. Intenta actualizar.</p>
     <p v-else-if="!data" class="text-slate-500">Orden no disponible para tu asignación actual.</p>
     <template v-else>
-      <p class="mt-1">Puntaje actual: <strong>{{ pointNumber(data.jobPoints) }} pts</strong></p>
+      <p class="mt-1">Puntos totales: <strong>{{ pointNumber(data.jobPoints) }} pts</strong></p>
       <p class="mt-1">Tu parte asignada: {{ pointNumber(data.personalPoints) }} pts · {{ data.crewSize }} integrante(s)</p>
-      <p v-if="data.configuredPoints == null" class="text-slate-500 mt-1">Sin asignación manual; se muestra la regla vigente.</p>
-      <p class="text-slate-500 mt-2">Solo consulta del puntaje asignado. No confirma acreditación administrativa.</p>
     </template>
   </section>
 </template>

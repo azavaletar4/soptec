@@ -23,6 +23,8 @@ export interface WorkOrderPointReview {
   definitiveClosure?: boolean;
   /** Origen comprobado por la RPC: Alta nueva de Prospecto aún con cero inicial. */
   prospectPointsPending?: boolean;
+  /** Permiso de ajuste calculado por la RPC; independiente del período oficial. */
+  canAdjustPoints?: boolean;
 }
 
 /** El selector del reporte entrega horas sin zona. Conservar históricos;

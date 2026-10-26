@@ -16,13 +16,19 @@ const reviewError = ref('');
 const currentPoints = computed(() => review.value ? review.value.points : props.points);
 let reviewGeneration = 0;
 const allowed = computed(() => isAdmin.value && !reviewLoading.value && !!review.value && !review.value.confirmation &&
-  (!review.value.historical || review.value.prospectPointsPending === true) && (pointsAreEditable(review.value.status) || review.value.finished));
+  (review.value.canAdjustPoints ?? (!review.value.historical || review.value.prospectPointsPending === true)) &&
+  (pointsAreEditable(review.value.status) || review.value.finished));
 const canConfirm = computed(() => isAdmin.value && !reviewLoading.value && !!review.value?.finished &&
   !review.value.confirmation && !!review.value.technicalCompletedAt && !!review.value.crew.length);
 const showConfirmation = ref(false);
 const explicitlyConfirmed = ref(false);
 const draft = ref<number | ''>('');
 const reason = ref('');
+const pointsChanged = computed(() => !!review.value && draft.value !== review.value.points);
+const validDraft = computed(() => {
+  try { return requireWorkOrderPoints(draft.value, props.jobType === 'ticket'); }
+  catch { return null; }
+});
 const saving = ref(false);
 const error = ref('');
 const history = ref<{ id: string; old_points: number | null; new_points: number; changed_by: string; changed_at: string; reason: string }[]>([]);
@@ -75,7 +81,7 @@ async function save() {
     saving.value = true;
     const { error: err } = await supabase.rpc('adjust_work_order_points', {
       p_job_type: props.jobType, p_job_id: props.jobId, p_points: points,
-      p_expected_points: props.points, p_reason: reason.value.trim(),
+      p_expected_points: review.value!.points, p_reason: reason.value.trim(),
     });
     if (err) throw err;
     if (generation !== reviewGeneration) return;
@@ -87,8 +93,6 @@ async function save() {
 }
 function openConfirmation() {
   error.value = '';
-  try { requireWorkOrderPoints(draft.value, props.jobType === 'ticket'); }
-  catch (e) { error.value = getErrorMessage(e, 'Puntos inválidos'); return; }
   if (!canConfirm.value || saving.value) return;
   explicitlyConfirmed.value = false;
   showConfirmation.value = true;
@@ -99,6 +103,7 @@ async function confirmPoints() {
   error.value = '';
   try {
     const points = requireWorkOrderPoints(draft.value, props.jobType === 'ticket');
+    if (pointsChanged.value && !allowed.value) throw new Error('Esta orden no permite modificar sus puntos. Actualiza la revisión.');
     if (points !== review.value.points && !reason.value.trim()) throw new Error('Indica el motivo del ajuste.');
     saving.value = true;
     const { data, error: err } = await supabase.rpc('confirm_work_order_points', {
@@ -125,7 +130,7 @@ const formatPoints = (points: number) => new Intl.NumberFormat('es-PE', { maximu
     <p v-if="reviewError" role="alert" class="text-xs text-red-600 mt-2">{{ reviewError }}</p>
     <button v-if="isAdmin" type="button" class="text-xs text-sky-700 mt-2" :disabled="saving || reviewLoading" @click="loadReview">Actualizar revisión de puntos</button>
     <p v-if="review?.prospectPointsPending" class="text-xs text-amber-700 mt-2">Alta de Prospecto con puntos pendientes: ADMIN/SUPERADMIN debe asignar y confirmar un valor mayor que 0 antes del cierre administrativo definitivo.</p>
-    <p v-else-if="review?.historical" class="text-xs text-amber-700 mt-2">Prueba de octubre: puntaje histórico protegido. Esta confirmación no acredita puntos oficiales.</p>
+    <p v-else-if="review?.historical && !allowed" class="text-xs text-amber-700 mt-2">Puntaje histórico protegido. Esta confirmación no acredita puntos oficiales.</p>
     <form v-if="allowed" class="mt-2 space-y-2" @submit.prevent="save">
       <label class="block text-xs">Nuevo puntaje
         <input v-model.number="draft" type="number" :step="jobType === 'ticket' ? '1' : 'any'" :min="jobType === 'ticket' ? 1 : 0" required class="field-input" :disabled="saving" />
@@ -167,11 +172,19 @@ const formatPoints = (points: number) => new Intl.NumberFormat('es-PE', { maximu
     <div v-if="showConfirmation && review" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="point-confirm-title">
       <form class="modal-panel w-full max-w-lg p-5 space-y-3" @submit.prevent="confirmPoints">
         <h3 id="point-confirm-title" class="font-semibold">Confirmar puntos definitivos</h3>
-        <p>Puntos definitivos de la orden: <strong>{{ formatPoints(Number(draft)) }} pts</strong></p>
-        <p v-if="review.recurrencePenalty" class="text-sm">Descuento existente por reincidencia: {{ formatPoints(review.recurrencePenalty) }} pts. Total neto a congelar: {{ formatPoints(Number(draft) - review.recurrencePenalty) }} pts.</p>
+        <p>Puntos vigentes de la orden: <strong>{{ review.points == null ? 'Sin asignación manual' : formatPoints(review.points) + ' pts' }}</strong></p>
+        <label v-if="allowed" class="block text-sm">Puntos definitivos de la orden
+          <input v-model.number="draft" type="number" :step="jobType === 'ticket' ? '1' : 'any'" :min="jobType === 'ticket' ? 1 : 0" required class="field-input" :disabled="saving" />
+        </label>
+        <p v-else>Puntos definitivos: <strong>{{ validDraft == null ? 'Sin asignación' : formatPoints(validDraft) + ' pts' }}</strong></p>
+        <label v-if="allowed && pointsChanged" class="block text-sm">Motivo del ajuste
+          <input v-model="reason" required maxlength="1000" class="field-input" :disabled="saving" />
+        </label>
+        <p v-if="validDraft == null" class="text-sm text-amber-700">Ingresa un puntaje válido mayor que 0 antes de confirmar.</p>
+        <p v-if="review.recurrencePenalty && validDraft != null" class="text-sm">Descuento existente por reincidencia: {{ formatPoints(review.recurrencePenalty) }} pts. Total neto a congelar: {{ formatPoints(validDraft - review.recurrencePenalty) }} pts.</p>
         <p v-if="review.historical" class="text-sm text-amber-700">Orden de prueba de octubre, sin acreditación oficial.</p>
         <ul class="text-sm space-y-1">
-          <li v-for="member in review.crew" :key="member.technicianId">{{ member.name }} · {{ member.role === 'leader' ? 'Líder' : 'Ayudante' }}: {{ formatPoints((Number(draft) - (review.recurrencePenalty ?? 0)) / review.crew.length) }} pts netos</li>
+          <li v-for="member in review.crew" :key="member.technicianId">{{ member.name }} · {{ member.role === 'leader' ? 'Líder' : 'Ayudante' }}: {{ validDraft == null ? '—' : formatPoints((validDraft - (review.recurrencePenalty ?? 0)) / review.crew.length) }} pts netos</li>
         </ul>
         <p v-if="draft !== review.points" class="text-sm">Cambio {{ review.points ?? 'sin asignación' }} → {{ draft }} pts. Motivo: {{ reason || 'Falta indicar motivo' }}</p>
         <label class="flex gap-2 text-sm"><input v-model="explicitlyConfirmed" type="checkbox" required :disabled="saving" />Confirmo que los puntos y su distribución son correctos.</label>
@@ -179,7 +192,7 @@ const formatPoints = (points: number) => new Intl.NumberFormat('es-PE', { maximu
         <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
         <div class="flex gap-2 justify-end">
           <button type="button" class="btn-secondary" :disabled="saving" @click="showConfirmation = false">Volver</button>
-          <button type="submit" class="btn-primary" :disabled="saving || !explicitlyConfirmed">{{ saving ? 'Confirmando…' : 'Confirmar puntos' }}</button>
+          <button type="submit" class="btn-primary" :disabled="saving || !explicitlyConfirmed || validDraft == null || (pointsChanged && (!allowed || !reason.trim()))">{{ saving ? 'Confirmando…' : 'Confirmar puntos' }}</button>
         </div>
       </form>
     </div>
