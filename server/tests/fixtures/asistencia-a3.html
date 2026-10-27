@@ -1,0 +1,27 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A3 local ficticio</title></head>
+<body><div id="app"></div><script type="module">
+import '/src/style.css';
+import { createApp, h } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
+import { useAuthStore } from '/src/stores/auth.ts';
+import { useAsistenciaStore } from '/src/stores/asistencia.ts';
+import IntercambiosPanel from '/src/components/asistencia/IntercambiosPanel.vue';
+import AsistenciaPanel from '/src/components/asistencia/AsistenciaPanel.vue';
+import AsistenciaView from '/src/views/asistencia/AsistenciaView.vue';
+const params=new URLSearchParams(location.search);
+const clock=params.get('day');
+if(clock){const NativeDate=Date;window.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:[clock+'T14:00:00Z']));}static now(){return new NativeDate(clock+'T14:00:00Z').getTime();}};}
+const pinia=createPinia();setActivePinia(pinia);
+const auth=useAuthStore();auth.role=params.get('role')||'TECNICO_RED';
+auth.user={id:'00000000-0000-0000-0000-000000000003'};
+const store=useAsistenciaStore();
+store.settings={lunes_hora_ingreso:'08:00',resto_hora_ingreso:'08:00',almuerzo_min:120};
+store.fetchSettings=async()=>{};store.fetchHoy=async()=>{};store.fetchFeriados=async()=>{};store.fetchHorariosPersonales=async()=>{};
+const registros=params.has('sinIngreso')?[]:[{id:'ficticio',user_id:auth.user.id,fecha:'2026-11-01',hora_ingreso:'2026-11-01T14:00:00Z',hora_salida:'2026-11-01T23:00:00Z',estado:'Finalizado',minutos_tardanza:0,exceso_almuerzo_min:0}];
+store.fetchRango=async()=>registros;
+store.fetchTablero=async fecha=>{store.tablero=registros.filter(r=>r.fecha===fecha);};
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/:pathMatch(.*)*',component:{render:()=>null}}]});
+await router.push('/asistencia');
+createApp({render:()=>params.has('reporte')?h(AsistenciaView):params.has('widget')?h(AsistenciaPanel):h(IntercambiosPanel,{administracion:auth.role==='SUPERADMIN'})}).use(pinia).use(router).mount('#app');
+</script></body></html>

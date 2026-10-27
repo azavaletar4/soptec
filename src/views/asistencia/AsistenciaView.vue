@@ -5,6 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '@/stores/auth';
 import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
 import NovedadesPanel from '@/components/asistencia/NovedadesPanel.vue';
+import IntercambiosPanel from '@/components/asistencia/IntercambiosPanel.vue';
+import { fetchIntercambiosResumen, intercambioDeDia, diasLaborablesConIntercambios, type IntercambioDia } from '@/lib/asistenciaIntercambios';
 import HorariosPersonalesPanel from '@/components/asistencia/HorariosPersonalesPanel.vue';
 import { AUSENCIA_LABEL, cuentaFalta, exentoDeAsistencia, fetchAusenciasResumen, type AusenciaResumen } from '@/lib/asistenciaAusencias';
 import { diaAutorizado, fetchNovedadesResumen, NOVEDAD_BADGE_CLASS, novedadTexto } from '@/lib/asistenciaNovedades';
@@ -30,6 +32,8 @@ const auth = useAuthStore();
 const canConfigure = computed(() => auth.role === 'SUPERADMIN');
 const ausenciasDia = ref<AusenciaResumen[]>([]);
 const ausenciasMes = ref<AusenciaResumen[]>([]);
+const intercambiosDia = ref<IntercambioDia[]>([]);
+const intercambiosMes = ref<IntercambioDia[]>([]);
 const novedadesDia = ref<NovedadResumen[]>([]);
 const novedadesMes = ref<NovedadResumen[]>([]);
 const tableroError = ref<string | null>(null);
@@ -51,10 +55,10 @@ async function loadTablero() {
   const dia = fecha.value;
   tableroReady.value = false; tableroError.value = null;
   try {
-    const [, rows, novedades] = await Promise.all([store.fetchTablero(dia), fetchAusenciasResumen(dia, dia), fetchNovedadesResumen(dia, dia)]);
+    const [, rows, novedades, intercambios] = await Promise.all([store.fetchTablero(dia), fetchAusenciasResumen(dia, dia), fetchNovedadesResumen(dia, dia), fetchIntercambiosResumen(dia, dia)]);
     if (request !== tableroRequest) return;
     ausenciasDia.value = rows;
-    novedadesDia.value = novedades;
+    novedadesDia.value = novedades; intercambiosDia.value = intercambios;
     tableroReady.value = true;
   } catch (e) {
     if (request !== tableroRequest) return;
@@ -76,6 +80,7 @@ interface FilaTablero {
   falta: boolean;
   ausencia?: AusenciaResumen;
   novedadesDelDia: NovedadResumen[];
+  intercambio?: IntercambioDia;
   horarioHabitual?: ReturnType<typeof horarioPersonalDeDia>;
 }
 const filas = computed<FilaTablero[]>(() => {
@@ -96,10 +101,11 @@ const filas = computed<FilaTablero[]>(() => {
       // muestran como contexto, sin recalcular ni suprimir nada en el cliente.
       const ausencia = ausenciasDia.value.find(a => a.user_id === p.id);
       const novedadesDelDia = novedadesDia.value.filter(n => n.user_id === p.id);
-      const autorizado = diaAutorizado(fecha.value, novedadesDelDia);
-      const falta = cuentaFalta(!!registro?.hora_ingreso, ausencia?.estado, fecha.value, fechaLimaISO(), esLaborable.value, ['ADMIN', 'TECNICO_RED'].includes(p.role), autorizado);
+      const intercambio = intercambioDeDia(intercambiosDia.value, p.id, fecha.value);
+      const autorizado = intercambio?.tipo === 'descanso' || diaAutorizado(fecha.value, novedadesDelDia);
+      const falta = cuentaFalta(!!registro?.hora_ingreso, ausencia?.estado, fecha.value, fechaLimaISO(), intercambio?.tipo === 'trabajo' || esLaborable.value, ['ADMIN', 'TECNICO_RED'].includes(p.role), autorizado);
       const horarioHabitual = horarioPersonalDeDia(store.horariosPersonales.filter(h => h.user_id === p.id), diaSemana);
-      return { profile: p, registro, falta, ausencia, novedadesDelDia, horarioHabitual };
+      return { profile: p, registro, falta, ausencia, novedadesDelDia, horarioHabitual, intercambio };
     })
     .sort((a, b) => (a.profile.full_name ?? a.profile.email).localeCompare(b.profile.full_name ?? b.profile.email));
 });
@@ -188,8 +194,8 @@ async function cargarReporte() {
     const [year, month] = mesSeleccionado.value.split('-').map(Number);
     const desde = `${mesSeleccionado.value}-01`;
     const hasta = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // ultimo dia del mes
-    const [marcaciones, ausencias, novedades] = await Promise.all([store.fetchRango(desde, hasta), fetchAusenciasResumen(desde, hasta), fetchNovedadesResumen(desde, hasta)]);
-    rangoRows.value = marcaciones; ausenciasMes.value = ausencias; novedadesMes.value = novedades;
+    const [marcaciones, ausencias, novedades, intercambios] = await Promise.all([store.fetchRango(desde, hasta), fetchAusenciasResumen(desde, hasta), fetchNovedadesResumen(desde, hasta), fetchIntercambiosResumen(desde, hasta)]);
+    rangoRows.value = marcaciones; ausenciasMes.value = ausencias; novedadesMes.value = novedades; intercambiosMes.value = intercambios;
     reporteReady.value = true;
   } catch (e) {
     reporteError.value = getErrorMessage(e, 'Error al cargar el reporte');
@@ -208,6 +214,8 @@ interface FilaReporte {
   pendientes: number;
   justificadas: number;
   rechazadas: number;
+  descansosIntercambio: number;
+  jornadasCompensatorias: number;
 }
 const reporte = computed<FilaReporte[]>(() => {
   if (!reporteReady.value) return [];
@@ -233,10 +241,12 @@ const reporte = computed<FilaReporte[]>(() => {
         tardanzaMin: propios.reduce((sum, r) => sum + (r.minutos_tardanza || 0), 0),
         excesoAlmuerzoMin: propios.reduce((sum, r) => sum + (r.exceso_almuerzo_min || 0), 0),
         diasTrabajados: diasConIngreso.size,
+        descansosIntercambio: intercambiosMes.value.filter(i => i.user_id === p.id && i.tipo === 'descanso').length,
+        jornadasCompensatorias: intercambiosMes.value.filter(i => i.user_id === p.id && i.tipo === 'trabajo').length,
         pendientes: solicitudes.filter(a => a.estado === 'pendiente').length,
         justificadas: solicitudes.filter(a => a.estado === 'aprobada').length,
         rechazadas: solicitudes.filter(a => a.estado === 'rechazada').length,
-        faltas: diasLaborables.filter(d => cuentaFalta(
+        faltas: diasLaborablesConIntercambios(diasLaborables, intercambiosMes.value, p.id, desde, hastaCorte).filter(d => cuentaFalta(
           diasConIngreso.has(d), ausenciasMes.value.find(a => a.user_id === p.id && a.fecha === d)?.estado, d, fechaLimaISO(), true,
           ['ADMIN', 'TECNICO_RED'].includes(p.role), diaAutorizado(d, novedadesPropias),
         )).length,
@@ -246,8 +256,8 @@ const reporte = computed<FilaReporte[]>(() => {
 });
 
 function exportReporteCsv() {
-  const header = ['Colaborador', 'Días trabajados', 'Minutos de tardanza (total)', 'Minutos de exceso de almuerzo (total)', 'Faltas', 'Ausencias pendientes', 'Ausencias justificadas', 'Ausencias rechazadas'];
-  const rows = reporte.value.map((f) => [f.profile.full_name || f.profile.email, f.diasTrabajados, f.tardanzaMin, f.excesoAlmuerzoMin, f.faltas, f.pendientes, f.justificadas, f.rechazadas]);
+  const header = ['Colaborador', 'Días trabajados', 'Minutos de tardanza (total)', 'Minutos de exceso de almuerzo (total)', 'Faltas', 'Ausencias pendientes', 'Ausencias justificadas', 'Ausencias rechazadas', 'Descansos por intercambio programados', 'Jornadas compensatorias programadas'];
+  const rows = reporte.value.map((f) => [f.profile.full_name || f.profile.email, f.diasTrabajados, f.tardanzaMin, f.excesoAlmuerzoMin, f.faltas, f.pendientes, f.justificadas, f.rechazadas, f.descansosIntercambio, f.jornadasCompensatorias]);
   const csv = [header, ...rows].map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -332,6 +342,7 @@ async function handleSaveSettings() {
     </div>
 
     <AusenciasPanel administracion @changed="loadTablero(); cargarReporte()" />
+    <IntercambiosPanel administracion @changed="loadTablero(); cargarReporte()" />
     <NovedadesPanel administracion @changed="loadTablero(); cargarReporte()" />
     <HorariosPersonalesPanel administracion @changed="loadTablero()" />
     <p class="text-sm mb-3">SUPERADMIN está exento: no se incluye en indicadores laborales ni pendientes de marcación. Sus marcaciones históricas se conservan.</p>
@@ -419,7 +430,7 @@ async function handleSaveSettings() {
       </div>
 
       <p v-if="!esLaborable" class="text-xs text-slate-400 mb-3">
-        {{ esDomingo ? 'Domingo — no es un día laborable.' : 'Feriado — no es un día laborable.' }}
+        {{ esDomingo ? 'Domingo: descanso general, salvo jornada compensatoria autorizada.' : 'Feriado: descanso general, salvo jornada compensatoria autorizada.' }}
       </p>
 
       <div class="table-shell">
@@ -444,12 +455,13 @@ async function handleSaveSettings() {
             <tr v-for="f in filas" :key="f.profile.id" class="border-t border-slate-200 hover:bg-slate-50">
               <td class="px-4 py-3 text-slate-800">{{ f.profile.full_name || f.profile.email }}</td>
               <td class="px-4 py-3">
-                <span v-if="f.horarioHabitual" class="badge mr-1 bg-violet-500/15 text-violet-700">📌 Horario habitual {{ horarioPersonalTexto(f.horarioHabitual) }}</span>
+                <span v-if="f.intercambio" class="badge mr-1 bg-indigo-500/15 text-indigo-700">{{ f.intercambio.tipo === 'descanso' ? 'Descanso autorizado por intercambio' : 'Jornada compensatoria' }} · {{ f.intercambio.fecha_vinculada }}<template v-if="f.intercambio.tipo === 'trabajo'"> · {{ f.intercambio.hora_ingreso.slice(0, 5) }}–{{ f.intercambio.hora_salida.slice(0, 5) }}</template></span>
+                <span v-if="f.horarioHabitual && !f.intercambio" class="badge mr-1 bg-violet-500/15 text-violet-700">📌 Horario habitual {{ horarioPersonalTexto(f.horarioHabitual) }}</span>
                 <span v-for="n in f.novedadesDelDia" :key="n.tipo + n.hora_inicio" class="badge mr-1" :class="NOVEDAD_BADGE_CLASS[n.tipo]">{{ novedadTexto(n) }}</span>
                 <span v-if="f.ausencia" class="badge">{{ AUSENCIA_LABEL[f.ausencia.estado] }}{{ f.registro?.hora_ingreso ? ' - Con ingreso: revisar coincidencia' : '' }}</span>
                 <span v-if="f.registro" class="badge" :class="ESTADO_BADGE_CLASS[f.registro.estado]">{{ f.registro.estado }}</span>
                 <span v-else-if="f.falta" class="badge" :class="ESTADO_BADGE_CLASS.Falta">Falta</span>
-                <span v-else-if="!f.ausencia && !f.novedadesDelDia.length" class="text-xs text-slate-400">Sin marcar</span>
+                <span v-else-if="!f.ausencia && !f.novedadesDelDia.length && f.intercambio?.tipo !== 'descanso'" class="text-xs text-slate-400">Sin marcar</span>
               </td>
               <td class="px-4 py-3 text-xs">
                 <template v-if="f.registro?.hora_ingreso">
@@ -507,11 +519,12 @@ async function handleSaveSettings() {
               <th class="text-right px-4 py-3">Exceso de almuerzo acumulado</th>
               <th class="text-right px-4 py-3">Faltas</th>
               <th class="text-right px-4 py-3">Ausencias pendientes / justificadas / rechazadas</th>
+              <th class="text-right px-4 py-3">Intercambios programados: descansos / jornadas compensatorias</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loadingReporte">
-              <td colspan="6" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
+              <td colspan="7" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
             </tr>
             <tr v-for="f in reporte" :key="f.profile.id" class="border-t border-slate-200">
               <td class="px-4 py-3 text-slate-800">{{ f.profile.full_name || f.profile.email }}</td>
@@ -520,6 +533,7 @@ async function handleSaveSettings() {
               <td class="px-4 py-3 text-right font-mono" :class="f.excesoAlmuerzoMin > 0 ? 'text-amber-700' : ''">{{ formatMinutos(f.excesoAlmuerzoMin) }}</td>
               <td class="px-4 py-3 text-right font-mono" :class="f.faltas > 0 ? 'text-red-600' : ''">{{ f.faltas }}</td>
               <td class="px-4 py-3 text-right font-mono">{{ f.pendientes }} / {{ f.justificadas }} / {{ f.rechazadas }}</td>
+              <td class="px-4 py-3 text-right font-mono">{{ f.descansosIntercambio }} / {{ f.jornadasCompensatorias }}</td>
             </tr>
           </tbody>
         </table>

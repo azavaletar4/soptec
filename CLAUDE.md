@@ -1,5 +1,17 @@
 # SmartRayco — guía para Claude Code
 
+## Estado vigente de A3
+
+A3 implementada y validada localmente en `feature/asistencia-a3-local`,
+worktree `scripts/inventory-auth-lab/runtime/asistencia-a3-worktree`, sobre
+`9918bb2`. Sin push, merge, migración productiva ni despliegue. A0/A1 sigue
+cerrada y validada; A2/A2.1 sigue cerrada administrativamente por decisión del
+propietario, con validación funcional completa aún no acreditada y seguimiento
+operativo del sábado/vacaciones/permisos. A3 deja de ser «sin implementar»:
+su pendiente ahora es revisión y autorización de activación productiva.
+Detalle de alcance, pruebas y rollback: `docs/ASISTENCIA-A3-INTERCAMBIOS-LOCAL.md`.
+Esta nota prevalece sobre las menciones anteriores de A3 como no iniciada.
+
 ## Estado vigente — cierre administrativo de Asistencia A2/A2.1
 
 **A2/A2.1 cerradas administrativamente por decisión del propietario; validación funcional completa aún no acreditada. Incidencias posteriores se atenderán puntualmente**.
