@@ -5,8 +5,15 @@
 // NO se usa `onu_type` (src/views/olt/AuthorizeOnuModal.vue) para esto: es
 // texto libre que tipea el tecnico al autorizar, no un dato verificado.
 //
+// Normaliza con gponSerial.ts antes de leer el prefijo: algunos CPE (ver
+// HWTC1D3691B7/Huawei real, 2026-10-27) reportan el MISMO serial con el
+// vendor ID tambien hex-codificado ("485754431D3691B7") en vez de ASCII
+// literal — sin normalizar, el prefijo leido serian los primeros 4
+// caracteres hex ("4857"), que no esta en ningun mapa de fabricantes.
+//
 // Lista NO exhaustiva — cubre los fabricantes ya vistos en este despliegue.
 // Un prefijo ausente del mapa no es un error: solo significa "no identificado".
+import { normalizeGponSerial } from './gponSerial';
 const ITU_VENDOR_IDS: Record<string, string> = {
   HWTC: 'Huawei',
   ZTEG: 'ZTE',
@@ -23,7 +30,8 @@ export interface GponVendorInfo {
 }
 
 export function gponVendorFromSerial(serial: string | null | undefined): GponVendorInfo {
-  const prefix = (serial ?? '').trim().slice(0, 4).toUpperCase();
+  const normalized = normalizeGponSerial(serial);
+  const prefix = normalized ? normalized.slice(0, 4) : (serial ?? '').trim().slice(0, 4).toUpperCase();
   return { prefix, name: ITU_VENDOR_IDS[prefix] ?? null };
 }
 

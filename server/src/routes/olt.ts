@@ -42,6 +42,7 @@ import {
   parseFullRunningConfig,
 } from '../ssh/zteParsers';
 import { TR069_ENABLE_ROLES, validateTr069EnableRequest, verifyLivePosition } from '../services/tr069Enable';
+import { matchTr069Device } from '../../../src/lib/gponSerial';
 import { createSingleFlightGuard } from '../services/singleFlightGuard';
 import { createSupabaseProvisioningStore } from '../services/oltProvisioningStore';
 import { classifyImportCandidates, type LinkedPosition } from '../services/oltImportDescriptionGuard';
@@ -728,13 +729,20 @@ oltRoutes.get('/onts/status', requireRole(...STAFF_READ), async (c) => {
   const serials = raw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 200);
   if (!serials.length) return c.json({});
 
-  const { data, error } = await supabaseAdmin.from('olt_onts').select('id, olt_device_id, serial, frame, slot, port, ont_id, status, description, rx_power, tx_power, last_synced_at').is('retired_at', null).in('serial', serials);
+  // Sin filtrar por "serial" en la consulta: la normalizacion (requisito
+  // 2026-10-27, ver src/lib/gponSerial.ts) no se puede expresar como filtro
+  // SQL — algunos CPE reportan por TR-069 el mismo serial GPON con el
+  // vendor ID tambien hex-codificado, distinto al literal que usa la OLT.
+  const { data, error } = await supabaseAdmin.from('olt_onts').select('id, olt_device_id, serial, frame, slot, port, ont_id, status, description, rx_power, tx_power, last_synced_at').is('retired_at', null);
   if (error) return c.json({ error: error.message }, 500);
 
+  const onts = (data ?? []).map((row) => ({ ...row, cpe_serial: row.serial }));
   const byserial: Record<string, unknown> = {};
-  for (const row of data ?? []) {
-    const projected = ontTelemetry.project(row);
-    byserial[row.serial] = { status: projected.status, description: row.description, telemetry: projected.telemetry, rx_power: projected.rx_power, tx_power: projected.tx_power };
+  for (const requested of serials) {
+    const match = matchTr069Device(requested, onts);
+    if (!match.device) continue; // sin ONT, invalido o ambiguo — nunca se adivina (requisito 5)
+    const projected = ontTelemetry.project(match.device);
+    byserial[requested] = { status: projected.status, description: match.device.description, telemetry: projected.telemetry, rx_power: projected.rx_power, tx_power: projected.tx_power };
   }
   return c.json(byserial);
 });
@@ -1397,15 +1405,17 @@ oltRoutes.get('/:id/onts/:ontDbId/tr069/status', requireRole(...STAFF_READ), asy
   const ont = await getOntOrNull(c.req.param('ontDbId'));
   if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
 
-  const { data: matchedDevice } = await supabaseAdmin
-    .from('tr069_devices')
-    .select('cpe_serial, last_seen_at')
-    .ilike('cpe_serial', ont.serial)
-    .maybeSingle();
+  // Comparacion exacta por serial GPON normalizado (requisito 2026-10-27):
+  // algunos CPE (confirmado con una Huawei real) reportan por TR-069 el
+  // mismo serial de 8 bytes con el vendor ID TAMBIEN hex-codificado — un
+  // "ilike" literal contra olt_onts.serial nunca encuentra esa coincidencia
+  // aunque sea la misma ONT real. Ver src/lib/gponSerial.ts.
+  const { data: devices } = await supabaseAdmin.from('tr069_devices').select('cpe_serial, last_seen_at');
+  const match = matchTr069Device(ont.serial, devices ?? []);
 
   return c.json({
     tr069_enabled: ont.tr069_enabled,
     requestInFlight: tr069EnableGuard.has(ont.id),
-    matchedDevice: matchedDevice ?? null,
+    matchedDevice: match.device,
   });
 });
