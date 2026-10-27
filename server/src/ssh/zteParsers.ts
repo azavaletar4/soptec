@@ -252,6 +252,39 @@ export function parseFullRunningConfig(raw: string): Map<string, FullConfigOnt> 
   return result;
 }
 
+/**
+ * Todas las IPs de gestión TR-069 (`ip-host N ip X.X.X.X ...`) ya asignadas
+ * en TODO el dump — para no duplicar una IP de otra ONT (requisito 3) al
+ * preparar una interfaz de gestión independiente nueva. Alcance: cualquier
+ * ONU, cualquier posición — un solo recorrido de texto, sin filtrar por
+ * ONU todavía (ver `extractPonOnuMngBlock` para acotar a una posición).
+ */
+export function extractManagementIpAssignments(raw: string): string[] {
+  const ips: string[] = [];
+  const re = /^\s*ip-host\s+\d+\s+ip\s+(\S+)/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) ips.push(m[1]);
+  return ips;
+}
+
+/** Texto crudo del bloque `pon-onu-mng gpon-onu_S/L/P:ID` de una posición puntual, o null si no existe. */
+export function extractPonOnuMngBlock(raw: string, shelf: number, slot: number, port: number, onuId: number): string | null {
+  const header = `pon-onu-mng gpon-onu_${shelf}/${slot}/${port}:${onuId}`;
+  const idx = raw.indexOf(header);
+  if (idx === -1) return null;
+  const end = raw.indexOf('\n!', idx);
+  return raw.slice(idx, end === -1 ? undefined : end);
+}
+
+/** Texto crudo del bloque `interface gpon-onu_S/L/P:ID` de una posición puntual, o null si no existe. */
+export function extractOnuInterfaceBlock(raw: string, shelf: number, slot: number, port: number, onuId: number): string | null {
+  const header = `interface gpon-onu_${shelf}/${slot}/${port}:${onuId}`;
+  const idx = raw.indexOf(header);
+  if (idx === -1) return null;
+  const end = raw.indexOf('\n!', idx);
+  return raw.slice(idx, end === -1 ? undefined : end);
+}
+
 export interface OltUptime {
   /** Ej. "42d 4h 48m" */
   raw: string;

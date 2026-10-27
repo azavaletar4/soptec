@@ -416,3 +416,161 @@ export function bulkOnuTxCommands(ref: ZteInterfaceRef): string[] {
 export function oltHealthCommands(): string[] {
   return ['enable', 'show system-group', 'show card-temperature', 'show processor'];
 }
+
+function sanitizeIpAddress(value: string, fieldName: string): string {
+  const v = String(value).trim();
+  const parts = v.split('.');
+  if (parts.length !== 4 || parts.some((p) => !/^\d{1,3}$/.test(p) || Number(p) > 255)) {
+    throw new Error(`${fieldName} no es una dirección IPv4 válida`);
+  }
+  return v;
+}
+
+/**
+ * Interfaz de gestión TR-069 INDEPENDIENTE por OMCI (IP propia, separada del
+ * WAN/PPPoE del cliente) — patrón tomado letra por letra de 6 Huawei
+ * GPT-2741GNAC reales YA configuradas en esta misma OLT (ver
+ * docs/TR069-GESTION-INDEPENDIENTE-HUAWEI.md), apuntando hoy al ACS de
+ * SmartOLT (10.69.69.1) — nunca antes implementado en este código, nunca
+ * confirmado con un Inform real a GenieACS todavía.
+ *
+ * tcont/gemport/service-port NUEVOS (`tcontId`/`gemportId`/`vportId`, los 3
+ * iguales entre sí por convención ZTE) son ADICIONALES al tcont/gemport/
+ * service-port del cliente (vlan 120) — nunca los reemplazan ni los tocan.
+ * iphost/veip también son índices NUEVOS e independientes del Internet del
+ * cliente. Todos los índices son LOCALES a esta ONU (no hay que coordinar
+ * un pool global) — confirmado: las 6 referencias usan exactamente los
+ * mismos números (tcont/gemport/vport 2, iphost 2, veip 1) cada una en su
+ * propia ONU, sin colisión entre ellas.
+ */
+export interface Tr069ManagementWanParams {
+  ref: ZteInterfaceRef;
+  onuId: number;
+  managementVlan: number;
+  managementIp: string;
+  managementMask: string;
+  gateway: string;
+  primaryDns: string;
+  secondaryDns: string;
+  acsUrl: string;
+  tcontProfile: string;
+  trafficProfile: string;
+  tcontId: number;
+  gemportId: number;
+  vportId: number;
+  iphostId: number;
+  veipId: number;
+  veipPort: number;
+  priority: number;
+}
+
+/** Que partes ya existen para esta ONU (se omiten para no duplicar — requisito 5). */
+export interface Tr069ManagementWanPresence {
+  interfaceBlock?: boolean;
+  serviceMgmt?: boolean;
+  switchportBind?: boolean;
+  ipHostAddress?: boolean;
+  ipHostDns?: boolean;
+  veipPortBinding?: boolean;
+  tr069State?: boolean;
+  tr069Acs?: boolean;
+  tr069Tag?: boolean;
+}
+
+function safeTr069ManagementWanParams(p: Tr069ManagementWanParams): Tr069ManagementWanParams {
+  return {
+    ref: safeRef(p.ref),
+    onuId: sanitizeInt(p.onuId, 'onuId', { min: 0, max: 127 }),
+    managementVlan: sanitizeInt(p.managementVlan, 'managementVlan', { min: 1, max: 4094 }),
+    managementIp: sanitizeIpAddress(p.managementIp, 'managementIp'),
+    managementMask: sanitizeIpAddress(p.managementMask, 'managementMask'),
+    gateway: sanitizeIpAddress(p.gateway, 'gateway'),
+    primaryDns: sanitizeIpAddress(p.primaryDns, 'primaryDns'),
+    secondaryDns: sanitizeIpAddress(p.secondaryDns, 'secondaryDns'),
+    acsUrl: sanitizeAcsUrl(p.acsUrl),
+    tcontProfile: sanitizeIdentifier(p.tcontProfile, 'tcontProfile', 64),
+    trafficProfile: sanitizeIdentifier(p.trafficProfile, 'trafficProfile', 64),
+    tcontId: sanitizeInt(p.tcontId, 'tcontId', { min: 1, max: 8 }),
+    gemportId: sanitizeInt(p.gemportId, 'gemportId', { min: 1, max: 32 }),
+    vportId: sanitizeInt(p.vportId, 'vportId', { min: 1, max: 32 }),
+    iphostId: sanitizeInt(p.iphostId, 'iphostId', { min: 1, max: 5 }),
+    veipId: sanitizeInt(p.veipId, 'veipId', { min: 1, max: 8 }),
+    veipPort: sanitizeInt(p.veipPort, 'veipPort', { min: 1, max: 65535 }),
+    priority: sanitizeInt(p.priority, 'priority', { min: 0, max: 7 }),
+  };
+}
+
+export function configureTr069ManagementWanCommands(
+  rawParams: Tr069ManagementWanParams,
+  already: Tr069ManagementWanPresence = {},
+): string[] {
+  const p = safeTr069ManagementWanParams(rawParams);
+  const cmds: string[] = ['enable', 'configure terminal'];
+
+  if (!already.interfaceBlock) {
+    cmds.push(
+      onuInterface2(p),
+      `tcont ${p.tcontId} profile ${p.tcontProfile}`,
+      `gemport ${p.gemportId} tcont ${p.tcontId}`,
+      `gemport ${p.gemportId} traffic-limit downstream ${p.trafficProfile}`,
+      `service-port ${p.vportId} vport ${p.vportId} user-vlan ${p.managementVlan} vlan ${p.managementVlan}`,
+      'exit',
+    );
+  }
+
+  const mngLines: string[] = [];
+  if (!already.serviceMgmt) mngLines.push(`service mgmt gemport ${p.gemportId} iphost ${p.iphostId} vlan ${p.managementVlan}`);
+  if (!already.switchportBind) mngLines.push(`switchport-bind switch_0/1 veip ${p.veipId}`);
+  if (!already.ipHostAddress) mngLines.push(`ip-host ${p.iphostId} ip ${p.managementIp} mask ${p.managementMask} gateway ${p.gateway}`);
+  if (!already.ipHostDns) mngLines.push(`ip-host ${p.iphostId} primary-dns ${p.primaryDns} second-dns ${p.secondaryDns}`);
+  if (!already.veipPortBinding) mngLines.push(`veip ${p.veipId} port udp ${p.veipPort} host ${p.iphostId}`);
+  if (!already.tr069State) mngLines.push(`tr069-mgmt ${p.veipId} state unlock`);
+  if (!already.tr069Acs) mngLines.push(`tr069-mgmt ${p.veipId} acs ${p.acsUrl}`);
+  if (!already.tr069Tag) mngLines.push(`tr069-mgmt ${p.veipId} tag pri ${p.priority} vlan ${p.managementVlan}`);
+
+  if (mngLines.length) cmds.push(`pon-onu-mng ${onuInterface(p.ref, p.onuId)}`, ...mngLines, 'exit');
+  return cmds;
+}
+
+/**
+ * Reversion — quita SOLO lo que configureTr069ManagementWanCommands() haya
+ * agregado de nuevo (nunca lo que ya existia antes de esta operación,
+ * reflejado en `applied`). Sintaxis "no <comando>" es la convención
+ * estándar Cisco-like que ya usa esta CLI en otros contextos — pero, a
+ * diferencia de las líneas de escritura (ya confirmadas contra el equipo
+ * real antes de usarse), esta ruta de REMOCIÓN específica todavía NO se
+ * probó contra el equipo real. Confirmar antes de usar en la prueba
+ * controlada.
+ */
+export function removeTr069ManagementWanCommands(
+  rawParams: Tr069ManagementWanParams,
+  applied: Tr069ManagementWanPresence,
+): string[] {
+  const p = safeTr069ManagementWanParams(rawParams);
+  const cmds: string[] = ['enable', 'configure terminal', `pon-onu-mng ${onuInterface(p.ref, p.onuId)}`];
+
+  if (applied.tr069Tag) cmds.push(`no tr069-mgmt ${p.veipId} tag`);
+  if (applied.tr069Acs) cmds.push(`no tr069-mgmt ${p.veipId} acs`);
+  if (applied.tr069State) cmds.push(`tr069-mgmt ${p.veipId} state lock`);
+  if (applied.veipPortBinding) cmds.push(`no veip ${p.veipId} port udp ${p.veipPort} host ${p.iphostId}`);
+  if (applied.ipHostDns) cmds.push(`no ip-host ${p.iphostId} primary-dns`);
+  if (applied.ipHostAddress) cmds.push(`no ip-host ${p.iphostId} ip`);
+  if (applied.switchportBind) cmds.push(`no switchport-bind switch_0/1 veip ${p.veipId}`);
+  if (applied.serviceMgmt) cmds.push(`no service mgmt gemport ${p.gemportId}`);
+  cmds.push('exit');
+
+  if (applied.interfaceBlock) {
+    cmds.push(
+      onuInterface2(p),
+      `no service-port ${p.vportId}`,
+      `no gemport ${p.gemportId}`,
+      `no tcont ${p.tcontId}`,
+      'exit',
+    );
+  }
+  return cmds;
+}
+
+function onuInterface2(p: Tr069ManagementWanParams): string {
+  return `interface ${onuInterface(p.ref, p.onuId)}`;
+}
