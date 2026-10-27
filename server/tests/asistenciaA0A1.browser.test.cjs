@@ -37,6 +37,7 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
     else if(u.pathname.endsWith('/feriados'))body=[];
     else if(u.pathname.endsWith('/asistencia_novedades'))body=[]; // A2: widget compartido también consulta "mis días autorizados"
     else if(u.pathname.endsWith('/asistencia_horarios_personales'))body=[]; // A2.1: y "mi horario habitual"
+    else if(u.pathname.endsWith('/asistencia_intercambios') && request.method==='GET')body=[]; // A3: lectura incorporada al widget productivo
     else if(!u.pathname.endsWith('/asistencia_solicitudes'))throw Error('Endpoint ficticio no previsto: '+u.pathname);
     await c('Fetch.fulfillRequest',{requestId,responseCode:code,responseHeaders:[{name:'Content-Type',value:'application/json'},{name:'Access-Control-Allow-Origin',value:'*'},{name:'Access-Control-Allow-Headers',value:'*'},{name:'Access-Control-Allow-Methods',value:'GET,POST,OPTIONS'}],body:Buffer.from(JSON.stringify(body)).toString('base64')});
    }catch(e){errors.push(String(e));await c('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'});}

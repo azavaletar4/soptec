@@ -16,11 +16,13 @@ auth.role=new URL(location.href).searchParams.get('role')||'ADMIN';auth.user={id
 const deviceId='00259E-HG8145X6%2D13-485754431D3691B7',serial='HWTC1D3691B7';
 const timestamp='2026-10-27T19:45:10.554Z';
 window.calls=[];window.blocked=[];window.fixtureError=false;
-window.fetch=async(...args)=>{window.blocked.push(String(args[0]));throw Error('NETWORK_DISABLED_IN_VISUAL_FIXTURE');};
-supabase.from=()=>{const query=new Proxy({}, {get:(_,key)=>key==='then'?(resolve)=>resolve({data:[],error:null}):()=>query});return query;};
+const fixtureDevice={id:'synthetic-huawei',genieacs_id:deviceId,cpe_serial:'485754431D3691B7',model_name:'HG8145X6-13 (simulado)',firmware_version:'V5R023C00S342',last_seen_at:timestamp,service_contract_id:null,created_at:timestamp};
+window.fetch=async(input,init={})=>{if(String(input)==='/api/tr069-sync/inventory'&&(!init.method||init.method==='GET'))return Response.json({checkedAt:new Date().toISOString(),total:1,devices:[fixtureDevice]});window.blocked.push(String(input));throw Error('NETWORK_DISABLED_IN_VISUAL_FIXTURE');};
+supabase.auth.getSession=async()=>({data:{session:{access_token:'synthetic-token'}},error:null});
+supabase.from=table=>{const rows=table==='tr069_devices'?[fixtureDevice]:[];const query=new Proxy({}, {get:(_,key)=>key==='then'?(resolve)=>resolve({data:rows,error:null,count:rows.length}):()=>query});return query;};
 const alerts=useScheduleAlertsStore(pinia);alerts.subscribe=()=>{};alerts.unsubscribe=()=>{};
 useOltStore(pinia).fetchOntStatusBySerials=async()=>({});
-store.fetchDevices=async()=>{store.devices=[{id:'synthetic-huawei',cpe_serial:'485754431D3691B7',model_name:'HG8145X6-13 (simulado)',firmware_version:'V5R023C00S342',last_seen_at:timestamp,service_contract_id:null}];};
+// Se conserva fetchDevices real: valida separación entre inventario actual y caché histórica.
 window.inventory={found:true,deviceId,serial,lastInform:'2026-10-27T20:32:31.480Z',networks:[
  {path:'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1',ssid:'RAYCO 18',enabled:null,writable:true,timestamp,band:'Banda desconocida'},
  {path:'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5',ssid:'WirelessNet-5G',enabled:null,writable:true,timestamp,band:'Banda desconocida'}]};

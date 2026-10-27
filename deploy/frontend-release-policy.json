@@ -1,0 +1,15 @@
+{
+  "minimumConsolidatedCommit": "ead801ace41b08511ddcd5fd202a1a960720625f",
+  "requiredSources": [
+    "src/views/asistencia/AsistenciaView.vue",
+    "src/components/asistencia/AusenciasPanel.vue",
+    "src/components/asistencia/IntercambiosPanel.vue",
+    "src/components/asistencia/HorariosPersonalesPanel.vue",
+    "src/components/campo/CampoJobPoints.vue",
+    "src/lib/fieldOrderLocation.ts",
+    "src/views/campo/CampoTrabajoDetailView.vue",
+    "src/lib/tr069Inventory.ts",
+    "src/lib/tr069WifiTrial.ts",
+    "src/views/tr069/Tr069View.vue"
+  ]
+}

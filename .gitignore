@@ -8,6 +8,8 @@ dist-ssr/
 *.log
 *.local
 coverage/
+dist-*/
+release-source.json
 .DS_Store
 Thumbs.db
 *.pem

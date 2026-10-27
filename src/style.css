@@ -1,4 +1,6 @@
-@import "tailwindcss";
+/* La salida no debe depender de documentos, laboratorios ni otros worktrees. */
+@import "tailwindcss" source(none);
+@source "./";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

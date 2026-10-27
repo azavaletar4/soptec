@@ -9,6 +9,7 @@
     "dev:web": "vite",
     "dev:api": "tsx watch server/src/index.ts",
     "build": "vue-tsc -b && vite build",
+    "build:release": "node scripts/frontend-release-build.mjs",
     "preview": "vite preview",
     "start:api": "tsx server/src/index.ts",
     "tr069:fix-acs": "tsx server/scripts/fix-acs-url.ts",
