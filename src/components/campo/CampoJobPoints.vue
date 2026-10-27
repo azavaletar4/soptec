@@ -6,6 +6,8 @@ import { usePersonalRead } from '@/composables/usePersonalRead';
 interface OrderPoints {
   jobPoints: number; configuredPoints: number | null; personalPoints: number;
   crewSize: number; status: string; asOf: string;
+  scoringState?: 'historical' | 'pending' | 'confirmed';
+  creditedPoints?: number | null; recurrencePenalty?: number; creditedAt?: string;
 }
 const pointNumber = (value: number) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 4 }).format(value);
 const props = defineProps<{ jobType: string; jobId: string }>();
@@ -59,8 +61,19 @@ onBeforeUnmount(() => {
     <p v-else-if="error" class="text-red-700">No se pudieron consultar los puntos. Intenta actualizar.</p>
     <p v-else-if="!data" class="text-slate-500">Orden no disponible para tu asignación actual.</p>
     <template v-else>
-      <p class="mt-1">Puntos totales: <strong>{{ pointNumber(data.jobPoints) }} pts</strong></p>
-      <p class="mt-1">Tu parte asignada: {{ pointNumber(data.personalPoints) }} pts · {{ data.crewSize }} integrante(s)</p>
+      <template v-if="data.scoringState === 'confirmed'">
+        <p class="mt-1">Puntos confirmados de la orden: <strong>{{ pointNumber(data.jobPoints) }} pts</strong></p>
+        <p class="mt-1">Tu parte: {{ pointNumber(data.personalPoints) }} pts · {{ data.crewSize }} integrante(s)</p>
+        <p v-if="data.recurrencePenalty" class="mt-1">Descuento por reincidencia: {{ pointNumber(data.recurrencePenalty) }} pts</p>
+        <p class="mt-1">Tu aporte neto: <strong>{{ pointNumber(data.creditedPoints ?? 0) }} pts</strong></p>
+        <p v-if="data.creditedAt" class="mt-1 text-slate-500">Acreditado: {{ new Date(data.creditedAt).toLocaleString('es-PE', { timeZone: 'America/Lima' }) }} (Perú). Se incluye en el período de confirmación.</p>
+      </template>
+      <template v-else>
+        <p class="mt-1">Puntos totales: <strong>{{ pointNumber(data.jobPoints) }} pts</strong></p>
+        <p class="mt-1">Tu parte asignada: {{ pointNumber(data.personalPoints) }} pts · {{ data.crewSize }} integrante(s)</p>
+        <p v-if="data.scoringState === 'pending'" class="mt-1 text-slate-500">Pendiente de confirmación administrativa. Estos puntos todavía no suman en Mi Avance ni en Ranking.</p>
+        <p v-else-if="data.scoringState === 'historical'" class="mt-1 text-slate-500">Orden del período piloto. Conserva su cálculo histórico y no se traslada a los puntos oficiales de noviembre.</p>
+      </template>
     </template>
   </section>
 </template>
