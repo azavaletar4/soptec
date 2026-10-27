@@ -1034,3 +1034,40 @@ export interface AsistenciaRegistro {
   updated_at: string;
   profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
 }
+
+// ---- Novedades de asistencia (Fase A2) ----
+export type NovedadTipo = 'vacaciones' | 'descanso_programado' | 'permiso_horas' | 'media_jornada';
+export type NovedadTurno = 'manana' | 'tarde';
+
+/** Programada y aprobada en un solo paso por SUPERADMIN (no hay "pendiente"
+ *  como en A1/ausencias) — ver asistencia_novedad_crear/cancelar. */
+export interface AsistenciaNovedad {
+  id: string;
+  user_id: string;
+  tipo: NovedadTipo;
+  fecha_inicio: string;
+  fecha_fin: string;
+  turno: NovedadTurno | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+  motivo: string | null;
+  estado: 'activa' | 'cancelada';
+  version: number;
+  created_by: string;
+  created_at: string;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  cancel_motivo: string | null;
+  profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}
+
+/** Fila expandida por día de `asistencia_novedades_resumen` — sin motivo
+ *  privado, para que ADMIN interprete el tablero de un colega. */
+export interface NovedadResumen {
+  user_id: string;
+  fecha: string;
+  tipo: NovedadTipo;
+  turno: NovedadTurno | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+}

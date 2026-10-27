@@ -61,6 +61,9 @@ export async function fetchAusenciasResumen(desde: string, hasta: string): Promi
   }
 }
 
-export function cuentaFalta(ingreso: boolean, estado: AusenciaEstado | undefined, dia: string, hoy: string, laborable: boolean, obligatorio: boolean): boolean {
-  return obligatorio && laborable && dia < hoy && !ingreso && estado !== 'pendiente' && estado !== 'aprobada';
+export function cuentaFalta(
+  ingreso: boolean, estado: AusenciaEstado | undefined, dia: string, hoy: string, laborable: boolean, obligatorio: boolean,
+  autorizadoPorNovedad = false,
+): boolean {
+  return obligatorio && laborable && dia < hoy && !ingreso && estado !== 'pendiente' && estado !== 'aprobada' && !autorizadoPorNovedad;
 }

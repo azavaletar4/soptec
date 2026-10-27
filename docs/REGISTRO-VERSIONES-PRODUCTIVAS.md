@@ -12,6 +12,14 @@ el 2026-10-26; actualizado tras activar la corrección de contadores y verificar
 el primer muestreo de contadores; frontend de devoluciones verificado a las
 17:16 UTC — no es una suposición desde git.
 
+**Nota (26/10/2026 ~22:35 UTC)**: A0/A1 de Asistencia quedó cerrada, validada
+en producción y pusheada a `origin/feature/asistencia-a0-a1-local` (sin
+force). A2 (vacaciones/descanso/permisos por horas/medias jornadas) está
+**implementada LOCALMENTE** en `feature/asistencia-a2-local`
+(`20261028000000_asistencia_a2_novedades.sql`), **sin aplicar ni desplegar**
+— las imágenes activas de abajo no cambiaron. Detalle en
+`ESTADO_DESARROLLO.md` ("Asistencia A2").
+
 ## Estado actual (2026-10-26)
 
 | | Backend | Frontend |

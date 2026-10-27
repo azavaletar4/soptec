@@ -35,6 +35,7 @@ test('A1 navegador local: reportar, reintentar, visualizar y resolver con API fi
     else if(u.pathname.endsWith('/rpc/resolver_ausencia')){const p=JSON.parse(request.postData);decisions.push(p);rows=[];body={...row,estado:p.p_decision};}
     else if(u.pathname.endsWith('/company_settings'))body={id:1,lunes_hora_ingreso:'07:30:00',resto_hora_ingreso:'08:00:00',tolerancia_min:5,almuerzo_min:120,oficina_lat:0,oficina_lng:0,oficina_radio_m:100};
     else if(u.pathname.endsWith('/feriados'))body=[];
+    else if(u.pathname.endsWith('/asistencia_novedades'))body=[]; // A2: widget compartido también consulta "mis días autorizados"
     else if(!u.pathname.endsWith('/asistencia_solicitudes'))throw Error('Endpoint ficticio no previsto: '+u.pathname);
     await c('Fetch.fulfillRequest',{requestId,responseCode:code,responseHeaders:[{name:'Content-Type',value:'application/json'},{name:'Access-Control-Allow-Origin',value:'*'},{name:'Access-Control-Allow-Headers',value:'*'},{name:'Access-Control-Allow-Methods',value:'GET,POST,OPTIONS'}],body:Buffer.from(JSON.stringify(body)).toString('base64')});
    }catch(e){errors.push(String(e));await c('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'});}

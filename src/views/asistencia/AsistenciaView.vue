@@ -4,7 +4,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '@/stores/auth';
 import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
+import NovedadesPanel from '@/components/asistencia/NovedadesPanel.vue';
 import { AUSENCIA_LABEL, cuentaFalta, exentoDeAsistencia, fetchAusenciasResumen, type AusenciaResumen } from '@/lib/asistenciaAusencias';
+import { diaAutorizado, fetchNovedadesResumen, NOVEDAD_BADGE_CLASS, novedadTexto, tardanzaSuprimidaPorPermiso } from '@/lib/asistenciaNovedades';
+import type { NovedadResumen } from '@/types/domain';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useAsistenciaStore } from '@/stores/asistencia';
 import { useCatalogsStore } from '@/stores/catalogs';
@@ -25,6 +28,8 @@ const auth = useAuthStore();
 const canConfigure = computed(() => auth.role === 'SUPERADMIN');
 const ausenciasDia = ref<AusenciaResumen[]>([]);
 const ausenciasMes = ref<AusenciaResumen[]>([]);
+const novedadesDia = ref<NovedadResumen[]>([]);
+const novedadesMes = ref<NovedadResumen[]>([]);
 const tableroError = ref<string | null>(null);
 const tableroReady = ref(false);
 const catalogs = useCatalogsStore();
@@ -44,13 +49,15 @@ async function loadTablero() {
   const dia = fecha.value;
   tableroReady.value = false; tableroError.value = null;
   try {
-    const [, rows] = await Promise.all([store.fetchTablero(dia), fetchAusenciasResumen(dia, dia)]);
+    const [, rows, novedades] = await Promise.all([store.fetchTablero(dia), fetchAusenciasResumen(dia, dia), fetchNovedadesResumen(dia, dia)]);
     if (request !== tableroRequest) return;
     ausenciasDia.value = rows;
+    novedadesDia.value = novedades;
     tableroReady.value = true;
   } catch (e) {
     if (request !== tableroRequest) return;
     ausenciasDia.value = [];
+    novedadesDia.value = [];
     tableroError.value = getErrorMessage(e, 'No se pudo cargar el tablero completo');
   }
 }
@@ -66,6 +73,8 @@ interface FilaTablero {
   registro: AsistenciaRegistro | null;
   falta: boolean;
   ausencia?: AusenciaResumen;
+  novedadesDelDia: NovedadResumen[];
+  tardanzaSuprimida: boolean;
 }
 const filas = computed<FilaTablero[]>(() => {
   if (!tableroReady.value) return [];
@@ -79,15 +88,18 @@ const filas = computed<FilaTablero[]>(() => {
       // una vez transcurrido el dia) sin ningun ingreso marcado — un dia de
       // hoy a media mañana sin marcar todavia no es una falta, es "sin marcar".
       const ausencia = ausenciasDia.value.find(a => a.user_id === p.id);
-      const falta = cuentaFalta(!!registro?.hora_ingreso, ausencia?.estado, fecha.value, fechaLimaISO(), esLaborable.value, ['ADMIN', 'TECNICO_RED'].includes(p.role));
-      return { profile: p, registro, falta, ausencia };
+      const novedadesDelDia = novedadesDia.value.filter(n => n.user_id === p.id);
+      const autorizado = diaAutorizado(fecha.value, novedadesDelDia);
+      const falta = cuentaFalta(!!registro?.hora_ingreso, ausencia?.estado, fecha.value, fechaLimaISO(), esLaborable.value, ['ADMIN', 'TECNICO_RED'].includes(p.role), autorizado);
+      const tardanzaSuprimida = !!registro?.hora_ingreso && registro.minutos_tardanza > 0 && tardanzaSuprimidaPorPermiso(registro.hora_ingreso, novedadesDelDia);
+      return { profile: p, registro, falta, ausencia, novedadesDelDia, tardanzaSuprimida };
     })
     .sort((a, b) => (a.profile.full_name ?? a.profile.email).localeCompare(b.profile.full_name ?? b.profile.email));
 });
 
 const resumenHoy = computed(() => ({
   puntuales: filas.value.filter((f) => f.registro?.estado === 'Puntual').length,
-  tardanzas: filas.value.filter((f) => f.registro?.estado === 'Tardanza' || (f.registro && f.registro.minutos_tardanza > 0)).length,
+  tardanzas: filas.value.filter((f) => !f.tardanzaSuprimida && (f.registro?.estado === 'Tardanza' || (f.registro && f.registro.minutos_tardanza > 0))).length,
   enAlmuerzo: filas.value.filter((f) => f.registro?.estado === 'En Almuerzo').length,
   faltas: filas.value.filter((f) => f.falta).length,
 }));
@@ -169,8 +181,8 @@ async function cargarReporte() {
     const [year, month] = mesSeleccionado.value.split('-').map(Number);
     const desde = `${mesSeleccionado.value}-01`;
     const hasta = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // ultimo dia del mes
-    const [marcaciones, ausencias] = await Promise.all([store.fetchRango(desde, hasta), fetchAusenciasResumen(desde, hasta)]);
-    rangoRows.value = marcaciones; ausenciasMes.value = ausencias;
+    const [marcaciones, ausencias, novedades] = await Promise.all([store.fetchRango(desde, hasta), fetchAusenciasResumen(desde, hasta), fetchNovedadesResumen(desde, hasta)]);
+    rangoRows.value = marcaciones; ausenciasMes.value = ausencias; novedadesMes.value = novedades;
     reporteReady.value = true;
   } catch (e) {
     reporteError.value = getErrorMessage(e, 'Error al cargar el reporte');
@@ -206,15 +218,23 @@ const reporte = computed<FilaReporte[]>(() => {
       const propios = rangoRows.value.filter((r) => r.user_id === p.id);
       const diasConIngreso = new Set(propios.filter((r) => r.hora_ingreso).map((r) => r.fecha));
       const solicitudes = ausenciasMes.value.filter(a => a.user_id === p.id);
+      const novedadesPropias = novedadesMes.value.filter(n => n.user_id === p.id);
+      const tardanzaMin = propios.reduce((sum, r) => {
+        if (r.hora_ingreso && r.minutos_tardanza > 0 && tardanzaSuprimidaPorPermiso(r.hora_ingreso, novedadesPropias)) return sum;
+        return sum + (r.minutos_tardanza || 0);
+      }, 0);
       return {
         profile: p,
-        tardanzaMin: propios.reduce((sum, r) => sum + (r.minutos_tardanza || 0), 0),
+        tardanzaMin,
         excesoAlmuerzoMin: propios.reduce((sum, r) => sum + (r.exceso_almuerzo_min || 0), 0),
         diasTrabajados: diasConIngreso.size,
         pendientes: solicitudes.filter(a => a.estado === 'pendiente').length,
         justificadas: solicitudes.filter(a => a.estado === 'aprobada').length,
         rechazadas: solicitudes.filter(a => a.estado === 'rechazada').length,
-        faltas: diasLaborables.filter(d => cuentaFalta(diasConIngreso.has(d), ausenciasMes.value.find(a => a.user_id === p.id && a.fecha === d)?.estado, d, fechaLimaISO(), true, ['ADMIN', 'TECNICO_RED'].includes(p.role))).length,
+        faltas: diasLaborables.filter(d => cuentaFalta(
+          diasConIngreso.has(d), ausenciasMes.value.find(a => a.user_id === p.id && a.fecha === d)?.estado, d, fechaLimaISO(), true,
+          ['ADMIN', 'TECNICO_RED'].includes(p.role), diaAutorizado(d, novedadesPropias),
+        )).length,
       };
     })
     .sort((a, b) => b.tardanzaMin - a.tardanzaMin);
@@ -307,6 +327,7 @@ async function handleSaveSettings() {
     </div>
 
     <AusenciasPanel administracion @changed="loadTablero(); cargarReporte()" />
+    <NovedadesPanel administracion @changed="loadTablero(); cargarReporte()" />
     <p class="text-sm mb-3">SUPERADMIN está exento: no se incluye en indicadores laborales ni pendientes de marcación. Sus marcaciones históricas se conservan.</p>
     <p class="text-sm mb-3">Ausencias: {{ ausenciasDia.filter(a => a.estado === 'pendiente').length }} pendientes · {{ ausenciasDia.filter(a => a.estado === 'aprobada').length }} justificadas · {{ ausenciasDia.filter(a => a.estado === 'rechazada').length }} rechazadas. Las justificaciones no alteran las marcaciones.</p>
     <!-- Configuracion de geocerca/horarios -->
@@ -417,15 +438,17 @@ async function handleSaveSettings() {
             <tr v-for="f in filas" :key="f.profile.id" class="border-t border-slate-200 hover:bg-slate-50">
               <td class="px-4 py-3 text-slate-800">{{ f.profile.full_name || f.profile.email }}</td>
               <td class="px-4 py-3">
+                <span v-for="n in f.novedadesDelDia" :key="n.tipo + n.hora_inicio" class="badge mr-1" :class="NOVEDAD_BADGE_CLASS[n.tipo]">{{ novedadTexto(n) }}</span>
                 <span v-if="f.ausencia" class="badge">{{ AUSENCIA_LABEL[f.ausencia.estado] }}{{ f.registro?.hora_ingreso ? ' - Con ingreso: revisar coincidencia' : '' }}</span>
-                <span v-if="f.registro" class="badge" :class="ESTADO_BADGE_CLASS[f.registro.estado]">{{ f.registro.estado }}</span>
+                <span v-if="f.registro" class="badge" :class="ESTADO_BADGE_CLASS[f.registro.estado]">{{ f.tardanzaSuprimida ? 'Puntual' : f.registro.estado }}</span>
                 <span v-else-if="f.falta" class="badge" :class="ESTADO_BADGE_CLASS.Falta">Falta</span>
-                <span v-else-if="!f.ausencia" class="text-xs text-slate-400">Sin marcar</span>
+                <span v-else-if="!f.ausencia && !f.novedadesDelDia.length" class="text-xs text-slate-400">Sin marcar</span>
               </td>
               <td class="px-4 py-3 text-xs">
                 <template v-if="f.registro?.hora_ingreso">
                   {{ formatHora(f.registro.hora_ingreso) }}
-                  <span v-if="f.registro.minutos_tardanza > 0" class="text-amber-600"> (+{{ f.registro.minutos_tardanza }} min)</span>
+                  <span v-if="f.registro.minutos_tardanza > 0 && !f.tardanzaSuprimida" class="text-amber-600"> (+{{ f.registro.minutos_tardanza }} min)</span>
+                  <span v-else-if="f.tardanzaSuprimida" class="text-teal-700"> (permiso autorizado)</span>
                   <span v-if="f.registro.fuera_oficina_ingreso" class="block text-red-600">⚠️ Fuera de oficina</span>
                 </template>
                 <span v-else class="text-slate-400">—</span>

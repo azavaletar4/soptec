@@ -1,6 +1,12 @@
 # SmartRayco — Estado de desarrollo
 
-## Asistencia semiautomática A0/A1 — implementada localmente (26/10/2026)
+## Asistencia semiautomática A0/A1 — CERRADA y validada en producción (26/10/2026)
+
+**Actualización 26/10/2026 ~22:30 UTC**: el propietario cerró A0/A1 como
+validada en producción y autorizó el push de `feature/asistencia-a0-a1-local`
+a GitHub (sin force, sin sobrescribir trabajo ajeno) — ya no aplica "sin
+push" en las notas históricas de abajo. A2 arrancó en rama propia
+`feature/asistencia-a2-local`, ver sección "Asistencia A2" más abajo.
 
 Solo SUPERADMIN configura horarios/geocerca/tolerancias/feriados (RLS y auditoría).
 ADMIN marca y reporta su propia ausencia desde el panel web; TECNICO_RED lo hace
@@ -133,6 +139,80 @@ correcciones visuales (el caso de aprobación/rechazo ya estaba verificado
 en el commit anterior, sin cambios de código — no se repitió).
 **Pendiente**: validación funcional real del propietario desde panel web
 y celular (Android, App de Campo).
+
+## Asistencia A2 — implementada LOCALMENTE, sin migrar ni desplegar (26/10/2026)
+
+Rama propia `feature/asistencia-a2-local` (sobre el tip ya cerrado de A0/A1).
+Alcance pedido por el propietario: vacaciones por rango de fechas, descansos
+programados, permisos por horas y medias jornadas. Reutiliza íntegramente
+`current_user_role()`, el patrón idempotente por UUID + bloqueo advisory de
+A1, y el trigger de auditoría de configuración ya aplicado
+(`asistencia_config_auditar`/`asistencia_config_eventos`) — ninguna tabla ni
+política de auditoría nueva. No toca `asistencia_registros`/`asistencia_solicitudes`
+ni sus RLS/triggers existentes.
+
+**Modelo**: `asistencia_novedades` (`id, user_id, tipo, fecha_inicio, fecha_fin,
+turno, hora_inicio, hora_fin, motivo, estado, version, created_by, created_at,
+cancelled_at, cancelled_by, cancel_motivo`), con `CHECK` que exige los campos
+correctos por tipo (vacaciones/descanso: rango sin turno/horas; media jornada:
+un día + turno obligatorio; permiso por horas: un día + rango horario válido).
+SUPERADMIN configura y aprueba en un solo paso — no hay estado "pendiente"
+como en A1, es quien programa directamente (origen "programación SUPERADMIN",
+ya anticipado en `docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md`).
+ADMIN/TECNICO_RED solo consultan sus propias filas (RLS); SUPERADMIN nunca es
+un objetivo válido (sigue exento). Sin solicitudes retroactivas ni
+solapamientos activos por colaborador (validado con bloqueo advisory,
+revalidado en el servidor, no solo en Vue).
+
+**RPC** (`supabase/migrations/20261028000000_asistencia_a2_novedades.sql`):
+`asistencia_novedad_crear` (idempotente por UUID, SUPERADMIN, valida rol/estado
+del colaborador objetivo, rango no retroactivo, sin solapamiento), 
+`asistencia_novedad_cancelar` (SUPERADMIN, motivo obligatorio, versión
+esperada, nunca sobre una novedad ya concluida — protege el cómputo
+histórico igual que el guard de feriados de A0), `asistencia_novedades_resumen`
+(SUPERADMIN/ADMIN, expande por día sin exponer motivo, mismo patrón de
+paginación por cursor que `asistencia_ausencias_resumen`).
+
+**Integración con Control de Asistencia/App de Campo (sin backend nuevo)**:
+`cuentaFalta()` recibe un flag `autorizadoPorNovedad` (vacaciones/descanso/
+media jornada eximen el día completo); un permiso por horas no exime el día
+pero suprime la tardanza visual/del reporte si el ingreso real cae dentro de
+su ventana (`tardanzaSuprimidaPorPermiso`, nunca reescribe el dato técnico
+real guardado por `mark_attendance_ingreso`, solo cambia qué se muestra/cuenta
+como indebido). `NovedadesPanel.vue` (nuevo) se monta dos veces, igual patrón
+que `AusenciasPanel.vue`: `administracion` dentro de `AsistenciaView.vue`
+(formulario + lista + cancelar, visible solo a SUPERADMIN) y personal dentro
+de `AsistenciaPanel.vue` (widget compartido Campo/panel: "Mis días
+autorizados", solo lectura). App de Campo queda cubierta automáticamente por
+compartir ese mismo widget, sin tocar `CampoDashboardView.vue`.
+
+**Pruebas** (todas con datos ficticios, ninguna escritura productiva):
+13/13 PostgreSQL aislado (`server/tests/asistenciaA2Novedades.test.cjs`:
+permisos por rol, objetivo SUPERADMIN/inactivo/cliente/rol no obligado
+rechazado, no retroactivo, combinaciones tipo↔campos, solapamiento,
+idempotencia, RLS sin políticas de escritura directa, resumen sin motivo,
+cancelación con versión/motivo/no-retroactiva, auditoría, concurrencia);
+5/5 navegador (`server/tests/asistenciaA2Novedades.browser.test.cjs`:
+programar, cancelar bloqueado sin motivo, consulta de solo lectura, widget
+vacío no ensucia pantalla); 4/4 unitarias nuevas
+(`src/lib/__tests__/asistenciaNovedades.test.ts`) + 1 caso añadido a
+`asistenciaAusencias.test.ts` para `cuentaFalta` con novedad. `vue-tsc`
+y `npm run build` limpios.
+
+**Pendiente para activar en producción** (nada de esto se hizo en esta
+sesión): autorización explícita y separada para aplicar
+`20261028000000_asistencia_a2_novedades.sql` en Supabase, y para el
+despliegue selectivo del frontend correspondiente (mismo mecanismo de
+override de 1 solo servicio ya usado en A0/A1, conservando el backend
+`smartrayco-backend-counters:16831c6-...` sin tocar). Validación funcional
+real del propietario queda para después de ese despliegue. Límite conocido
+y documentado del alcance: con la arquitectura actual de
+`asistencia_registros` (una sola marca de ingreso/salida por día, sin hora
+de fin de jornada configurada), "media jornada" se trata para fines de
+falta/tardanza como exención del día completo (igual que vacaciones/descanso),
+distinguida solo por su etiqueta en reportes — no hay reconciliación de
+asistencia parcial dentro del mismo día; revisar solo si el negocio
+necesita ese nivel de detalle a futuro.
 
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 

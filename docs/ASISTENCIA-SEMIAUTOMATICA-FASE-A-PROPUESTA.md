@@ -1,5 +1,21 @@
 # Asistencia semiautomática — Fase A, diagnóstico y propuesta
 
+## Estado vigente — A2 implementada LOCALMENTE (26/10/2026)
+
+A0/A1 (sección siguiente) quedaron **cerradas y validadas en producción**;
+el propietario autorizó el push de esa rama a GitHub. A2 — vacaciones por
+rango, descansos programados, permisos por horas y medias jornadas — está
+**implementada LOCALMENTE** en `feature/asistencia-a2-local`, siguiendo
+exactamente el diseño ya anticipado en la sección "A2. Vacaciones, permisos
+parciales y descansos programados" más abajo (SUPERADMIN programa y aprueba
+en un solo paso, sin "pendiente"; ADMIN/TECNICO_RED solo consultan). Sin
+migrar a Supabase ni desplegar — pendiente autorización explícita separada.
+Detalle completo (modelo de datos, RPC, integración con Control de
+Asistencia/App de Campo, límite conocido de "media jornada" con la
+arquitectura actual de una sola marca por día, y las 13 SQL + 5 navegador +
+unitarias que pasan) en `ESTADO_DESARROLLO.md`, sección "Asistencia A2" —
+no se repite aquí para no duplicar.
+
 ## Estado vigente — A0 + A1 implementadas LOCALMENTE (26/10/2026)
 
 Autorización del propietario: implementar A0/A1, preparar migración y pruebas,

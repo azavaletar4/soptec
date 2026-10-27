@@ -17,6 +17,12 @@ test('pendiente y aprobada no generan falta; rechazo pasado genera una sola falt
   assert.equal(cuentaFalta(false, 'rechazada', '2026-10-26', '2026-10-27', true, true), true);
   assert.equal(AUSENCIA_LABEL.pendiente, 'Pendiente de justificar');
 });
+test('una novedad A2 que exime el día completo evita la falta aunque no haya ausencia/ingreso', () => {
+  assert.equal(cuentaFalta(false, undefined, '2026-10-26', '2026-10-27', true, true, true), false);
+  assert.equal(cuentaFalta(false, 'rechazada', '2026-10-26', '2026-10-27', true, true, true), false);
+  assert.equal(cuentaFalta(false, undefined, '2026-10-26', '2026-10-27', true, true, false), true);
+});
+
 test('hoy, futuro, no laborables y roles no obligatorios no son faltas', () => {
   for (const dia of ['2026-10-26', '2026-10-27']) assert.equal(cuentaFalta(false, undefined, dia, '2026-10-26', true, true), false);
   assert.equal(cuentaFalta(false, undefined, '2026-10-25', '2026-10-26', false, true), false);

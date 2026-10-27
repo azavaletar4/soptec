@@ -14,6 +14,7 @@ import {
 } from '@/lib/asistenciaReglas';
 import { getErrorMessage } from '@/lib/errors';
 import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
+import NovedadesPanel from '@/components/asistencia/NovedadesPanel.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 
 // Widget de marcacion de jornada (Fase 117) — un solo componente compartido
@@ -217,6 +218,7 @@ function formatCountdown(ms: number): string {
     <p v-if="actionError" class="text-xs text-red-600 mt-2.5">{{ actionError }}</p>
 
     <AusenciasPanel />
+    <NovedadesPanel />
 
     <ConfirmModal
       :open="!!pendingAction"

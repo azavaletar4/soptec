@@ -48,9 +48,15 @@ intactas. ADMIN marca/reporta desde el panel web y técnico desde Campo
   aislado): 9/9 navegador + `vue-tsc` limpio para ambas correcciones
   visuales; unitarias/pruebas de aprobación-rechazo previas sin cambios de
   código, no repetidas. No se resolvió ninguna solicitud real.
-- **A2 EN DESARROLLO** (rama propia, sin migrar/desplegar todavía): vacaciones
-  por rango de fechas, descansos programados, permisos por horas y medias
-  jornadas. Ver sección "Asistencia A2" más abajo para alcance y estado.
+- **A2 implementada LOCALMENTE** en `feature/asistencia-a2-local` (sin migrar
+  ni desplegar): vacaciones por rango, descansos programados, permisos por
+  horas y medias jornadas — SUPERADMIN programa y aprueba en un solo paso,
+  ADMIN/TECNICO_RED solo consultan sus propias novedades. Migración
+  `20261028000000_asistencia_a2_novedades.sql`, componente `NovedadesPanel.vue`
+  (montado en Control de Asistencia y en el widget compartido Campo/panel).
+  13/13 SQL + 5/5 navegador + unitarias PASS, `vue-tsc`/build limpios. Detalle
+  completo en `ESTADO_DESARROLLO.md` ("Asistencia A2"). Pendiente autorización
+  explícita separada para aplicar la migración y desplegar.
 
 ## Antes de empezar
 
