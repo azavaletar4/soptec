@@ -1,0 +1,17 @@
+{
+  "containers": [
+    {
+      "name": "/smartrayco-frontend-1",
+      "id": "5ed0853222f375a388ef8410843ca024445ef3015b345ccc137fd6e007fa2286",
+      "image": "sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+      "startedAt": "2026-10-27T02:44:18.038826098Z"
+    },
+    {
+      "name": "/smartrayco-backend-1",
+      "id": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+      "image": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+      "startedAt": "2026-10-26T20:44:49.856235867Z"
+    }
+  ],
+  "backendAndOverridesUnchanged": true
+}

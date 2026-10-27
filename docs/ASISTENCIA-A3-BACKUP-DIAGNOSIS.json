@@ -1,0 +1,46 @@
+{
+  "containerImage": "sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+  "containerReference": "smartrayco-asistencia-a2-full:7ed8dcd-20261027T000500Z",
+  "inspectId": "sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+  "repoDigests": [
+    "smartrayco-asistencia-a2-full@sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+    "smartrayco-asistencia-a3-rollback@sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e"
+  ],
+  "descriptor": {
+    "mediaType": "application/vnd.oci.image.index.v1+json",
+    "digest": "sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+    "size": 856
+  },
+  "dockerVersion": "29.8.1",
+  "archiveConfig": "blobs/sha256/37c1b8efbfa476f44fe047bf5c044fecb3a78d61e7ed7954f5afc5dd155c6c1a",
+  "archiveConfigHash": "sha256:37c1b8efbfa476f44fe047bf5c044fecb3a78d61e7ed7954f5afc5dd155c6c1a",
+  "archiveLayerCount": 10,
+  "rootfsMatches": true,
+  "configMatches": true,
+  "architectureMatches": true,
+  "osMatches": true,
+  "configKeys": [
+    "architecture",
+    "config",
+    "created",
+    "history",
+    "os",
+    "rootfs"
+  ],
+  "index": {
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.index.v1+json",
+    "manifests": [
+      {
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "digest": "sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+        "size": 856,
+        "annotations": {
+          "io.containerd.image.name": "docker.io/library/smartrayco-asistencia-a3-rollback:asistencia-a3-71944f5-20261027T034446Z",
+          "org.opencontainers.image.ref.name": "asistencia-a3-71944f5-20261027T034446Z"
+        }
+      }
+    ]
+  },
+  "rawConfigExists": false
+}

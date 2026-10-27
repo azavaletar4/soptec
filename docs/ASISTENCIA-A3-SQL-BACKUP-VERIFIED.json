@@ -1,0 +1,98 @@
+{
+  "readOnly": true,
+  "project": "mzupdnjegfwmpajywckd",
+  "checkedAt": "2026-10-27T04:04:20.285274+00:00",
+  "a3Absent": true,
+  "tables": [
+    {
+      "name": "asistencia_config_eventos",
+      "rows": 2,
+      "md5": "8dc8878cdcd8c5da195ec91beee24c21"
+    },
+    {
+      "name": "asistencia_horarios_personales",
+      "rows": 2,
+      "md5": "0d2c0e20992df3be33461f8679e20979"
+    },
+    {
+      "name": "asistencia_novedades",
+      "rows": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "name": "asistencia_registros",
+      "rows": 113,
+      "md5": "6c7c54f150569be58a570651222ac3cd"
+    },
+    {
+      "name": "asistencia_solicitud_eventos",
+      "rows": 2,
+      "md5": "141ca1dfe7b8615f8369623fe6af7725"
+    },
+    {
+      "name": "asistencia_solicitudes",
+      "rows": 1,
+      "md5": "a07af7d8279b7e4610de8e422eed5c71"
+    },
+    {
+      "name": "company_settings",
+      "rows": 1,
+      "md5": "97f7db6baa8917e5abfa5f98d7c54655"
+    },
+    {
+      "name": "feriados",
+      "rows": 1,
+      "md5": "70c1d863058cc66f16323cad6f16cbae"
+    }
+  ],
+  "functionCount": 15,
+  "dumpSha256": "eed0f35d1eed42fc6d03d8f93a050bc2ebee9e9298f9e8da4d0f94b831e5aaa8",
+  "functionsSha256": "b5cdda7de02f39a34eccde71504a5d5210c269acb906e7c6279d645bb2a9496c",
+  "dumpBytes": 52953,
+  "restorationVerified": true,
+  "restoreCheck": {
+    "network": "none",
+    "ephemeral": true,
+    "tableHashesMatched": 8,
+    "functionBodiesMatched": 15,
+    "triggersMatched": 9,
+    "policiesMatched": 13,
+    "a3StillAbsent": true
+  },
+  "remoteCopy": {
+    "directory": "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/recovery",
+    "remoteFiles": [
+      {
+        "name": "asistencia-before.dump",
+        "sha256": "eed0f35d1eed42fc6d03d8f93a050bc2ebee9e9298f9e8da4d0f94b831e5aaa8"
+      },
+      {
+        "name": "functions-before.sql",
+        "sha256": "b5cdda7de02f39a34eccde71504a5d5210c269acb906e7c6279d645bb2a9496c"
+      },
+      {
+        "name": "sql-before-private.json",
+        "sha256": "df3a12610e16e8e9a7600a9fb33ef9eb694f47e2abecbd360d8236a9ccb9d485"
+      },
+      {
+        "name": "asistencia-a3-rollback.sql",
+        "sha256": "8fb6eb79cd3fe6ced0f740062ad7dcee243142bf2df20bfadd9f4a25ff48f536"
+      }
+    ],
+    "allRemoteHashesMatch": true,
+    "containersAfter": [
+      {
+        "name": "/smartrayco-frontend-1",
+        "id": "5ed0853222f375a388ef8410843ca024445ef3015b345ccc137fd6e007fa2286",
+        "image": "sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+        "startedAt": "2026-10-27T02:44:18.038826098Z"
+      },
+      {
+        "name": "/smartrayco-backend-1",
+        "id": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+        "image": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+        "startedAt": "2026-10-26T20:44:49.856235867Z"
+      }
+    ]
+  }
+}

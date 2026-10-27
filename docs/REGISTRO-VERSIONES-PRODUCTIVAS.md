@@ -1,5 +1,16 @@
 # Registro de versiones productivas — SmartRayco
 
+## Estado vigente: respaldos verificados; A3 todavía NO activada
+
+**APTO para retomar la activación controlada.** Se identificó y corrigió el
+verificador, se acreditó la recuperación real de la imagen y del respaldo SQL,
+y se conservaron frontend, backend y overrides. No se aplicó la migración A3
+ni se construyó/promovió frontend. Esta actualización sustituye el bloqueo del
+respaldo descrito en `ASISTENCIA-A3-ACTIVACION-DETENIDA.md`, conservado como
+antecedente. No constituye autorización ni ejecución de la activación pendiente.
+
+Detalle: `docs/ASISTENCIA-A3-RESPALDOS-CORREGIDOS.md`.
+
 ## Estado vigente: A3 NO activada
 
 La activación del candidato `71944f5` fue autorizada por el propietario, pero
