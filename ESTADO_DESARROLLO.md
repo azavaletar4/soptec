@@ -1,5 +1,27 @@
 # SmartRayco — Estado de desarrollo
 
+## Estado vigente — cierre administrativo de Asistencia A2/A2.1
+
+**A2/A2.1 cerradas administrativamente por decisión del propietario; validación funcional completa aún no acreditada. Incidencias posteriores se atenderán puntualmente**.
+
+- A0/A1: cerrada y validada.
+- A2 y A2.1: implementadas, desplegadas y cerradas administrativamente.
+- Horarios del sábado configurados y guardados correctamente: Alhely Lozano,
+  08:00–13:30 (mañana); Angie Laguna, 13:30–19:00 (tarde).
+- Las marcaciones reales del próximo sábado y el uso real de vacaciones/permisos
+  quedan en seguimiento operativo, sin bloquear el cierre administrativo.
+- **Siguiente fase pendiente: A3 — intercambio de descansos**, aún sin implementar.
+
+Esta decisión posterior del propietario prevalece sobre todas las notas de estos
+documentos que indiquen «NO cerradas todavía», «pendiente de cierre» o que exijan
+validación real como condición de cierre de A2/A2.1. Esas notas se conservan como
+antecedentes y no acreditan validación funcional completa.
+
+Continuidad compartida para Claude Code y Codex en `feature/asistencia-a2-local`:
+consultar este estado vigente en los tres documentos sincronizados. Actualización
+exclusivamente documental, sin cambios funcionales, pruebas repetidas, migraciones
+ni despliegues; versiones productivas conservadas. A3 no se inicia con este cierre.
+
 ## Asistencia semiautomática A0/A1 — CERRADA y validada en producción (26/10/2026)
 
 **Actualización 26/10/2026 ~22:30 UTC**: el propietario cerró A0/A1 como
