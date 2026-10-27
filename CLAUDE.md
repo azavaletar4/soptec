@@ -41,7 +41,28 @@ pendientes, pero no invalidan la recuperación real ya confirmada.
 
 ## TR-069 Huawei (HWTC1D3691B7) — gestión independiente operativa, corrección de identificación DESPLEGADA (27/10/2026)
 
-**Último resultado WiFi — prevalece (27/10, 16:26 Perú):** el propietario
+**Último resultado WiFi — prevalece (continuación con Claude Code, 27/10/2026):**
+la primera prueba manual real del propietario quedó bloqueada con
+«La identidad, instancia o SSID actual cambió; vuelve a consultar». Causa
+encontrada y corregida en candidato local: GenieACS refresca `_timestamp` en
+cada Inform que reporta el parámetro (incluido el periódico de 300s ya
+confirmado real en esta ONT) aunque el valor no cambie; exigir que ese
+timestamp coincidiera byte a byte con el que vio el panel bloqueaba casi
+cualquier envío real con solo el paso normal del tiempo. Se quitó esa
+comparación en `server/src/services/tr069WifiTrial.ts`; la comparación real
+de seguridad —el SSID vigente contra el esperado— sigue intacta y se
+revalida en vivo justo antes de escribir. También se simplificó el
+formulario (estilo SmartOLT): seleccionar red, nuevo nombre, nueva
+contraseña (opcional, **bloqueada** hasta validar compatibilidad real — el
+backend tampoco acepta ese campo) y «Aplicar cambios»; rutas TR-069,
+deviceId, serial largo y mensajes con jerga se movieron a "Detalles
+técnicos" (plegado), nunca se eliminaron. 6/6 + 19/19 + 3/3 pruebas
+focalizadas PASS, 272/272 y 480/480 de las suites completas de servidor/lib
+sin regresión, TypeScript limpio. **Candidato local únicamente: sin push, sin
+despliegue, cero tareas enviadas a GenieACS durante la corrección.** Detalle
+completo: `ESTADO_DESARROLLO.md` (sección al inicio del archivo).
+
+**Resultado WiFi anterior (27/10, 16:26 Perú):** el propietario
 autorizó implementar/desplegar, reservando el cambio SSID para su clic manual.
 Candidato de escritura/restauración de solo WLAN 5.SSID implementado local,
 42/42 pruebas y TypeScript PASS; 6 capturas con stores ficticios. **Despliegue

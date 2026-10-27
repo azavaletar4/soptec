@@ -1,5 +1,72 @@
 # SmartRayco — Estado de desarrollo
 
+## WiFi TR-069: corregido el falso bloqueo + formulario simplificado — CANDIDATO LOCAL, NO desplegado (27/10/2026, continuación con Claude Code)
+
+Retomado desde el estado de Codex (sin tokens). La primera prueba manual real
+del propietario sobre `HWTC1D3691B7` quedó bloqueada con
+«La identidad, instancia o SSID actual cambió; vuelve a consultar» —
+investigado y corregido en esta sesión; no se repitió ninguna auditoría ya
+documentada arriba/abajo.
+
+**Causa raíz encontrada:** `server/src/services/tr069WifiTrial.ts` exigía que
+`expectedTimestamp` (enviado por el panel al abrir el formulario) coincidiera
+byte a byte con el `_timestamp` que GenieACS reporta ahora mismo para el SSID.
+GenieACS actualiza ese `_timestamp` en **cada** Inform que reporta el
+parámetro — incluido el Inform periódico cada 300s confirmado real en esta
+misma ONT — aunque el valor no cambie en absoluto. Con solo el tiempo normal
+entre abrir el formulario y confirmar el envío, ya era casi seguro que un
+Inform periódico hubiera refrescado ese timestamp, bloqueando el envío real
+aunque el SSID vigente siguiera siendo exactamente el que el panel mostraba.
+Es la misma causa, verificada ahora con una prueba de regresión que la
+reproduce determinísticamente (sin red real).
+
+**Corrección:** se quitó la comparación exacta de `expectedTimestamp`; la
+comparación que de verdad importa —`expectedSsid` contra el SSID vigente—
+ya se revalida en vivo justo antes (`current(nbi)`), así que sigue
+protegiendo contra un cambio real concurrente sin depender de un dato de
+caché que GenieACS refresca solo. No se tocó `tr069WifiPreparation.ts`
+(modo "preparación sin aplicar" para otras Huawei, nunca escribe al CPE) —
+mismo patrón, fuera de alcance de esta corrección puntual.
+
+**Formulario simplificado (estilo SmartOLT), solo para la Huawei de prueba
+HWTC1D3691B7/instancia 5/contrato CTR-2026-00214, ADMIN/SUPERADMIN:**
+seleccionar red → nuevo nombre → nueva contraseña (opcional, **bloqueada**:
+el campo existe pero está deshabilitado con el aviso "pendiente de validar
+que el equipo lo admite de forma segura" — el backend tampoco acepta ese
+campo, cero riesgo de enviarla) → «Aplicar cambios». Se quitaron del
+formulario principal la ruta TR-069, el deviceId y el serial GPON largo, la
+fecha cruda de caché y los mensajes con jerga ("GenieACS", "Inform", "NBI")
+— todo eso sigue disponible, pero ahora bajo "Detalles técnicos" (plegado),
+conforme a la regla permanente de usabilidad administrativa de `CLAUDE.md`.
+Los mensajes de estado se traducen a lenguaje sencillo con un diccionario
+nuevo y puro (`plainWifiTrialMessage` en `src/lib/tr069WifiTrial.ts`) que
+nunca oculta un mensaje desconocido (pasa tal cual si no está mapeado) y
+nunca cambia lo que el backend decide o registra. "Verificar resultado" y
+"Consultar estado" se unificaron en un solo botón "Comprobar estado"
+(`checkWifiTrialStatus`), ya que `wifiTrial.verify()` internamente actúa
+como una lectura de estado segura cuando no hay nada pendiente que leer.
+
+**Pruebas (focalizadas en el módulo, sin repetir auditorías):**
+- `server/src/services/__tests__/tr069WifiTrial.test.ts`: 6/6 (antes 5/5) —
+  se agregó la prueba de regresión del timestamp y se quitó la aserción que
+  exigía el bloqueo falso.
+- `server/src/services/__tests__/tr069WifiPreparation.test.ts`: 19/19 sin
+  cambios (no tocado).
+- `src/lib/__tests__/tr069WifiTrial.test.ts` (nuevo): 3/3 para
+  `plainWifiTrialMessage`.
+- `npm run test:provisioning` (suite completa de `server/src/services`):
+  272/272 PASS, sin regresión en ningún otro módulo.
+- `npm run test:fetch-timeout` (suite completa de `src/lib`): 480/480 PASS.
+- `npx tsc -p tsconfig.server.json --noEmit` y
+  `npx vue-tsc -p tsconfig.app.json --noEmit`: ambos limpios.
+
+**Sin tocar:** PPPoE, VLAN, OLT, MikroTik, Asistencia, Puntos, App de Campo.
+Sin migraciones. **Cero tareas enviadas a GenieACS** durante esta corrección
+(todas las pruebas usan dependencias ficticias, nunca la NBI real). Commit
+local únicamente; sin push ni despliegue — pendiente de autorización
+explícita del propietario, igual que la prueba manual real de aplicar un
+cambio ya quedó pendiente en la sesión anterior.
+
 ## Estado vigente — frontend consolidado y WiFi desplegados (27/10/2026, 17:08 Perú)
 
 Fuente canónica compilada: **`288f2d8ac3c4ed0d2279b9a01618885bcfb02b9f`**;

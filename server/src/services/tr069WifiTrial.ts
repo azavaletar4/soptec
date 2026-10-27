@@ -143,7 +143,11 @@ export function createWifiTrial(deps: Dependencies = {}) {
       if ((await faults(nbi)).length) throw new Error('Hay fallos GenieACS de este equipo pendientes de revisión; no se envió cambio');
       const target = restore ? record!.originalSsid : b.ssid;
       if (typeof target !== 'string' || !target.trim() || Buffer.byteLength(target, 'utf8') > 32 || /[\x00-\x1f\x7f]/.test(target)) throw new Error('SSID inválido: 1 a 32 bytes, sin controles');
-      if (!restore && (b.deviceId !== WIFI_TEST_DEVICE || b.path !== WIFI_TRIAL_PATH || b.expectedSsid !== net.ssid || b.expectedTimestamp !== net.timestamp)) throw new Error('La identidad, instancia o SSID actual cambió; vuelve a consultar');
+      // GenieACS refresca _timestamp en cada Inform que reporta el parámetro (periódico cada
+      // 300s), aunque el valor no cambie — exigir esa igualdad exacta bloqueaba casi cualquier
+      // envío real con solo el paso del tiempo entre consultar y confirmar. Lo que realmente
+      // importa ya se revalidó arriba con una lectura en vivo: el SSID vigente (net.ssid).
+      if (!restore && (b.deviceId !== WIFI_TEST_DEVICE || b.path !== WIFI_TRIAL_PATH || b.expectedSsid !== net.ssid)) throw new Error('La identidad, instancia o SSID actual cambió; vuelve a consultar');
       if (restore && net.ssid !== last!.after) throw new Error('El SSID cambió fuera de esta prueba; no restaurar automáticamente');
       if (target === net.ssid) throw new Error('El SSID ya tiene ese nombre; no se envió tarea');
       if (!record) record = { version: 1, serial: WIFI_TEST_SERIAL, deviceId: WIFI_TEST_DEVICE, contractNumber: WIFI_TRIAL_CONTRACT,

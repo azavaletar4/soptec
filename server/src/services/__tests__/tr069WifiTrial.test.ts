@@ -69,12 +69,22 @@ test('cambio y restauración: un parámetro fijo, respaldo duradero, aceptación
 test('serial, deviceId, instancia, contrato, campos extra y confirmación: rechaza antes de enviar', async () => {
   const f = fixture(); try {
     await assert.rejects(f.service.change(nbi, 'HWTC00000000', f.body, 'admin'));
-    for (const override of [{ path: WIFI_TRIAL_PATH.replace('.5', '.1') }, { deviceId: 'otro' }, { confirmed: false }, { password: 'SYNTHETIC' }, { pppoeUsername: 'SYNTHETIC' }, { ssid: '😀'.repeat(9) }, { expectedSsid: 'Cambió' }, { expectedTimestamp: 'otra' }]) {
+    for (const override of [{ path: WIFI_TRIAL_PATH.replace('.5', '.1') }, { deviceId: 'otro' }, { confirmed: false }, { password: 'SYNTHETIC' }, { pppoeUsername: 'SYNTHETIC' }, { ssid: '😀'.repeat(9) }, { expectedSsid: 'Cambió' }]) {
       await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, ...override }, 'admin'));
     }
     f.state.mismatch = true; await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin'));
     f.state.mismatch = false; f.state.enabled = false; await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin'));
     assert.equal(f.state.posts.length, 0);
+  } finally { f.cleanup(); }
+});
+test('un Inform periódico que solo refresca el timestamp (mismo SSID) no bloquea el envío real', async () => {
+  const f = fixture(); try {
+    // Simula el falso bloqueo reportado en la prueba manual: el SSID vigente sigue siendo
+    // el mismo que vio el panel, pero GenieACS ya refrescó _timestamp con un Inform periódico.
+    const stale = { ...f.body, expectedTimestamp: new Date(Date.now() - 300_000).toISOString() };
+    const queued = await f.service.change(nbi, WIFI_TEST_SERIAL, stale, 'admin');
+    assert.equal(queued.record!.operations[0].state, 'queued');
+    assert.equal(f.state.posts.length, 1);
   } finally { f.cleanup(); }
 });
 test('tareas o faults previos bloquean; capacidad anunciada ausente también', async () => {

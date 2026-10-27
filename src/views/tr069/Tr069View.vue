@@ -11,7 +11,7 @@ import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { useAuthStore } from '@/stores/auth';
 import { compareWifiPlan, type WifiSsidPlan } from '@/lib/tr069WifiPlan';
-import type { WifiTrialStatus } from '@/lib/tr069WifiTrial';
+import { plainWifiTrialMessage, type WifiTrialStatus } from '@/lib/tr069WifiTrial';
 import type { ServiceContract, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { WifiNetwork } from '@/stores/tr069';
 
@@ -66,7 +66,7 @@ const linkError = ref<string | null>(null);
 
 // Preparación de un único SSID: ninguna tarea ni escritura sobre el CPE.
 const configModalDevice = ref<Tr069Device | null>(null);
-const configForm = ref({ wifiSsid: '' });
+const configForm = ref({ wifiSsid: '', wifiPassword: '' });
 const configDeviceId = ref<string | null>(null);
 const configCanonicalSerial = ref<string | null>(null);
 const configPlan = ref<WifiSsidPlan | null>(null);
@@ -74,14 +74,28 @@ const configTrial = ref<WifiTrialStatus | null>(null);
 const configWifiNetworks = ref<WifiNetwork[]>([]);
 const configWifiPath = ref('');
 const configSelectedNetwork = computed(() => configWifiNetworks.value.find(n => n.path === configWifiPath.value));
+// La contraseña se pide como en SmartOLT, pero su envío sigue bloqueado: todavía no se probó que
+// el firmware de esta Huawei acepte ese parámetro de forma segura (ver docs/TR069-WIFI-*-20261027*.md).
+const configPasswordBlockedReason = 'Cambio de contraseña: todavía no disponible. Pendiente de validar que el equipo lo admite de forma segura. Por ahora solo se puede cambiar el nombre (SSID).';
 const configLoadingCurrent = ref(false);
 const configSaving = ref(false);
 const configError = ref<string | null>(null);
 const configResult = ref<string | null>(null);
+// Lo que ve el administrador: igual contenido, sin jerga TR-069/GenieACS (regla de usabilidad).
+const configDisplayError = computed(() => plainWifiTrialMessage(configError.value));
+const configDisplayResult = computed(() => plainWifiTrialMessage(configResult.value));
+const WIFI_OPERATION_STATE_LABELS: Record<string, string> = {
+  sending: 'Enviando…', queued: 'Enviado, esperando confirmación del equipo',
+  uncertain: 'Resultado incierto, no repetir', failed: 'Con error, revisar antes de repetir', verified: 'Confirmado',
+};
+const configOperationStateLabel = computed(() => {
+  const state = configTrial.value?.record?.operations.at(-1)?.state;
+  return state ? (WIFI_OPERATION_STATE_LABELS[state] ?? state) : null;
+});
 
 async function openConfigModal(device: Tr069Device) {
   configModalDevice.value = device;
-  configForm.value = { wifiSsid: '' };
+  configForm.value = { wifiSsid: '', wifiPassword: '' };
   configDeviceId.value = null;
   configCanonicalSerial.value = null;
   configPlan.value = null;
@@ -147,24 +161,25 @@ function downloadWifiPlan() {
   URL.revokeObjectURL(url);
 }
 
-async function runWifiTrial(action: 'change' | 'restore' | 'verify') {
+async function runWifiTrial(action: 'change' | 'restore') {
   const device = configModalDevice.value;
   if (!device || !canPrepareWifi.value || !configTrial.value?.enabled || configSaving.value) return;
   const network = configSelectedNetwork.value;
   const restore = action === 'restore';
   if (action === 'change' && (!network || network.path !== 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5' ||
     network.ssid === null || !network.timestamp || !configForm.value.wifiSsid.trim())) {
-    configError.value = 'Selecciona la instancia 5 y escribe un nuevo nombre WiFi.'; return;
+    configError.value = 'Selecciona la red WiFi de prueba y escribe un nuevo nombre.'; return;
   }
-  const payload = action === 'verify' ? {} : restore ? { requestId: crypto.randomUUID(), confirmed: true } : {
+  const payload = restore ? { requestId: crypto.randomUUID(), confirmed: true } : {
     requestId: crypto.randomUUID(), confirmed: true, deviceId: configDeviceId.value, path: network!.path,
     ssid: configForm.value.wifiSsid, expectedSsid: network!.ssid, expectedTimestamp: network!.timestamp,
   };
   const target = restore ? configTrial.value.record?.originalSsid : configForm.value.wifiSsid;
-  const message = action === 'verify' ? 'Se consultará únicamente el SSID de la instancia 5 mediante GenieACS. Puede esperar al próximo Inform (hasta 5 minutos).' :
-    `Huawei: HWTC1D3691B7\nContrato: CTR-2026-00214\nInstancia: InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID\nActual: ${restore ? configTrial.value.record?.operations.at(-1)?.after : network!.ssid}\nNuevo: ${target}\n${restore ? 'Se restaurará el nombre anterior guardado.' : 'Se guardará el respaldo antes de enviar el cambio real.'}\nNo se cambiarán contraseñas, PPPoE, WAN ni VLAN. Se aplicará en el próximo Inform.`;
-  if (!await confirmDialog({ title: action === 'verify' ? 'Verificar resultado' : restore ? 'Restaurar SSID anterior' : 'Confirmar cambio real de SSID',
-    confirmLabel: action === 'verify' ? 'Consultar SSID' : restore ? 'Restaurar nombre' : 'Enviar cambio', message, wrapMessage: true })) return;
+  const message = `Actual: ${restore ? configTrial.value.record?.operations.at(-1)?.after : network!.ssid}\nNuevo: ${target}\n` +
+    (restore ? 'Se restaurará el nombre anterior guardado.' : 'Se guardará el nombre actual como respaldo antes de enviar el cambio.') +
+    '\nNo se cambiarán contraseñas, PPPoE, WAN ni VLAN. El equipo lo aplicará en los próximos minutos.';
+  if (!await confirmDialog({ title: restore ? 'Restaurar nombre WiFi anterior' : 'Aplicar cambio de nombre WiFi',
+    confirmLabel: restore ? 'Restaurar nombre' : 'Aplicar cambios', message, wrapMessage: true })) return;
   if (configModalDevice.value?.id !== device.id) return;
   configSaving.value = true; configError.value = null;
   try {
@@ -174,14 +189,19 @@ async function runWifiTrial(action: 'change' | 'restore' | 'verify') {
   finally { configSaving.value = false; }
 }
 
-async function refreshWifiTrial() {
-  if (!configModalDevice.value || configSaving.value) return;
+/** Un único botón "Comprobar estado": combina la lectura de estado y, si corresponde, la
+ * confirmación puntual del SSID. Nunca encola una tarea nueva si no hace falta (ver wifiTrial.verify). */
+async function checkWifiTrialStatus() {
+  const device = configModalDevice.value;
+  if (!device || configSaving.value) return;
+  configSaving.value = true; configError.value = null;
   try {
-    configTrial.value = await tr069Store.wifiTrialStatus(configModalDevice.value.cpe_serial);
+    configTrial.value = await tr069Store.wifiTrialAction(device.cpe_serial, 'verify');
     configResult.value = configTrial.value.message;
-    const inventory = await tr069Store.fetchWifiNetworks(configModalDevice.value.cpe_serial);
-    configWifiNetworks.value = inventory.networks;
-  } catch (e) { configError.value = getErrorMessage(e, 'No se pudo consultar el estado'); }
+    const inventory = await tr069Store.fetchWifiNetworks(device.cpe_serial);
+    if (configModalDevice.value?.id === device.id) configWifiNetworks.value = inventory.networks;
+  } catch (e) { configError.value = getErrorMessage(e, 'No se pudo comprobar el estado'); }
+  finally { configSaving.value = false; }
 }
 
 async function verifyWifiCache() {
@@ -561,61 +581,74 @@ async function handleUnlink() {
     <Teleport to="body">
       <div v-if="configModalDevice" class="modal-overlay">
         <form class="w-full max-w-sm modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleSaveConfig">
-          <h2 class="text-lg font-semibold mb-1">{{ configTrial?.enabled ? 'Configurar nombre WiFi de prueba' : 'Preparar nombre WiFi' }}</h2>
-          <p class="text-xs text-slate-500 mb-4 font-mono">{{ configModalDevice.cpe_serial }}</p>
-          <p v-if="configCanonicalSerial" class="text-xs mb-2">Serial GPON completo: {{ configCanonicalSerial }}</p>
-          <p v-if="configDeviceId" class="text-xs break-all mb-3">Dispositivo GenieACS: {{ configDeviceId }}</p>
-
+          <h2 class="text-lg font-semibold mb-1">Configurar WiFi</h2>
           <p class="text-xs text-slate-500 mb-3">
-            {{ configTrial?.enabled ? 'Prueba real habilitada solo para instancia 5, Huawei HWTC1D3691B7, contrato CTR-2026-00214.' : 'Preparación sin aplicar, solo para la Huawei HWTC1D3691B7.' }} PPPoE y contraseñas no se pueden cambiar.
-            Estado y banda sin verificar cuando faltan datos. La caché puede ser antigua.
+            {{ configTrial?.enabled ? 'Cambio real, solo para esta Huawei de prueba y el contrato CTR-2026-00214.' : 'Preparación sin aplicar, solo para esta Huawei de prueba.' }}
+            Por ahora solo se puede cambiar el nombre de la red. PPPoE y otras redes no se tocan desde aquí.
           </p>
 
-          <p v-if="configLoadingCurrent" class="text-xs text-slate-500 mb-3">Consultando GenieACS...</p>
-
+          <p v-if="configLoadingCurrent" class="text-xs text-slate-500 mb-3">Consultando el equipo...</p>
 
           <div class="mb-3">
-            <p class="text-xs font-semibold text-slate-700 mb-2">WiFi</p>
             <p v-if="!configLoadingCurrent && !configWifiNetworks.length" class="text-xs text-amber-700 mb-2">
-              No se encontraron redes WiFi en la caché del equipo.
+              No se encontraron redes WiFi para este equipo.
             </p>
             <div v-if="configWifiNetworks.length" class="mb-2">
-              <label class="block text-xs text-slate-600 mb-1">Red a cambiar</label>
+              <label class="block text-xs text-slate-600 mb-1">Red WiFi</label>
               <select v-model="configWifiPath" class="field-input">
                 <option value="">Selecciona una red</option>
-                <option v-for="n in configWifiNetworks" :key="n.path" :value="n.path" :disabled="configTrial?.enabled && n.path !== 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5'">{{ n.ssid ?? 'SSID no disponible' }} — {{ n.band }} — instancia {{ n.path.split('.').pop() }} ({{ n.enabled === null ? 'estado sin verificar' : n.enabled ? 'habilitada' : 'desactivada' }})</option>
+                <option v-for="n in configWifiNetworks" :key="n.path" :value="n.path" :disabled="configTrial?.enabled && n.path !== 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5'">{{ n.ssid ?? 'SSID no disponible' }} — {{ n.band }} ({{ n.enabled === null ? 'estado sin verificar' : n.enabled ? 'habilitada' : 'desactivada' }})</option>
               </select>
-              <p v-if="configWifiPath" class="text-xs break-all">Instancia: {{ configWifiPath }}</p>
-              <p v-if="configWifiPath" class="text-xs">{{ configSelectedNetwork?.band }}. Fecha del SSID (Perú): {{ configSelectedNetwork?.timestamp ? new Date(configSelectedNetwork.timestamp).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'Sin fecha verificable' }}.</p>
             </div>
             <div class="mb-2">
-              <label class="block text-xs text-slate-600 mb-1">Nuevo SSID</label>
+              <label class="block text-xs text-slate-600 mb-1">Nuevo nombre (SSID)</label>
               <input v-model="configForm.wifiSsid" class="field-input" placeholder="Nuevo nombre de esta red" />
+            </div>
+            <div class="mb-2">
+              <label class="block text-xs text-slate-600 mb-1">Nueva contraseña (opcional)</label>
+              <input v-model="configForm.wifiPassword" type="password" class="field-input" placeholder="Todavía no disponible" disabled />
+              <p class="text-xs text-amber-700 mt-1">{{ configPasswordBlockedReason }}</p>
             </div>
           </div>
 
-          <p v-if="configError" class="text-sm text-red-600 mb-3">{{ configError }}</p>
-          <p v-if="configResult" role="status" class="text-sm text-slate-700 mb-3">{{ configResult }}</p>
-          <div v-if="configTrial?.enabled" class="text-xs mb-3 space-y-2">
-            <template v-if="configTrial.record">
-              <p>Respaldo persistente: {{ configTrial.record.originalSsid }}. Instancia: {{ configTrial.record.path }}. Estado: {{ configTrial.record.operations.at(-1)?.state }}.</p>
-              <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo SSID</button>
-              <button type="button" class="btn-secondary" :disabled="configSaving" @click="runWifiTrial('verify')">Verificar resultado</button>
-              <button type="button" class="btn-secondary" :disabled="configSaving || configTrial.record.operations.at(-1)?.state !== 'verified' || configTrial.record.operations.at(-1)?.kind !== 'change'" @click="runWifiTrial('restore')">Restaurar SSID anterior</button>
-            </template>
-            <button type="button" class="btn-secondary" :disabled="configSaving" @click="refreshWifiTrial">Consultar estado</button>
+          <p v-if="configDisplayError" class="text-sm text-red-600 mb-3">{{ configDisplayError }}</p>
+          <p v-if="configDisplayResult" role="status" class="text-sm text-slate-700 mb-3">{{ configDisplayResult }}</p>
+
+          <div v-if="configTrial?.enabled && configTrial.record" class="text-xs mb-3 space-y-1 border border-slate-200 rounded p-2">
+            <p>Nombre anterior: <strong>{{ configTrial.record.operations.at(-1)?.before }}</strong></p>
+            <p>Nombre nuevo enviado: <strong>{{ configTrial.record.operations.at(-1)?.after }}</strong></p>
+            <p>Estado: {{ configOperationStateLabel }}</p>
+            <div class="flex flex-wrap gap-2 pt-1">
+              <button type="button" class="btn-secondary" :disabled="configSaving" @click="checkWifiTrialStatus">Comprobar estado</button>
+              <button type="button" class="btn-secondary" :disabled="configSaving || configTrial.record.operations.at(-1)?.state !== 'verified' || configTrial.record.operations.at(-1)?.kind !== 'change'" @click="runWifiTrial('restore')">Restaurar nombre anterior</button>
+              <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo</button>
+            </div>
+          </div>
+          <div v-else-if="configTrial?.enabled" class="text-xs mb-3">
+            <button type="button" class="btn-secondary" :disabled="configSaving" @click="checkWifiTrialStatus">Comprobar estado</button>
           </div>
           <div v-if="configPlan" class="text-xs mb-3">
-            <p>Plan confirmado: {{ configPlan.before }} → {{ configPlan.after }}. Instancia: {{ configPlan.path }}.</p>
-            <p>Reversión prevista: restaurar «{{ configPlan.before }}» en esa misma instancia, con autorización.</p>
-            <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo SSID</button>
-            <button type="button" class="btn-secondary" @click="verifyWifiCache">Comparar caché sin refrescar</button>
+            <p>Plan preparado: {{ configPlan.before }} → {{ configPlan.after }}. No se envió al equipo.</p>
+            <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo</button>
+            <button type="button" class="btn-secondary" @click="verifyWifiCache">Comparar con la caché actual</button>
           </div>
+
+          <details class="text-xs text-slate-500 mb-3">
+            <summary class="cursor-pointer select-none">Detalles técnicos</summary>
+            <div class="mt-2 space-y-1">
+              <p class="font-mono">Serial TR-069: {{ configModalDevice.cpe_serial }}</p>
+              <p v-if="configCanonicalSerial">Serial GPON completo: {{ configCanonicalSerial }}</p>
+              <p v-if="configDeviceId" class="break-all">Dispositivo GenieACS: {{ configDeviceId }}</p>
+              <p v-if="configWifiPath" class="break-all">Instancia TR-069: {{ configWifiPath }}</p>
+              <p v-if="configWifiPath">Fecha del SSID en caché (Perú): {{ configSelectedNetwork?.timestamp ? new Date(configSelectedNetwork.timestamp).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'Sin fecha verificable' }}.</p>
+              <p v-if="configTrial?.record">Respaldo persistente: {{ configTrial.record.originalSsid }}. Instancia: {{ configTrial.record.path }}. Estado interno: {{ configTrial.record.operations.at(-1)?.state }}.</p>
+            </div>
+          </details>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="configModalDevice = null">Cerrar</button>
             <button v-if="canPrepareWifi" type="submit" :disabled="configSaving || configLoadingCurrent || !!configTrial?.record" class="btn-primary">
-              {{ configSaving ? 'Procesando...' : configTrial?.enabled ? 'Guardar SSID' : 'Preparar sin aplicar' }}
+              {{ configSaving ? 'Procesando...' : configTrial?.enabled ? 'Aplicar cambios' : 'Preparar sin aplicar' }}
             </button>
           </div>
         </form>
