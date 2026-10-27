@@ -1,5 +1,24 @@
 # SmartRayco — Estado de desarrollo
 
+## Campo: dirección por contrato desplegada - 27/10/2026
+
+Corrección `fc9047f` desplegada exclusivamente en frontend, con autorización:
+`smartrayco-campo-direccion:fc9047f-20261027T145104Z`. Altas, Averías y Rutinas muestran
+dirección y código del contrato exacto. Si falta dirección, se identifica la
+alternativa general del cliente; Maps/Waze usan solo su GPS completo cuando
+la orden tiene contrato. Sin contrato, se conserva el comportamiento anterior.
+Backend `16831c6`, misma imagen, contenedor y StartedAt, sin reinicio.
+Supabase, OLT, MikroTik y otros servicios intactos: sin SQL ni escrituras de datos.
+A0-A3, Puntos, Devoluciones y ejecución técnica conservados.
+API, Campo y recursos publicados verificados; 118 comprobaciones móviles sobre
+el frontend público con sesión/órdenes ficticias y llamadas de datos bloqueadas.
+Conservar toda la cadena Compose y agregar al final
+`/opt/smartrayco-staging/campo-direccion-fc9047f-20261027T145104Z/promotion/frontend.override.json`.
+Respaldo saliente ff3077f verificado en PC/VM (19 blobs OCI), rollback preparado
+y no usado. Evidencia y comandos: `docs/CAMPO-DIRECCION-DESPLEGADA.md` y
+`docs/CAMPO-DIRECCION-RELEASE.json`. Este estado prevalece sobre notas anteriores
+de corrección local o frontend ff3077f activo. Sin force push ni merge a main.
+
 ## Cierre administrativo de la corrección de puntos - 27/10/2026
 
 **Corrección `ff3077f` aprobada y cerrada administrativamente por el propietario.**

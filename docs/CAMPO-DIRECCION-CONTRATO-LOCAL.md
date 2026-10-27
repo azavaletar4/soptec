@@ -1,5 +1,12 @@
 # Campo: dirección del contrato seleccionado
 
+## Estado vigente: desplegada
+
+Frontend fc9047f publicado y verificado el 27/10/2026.
+Detalle: [CAMPO-DIRECCION-DESPLEGADA.md](CAMPO-DIRECCION-DESPLEGADA.md).
+Las notas siguientes conservan la evidencia de preparación local.
+
+
 Estado: corrección local en `fix/campo-direccion-contrato-local`, sin push ni
 despliegue. Solo cambia la presentación compartida de Altas, Averías y Rutinas.
 
