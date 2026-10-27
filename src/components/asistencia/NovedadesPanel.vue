@@ -112,7 +112,9 @@ const misNovedades = computed(() => rows.value.filter((n) => n.fecha_fin >= fech
       <p class="text-sm text-slate-500">Programa directamente — queda activa de inmediato, sin paso de aprobación aparte.</p>
     </div>
 
+    <div class="attendance-management">
     <form class="surface p-4 grid gap-3 sm:grid-cols-2 mb-4" @submit.prevent="crear">
+      <h3 class="text-sm font-semibold text-slate-900 sm:col-span-2">Nueva autorización</h3>
       <label class="block">
         <span class="field-label">Colaborador</span>
         <select v-model="form.userId" required class="field-input">
@@ -160,6 +162,8 @@ const misNovedades = computed(() => rows.value.filter((n) => n.fecha_fin >= fech
       </div>
     </form>
 
+    <div class="attendance-list">
+    <h3 class="attendance-list-heading">Autorizaciones registradas</h3>
     <p v-if="error" role="alert" class="text-sm text-red-600 mb-3">{{ error }}</p>
     <p v-if="notice" role="status" class="text-sm text-amber-600 mb-3">{{ notice }}</p>
 
@@ -187,6 +191,8 @@ const misNovedades = computed(() => rows.value.filter((n) => n.fecha_fin >= fech
           <button class="btn-secondary text-sm" :disabled="busy || !cancelMotivos[n.id]?.trim()" @click="cancelar(n)">Cancelar</button>
         </div>
       </article>
+    </div>
+    </div>
     </div>
   </section>
 </template>

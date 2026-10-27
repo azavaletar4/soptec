@@ -1,5 +1,15 @@
 # SmartRayco — Estado de desarrollo
 
+## Estado compartido vigente
+
+El propietario confirma que **A3 funciona correctamente y está validada**.
+Esto supera las notas anteriores de aceptación funcional pendiente de A3.
+La nueva reorganización visual está implementada y validada **solo localmente**,
+en `feature/asistencia-a3-local`, sobre `4156e84`. Sin push ni despliegue.
+Las imágenes productivas documentadas se mantienen; no se consultó producción.
+
+Detalle: `docs/ASISTENCIA-PESTANAS-VISUAL-LOCAL.md`.
+
 ## Estado vigente: A3 migrada, desplegada y verificada técnicamente
 
 Frontend A3 `71944f5` promovido el **27/10/2026 05:21:22 UTC (00:21 Perú)**.

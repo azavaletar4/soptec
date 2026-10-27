@@ -30,6 +30,26 @@ import type { AsistenciaRegistro, StaffProfile } from '@/types/domain';
 const store = useAsistenciaStore();
 const auth = useAuthStore();
 const canConfigure = computed(() => auth.role === 'SUPERADMIN');
+const tabs = [
+  { id: 'asistencia', label: 'Asistencia' },
+  { id: 'ausencias', label: 'Ausencias' },
+  { id: 'descansos', label: 'Descansos y permisos' },
+  { id: 'horarios', label: 'Horarios' },
+] as const;
+const activeTab = ref<(typeof tabs)[number]['id']>('asistencia');
+function selectTab(id: (typeof tabs)[number]['id']) {
+  activeTab.value = id;
+  void nextTick(() => document.getElementById(`attendance-tab-${id}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+}
+function navigateTabs(event: KeyboardEvent, index: number) {
+  const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+    : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+    : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null;
+  if (next === null) return;
+  event.preventDefault();
+  selectTab(tabs[next].id);
+  document.getElementById(`attendance-tab-${activeTab.value}`)?.focus();
+}
 const ausenciasDia = ref<AusenciaResumen[]>([]);
 const ausenciasMes = ref<AusenciaResumen[]>([]);
 const intercambiosDia = ref<IntercambioDia[]>([]);
@@ -333,24 +353,20 @@ async function handleSaveSettings() {
 
 <template>
   <AppLayout>
+    <div class="attendance-page">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
-        <h1 class="text-2xl font-semibold">🕐 Control de Asistencia</h1>
-        <p class="text-slate-600 text-sm mt-1">Marcación de ingreso, almuerzo y salida del staff interno.</p>
+        <p class="text-xs font-semibold uppercase tracking-widest text-sky-700 mb-2">Gestión del equipo</p>
+        <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">Control de Asistencia</h1>
+        <p class="text-slate-500 text-sm mt-2">Revisa la jornada y organiza los días de tu equipo. Horario de Perú.</p>
       </div>
-      <button class="btn-secondary" @click="showSettings = !showSettings">{{ canConfigure ? 'Configuración' : 'Consultar configuración' }}</button>
+      <button v-if="canConfigure" class="btn-secondary" :aria-expanded="showSettings" aria-controls="attendance-settings" @click="showSettings = !showSettings">{{ showSettings ? 'Cerrar configuración' : 'Configuración' }}</button>
     </div>
 
-    <AusenciasPanel administracion @changed="loadTablero(); cargarReporte()" />
-    <IntercambiosPanel administracion @changed="loadTablero(); cargarReporte()" />
-    <NovedadesPanel administracion @changed="loadTablero(); cargarReporte()" />
-    <HorariosPersonalesPanel administracion @changed="loadTablero()" />
-    <p class="text-sm mb-3">SUPERADMIN está exento: no se incluye en indicadores laborales ni pendientes de marcación. Sus marcaciones históricas se conservan.</p>
-    <p class="text-sm mb-3">Ausencias: {{ ausenciasDia.filter(a => a.estado === 'pendiente').length }} pendientes · {{ ausenciasDia.filter(a => a.estado === 'aprobada').length }} justificadas · {{ ausenciasDia.filter(a => a.estado === 'rechazada').length }} rechazadas. Las justificaciones no alteran las marcaciones.</p>
     <!-- Configuracion de geocerca/horarios -->
-    <fieldset v-if="showSettings" :disabled="!canConfigure" class="surface p-4 mb-6">
+    <fieldset v-if="canConfigure" v-show="showSettings" id="attendance-settings" class="surface p-5 mb-6">
       <h2 class="text-sm font-semibold mb-3">Geocerca y horarios</h2>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
         <div>
           <label class="field-label">Latitud oficina</label>
           <input v-model.number="settingsForm.oficina_lat" type="number" step="0.000001" class="field-input" />
@@ -407,11 +423,41 @@ async function handleSaveSettings() {
       <p v-else class="text-xs text-slate-400">Sin feriados registrados.</p>
     </fieldset>
 
+    <div role="tablist" aria-label="Secciones de Control de Asistencia" class="attendance-tabs">
+      <button v-for="(tab, index) in tabs" :id="`attendance-tab-${tab.id}`" :key="tab.id" type="button" role="tab"
+        :aria-selected="activeTab === tab.id" :aria-controls="`attendance-panel-${tab.id}`" :tabindex="activeTab === tab.id ? 0 : -1"
+        :class="['attendance-tab', { 'attendance-tab-active': activeTab === tab.id }]"
+        @click="selectTab(tab.id)" @keydown="navigateTabs($event, index)">{{ tab.label }}</button>
+    </div>
+
+    <!-- v-show conserva instancias, filtros, borradores y eventos al cambiar de pestaña. -->
+    <section v-show="activeTab === 'ausencias'" id="attendance-panel-ausencias" role="tabpanel" aria-labelledby="attendance-tab-ausencias" class="attendance-panel">
+      <p class="text-sm text-slate-500 mb-4">{{ ausenciasDia.filter(a => a.estado === 'pendiente').length }} pendientes · {{ ausenciasDia.filter(a => a.estado === 'aprobada').length }} justificadas · {{ ausenciasDia.filter(a => a.estado === 'rechazada').length }} rechazadas en la fecha del tablero. Las justificaciones no alteran las marcaciones.</p>
+      <AusenciasPanel administracion @changed="loadTablero(); cargarReporte()" />
+      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">La aprobación de solicitudes está a cargo de SUPERADMIN. Puedes consultar tus solicitudes desde «Marcar asistencia».</p>
+    </section>
+    <section v-show="activeTab === 'descansos'" id="attendance-panel-descansos" role="tabpanel" aria-labelledby="attendance-tab-descansos" class="attendance-panel space-y-8">
+      <IntercambiosPanel administracion @changed="loadTablero(); cargarReporte()" />
+      <NovedadesPanel administracion @changed="loadTablero(); cargarReporte()" />
+      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">SUPERADMIN programa los descansos y permisos. Tus días autorizados están disponibles en «Marcar asistencia».</p>
+    </section>
+    <section v-show="activeTab === 'horarios'" id="attendance-panel-horarios" role="tabpanel" aria-labelledby="attendance-tab-horarios" class="attendance-panel">
+      <HorariosPersonalesPanel administracion @changed="loadTablero()" />
+      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">SUPERADMIN administra los horarios habituales. Puedes consultar tu horario desde «Marcar asistencia».</p>
+    </section>
+    <section v-show="activeTab === 'asistencia'" id="attendance-panel-asistencia" role="tabpanel" aria-labelledby="attendance-tab-asistencia" class="attendance-panel">
     <!-- Tablero en vivo -->
     <p v-if="tableroError" role="alert" class="text-red-600">{{ tableroError }}</p>
+    <div class="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+      <div class="surface p-4 border-t-2 border-t-emerald-500"><p class="text-sm text-slate-500">Puntuales</p><p class="text-3xl font-semibold text-emerald-700 mt-2">{{ resumenHoy.puntuales }}</p></div>
+      <div class="surface p-4 border-t-2 border-t-amber-500"><p class="text-sm text-slate-500">Tardanzas</p><p class="text-3xl font-semibold text-amber-700 mt-2">{{ resumenHoy.tardanzas }}</p></div>
+      <div class="surface p-4 border-t-2 border-t-sky-500"><p class="text-sm text-slate-500">En almuerzo</p><p class="text-3xl font-semibold text-sky-700 mt-2">{{ resumenHoy.enAlmuerzo }}</p></div>
+      <div class="surface p-4 border-t-2 border-t-rose-500"><p class="text-sm text-slate-500">Faltas</p><p class="text-3xl font-semibold text-rose-700 mt-2">{{ resumenHoy.faltas }}</p></div>
+    </div>
     <div class="surface p-4 mb-6">
-      <div class="flex flex-wrap items-end justify-between gap-3 mb-3">
-        <div class="flex flex-wrap items-end gap-3">
+      <h2 class="text-base font-semibold text-slate-900 mb-4">Jornada del equipo</h2>
+      <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-[180px_minmax(220px,1fr)] gap-3 w-full lg:max-w-2xl">
           <div>
             <label class="field-label">Fecha</label>
             <input v-model="fecha" type="date" class="field-input" />
@@ -420,12 +466,6 @@ async function handleSaveSettings() {
             <label class="field-label">Buscar</label>
             <input v-model="search" class="field-input" placeholder="Nombre del colaborador" />
           </div>
-        </div>
-        <div class="flex flex-wrap gap-2 text-xs">
-          <span class="badge bg-green-500/15 text-green-600">✅ {{ resumenHoy.puntuales }} puntuales</span>
-          <span class="badge bg-amber-500/15 text-amber-700">⏱️ {{ resumenHoy.tardanzas }} tardanzas</span>
-          <span class="badge bg-sky-500/15 text-sky-700">🍲 {{ resumenHoy.enAlmuerzo }} en almuerzo</span>
-          <span class="badge bg-red-500/15 text-red-600">🚫 {{ resumenHoy.faltas }} faltas</span>
         </div>
       </div>
 
@@ -539,6 +579,8 @@ async function handleSaveSettings() {
         </table>
       </div>
     </div>
+    <p class="text-xs text-slate-500 mt-4">SUPERADMIN está exento de indicadores laborales y pendientes. Sus marcaciones históricas se conservan.</p>
+    </section>
 
     <!-- Mapa flotante de ubicacion -->
     <Teleport to="body">
@@ -558,5 +600,26 @@ async function handleSaveSettings() {
         </div>
       </div>
     </Teleport>
+    </div>
   </AppLayout>
 </template>
+
+<style scoped>
+.attendance-page { width: 100%; min-width: 0; }
+.attendance-tabs { display: flex; gap: 0.375rem; overflow-x: auto; padding: 0.375rem; margin-bottom: 1.5rem; border: 1px solid #e2e8f0; border-radius: 0.875rem; background: #f1f5f9; scrollbar-width: thin; }
+.attendance-tab { flex-shrink: 0; min-height: 44px; padding: 0.625rem 1.25rem; border-radius: 0.625rem; color: #475569; font-size: 0.875rem; font-weight: 600; white-space: nowrap; }
+.attendance-tab:hover { background: #e2e8f0; color: #0f172a; }
+.attendance-tab-active, .attendance-tab-active:hover { background: white; color: #0369a1; box-shadow: 0 1px 3px #0f172a1a; }
+.attendance-tab:focus-visible { outline: 2px solid #0284c7; outline-offset: -2px; }
+.attendance-panel { min-width: 0; }
+.attendance-page :deep(.field-input), .attendance-page :deep(.btn-primary), .attendance-page :deep(.btn-secondary) { min-height: 44px; }
+.attendance-page :deep(.field-input), .attendance-page :deep(label) { min-width: 0; }
+.attendance-page :deep(.attendance-management) { display: grid; gap: 1.25rem; align-items: start; }
+.attendance-page :deep(.attendance-management form) { margin: 0; padding: 1.25rem; grid-template-columns: minmax(0, 1fr); }
+.attendance-page :deep(.attendance-management form > *) { grid-column: auto; }
+.attendance-page :deep(.attendance-list) { min-width: 0; }
+.attendance-page :deep(.attendance-list-heading) { font-size: 0.875rem; font-weight: 600; color: #334155; margin-bottom: 1rem; }
+@media (min-width: 1100px) {
+  .attendance-page :deep(.attendance-management) { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 1.5rem; }
+}
+</style>

@@ -75,13 +75,14 @@ async function eliminar(userId: string, diaSemana: number) {
     <div class="mb-4">
       <h2 class="text-lg font-semibold text-slate-900">Horarios parciales habituales</h2>
       <p class="text-sm text-slate-500">
-        Patrón semanal fijo de un colaborador (ej. todos los sábados, media jornada) — distinto de un permiso
-        excepcional de un solo día (ver "Vacaciones, descansos y permisos" arriba). Las horas siempre se configuran
-        aquí, nunca se asumen.
+        Define el horario que se repite cada semana. Para autorizar un cambio de un solo día, usa la pestaña
+        «Descansos y permisos».
       </p>
     </div>
 
+    <div class="attendance-management">
     <form class="surface p-4 grid gap-3 sm:grid-cols-2 mb-4" @submit.prevent="guardar">
+      <h3 class="text-sm font-semibold text-slate-900 sm:col-span-2">Agregar o modificar horario</h3>
       <label class="block">
         <span class="field-label">Colaborador</span>
         <select v-model="form.userId" required class="field-input">
@@ -102,7 +103,7 @@ async function eliminar(userId: string, diaSemana: number) {
           <option value="tarde">Tarde</option>
         </select>
       </label>
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label class="block">
           <span class="field-label">Ingreso</span>
           <input v-model="form.horaIngreso" type="time" required class="field-input" />
@@ -118,6 +119,8 @@ async function eliminar(userId: string, diaSemana: number) {
       </div>
     </form>
 
+    <div class="attendance-list">
+    <h3 class="attendance-list-heading">Horarios configurados</h3>
     <p v-if="error" role="alert" class="text-sm text-red-600 mb-3">{{ error }}</p>
     <p v-if="notice" role="status" class="text-sm text-amber-600 mb-3">{{ notice }}</p>
 
@@ -130,6 +133,8 @@ async function eliminar(userId: string, diaSemana: number) {
         </div>
         <button class="btn-secondary text-xs" :disabled="busy" @click="eliminar(h.user_id, h.dia_semana)">Eliminar</button>
       </div>
+    </div>
+    </div>
     </div>
   </section>
 </template>

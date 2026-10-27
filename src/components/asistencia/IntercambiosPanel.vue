@@ -64,7 +64,9 @@ function nombre(id: string) { const p = catalogs.staff.find(p => p.id === id); r
   <section v-if="configura || consulta" class="my-4 border-t border-slate-200 pt-3">
     <h2 class="text-base font-semibold">{{ configura ? 'Intercambio de días de descanso' : 'Mis intercambios de descanso' }}</h2>
     <p class="text-xs text-slate-500 mb-3">Un día de descanso autorizado se compensa trabajando un domingo o feriado. Ambos días forman un solo intercambio. Horario de Perú.</p>
+    <div class="attendance-management">
     <form v-if="configura" class="surface p-4 grid gap-3 sm:grid-cols-2 mb-3" @submit.prevent="crear">
+      <h3 class="text-sm font-semibold text-slate-900 sm:col-span-2">Programar intercambio</h3>
       <label><span class="field-label">Colaborador</span><select v-model="form.user" class="field-input" required><option value="" disabled>Seleccionar...</option><option v-for="p in empleados" :key="p.id" :value="p.id">{{ p.full_name || p.email }}</option></select></label>
       <label><span class="field-label">Día de descanso autorizado</span><input v-model="form.descanso" type="date" :min="fechaLimaISO()" class="field-input" required /></label>
       <label><span class="field-label">Día compensatorio (domingo o feriado)</span><input v-model="form.trabajo" type="date" :min="fechaLimaISO()" class="field-input" required /></label>
@@ -72,6 +74,8 @@ function nombre(id: string) { const p = catalogs.staff.find(p => p.id === id); r
       <label><span class="field-label">Salida del día compensatorio</span><input v-model="form.salida" type="time" class="field-input" required /></label>
       <div class="sm:col-span-2"><button class="btn-primary" :disabled="busy">Programar y autorizar intercambio</button></div>
     </form>
+    <div class="attendance-list">
+    <h3 v-if="configura" class="attendance-list-heading">Intercambios registrados</h3>
     <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
     <button v-if="error" class="btn-secondary" @click="error = ''; load()">Reintentar</button>
     <p v-if="notice" role="status" class="text-sm text-green-700">{{ notice }}</p>
@@ -87,5 +91,7 @@ function nombre(id: string) { const p = catalogs.staff.find(p => p.id === id); r
         <button class="btn-secondary" :disabled="busy || !motivos[row.id]?.trim()" @click="cancelar(row)">Cancelar intercambio</button>
       </div>
     </article>
+    </div>
+    </div>
   </section>
 </template>
