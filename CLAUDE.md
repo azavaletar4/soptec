@@ -2,6 +2,24 @@
 
 ## Antes de empezar
 
+**Base vigente — frontend consolidado y WiFi desplegados (27/10, 17:08 Perú).**
+Usar `integration/frontend-productivo-tr069-20261027`, worktree
+`scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`.
+Código publicado: **`288f2d8ac3c4ed0d2279b9a01618885bcfb02b9f`**. No compilar un
+checkout raíz/VM atrasado: el estado real está en `/release-manifest.json` del panel.
+Integrados Asistencia A0–A3/pestañas, Puntos noviembre, Campo dirección/GPS,
+inventario ACS actual/histórico y WiFi posterior. 93 unitarias (incluidas las 42
+TR-069), navegadores focalizados, doble build reproducible y rollback aislado PASS.
+Frontend `smartrayco-frontend-consolidado:288f2d8ac3c4`, backend selectivo
+`smartrayco-backend-wifitrial:288f2d8ac3c4`; otros servicios intactos. «Configurar»
+habilita solo WLAN 5.SSID de HWTC1D3691B7/CTR-2026-00214 para ADMIN/SUPERADMIN,
+con respaldo/confirmación/verificación/restauración. **Prueba manual real pendiente;
+Codex envió cero tareas.** Se preservó la configuración efectiva de custodia nula,
+sin activar la fecha de Compose que no estaba compilada. Main remoto `88dec40`
+conservado; la rama integra sus 4 commits pendientes sin forzar historial.
+Continuidad técnica/futuros builds: `docs/FRONTEND-CONSOLIDACION-CONTINUIDAD-20261027.md`.
+Este estado prevalece sobre la parada anterior, conservada abajo como antecedente.
+
 Lee primero `ESTADO_DESARROLLO.md` (raíz del repo) — tiene el estado real
 (implementado/desplegado/pendiente), la arquitectura, el último commit
 desplegado y los riesgos/trabajos pendientes conocidos. Evita repetir

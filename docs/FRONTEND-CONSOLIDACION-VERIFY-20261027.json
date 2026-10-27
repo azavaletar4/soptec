@@ -1,0 +1,17 @@
+{
+  "routes": [
+    "/",
+    "/tr069",
+    "/asistencia",
+    "/campo",
+    "/campo/mi-custodia",
+    "/puntos",
+    "/soporte",
+    "/mikrotik",
+    "/analitica"
+  ],
+  "artifactsVerified": 125,
+  "sourceCommit": "288f2d8ac3c4ed0d2279b9a01618885bcfb02b9f",
+  "unauthenticatedStatus": 401,
+  "ssidTasksSent": 0
+}

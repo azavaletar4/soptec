@@ -1,0 +1,18 @@
+{
+  "trialEnabled": true,
+  "operationsRecorded": 0,
+  "journalBackedUp": false,
+  "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+  "serial": "HWTC1D3691B7",
+  "network": {
+    "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5",
+    "ssid": "WirelessNet-5G",
+    "enabled": null,
+    "writable": true,
+    "timestamp": "2026-10-27T21:37:30.461Z",
+    "band": "Banda desconocida"
+  },
+  "pendingTasks": 0,
+  "ssidTasksSentByThisCheck": 0,
+  "checkedAt": "2026-10-27T22:11:33.654571+00:00"
+}

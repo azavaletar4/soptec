@@ -1,0 +1,51 @@
+{
+  "at": "2026-10-27T22:08:14.476594+00:00",
+  "action": "deploy",
+  "validation": {
+    "routes": [
+      "/",
+      "/tr069",
+      "/asistencia",
+      "/campo",
+      "/campo/mi-custodia",
+      "/puntos",
+      "/soporte",
+      "/mikrotik",
+      "/analitica"
+    ],
+    "artifactsVerified": 125,
+    "sourceCommit": "288f2d8ac3c4ed0d2279b9a01618885bcfb02b9f",
+    "unauthenticatedStatus": 401,
+    "ssidTasksSent": 0
+  },
+  "services": {
+    "frontend": {
+      "id": "9b5db2cd2dedc21287b830107b8c66f2af99ef2d109033b103af4b92ad6c8a0a",
+      "image": "sha256:fca857f7dbfc9d07df9f9f5e82b45758f5e58fa0cd2c84d07433c35bb85b85db",
+      "started": "2026-10-27T22:08:00.721981333Z"
+    },
+    "backend": {
+      "id": "3adcbde4a03316644b3300c8c97030790eb20f924994a2274343e61d1fef64af",
+      "image": "sha256:7959f08b6535c733c63d90f7a7a0dd4ca65fa524866fb2cc6b56be719de326a0",
+      "started": "2026-10-27T22:08:00.559923702Z"
+    },
+    "caddy": {
+      "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+      "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+      "started": "2026-10-27T17:59:52.601749213Z"
+    },
+    "mongo": {
+      "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+      "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+      "started": "2026-10-27T17:59:52.61111918Z"
+    },
+    "genieacs": {
+      "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+      "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+      "started": "2026-10-27T17:59:52.552085739Z"
+    }
+  },
+  "stage": "/opt/smartrayco-staging/frontend-consolidado-tr069-288f2d8-20261027",
+  "sourceCommit": "288f2d8ac3c4ed0d2279b9a01618885bcfb02b9f",
+  "ssidTasksSent": 0
+}

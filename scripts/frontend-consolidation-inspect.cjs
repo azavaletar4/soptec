@@ -1,0 +1,9 @@
+// Verificación posterior solo lectura: no se invocan change/verify/restore ni tareas.
+const cp=require('node:child_process'),fs=require('node:fs'),path=require('node:path');
+const nodeProgram=`import {wifiTrial} from './server/src/services/tr069WifiTrial.ts';import {readWifiInventory} from './server/src/services/tr069WifiPreparation.ts';
+const nbi=process.env.GENIEACS_NBI||'http://localhost:7557';const serial='HWTC1D3691B7';const status=await wifiTrial.status(nbi,serial);const inventory=await readWifiInventory(nbi,serial);
+const q=encodeURIComponent(JSON.stringify({device:inventory.deviceId}));const tasks=await fetch(nbi+'/tasks/?query='+q,{method:'GET'}).then(r=>r.json());
+console.log(JSON.stringify({trialEnabled:status.enabled,operationsRecorded:status.record?.operations.length??0,journalBackedUp:status.record!==null,deviceId:inventory.deviceId,serial:inventory.serial,
+network:inventory.networks.find(n=>n.path==='InternetGatewayDevice.LANDevice.1.WLANConfiguration.5'),pendingTasks:tasks.length,ssidTasksSentByThisCheck:0}));`;
+const py='import subprocess,json,datetime\np=subprocess.run(["docker","exec","smartrayco-backend-1","node","--import","tsx","--input-type=module","-e",'+JSON.stringify(nodeProgram)+'],capture_output=True,text=True,timeout=40)\nassert p.returncode==0,"READ_ONLY_CHECK_FAILED"\no=json.loads(p.stdout);o["checkedAt"]=datetime.datetime.now(datetime.timezone.utc).isoformat();print(json.dumps(o))\n';
+try{const raw=cp.execFileSync('ssh',['-o','BatchMode=yes','-i',path.join(process.env.USERPROFILE,'.ssh','smartrayco-deploy'),'root@192.168.55.201','python3 -'],{input:py,encoding:'utf8',timeout:60000,stdio:['pipe','pipe','pipe']});const o=JSON.parse(raw);fs.writeFileSync('docs/FRONTEND-TR069-POST-DESPLIEGUE-20261027.json',JSON.stringify(o,null,2)+'\n');console.log(JSON.stringify(o));}catch{console.error('READ_ONLY_CHECK_FAILED_DETAILS_WITHHELD');process.exitCode=1;}

@@ -22,7 +22,7 @@
       "operation": "TRIAL_CHANGE",
       "serial": "485754431D3691B7",
       "payload": {
-        "requestId": "01205d76-e415-491b-bb16-cf14e002c75a",
+        "requestId": "114a3033-0ec6-44af-bea9-9050a827adfd",
         "confirmed": true,
         "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
         "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5",
@@ -40,7 +40,7 @@
       "operation": "TRIAL_RESTORE",
       "serial": "485754431D3691B7",
       "payload": {
-        "requestId": "150f1003-69cd-44dd-b62f-faa60d37cdb4",
+        "requestId": "e06295c8-37a7-449c-a97c-93042f707a20",
         "confirmed": true
       }
     },

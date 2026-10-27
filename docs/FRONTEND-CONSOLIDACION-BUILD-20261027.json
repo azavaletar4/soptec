@@ -1,0 +1,10 @@
+{
+  "built": true,
+  "sourceCommit": "288f2d8ac3c4ed0d2279b9a01618885bcfb02b9f",
+  "reproducible": true,
+  "contractGuardValidatedReadOnly": true,
+  "artifactCount": 125,
+  "frontendImage": "sha256:fca857f7dbfc9d07df9f9f5e82b45758f5e58fa0cd2c84d07433c35bb85b85db",
+  "backendImage": "sha256:7959f08b6535c733c63d90f7a7a0dd4ca65fa524866fb2cc6b56be719de326a0",
+  "servicesChanged": false
+}

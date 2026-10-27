@@ -1,5 +1,41 @@
 # SmartRayco — Estado de desarrollo
 
+## Estado vigente — frontend consolidado y WiFi desplegados (27/10/2026, 17:08 Perú)
+
+Fuente canónica compilada: **`288f2d8ac3c4ed0d2279b9a01618885bcfb02b9f`**;
+rama `integration/frontend-productivo-tr069-20261027`, worktree
+`scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`.
+`ead801a` recupera Asistencia A0–A3/pestañas, Puntos noviembre, Campo dirección/GPS,
+inventario ACS actual/histórico y runtime productivo; mantiene WiFi de `3c6b085`.
+`288f2d8` añade build canónico con snapshot/manifest y CSS acotado; `c6bdab9`
+versiona promoción/rollback. `67c64b4` integra los cuatro commits documentales/
+pruebas de origin/main sin alterar código ni las fuentes compiladas.
+
+Frontend activo `smartrayco-frontend-consolidado:288f2d8ac3c4`, backend selectivo
+`smartrayco-backend-wifitrial:288f2d8ac3c4`. Dos builds remotos idénticos,
+125 hashes HTTP/manifest verificados, API saludable y sin autenticación 401.
+Caddy/Mongo/GenieACS sin recrear; rollback de imágenes probado aisladamente.
+93 unitarias PASS (incluidas las 42 TR-069), navegadores Asistencia/Puntos/Campo,
+6 capturas WiFi y devolución Campo publicada con negocio simulado PASS.
+
+Botón «Configurar» disponible en /tr069 para la Huawei HWTC1D3691B7,
+contrato CTR-2026-00214: solo WLANConfiguration.5.SSID, ADMIN/SUPERADMIN,
+respaldo persistido antes del primer envío, confirmación, Inform/lectura posterior
+y restauración. Verificado a las 17:11 Perú: habilitado, WirelessNet-5G, cero
+operaciones/tareas pendientes. **Prueba física/manual del propietario pendiente;
+Codex no envió tareas a GenieACS.** PPPoE, claves, WAN/VLAN y otras ONT bloqueados.
+
+La divergencia combinaba fuentes productivas ausentes de main con compilaciones
+sin contexto estable y configuración Compose distinta de la realmente compilada.
+Se preservó el corte efectivo de custodia null: no se activó inadvertidamente la
+fecha configurada ni se modificaron datos. Git de la VM no es referencia del build;
+usar `/release-manifest.json` y la rama canónica. Main remoto se conserva en
+88dec40; la integración ya lo contiene como ancestro, sin force ni merge remoto.
+Procedimiento, fuentes, ramas, hashes, límites y pendientes:
+`docs/FRONTEND-CONSOLIDACION-CONTINUIDAD-20261027.md`.
+Las fases cerradas y los antecedentes siguientes se conservan; este estado
+prevalece sobre las notas históricas de parada o de implementación pendiente.
+
 ## TR-069 Huawei HWTC1D3691B7 — conectado real, corrección de identificación DESPLEGADA (27/10/2026)
 
 **Último resultado de administración WiFi (27/10, 16:26 Perú, prevalece):**

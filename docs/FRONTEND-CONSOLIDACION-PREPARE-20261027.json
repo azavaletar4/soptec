@@ -1,0 +1,11 @@
+{
+  "prepared": true,
+  "rollbackTested": true,
+  "backupFiles": {
+    "backend": "/opt/smartrayco-staging/tr069-wifi-manual-20261027/backend-before.image.tar",
+    "frontend": "/opt/smartrayco-staging/tr069-wifi-manual-20261027/frontend-before.image.tar"
+  },
+  "stage": "/opt/smartrayco-staging/frontend-consolidado-tr069-288f2d8-20261027",
+  "sourceCommit": "288f2d8ac3c4ed0d2279b9a01618885bcfb02b9f",
+  "servicesChanged": false
+}
