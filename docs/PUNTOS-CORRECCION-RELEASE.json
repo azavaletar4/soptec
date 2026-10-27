@@ -1,0 +1,423 @@
+{
+  "commit": "ff3077f",
+  "imageTag": "smartrayco-puntos:ff3077f-20261027T140327Z",
+  "stage": "/opt/smartrayco-staging/puntos-ff3077f-20261027T140327Z",
+  "status": "DEPLOYED_TECHNICALLY_VERIFIED",
+  "front": {
+    "name": "/smartrayco-frontend-1",
+    "id": "eabc57a9ed58e13734dc3ac64f7a6fdd921877bd48159ccb0fcd34edf9c53c37",
+    "image": "sha256:b1d21a1c3a2d8656b98040316b76b5458e7ba1b619d41f4d14426d15278ba038",
+    "tag": "smartrayco-asistencia-visual:233f230-20261027T133357Z",
+    "startedAt": "2026-10-27T13:34:58.030706237Z",
+    "running": true,
+    "composeFiles": [
+      "/opt/smartrayco/docker-compose.onprem.yml",
+      "/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json",
+      "/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/frontend.override.json",
+      "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/promotion/frontend.override.json",
+      "/opt/smartrayco-staging/asistencia-visual-233f230-20261027T133357Z/promotion/frontend.override.json"
+    ],
+    "composeHashes": {
+      "/opt/smartrayco/docker-compose.onprem.yml": "ee98f1d336468b1b56190f46b09f61b0ccd58643a8e56d4c273f58b7f2e6a762",
+      "/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json": "7be5e9495bf0227164f8b629d73c4c41ed8d313dbf232c9945f13d929fe8bed5",
+      "/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/frontend.override.json": "0b2c5c2e40ad56a219e58d1a7a0a7681c36e7825c8be12ff8547422c36069dc4",
+      "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/promotion/frontend.override.json": "0b9ddcc0dffefb51b61d1c4aa5b32cc8c41cd773da967162bc9e7a6f187d99d0",
+      "/opt/smartrayco-staging/asistencia-visual-233f230-20261027T133357Z/promotion/frontend.override.json": "58ce63ae6e65f34a645e09a0300d37743d2ae9f8f1d22e4b5567cecd99798e8b"
+    },
+    "workingDir": "/opt/smartrayco"
+  },
+  "back": {
+    "name": "/smartrayco-backend-1",
+    "id": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+    "image": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+    "tag": "smartrayco-backend-counters:16831c6-20261026T162650Z",
+    "startedAt": "2026-10-26T20:44:49.856235867Z",
+    "running": true
+  },
+  "backup": {
+    "image": "sha256:b1d21a1c3a2d8656b98040316b76b5458e7ba1b619d41f4d14426d15278ba038",
+    "file": "frontend-visual-current-points-backup.tar",
+    "sha256": "e7b9213a15a5d5606c91b8681aab033bfedf73d744c636e55502342083b52101",
+    "verifiedBlobs": 18,
+    "remotePath": "/opt/smartrayco-staging/puntos-ff3077f-20261027T140327Z/recovery/frontend.tar",
+    "sqlOriginalRemotePath": "/opt/smartrayco-staging/puntos-ff3077f-20261027T140327Z/recovery/functions-original.sql"
+  },
+  "frontendPreflight": {
+    "otherContainers": [
+      {
+        "name": "/smartrayco-backend-1",
+        "id": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+        "image": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+        "tag": "smartrayco-backend-counters:16831c6-20261026T162650Z",
+        "startedAt": "2026-10-26T20:44:49.856235867Z",
+        "running": true
+      },
+      {
+        "name": "/smartrayco-caddy-1",
+        "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+        "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+        "tag": "caddy:2",
+        "startedAt": "2026-10-21T19:37:56.248715181Z",
+        "running": true
+      },
+      {
+        "name": "/smartrayco-mongo-1",
+        "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+        "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+        "tag": "mongo:8.0",
+        "startedAt": "2026-10-21T19:37:56.208636545Z",
+        "running": true
+      },
+      {
+        "name": "/smartrayco-genieacs-1",
+        "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+        "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+        "tag": "drumsergio/genieacs:1.2.16.0",
+        "startedAt": "2026-10-21T19:37:56.23339486Z",
+        "running": true
+      }
+    ],
+    "revalidatedSqlAt": "2026-10-27T14:10:15.399Z"
+  },
+  "build": {
+    "source": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\asistencia-a3-worktree\\.env.a3-recovery\\points-source-ff3077f",
+    "distHashes": {
+      "assets/ActivosFijosView-DDXsvMeO.js": "e810a1f30170dd297b0b4b63f03d716d9e57e734dbb66b61971165ee71a45fee",
+      "assets/AnaliticaView-D46JLHNB.js": "ce17f13ebc5eac9c238345e1cc77a47bc9a467e7fab70c86962558ce897557a4",
+      "assets/apexcharts.ssr.esm-fe46cd2d-9CakV-nF.js": "9e8c90ca0bc7a3cff8652476bb73eea77cd3b697c49d184c9670205447c2a45e",
+      "assets/AppLayout.vue_vue_type_script_setup_true_lang-D-8vPlYw.js": "1ccda618ba95e939c2e1a1c88aa4e04f497ad89a778dafb7e806895c38cdaafa",
+      "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang-B1KHL-jE.js": "e713c9992d78ba21ab9d1b48ef58263ec7ef654a98ad8d1d45b7bf564f07ed8f",
+      "assets/AsistenciaView-DpRaM9zY.js": "b8d6f9ca32f809aae7e170634a0db07b4228db6af075439abaef610305f12498",
+      "assets/AsistenciaView-OdV_QNzr.css": "8649b49d6780ee63b8500f6ab1a41b7426d09d44f2fc7dd49ba5baf7d7797a9e",
+      "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang-CiACAsx5.js": "0d998aef6dcb5267098672c17bee7bfbe13c1e36d43663f45f7ac06b0017eb88",
+      "assets/CajaChicaView-VFxy-Lqv.js": "e43809557e45bc1bb2194afc8ab5675a30bc6bfa5ed204bf4e2acd323e711b26",
+      "assets/CambiarPasswordView--YPLeAJs.js": "f763c109d7dfe8808eab625f18612e8460427a92ef902a5efbffcb17b31919c8",
+      "assets/CampoCustodiaView-DytsopkN.js": "a12cec1b99399290f83bbfa4ec89a00d002a265ea2e626bd1b7b6ed2b73f87c5",
+      "assets/CampoCustodiaView.vue_vue_type_script_setup_true_lang-CxTI0xR4.js": "7fec5f138bfd770bfb0833fbb70e12129476b2e8ce184dbfd36f0eb1c630d480",
+      "assets/CampoDashboardView-ClwfZIXW.js": "13696f391692f110c10d52ce33fb330b4be9de423f35074ccc3c977068b0755a",
+      "assets/CampoMiCustodiaView-PFZK9N2f.js": "3bd3cbb508359a94319a7fcab1ee1fcd83a11643ed24c605883d832d02bb568a",
+      "assets/CampoTrabajoDetailView-Cx5nFUiw.js": "866a7a43a2972e0849b1445a308e6628e2742562a751dcc3faac35a44811ed38",
+      "assets/catalogs-hiOqdGy9.js": "a8873365ab7a06923c6c0320b1e2daaefbb7ee3d407412790880900bf9528d1d",
+      "assets/ClientDetailView-CY--Pok6.js": "c92437721229b1174c59983b71bc9f0d05bec5442bba3e9531e02330a52f3852",
+      "assets/clientEquipmentPhotos-AD2GH781.js": "ea61a124d74f5aff4052ce39fa770b88837393369cfb7be02619fdab2df042ec",
+      "assets/ClientesMapView-D0dga3b9.js": "03bcd61f29b7bcd1b6a6ca2990497992924451e9a57274ca7b1f220486bf6c7a",
+      "assets/ClientesView-CvdhB9F1.js": "28bfeb7011039d9a3a560c6214f648addd522c904ccead0daf1b289c91499a4e",
+      "assets/clientLifecycle-C66tkUhY.js": "4d411ec5be0ff57947303550fec78c63904af1be1468cdf8b0b44e8211e2a934",
+      "assets/clientPhotos-BsxJzbao.js": "1535578764476d4e9dd8a499736fbdcc87bfa39f2c34c46c2590dcefa9ff7d71",
+      "assets/ClientRetirementDialog.vue_vue_type_script_setup_true_lang-CTT9uNBv.js": "1f92d1ee5cb539e7c207c0fd24e1d63669718b34ac6e51cb8df9a706b51710a1",
+      "assets/clients-BAIb7WyR.js": "3a4cd94eca82b4dc03ce35f25a6a70331adb4b507d38196ac08e32bb7c4bc33e",
+      "assets/ClientServiceDetailView-DZgsBipc.js": "21b2be4fdaccc463b59bd314c6e0aff6de5421586932058e1af6a89c3a1f31b3",
+      "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang-C4lbkqdE.js": "e9d9d04a6b8f1fb3a08795ed8d7df512d62bb05288b0fcd747917b56de7088a7",
+      "assets/contracts-DuygZpHs.js": "cdbac0d2d52661ae06a65eb317a8897056b93050e3f3eade9a2a4c0ddc2fb014",
+      "assets/CortesView-CSNF_xAR.js": "5e7aa8f6d3ab8b428debddeed1b13129a1e05afc0aaaf4089eb6e5444a135caf",
+      "assets/CrewAssignEditor.vue_vue_type_script_setup_true_lang-DSijFgR5.js": "dbf07ce17805cc3d4f4bdf61aad4e6b557fb40c7a31f12eb94b0fe45d7c13fa8",
+      "assets/DashboardView-C6wgiHWR.js": "4ca252fc67bd8ad69a1f1ac4c969104ea5a604103b239082d715e40d062a2c2b",
+      "assets/DateRangeFilter.vue_vue_type_script_setup_true_lang-Bibi1_3h.js": "86310c74fe5ca16817f86975377d4e95b3c42b9e572bbb33059aeabe7ff58569",
+      "assets/descuentosCompensacion-7M_iFP2h.js": "a84d24ce4c24275946585c54727bf5542816123ff8cdeeff27b22bb54bb0c74e",
+      "assets/DevolucionesView-Do9syYVE.js": "3a7bef557297a6fb9edc497173e28d4a1178c77f3bde585bce0ba6f15ac8226e",
+      "assets/DispatchBoardView-R094bh-7.js": "4efd20b7789438c976a65098902986b66d2687ec0b03e7da829c1c48836e5087",
+      "assets/domain-DTnkHfJg.js": "156072554a2c1608b309636106260d77af1c3ea4ecbff2a5072592d584f3d038",
+      "assets/elapsedTime-B7QjnEzO.js": "93ae344cbd661c44c460b65fbfd40a466e461f9420536cf25922b04e51174cd3",
+      "assets/equipmentPhotoType-BZrQ3ecS.js": "bbd82050a95fdb2c6be54d4a59a1dbe858123caf1fb052f5f76c0da868ca3e7c",
+      "assets/FacturacionView-Dlm9QCB5.js": "1d468e5934453581d8643a7f0e35c2f34f5f65cf4adfcdbe1a43b4107caeabbf",
+      "assets/FacturacionView-P51cOe60.css": "68245245aff5975510da0a5e528bb7b7c04572d2d51667d1068c53a451a9bc71",
+      "assets/fieldInventoryOperation-Bqo0EyGc.js": "836b76f6cf8f1ae7f21469807587ded798ac35e3bbad75cf3b07828818325971",
+      "assets/fieldProgress-CZSvaN1d.js": "1dcd9d5ee1fc5d83aee5d7ff997d48b6473937945f9a7937054da5bc7e6c2a40",
+      "assets/FlotaView-CRvmR51B.js": "af78632e688492f636c87d2ca6339f576ac66b8d586dfc8470f808b1fe1293bb",
+      "assets/foFibra-CXg0-RNl.js": "514cca20263ee4c315b9e6219d69696eef4599c83bae27bc4a262800bf18fe96",
+      "assets/HistoricoAtendidosView-BAGV5WZl.js": "fd4b6d441f29049aa7385515c926ecc1410a2baa4f449672363989a56f3e2333",
+      "assets/imageCompression-CZrI0dQN.js": "ed702e0c7420682fa3678e1b85ec4fcedff967ffd8e6c06f5b8894d74080ee38",
+      "assets/ImportMapView-BQfb_axj.js": "1dfd0fcc2c7eed17bc2adec1e4b618b5cded8d8a4935ecb8bd80a8ecbc1b337b",
+      "assets/index-BTFTS4Lk.js": "1e90b998eaf2126b5ecd6592d2f42866a9105582a4dd8322402b53202db9b828",
+      "assets/index-DnRC_l5m.css": "d944eaac737113e404df5d2e93dbbe4159c17f1605c6cc7a72f90f7c46b208fb",
+      "assets/infraElementos-DU-mJBZa.js": "10a874a6b99e99f5dd202cc9f18942afea4d421f4352be4ba8926f389e60a8b6",
+      "assets/InstalacionDetailView-52gPvmCk.js": "5c8dd5244162f0ccdc659f7a4ce5d25cb3c5d67c7265fadd0c6990539289daec",
+      "assets/InstalacionesView-ClpGR32h.js": "46e7362e81a1dffd36db9c32ef692bd7376fe20a5133d811692dfa988ad02f09",
+      "assets/installations-CFftZqvj.js": "afd62eb39838bf804cd280e9fec9bd198f2f0c100d3d6f1aa90eb4643d8c6d76",
+      "assets/InventarioAlbumView-BGAfLy8h.js": "354d1e944b4d65f398b19b307c721be17d3ccacb7d74e48e22ef4e466a00f752",
+      "assets/InventarioConciliacionView-B1VQQAYd.js": "937128ad3c2a83d685b9ea0c9d10baf6bb914b45ab51d329836602fa44d1b9f5",
+      "assets/InventarioCustodiaView-Bg7PMGkQ.js": "25a52429cac8615ba3b904eaae262587d319b0d87a1883250ccea9d964b6479d",
+      "assets/InventarioProductoView-rQoP4qfO.js": "7320777f7094d7623e163df18b588a8d31227585aa1ce7e6b61477d818b798be",
+      "assets/InventarioView-De2eUsys.js": "abdbc6e2cae643f29fa74399813598b0d9fc2c68e84239d5160f72c8b2440de8",
+      "assets/inventory-BZyjpbeh.js": "ab88ee43c13fe87e0b083462e8790aaed5e12a5c1ff19c189a33d5cca2cff57d",
+      "assets/inventoryPresentation-BKwDbcl0.js": "ce65ae25c1ee6a49542debd339a72795eb180cb9f0ca6125105515e9db94c5b9",
+      "assets/InventorySearchResults.vue_vue_type_script_setup_true_lang-COCargQl.js": "342c81b426846018e9c843884ee129692fbda92e8a769cc8bfb9e09a034e7a8e",
+      "assets/inventoryUnits-CrvUiiFh.js": "3b1d8bad0ebf821a6b91cf4f0f04c242cf864efa1a653e0663e590ff054a65c4",
+      "assets/jobAssignees-BTz4xKZK.js": "17afd03aed481abfe01cb4a25b1f2087e8e67aff1c3ea35907427275c71580c5",
+      "assets/leaflet-CIGW-MKW.css": "fcd9fbeec3e87013f776847f0e76395d4d7eba07d982964933a41bd07503e6fe",
+      "assets/LoginView-CJFV1x3X.js": "22b911eded45ade78f404719ea3d57acf472a303ed59fefd1cb00a4d354aebaf",
+      "assets/logo-icon-BLKDjdZa.js": "03cfd73a39cf345b800e289e4a166a2deb9a6a7133f21c8c069a7f1b19cc538d",
+      "assets/logo-icon-JbUtx3QJ.png": "01595f40e970f1825fd285582dabea3c231ddd15ec8cd08ba26881d407d446de",
+      "assets/mapIcons-D1S92751.js": "4d5d9d74fec2b5f01cbfb4f45c1a369371583382fe0b34e612e15d83c62ee77b",
+      "assets/materialInventoryOutcome-xSdnZKYW.js": "53f5df0fc42b62792c15c186434d7f992d2ea5b7ffdf013eb256e8d72be02f89",
+      "assets/materialMovementPresentation-DaZ01CsN.js": "fca39d231809c7a92698febde39ef5a726865d24c6eb56098a2278b0a33e5168",
+      "assets/mikrotik-BPvS-QrR.js": "68db8ec4f04b85020c832d74680830616d6482d464894ae5ea6d7489894c0f49",
+      "assets/MikrotikDetailView-C2LhhhPG.js": "52a32a1b8d0c2b1634e4995bbf2b13188214d369348e65b75dae474f51535983",
+      "assets/mikrotikDeviceRole-eJjItOfE.js": "01f248bfb14e0adf1c3a3667dcc7277ef265326a3ab3f2246a1c6fa24bb60f7f",
+      "assets/MikrotikDevicesView-eygi-Fql.js": "8d280ed3cc513af189497d66f955f85041a4aafa008b61a402ae1089832b8cad",
+      "assets/MoveAlbumMenu.vue_vue_type_script_setup_true_lang-Bnud3fDm.js": "d468dc5c5e6d8d5553002e73cd7510650785524dacc00acc58205f65e80ccf11",
+      "assets/napOccupancy-BzXnx-La.js": "cc68255ddf13066a1551e01d743bc0dd8f7e254b2d519f34fe2e26c96878cbd5",
+      "assets/nativeApp-DBj1S8Pz.js": "b721bfabf63a0afb12ab5bc5b1a1a5353fdf09cb4b97365cc08e5ac199a2362b",
+      "assets/olt-CHx9SuGW.js": "ac311cd8cb0377dd30c7b6872012f5b87fe2e7d31db25573f4322c6615cc3bff",
+      "assets/oltAlertPresentation-DuFjnK97.js": "c2bb6adb38b7fb8d81123b11bf30ff1b476755c804081f5e19b0e53dedfae90f",
+      "assets/OltDetailView-BXnq3MMu.js": "29b0a9b9b1d03eeebaf833a2e29791569e153fe9798ff3e5f25eb7f24cb117bb",
+      "assets/OltDevicesView-B17JlkeS.js": "017ff6135aba0bd473726e0aadc96dba42a227addf47ee574347630a7725e958",
+      "assets/ontZoneSync-Dbk0EOzL.js": "d0e5b40dbd120d8741c9225cf808e9cf1ec36adcdb2a6fe2d5eed186308d307e",
+      "assets/OperacionesHoyView-Dk_oiSMC.js": "23b407f64beb5130235a3b783c4ff98d8ac7cab03870cc34daf81fe35409ffdd",
+      "assets/orderInventory-CE0pGcdv.js": "a8458f3143a0ff27f3ef9a9407d949a1abe62960c456c530d53b01c7901a95c9",
+      "assets/phone-DeMz4mPO.js": "f9c48819b897c5824d8f9474512c8799ce47d96f9fd35067619418ba34c64999",
+      "assets/PlanesView-GDYqGIoL.js": "032abedde267813e01b393cfb27bf81639fb2f12453ab46f693e99f908c70cef",
+      "assets/ProspectosView-CAYu684G.js": "8cabb98475507f92d4d8b2da4fb7d8171dd862fb85dc73fa311c49a80248e72d",
+      "assets/prospects-B2qRkFDN.js": "8ab1ffde67c4b5701389ee9e63724e5c1b6dcfa3fa69bd14a5a61a8db3742c58",
+      "assets/qr-scanner-worker.min-D85Z9gVD.js": "f9d5a00a24ef3c0f52453748a018feec9441c0031c7068e41606c744a26491f5",
+      "assets/qr-scanner-worker.min-PJMWJc5V.js": "f4d8445f5a15c4e5f71a8c8c062c6443f09db370b8d3fe1fbdc7fe7889630d14",
+      "assets/RankingTecnicosView-BHZgkw1z.js": "b22a5326d2a019e2a18cd2b7228435c3a9a3fd9a35b83e1587500d478a258b98",
+      "assets/RecoveryModal.vue_vue_type_script_setup_true_lang-CI2CiZkE.js": "b84c65ee484618076e25780a489fc6de0dd4355b59cfcb71814d4c48b0feef00",
+      "assets/RedMapView-BvpdK_1i.js": "dd518daef2bedb71070e40942727b4f96ccecedc929fb9648292ef8816b31d6f",
+      "assets/ReportesView-BG_O1Llo.js": "6b3ca0d1711f6ca3d03aa145de6a0f3f1faaedb034ae9c34f354412599a99d42",
+      "assets/RoutineDetailView-DWvJkfHJ.js": "d7a8764aedad5002ea85cbcb4bce90f2b0548f9b56c7b99667451319a66f2763",
+      "assets/routines-dM85G9qU.js": "09995945babaa6a4676541cbd162f173b8e229d580e7fb5862d56f0e45a1d806",
+      "assets/routineTraslado-BGJR8-r6.js": "f5d43680aa307e11b4ee41fce162242c0657fb8da954dd5374b9646cc9f65be9",
+      "assets/RutinasView-914bzenZ.js": "f042271758bdbd54c4843122c328d4fd1d615d343c3d1d8e2ca5b849e6e53c5d",
+      "assets/scheduleConflict-130819h5.js": "c62e687fafc5fa443e0c524787afaf9095a096224240415e6e9661ef20a704b4",
+      "assets/ServidoresView-D99Iw7eN.js": "96fad3ec2e97f4685aa82362d50c4e733c3cf272c2fa98c49fbd9b68727d40d1",
+      "assets/singleActiveJob-DiG-7Q3E.js": "a1d5f2013bc3b741fee88c9bead9d7808c43a13e7dfc0f693575e7e009db20d1",
+      "assets/SpliceDiagramModal.vue_vue_type_script_setup_true_lang-CoO4BhcP.js": "e470c84d2d79feac554dc41b37ee971403bd037e278ca7d694ab7ac47d10466c",
+      "assets/technicianCustody-DsW2B_4H.js": "2e620bcfb91e4e6ce30e4216ee911263a35009926b9423ffec26ef3d106c0369",
+      "assets/ticketApprovals-CfkyLW3B.js": "7d630aabf9ab8fa16912f8b1c3a8bc29b05fb1e4b961b4593e0553f9a6ab4115",
+      "assets/TicketDetailView-DP_RYqfC.js": "7be1cdc3fe513830364ba9508d8060d6a20475890279b852661d6f578ce88415",
+      "assets/ticketMotivoAveria-C-e57W6U.js": "002e352e1a9230d1c9c77e81a070184cbffa5b2dc01c2d2683fbdb6c7b984614",
+      "assets/tickets-Bc46O4mU.js": "0b11397b8a622c41ea5063d9f0c1fa53015dd56f3218dcedd381b0469b94daa1",
+      "assets/tr069-DtrqC47w.js": "b755b5121da1bfb343cf6da57f6c5492b151f289fbb05c13e9b0ad29eff57685",
+      "assets/Tr069View-CNCfefkI.js": "1440ea27f8f17abad3ac1013df398a2268dd0a0620cee98f032ab019ee84a406",
+      "assets/turnos-DKU6Nwm1.js": "6ca99264def4c651c18d7e92c533ff65f369c63aa6b4db38bdd7c6919f09b744",
+      "assets/useAsyncAction-DbrXCHkl.js": "c1a97c3e04c1663b388c4f67cae4e7130862bc9a324934473449dcdc5b3d30d8",
+      "assets/useOntEvidenceClock-CBGPU9jp.js": "ede24d5821b229cb17bb16d2d5b8a60e81153f74ad918d12a964cdec711c1853",
+      "assets/usePersonalRead-BYqBEJGj.js": "911fcf514e07b52ca27d964308cbb9655499fa0fea1592f8a93595442b048ca6",
+      "assets/useToast-CtpwF442.js": "d3e904db17b3d0aa4ad5cb635d8c1e5f41242735475cf02f61bdef7609b37e54",
+      "assets/useUnifiedJobs-DxXivUsL.js": "db901fbb9fdab067744752c0a6071adb6996367a9922f6bf929d16f1346f93be",
+      "assets/useWorkOrderFinality-DhaXOsX2.js": "8e8b90f91b4da52ebbca33caf4b18c416a046b6869a5ff982e140638e15a0af2",
+      "assets/UsuariosView-C2ybIE0t.js": "1b634b9c9fd05812a0ef22d6a89b693d7b946778d28c6f685bd3ece3f9cf6bcf",
+      "assets/vehiculoAlertas-D0_xd9VL.js": "8dca545f253e2c6e2aa274fafaf29881129b5bb1b41367a59c9cc9a5d705c9c5",
+      "assets/vehiculos-ClabnA4y.js": "95c05c2e25282fe87d9f6374f82b915d586677e2761f2d36624dd64a7316d6fa",
+      "assets/vue3-apexcharts-BxILXi6X.js": "6b4fbe31a2e60eccbae09fbc57454ba18a3ddd9261dc5bbad4ff62d9f9a3bd43",
+      "assets/workOrderFinality-C8okZxEC.js": "29bff952ad018f1ec5274379134ca76e3deb31930d6bdc2d2ab3f99d00e119f4",
+      "assets/workOrderPoints-Ctbn_-lp.js": "30593e08d1ca28ea43c1dde28cfae5b3e1a14dfc5d787897b9f34c734636b640",
+      "assets/WorkOrderPointsEditor.vue_vue_type_script_setup_true_lang-C_idg7ZW.js": "c4a06e502c6768eeaa1240761fda96d43eb1df24ea56a5c8248d1d26ef2a2588",
+      "assets/ZonasView-BJM_xqiX.js": "50e85d3d06f1e23c01cfa80b8c3bf7ee0515e4c26b0e282ac00722b8767b5051",
+      "index.html": "586eaf723346a0723610f2b5da0edbe0005b812b5af44c4b670b34ea55103e1d"
+    },
+    "compiledLocally": true,
+    "productionConfigurationVerified": true,
+    "image": "sha256:17a7589eee51b8d58d8457f35ecba815623f181223574623ec2254d0bd1226c4",
+    "tag": "smartrayco-puntos:ff3077f-20261027T140327Z",
+    "backupVerifiedBlobs": 18,
+    "remoteBackupVerified": true,
+    "assetsVerified": 124,
+    "compiled": true
+  },
+  "sqlPlan": {
+    "candidateSha256": "38702ab2cd4af8f37790a67f984b3c1ed37c575a1fdc96affb770fb6a1d968b8",
+    "guardedSha256": "cb32ecec8f344f36b57c90c699a7177c776082e86386044e6d91732315982ced",
+    "rollbackSha256": "a927121cc94083e5be4394b2eda7858340dad3047ce38116923a04fb84567ea2"
+  },
+  "previousComposeFiles": [
+    "/opt/smartrayco/docker-compose.onprem.yml",
+    "/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json",
+    "/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/frontend.override.json",
+    "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/promotion/frontend.override.json",
+    "/opt/smartrayco-staging/asistencia-visual-233f230-20261027T133357Z/promotion/frontend.override.json"
+  ],
+  "candidate": {
+    "image": "sha256:17a7589eee51b8d58d8457f35ecba815623f181223574623ec2254d0bd1226c4",
+    "assetsVerified": 124,
+    "runtimeConfigPreserved": true,
+    "onlyFrontendImageChanges": true,
+    "override": "/opt/smartrayco-staging/puntos-ff3077f-20261027T140327Z/promotion/frontend.override.json",
+    "overrideSha256": "ae0fa49270edd3034daea002d8a7f8e8cf960c6c8137549ea00fbf09619d1940",
+    "composeFiles": [
+      "/opt/smartrayco/docker-compose.onprem.yml",
+      "/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json",
+      "/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/frontend.override.json",
+      "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/promotion/frontend.override.json",
+      "/opt/smartrayco-staging/asistencia-visual-233f230-20261027T133357Z/promotion/frontend.override.json",
+      "/opt/smartrayco-staging/puntos-ff3077f-20261027T140327Z/promotion/frontend.override.json"
+    ],
+    "effectiveConfigSha256": "bea74859373995b9c9bd3e575bcef05a5d5ad809c89de477b693e79adc621f82"
+  },
+  "sql": {
+    "applied": true,
+    "verified": true,
+    "checkedAt": "2026-10-27T14:14:46.130Z",
+    "functions": [
+      "my_field_order_points",
+      "technician_ranking_between"
+    ],
+    "aclPreserved": true,
+    "otherFunctionDefinitionsPreserved": true,
+    "cutoffPreserved": true,
+    "octoberRowsAndContributionsUnchanged": true,
+    "personalTotalsUnchanged": true,
+    "installedBodyMd5": {
+      "my_field_order_points": "968b4280d9b358b3695e4c1c3d225e87",
+      "technician_ranking_between": "0bb43ead749123d72f2bba9bcf066e46"
+    }
+  },
+  "history": {
+    "periods": {
+      "week": {
+        "end": "2026-11-02T05:00:00+00:00",
+        "start": "2026-10-26T05:00:00+00:00",
+        "points": 11
+      },
+      "month": {
+        "end": "2026-11-01T05:00:00+00:00",
+        "start": "2026-10-01T05:00:00+00:00",
+        "points": 325.5
+      },
+      "today": {
+        "end": "2026-10-28T05:00:00+00:00",
+        "start": "2026-10-27T05:00:00+00:00",
+        "points": 0
+      }
+    },
+    "entries": [
+      {
+        "kind": "work",
+        "points": 0,
+        "crewSize": 2,
+        "reference": "TCK-2026-00057"
+      },
+      {
+        "kind": "work",
+        "points": 1,
+        "crewSize": 2,
+        "reference": "TCK-2026-00068"
+      },
+      {
+        "kind": "work",
+        "points": 0,
+        "crewSize": 2,
+        "reference": "TCK-2026-00070"
+      }
+    ],
+    "ranking": [
+      {
+        "period": "month",
+        "points": 325.5
+      },
+      {
+        "period": "week",
+        "points": 11
+      }
+    ],
+    "details": [
+      {
+        "reference": "TCK-2026-00057",
+        "jobPoints": 0,
+        "personalPoints": 0,
+        "scoringState": "historical"
+      },
+      {
+        "reference": "TCK-2026-00068",
+        "jobPoints": 3,
+        "personalPoints": 1.5,
+        "scoringState": "historical"
+      },
+      {
+        "reference": "TCK-2026-00070",
+        "jobPoints": 4,
+        "personalPoints": 2,
+        "scoringState": "historical"
+      }
+    ]
+  },
+  "promotion": {
+    "tag": "smartrayco-puntos:ff3077f-20261027T140327Z",
+    "image": "sha256:17a7589eee51b8d58d8457f35ecba815623f181223574623ec2254d0bd1226c4",
+    "id": "be1401f4a676f473c60353bbedc3fd0e6404da6ec62b61a0af0141f338b35ca8",
+    "startedAt": "2026-10-27T14:16:10.605278999Z",
+    "backendId": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+    "backendStartedAt": "2026-10-26T20:44:49.856235867Z",
+    "backendUnchanged": true,
+    "otherContainersUnchanged": true,
+    "composeFiles": [
+      "/opt/smartrayco/docker-compose.onprem.yml",
+      "/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json",
+      "/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/frontend.override.json",
+      "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/promotion/frontend.override.json",
+      "/opt/smartrayco-staging/asistencia-visual-233f230-20261027T133357Z/promotion/frontend.override.json",
+      "/opt/smartrayco-staging/puntos-ff3077f-20261027T140327Z/promotion/frontend.override.json"
+    ],
+    "promotedAt": "2026-10-27T14:16:10.999633+00:00"
+  },
+  "http": {
+    "checkedAt": "2026-10-27T14:16:33.847Z",
+    "results": [
+      {
+        "path": "/api/health",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/asistencia",
+        "status": 200
+      },
+      {
+        "path": "/campo",
+        "status": 200
+      },
+      {
+        "path": "/soporte/ranking",
+        "status": 200
+      },
+      {
+        "path": "assets/AsistenciaView-DpRaM9zY.js",
+        "status": 200,
+        "hashMatches": true
+      },
+      {
+        "path": "assets/AsistenciaView-OdV_QNzr.css",
+        "status": 200,
+        "hashMatches": true
+      },
+      {
+        "path": "assets/CampoDashboardView-ClwfZIXW.js",
+        "status": 200,
+        "hashMatches": true
+      },
+      {
+        "path": "assets/CampoTrabajoDetailView-Cx5nFUiw.js",
+        "status": 200,
+        "hashMatches": true
+      },
+      {
+        "path": "assets/index-BTFTS4Lk.js",
+        "status": 200,
+        "hashMatches": true
+      },
+      {
+        "path": "assets/index-DnRC_l5m.css",
+        "status": 200,
+        "hashMatches": true
+      },
+      {
+        "path": "assets/RankingTecnicosView-BHZgkw1z.js",
+        "status": 200,
+        "hashMatches": true
+      }
+    ],
+    "frontendImage": "sha256:17a7589eee51b8d58d8457f35ecba815623f181223574623ec2254d0bd1226c4",
+    "backendUnchanged": true
+  },
+  "verificationScope": {
+    "production": "Read-only history comparison, installed function bodies and ACL, HTTP/assets and container identity",
+    "futureOfficialCases": "Previously approved isolated synthetic tests; no real confirmations or clock changes",
+    "octoberPreserved": true,
+    "officialCutoff": "2026-11-01T00:00:00-05:00",
+    "rollbackExecuted": false
+  }
+}

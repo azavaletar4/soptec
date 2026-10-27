@@ -1,5 +1,12 @@
 # Puntos desde noviembre: validación y corrección local
 
+## Estado vigente: activada en producción
+
+SQL y frontend ff3077f aplicados y verificados el 27/10/2026 con autorización.
+Detalle: [PUNTOS-CORRECCION-DESPLEGADA.md](PUNTOS-CORRECCION-DESPLEGADA.md).
+Lo siguiente conserva la evidencia de la preparación local anterior.
+
+
 Estado: candidato local, sin SQL aplicado, push ni despliegue. Rama
 `fix/puntos-noviembre-local`. Octubre permanece como piloto, incluidos sus ceros.
 

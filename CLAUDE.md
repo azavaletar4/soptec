@@ -1,5 +1,24 @@
 # SmartRayco — guía para Claude Code
 
+## Puntos: corrección activada - 27/10/2026
+
+Aplicadas únicamente las funciones de lectura `technician_ranking_between` y
+`my_field_order_points`, con autorización expresa. Frontend `ff3077f` activo:
+`smartrayco-puntos:ff3077f-20261027T140327Z`. Backend `16831c6` intacto:
+contenedor `cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154`,
+StartedAt `2026-10-26T20:44:49.856235867Z`, misma imagen y sin reinicio.
+Octubre piloto intacto: tickets 00057/00068/00070, sus aportes y totales
+contrastados antes/después; 11 puntos semanales y 325.5 mensuales conservados.
+Corte oficial conservado: 01/11/2026 00:00 Perú (05:00 UTC). Sin DML ni
+cambios de liquidaciones, permisos o fórmulas; solo dos funciones de lectura.
+Ranking admite aportes oficiales de categoría Otro; detalle de Campo distingue
+puntos asignados, descuentos y neto congelado. A0-A3 y otros módulos conservados.
+API, panel, Campo, Ranking y recursos publicados verificados. Conservar la cadena
+completa de Compose y agregar al final `/opt/smartrayco-staging/puntos-ff3077f-20261027T140327Z/promotion/frontend.override.json`.
+Evidencia, imagen exacta, alcance y rollback: `docs/PUNTOS-CORRECCION-DESPLEGADA.md`
+y `docs/PUNTOS-CORRECCION-RELEASE.json`. Esta sección prevalece sobre notas
+anteriores de candidato local o frontend 233f230 activo. Sin push ni merge a main.
+
 ## Cierre definitivo de Fase A3 - 27/10/2026
 
 **A3 implementada, desplegada, aprobada y validada visualmente por el propietario.
