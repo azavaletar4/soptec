@@ -1,5 +1,9 @@
 # Administración Huawei HWTC1D3691B7 — diagnóstico de caché, 27/10/2026
 
+Continuación posterior: [preparación WiFi implementada solo local](TR069-WIFI-PREPARACION-SEGURA-20261027.md).
+Este informe conserva los hallazgos del diagnóstico; los límites del código
+descritos aquí son anteriores a esa preparación. No se ha probado escritura real.
+
 ## Alcance y evidencia
 
 Continuación de `1ae1603`, publicado en

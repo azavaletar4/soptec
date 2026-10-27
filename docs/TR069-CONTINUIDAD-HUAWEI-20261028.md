@@ -104,6 +104,12 @@ y `deriveTr069EnableStatus(...)` ya deriva `'conectado'` con el
 
 ## 7. Pendiente
 
+Preparación WiFi posterior implementada solo local, sin tareas ni despliegue:
+formulario de un SSID, identidad exacta, Enable desconocido visible, preparación
+ADMIN/SUPERADMIN para la Huawei de prueba, respaldo y comparación GET. Escrituras
+WiFi/PPPoE/provision/proxy bloqueadas; falta vía de aplicar/revertir autorizada y
+prueba física. Detalle: [TR069-WIFI-PREPARACION-SEGURA-20261027.md](TR069-WIFI-PREPARACION-SEGURA-20261027.md).
+
 Diagnóstico posterior de administración, solo lectura (27/10): árbol cacheado
 `InternetGatewayDevice`, WLAN 1/5 con SSID y KeyPassphrase; Enable/seguridad/bandas
 sin valores, WANPPPConnection anunciado sin instancia legible. Escritura no

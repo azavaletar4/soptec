@@ -1,4 +1,5 @@
 import { getPath } from './genieacsMetricsService';
+import { readWifiInventory } from './tr069WifiPreparation';
 
 // Acciones directas sobre una ONT via TR-069/GenieACS (setParameterValues,
 // reboot, connection request), replicando la logica de
@@ -139,20 +140,9 @@ export interface WifiNetwork {
   ssid: string | null;
 }
 
-/** Lista las redes WiFi activas del equipo (Enable=true), con su SSID actual. */
+/** Enable desconocido no implica desactivado; nunca devuelve contraseñas. */
 export async function getWifiNetworks(nbiUrl: string, serial: string): Promise<{ found: boolean; networks: WifiNetwork[] }> {
-  const device = await findDeviceBySerial(nbiUrl, serial);
-  if (!device) return { found: false, networks: [] };
-  const { igd, prefix } = rootPrefix(device);
-  if (!igd) return { found: true, networks: [] };
-  const paths = walkForKey(igd, 'WLANConfiguration').map((p) => `${prefix}.${p}`);
-  const networks = paths
-    .filter((p) => getPath(device, `${p}.Enable`)?._value === true)
-    .map((p) => {
-      const ssid = getPath(device, `${p}.SSID`)?._value;
-      return { path: p, ssid: ssid != null ? String(ssid) : null };
-    });
-  return { found: true, networks };
+  return readWifiInventory(nbiUrl, serial);
 }
 
 /** Cambia SSID y/o clave de UNA red WiFi puntual (path de getWifiNetworks). */

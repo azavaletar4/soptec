@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { tr069PreparationOnly } from '../middleware/tr069PreparationOnly';
 
 // Adaptado de REPLICA-TR069-GENIEACS.md seccion 8: proxy reverso al NBI de
 // GenieACS. La sesion JWT de Supabase (requireAuth) actua como guardian;
@@ -9,31 +10,20 @@ const NBI = process.env.GENIEACS_NBI || 'http://localhost:7557';
 export const genieacsRoutes = new Hono();
 
 const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
-// Mismo set que genieacsSync.ts (PPP_WRITE) — SOPORTE puede leer pero no
-// escribir/reiniciar/borrar equipos de TR-069. Antes este proxy dejaba
-// pasar CUALQUIER metodo (incluido POST /devices/:id/tasks, DELETE, etc.)
-// con solo STAFF_READ, saltandose esa restriccion (ver revision de
-// seguridad 2026-09-28).
-const WRITE_ROLES = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
+// Etapa de preparación: proxy solo GET/HEAD. Toda mutación queda bloqueada,
+// incluidos ADMIN/SUPERADMIN; los demás roles reciben 403.
 
 genieacsRoutes.use('*', requireAuth, requireRole(...STAFF_READ));
 
 genieacsRoutes.all('*', async (c) => {
   if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
-    const user = c.get('user');
-    if (!user || !(WRITE_ROLES as readonly string[]).includes(user.role)) {
-      return c.json({ error: 'No tienes permisos para esta accion' }, 403);
-    }
+    return tr069PreparationOnly(c);
   }
 
   const rawUrl = new URL(c.req.url);
   const prefix = '/api/genieacs';
   const subPath = rawUrl.pathname.startsWith(prefix) ? rawUrl.pathname.slice(prefix.length) || '/' : rawUrl.pathname;
 
-  let body: Buffer<ArrayBuffer> | undefined;
-  if (c.req.method === 'POST' || c.req.method === 'PUT') {
-    body = Buffer.from(await c.req.arrayBuffer());
-  }
 
   try {
     const fwdHeaders: Record<string, string> = {};
@@ -42,12 +32,10 @@ genieacsRoutes.all('*', async (c) => {
         fwdHeaders[k] = v;
       }
     }
-    if (body?.length && !fwdHeaders['content-type']) fwdHeaders['content-type'] = 'application/json';
 
     const upstream = await fetch(`${NBI}${subPath}${rawUrl.search}`, {
       method: c.req.method,
       headers: fwdHeaders,
-      body: body?.length ? body : undefined,
       signal: AbortSignal.timeout(60_000),
     });
 

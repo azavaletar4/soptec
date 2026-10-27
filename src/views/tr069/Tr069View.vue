@@ -9,6 +9,8 @@ import { useContractsStore } from '@/stores/contracts';
 import { useOltStore, type OltSerialStatus } from '@/stores/olt';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
+import { useAuthStore } from '@/stores/auth';
+import { compareWifiPlan, type WifiSsidPlan } from '@/lib/tr069WifiPlan';
 import type { ServiceContract, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { WifiNetwork } from '@/stores/tr069';
 
@@ -17,6 +19,8 @@ const clientsStore = useClientsStore();
 const contractsStore = useContractsStore();
 const oltStore = useOltStore();
 const { confirmDialog } = useConfirm();
+const auth = useAuthStore();
+const canPrepareWifi = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? ''));
 
 // Estado online/offline real de la ONU (olt_onts.status), por numero de
 // serie del CPE — distinto del "ultimo reporte" de GenieACS (ese es TR-069,
@@ -53,16 +57,14 @@ const linkingContractId = ref('');
 const linkSaving = ref(false);
 const linkError = ref<string | null>(null);
 
-// ---- Configurar equipo via TR-069 (PPPoE + WiFi, aprovisionar de una) ----
-// Distinto del "Usuario PPPoE" del contrato (ese es el secreto en MikroTik).
-// Esto cambia lo que el equipo del cliente realmente usa para conectarse;
-// se aplica solo en su proximo Inform (no es instantaneo). Uso exclusivo de
-// esta seccion — no se repite en la ficha del cliente.
+// Preparación de un único SSID: ninguna tarea ni escritura sobre el CPE.
 const configModalDevice = ref<Tr069Device | null>(null);
-const configForm = ref({ pppoeUsername: '', pppoePassword: '', wifiSsid: '', wifiPassword: '' });
-const configCurrentPppoeUsername = ref<string | null>(null);
+const configForm = ref({ wifiSsid: '' });
+const configDeviceId = ref<string | null>(null);
+const configPlan = ref<WifiSsidPlan | null>(null);
 const configWifiNetworks = ref<WifiNetwork[]>([]);
 const configWifiPath = ref('');
+const configSelectedNetwork = computed(() => configWifiNetworks.value.find(n => n.path === configWifiPath.value));
 const configLoadingCurrent = ref(false);
 const configSaving = ref(false);
 const configError = ref<string | null>(null);
@@ -70,22 +72,21 @@ const configResult = ref<string | null>(null);
 
 async function openConfigModal(device: Tr069Device) {
   configModalDevice.value = device;
-  configForm.value = { pppoeUsername: '', pppoePassword: '', wifiSsid: '', wifiPassword: '' };
-  configCurrentPppoeUsername.value = null;
+  configForm.value = { wifiSsid: '' };
+  configDeviceId.value = null;
+  configPlan.value = null;
   configWifiNetworks.value = [];
   configWifiPath.value = '';
   configError.value = null;
   configResult.value = null;
   configLoadingCurrent.value = true;
   try {
-    const [pppoe, wifi] = await Promise.all([
-      tr069Store.fetchPppoeInfo(device.cpe_serial),
-      tr069Store.fetchWifiNetworks(device.cpe_serial),
-    ]);
-    configCurrentPppoeUsername.value = pppoe.username;
+    const wifi = await tr069Store.fetchWifiNetworks(device.cpe_serial);
+    if (configModalDevice.value?.id !== device.id) return;
+    configDeviceId.value = wifi.deviceId;
     configWifiNetworks.value = wifi.networks;
-    configWifiPath.value = wifi.networks[0]?.path ?? '';
-    if (!pppoe.found) configError.value = 'El equipo no aparece en GenieACS todavia (nunca informo TR-069, o el ACS URL esta mal).';
+    configWifiPath.value = '';
+    if (!wifi.found) configError.value = 'No se encontró una identidad GenieACS única para esta ONT.';
   } catch (e) {
     configError.value = getErrorMessage(e, 'Error al consultar GenieACS');
   } finally {
@@ -94,36 +95,48 @@ async function openConfigModal(device: Tr069Device) {
 }
 
 async function handleSaveConfig() {
-  if (!configModalDevice.value) return;
-  const f = configForm.value;
-  if (!f.pppoeUsername.trim() && !f.pppoePassword.trim() && !f.wifiSsid.trim() && !f.wifiPassword.trim()) {
-    configError.value = 'Ingresa al menos un campo a cambiar (PPPoE o WiFi)';
+  const device = configModalDevice.value;
+  const network = configWifiNetworks.value.find(n => n.path === configWifiPath.value);
+  if (!device || !canPrepareWifi.value || !configDeviceId.value || configSaving.value) return;
+  if (!network || network.ssid === null || !network.timestamp || !configForm.value.wifiSsid.trim()) {
+    configError.value = 'Selecciona una red con SSID recuperable e ingresa el nuevo nombre.';
     return;
   }
+  const payload = { deviceId: configDeviceId.value, path: network.path, ssid: configForm.value.wifiSsid,
+    expectedSsid: network.ssid, expectedTimestamp: network.timestamp, confirmed: true };
+  const ok = await confirmDialog({ title: 'Confirmar preparación de un SSID', confirmLabel: 'Preparar sin aplicar',
+    message: `${device.cpe_serial}\n${network.path}\nActual: ${network.ssid}\nPropuesto: ${payload.ssid}\nSolo se guardará un plan descargable. No se enviará al equipo.` });
+  if (!ok || configModalDevice.value?.id !== device.id) return;
   configSaving.value = true;
   configError.value = null;
   configResult.value = null;
   try {
-    const result = await tr069Store.provisionDevice(configModalDevice.value.cpe_serial, {
-      pppoeUsername: f.pppoeUsername.trim() || undefined,
-      pppoePassword: f.pppoePassword.trim() || undefined,
-      wifiSsid: f.wifiSsid.trim() || undefined,
-      wifiPassword: f.wifiPassword.trim() || undefined,
-      wlanPath: (f.wifiSsid.trim() || f.wifiPassword.trim()) ? configWifiPath.value || undefined : undefined,
-    });
-    const parts: string[] = [];
-    if (result.pppoe) parts.push(result.pppoe.ok ? 'PPPoE: encolado' : `PPPoE: ${result.pppoe.error ?? 'error'}`);
-    if (result.wifi) parts.push(result.wifi.ok ? 'WiFi: encolado' : `WiFi: ${result.wifi.error ?? 'error'}`);
-    if (result.ok) {
-      configResult.value = `${parts.join(' · ')}. Se aplica solo en el proximo Inform del equipo (no es instantaneo).`;
-    } else {
-      configError.value = parts.join(' · ') || result.error || 'Error al encolar los cambios';
-    }
+    const plan = await tr069Store.prepareWifiSsid(device.cpe_serial, payload);
+    if (configModalDevice.value?.id !== device.id) return;
+    configPlan.value = plan;
+    configResult.value = 'Plan preparado. No aplicado. Descarga el respaldo antes de cerrar.';
   } catch (e) {
-    configError.value = getErrorMessage(e, 'Error al encolar los cambios en GenieACS');
+    configError.value = getErrorMessage(e, 'No se pudo preparar el SSID');
   } finally {
     configSaving.value = false;
   }
+}
+
+function downloadWifiPlan() {
+  if (!configPlan.value) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(configPlan.value, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = 'respaldo-ssid-huawei.json'; link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function verifyWifiCache() {
+  const plan = configPlan.value;
+  if (!plan) return;
+  try {
+    const inventory = await tr069Store.fetchWifiNetworks(plan.serial);
+    if (configPlan.value !== plan) return;
+    configResult.value = compareWifiPlan(plan, inventory);
+  } catch (e) { configError.value = getErrorMessage(e, 'No se pudo consultar la caché'); }
 }
 
 // ---- Reiniciar / Refrescar (acciones rapidas por fila) ----
@@ -376,7 +389,7 @@ async function handleUnlink() {
               <td class="px-4 py-3 text-slate-600">{{ formatDate(device.last_seen_at) }}</td>
               <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs" @click.stop>
                 <button class="text-sky-600 hover:underline" @click="openLinkModal(device)">Vincular</button>
-                <button class="text-sky-600 hover:underline" @click="openConfigModal(device)">Configurar</button>
+                <button class="text-sky-600 hover:underline" @click="openConfigModal(device)">Consultar WiFi</button>
                 <button class="text-slate-600 hover:underline" :disabled="refreshingId === device.id" @click="handleRefresh(device)">
                   {{ refreshingId === device.id ? 'Pidiendo...' : 'Refrescar' }}
                 </button>
@@ -467,59 +480,50 @@ async function handleUnlink() {
     <Teleport to="body">
       <div v-if="configModalDevice" class="modal-overlay">
         <form class="w-full max-w-sm modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleSaveConfig">
-          <h2 class="text-lg font-semibold mb-1">Configurar equipo (TR-069)</h2>
+          <h2 class="text-lg font-semibold mb-1">Preparar nombre WiFi</h2>
           <p class="text-xs text-slate-500 mb-4 font-mono">{{ configModalDevice.cpe_serial }}</p>
 
           <p class="text-xs text-slate-500 mb-3">
-            Cambia lo que el equipo del cliente usa realmente (PPPoE y/o WiFi), sin ir a la casa del cliente — pero
-            no es instantaneo: recien surte efecto en el proximo Inform. Deja en blanco lo que no quieras cambiar.
+            Preparación sin aplicar, solo para la Huawei HWTC1D3691B7. PPPoE y contraseñas no se pueden cambiar.
+            Estado y banda sin verificar cuando faltan datos. La caché puede ser antigua.
           </p>
 
           <p v-if="configLoadingCurrent" class="text-xs text-slate-500 mb-3">Consultando GenieACS...</p>
 
-          <div class="mb-4 pb-4 border-b border-slate-200">
-            <p class="text-xs font-semibold text-slate-700 mb-2">PPPoE</p>
-            <p v-if="configCurrentPppoeUsername" class="text-xs text-slate-600 mb-2">
-              Usuario actual: <span class="font-mono">{{ configCurrentPppoeUsername }}</span>
-            </p>
-            <div class="mb-2">
-              <label class="block text-xs text-slate-600 mb-1">Nuevo usuario</label>
-              <input v-model="configForm.pppoeUsername" class="field-input" placeholder="Dejar vacio para no cambiarlo" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Nueva clave</label>
-              <input v-model="configForm.pppoePassword" class="field-input" placeholder="Dejar vacio para no cambiarla" />
-            </div>
-          </div>
 
           <div class="mb-3">
             <p class="text-xs font-semibold text-slate-700 mb-2">WiFi</p>
             <p v-if="!configLoadingCurrent && !configWifiNetworks.length" class="text-xs text-amber-700 mb-2">
-              No se encontraron redes WiFi activas en el equipo.
+              No se encontraron redes WiFi en la caché del equipo.
             </p>
             <div v-if="configWifiNetworks.length" class="mb-2">
               <label class="block text-xs text-slate-600 mb-1">Red a cambiar</label>
               <select v-model="configWifiPath" class="field-input">
-                <option v-for="n in configWifiNetworks" :key="n.path" :value="n.path">{{ n.ssid || n.path }}</option>
+                <option value="">Selecciona una red</option>
+                <option v-for="n in configWifiNetworks" :key="n.path" :value="n.path">{{ n.ssid ?? 'SSID no disponible' }} — {{ n.path.split('.').pop() }} ({{ n.enabled === null ? 'estado sin verificar' : n.enabled ? 'habilitada' : 'desactivada' }})</option>
               </select>
+              <p v-if="configWifiPath" class="text-xs break-all">Instancia: {{ configWifiPath }}</p>
+              <p v-if="configWifiPath" class="text-xs">Fecha del SSID (Perú): {{ configSelectedNetwork?.timestamp ? new Date(configSelectedNetwork.timestamp).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'Sin fecha verificable' }}. Banda sin verificar.</p>
             </div>
             <div class="mb-2">
               <label class="block text-xs text-slate-600 mb-1">Nuevo SSID</label>
-              <input v-model="configForm.wifiSsid" class="field-input" placeholder="Dejar vacio para no cambiarlo" />
-            </div>
-            <div>
-              <label class="block text-xs text-slate-600 mb-1">Nueva clave</label>
-              <input v-model="configForm.wifiPassword" class="field-input" placeholder="Dejar vacio para no cambiarla" />
+              <input v-model="configForm.wifiSsid" class="field-input" placeholder="Nuevo nombre de esta red" />
             </div>
           </div>
 
           <p v-if="configError" class="text-sm text-red-600 mb-3">{{ configError }}</p>
           <p v-if="configResult" class="text-sm text-green-600 mb-3">{{ configResult }}</p>
+          <div v-if="configPlan" class="text-xs mb-3">
+            <p>Plan confirmado: {{ configPlan.before }} → {{ configPlan.after }}. Instancia: {{ configPlan.path }}.</p>
+            <p>Reversión prevista: restaurar «{{ configPlan.before }}» en esa misma instancia, con autorización.</p>
+            <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo SSID</button>
+            <button type="button" class="btn-secondary" @click="verifyWifiCache">Comparar caché sin refrescar</button>
+          </div>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="configModalDevice = null">Cerrar</button>
-            <button type="submit" :disabled="configSaving" class="btn-primary">
-              {{ configSaving ? 'Encolando...' : 'Aplicar cambios' }}
+            <button v-if="canPrepareWifi" type="submit" :disabled="configSaving || configLoadingCurrent" class="btn-primary">
+              {{ configSaving ? 'Preparando...' : 'Preparar sin aplicar' }}
             </button>
           </div>
         </form>

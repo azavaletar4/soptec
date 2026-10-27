@@ -79,6 +79,14 @@ normalizada en administración, path validado, contrato exacto, solo ADMIN/SUPER
 (incluido proxy) y operación WiFi separada de PPPoE. «Administrar TR-069» aún abre
 asignación de ACS en OLT. Sin cambios productivos ni tareas de GenieACS.
 Detalle y preparación reversible: `docs/TR069-ADMINISTRACION-HUAWEI-SOLO-LECTURA-20261027.md`.
+**Preparación WiFi posterior implementada SOLO LOCAL:** formulario reutilizado
+para un SSID, serial normalizado único, Enable desconocido visible, preparación
+solo ADMIN/SUPERADMIN y Huawei HWTC1D3691B7/deviceId exacto. Respaldo descargable
+del SSID y comparación GET de caché; sin contraseñas ni PPPoE. Escrituras WiFi,
+PPPoE, provisionado combinado y proxy NBI bloqueados en este candidato. No está
+desplegado, no escribió nada y aún no tiene vía habilitada de aplicar/revertir.
+Prueba física requiere autorización independiente y contrato exacto verificado.
+Procedimiento: `docs/TR069-WIFI-PREPARACION-SEGURA-20261027.md`.
 Detalle completo y consolidado:
 [TR069-CONTINUIDAD-HUAWEI-20261028.md](docs/TR069-CONTINUIDAD-HUAWEI-20261028.md).
 Equipos seriados, custodia, devoluciones, Asistencia y Puntos permanecen

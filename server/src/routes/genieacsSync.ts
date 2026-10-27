@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
+import { wifiPreparationRoutes } from './tr069WifiPreparation';
+import { tr069PreparationOnly } from '../middleware/tr069PreparationOnly';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { collectMetricsForDevice } from '../services/genieacsMetricsService';
-import { getPppoeInfo, queuePppoeChange, getWifiNetworks, queueWifiChange, queueReboot, queueRefresh, queueProvision } from '../services/tr069DeviceService';
+import { getPppoeInfo, queueReboot, queueRefresh } from '../services/tr069DeviceService';
 
 // Adaptado de REPLICA-TR069-GENIEACS.md secciones 8/9. Sin tenant_id
 // (single-tenant): "todos" simplemente significa todos los tr069_devices.
@@ -12,6 +14,10 @@ const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
 const PPP_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
 genieacsSyncRoutes.use('*', requireAuth, requireRole(...STAFF_READ));
+genieacsSyncRoutes.route('/wifi', wifiPreparationRoutes);
+// No dejar el provisionado combinado como vía alternativa a WiFi/PPPoE.
+genieacsSyncRoutes.post('/pppoe/:serial', tr069PreparationOnly);
+genieacsSyncRoutes.post('/provision/:serial', tr069PreparationOnly);
 
 function nbiUrl() {
   return process.env.GENIEACS_NBI || 'http://localhost:7557';
@@ -62,39 +68,6 @@ genieacsSyncRoutes.get('/pppoe/:serial', async (c) => {
   }
 });
 
-genieacsSyncRoutes.post('/pppoe/:serial', requireRole(...PPP_WRITE), async (c) => {
-  const serial = c.req.param('serial') ?? '';
-  const { username, password } = await c.req.json<{ username?: string; password?: string }>();
-  try {
-    const result = await queuePppoeChange(nbiUrl(), serial, { username, password });
-    return c.json(result, result.ok ? 200 : 502);
-  } catch (e) {
-    return c.json({ ok: false, error: e instanceof Error ? e.message : 'Error al contactar GenieACS' }, 502);
-  }
-});
-
-// WiFi (WLANConfiguration) — mismo criterio de serial que PPPoE.
-genieacsSyncRoutes.get('/wifi/:serial', async (c) => {
-  const serial = c.req.param('serial') ?? '';
-  try {
-    const info = await getWifiNetworks(nbiUrl(), serial);
-    return c.json(info);
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar GenieACS' }, 502);
-  }
-});
-
-genieacsSyncRoutes.post('/wifi/:serial', requireRole(...PPP_WRITE), async (c) => {
-  const serial = c.req.param('serial') ?? '';
-  const { path, ssid, password } = await c.req.json<{ path?: string; ssid?: string; password?: string }>();
-  if (!path) return c.json({ ok: false, error: 'Falta el path de la red WiFi (ver GET /wifi/:serial)' }, 400);
-  try {
-    const result = await queueWifiChange(nbiUrl(), serial, path, { ssid, password });
-    return c.json(result, result.ok ? 200 : 502);
-  } catch (e) {
-    return c.json({ ok: false, error: e instanceof Error ? e.message : 'Error al contactar GenieACS' }, 502);
-  }
-});
 
 // Reiniciar el equipo
 genieacsSyncRoutes.post('/reboot/:serial', requireRole(...PPP_WRITE), async (c) => {
@@ -112,18 +85,6 @@ genieacsSyncRoutes.post('/refresh/:serial', requireRole(...PPP_WRITE), async (c)
   const serial = c.req.param('serial') ?? '';
   try {
     const result = await queueRefresh(nbiUrl(), serial);
-    return c.json(result, result.ok ? 200 : 502);
-  } catch (e) {
-    return c.json({ ok: false, error: e instanceof Error ? e.message : 'Error al contactar GenieACS' }, 502);
-  }
-});
-
-// Aprovisionar de una: PPPoE + WiFi (pensado para instalaciones nuevas)
-genieacsSyncRoutes.post('/provision/:serial', requireRole(...PPP_WRITE), async (c) => {
-  const serial = c.req.param('serial') ?? '';
-  const body = await c.req.json<{ pppoeUsername?: string; pppoePassword?: string; wifiSsid?: string; wifiPassword?: string; wlanPath?: string }>();
-  try {
-    const result = await queueProvision(nbiUrl(), serial, body);
     return c.json(result, result.ok ? 200 : 502);
   } catch (e) {
     return c.json({ ok: false, error: e instanceof Error ? e.message : 'Error al contactar GenieACS' }, 502);

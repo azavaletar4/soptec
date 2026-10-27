@@ -87,7 +87,16 @@ de administración actual abre configuración ACS en OLT, no WiFi. Sin tareas
 ni cambios productivos; evidencia, límites y procedimiento reversible en
 `docs/TR069-ADMINISTRACION-HUAWEI-SOLO-LECTURA-20261027.md`.
 
-**Pendiente:** preparar guardas locales y prueba controlada de modificación de WiFi desde SmartRayco
+**Preparación WiFi implementada posteriormente SOLO LOCAL:** formulario de una
+red con selección explícita, normalización exacta y rechazo de ambigüedad,
+Enable desconocido visible, guardas reales ADMIN/SUPERADMIN y restricción al
+deviceId/serial de HWTC1D3691B7. Plan con respaldo SSID descargable y comparación
+GET de caché. Rutas de escritura WiFi/PPPoE/provision y proxy NBI bloqueadas;
+sin vía habilitada para aplicar/revertir, sin claves ni tareas reales. No
+desplegado. Contrato exacto y prueba física siguen por verificar antes de escribir.
+Ver `docs/TR069-WIFI-PREPARACION-SEGURA-20261027.md` para pruebas y procedimiento.
+
+**Pendiente:** vía específica de ejecución autorizada y prueba controlada de modificación de WiFi desde SmartRayco
 sobre esta misma ONT, todavía no intentada ni autorizada. Antes de ejecutarla,
 acordar el cambio y su reversión; después, comprobar su aplicación real y
 la continuidad de internet/PPPoE. La conexión TR-069 y el botón habilitado

@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
+import type { WifiInventory, WifiSsidPlan } from '@/lib/tr069WifiPlan';
+export type { WifiNetwork } from '@/lib/tr069WifiPlan';
 import type { OltTr069AcsProfile, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 
 export interface DeviceChangeResult {
@@ -12,10 +14,6 @@ export interface DeviceChangeResult {
   error?: string;
 }
 
-export interface WifiNetwork {
-  path: string;
-  ssid: string | null;
-}
 
 // tr069_devices, tr069_performance_metrics y olt_tr069_acs_profiles tienen
 // policies RLS para staff (ver migraciones fase6d/e/f) — a diferencia de
@@ -107,7 +105,7 @@ export const useTr069Store = defineStore('tr069', () => {
   }
 
   function fetchWifiNetworks(serial: string) {
-    return apiFetch<{ found: boolean; networks: WifiNetwork[] }>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}`);
+    return apiFetch<WifiInventory>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}`);
   }
 
   function setWifi(serial: string, payload: { path: string; ssid?: string; password?: string }) {
@@ -167,6 +165,8 @@ export const useTr069Store = defineStore('tr069', () => {
   }
 
   return {
+    prepareWifiSsid: (serial: string, payload: { deviceId: string; path: string; ssid: string; expectedSsid: string; expectedTimestamp: string; confirmed: boolean }) =>
+      apiFetch<WifiSsidPlan>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}/prepare`, { method: 'POST', body: JSON.stringify(payload) }),
     devices,
     loading,
     error,
