@@ -1,5 +1,29 @@
 # SmartRayco — guía para Claude Code
 
+## Cierre administrativo de la corrección de puntos - 27/10/2026
+
+**Corrección `ff3077f` aprobada y cerrada administrativamente por el propietario.**
+Las funciones `technician_ranking_between` y `my_field_order_points` están
+corregidas y aplicadas en producción. Frontend `ff3077f` desplegado:
+`smartrayco-puntos:ff3077f-20261027T140327Z`; backend `16831c6` conservado,
+con la misma imagen, contenedor y StartedAt, sin reinicio.
+
+Octubre de 2026 permanece como mes piloto, incluidos sus ceros: sin recalcular
+históricos ni modificar puntos reales o liquidaciones. El cálculo oficial
+inicia el **01/11/2026 a las 00:00, hora de Perú (05:00 UTC)**.
+
+**Único pendiente de esta corrección:** validación operativa con la primera
+orden real de noviembre, desde su confirmación hasta su visualización en
+Mi Avance, Ranking y detalle de Campo. No bloquea el cierre administrativo
+ni reabre desarrollo o auditorías sin una incidencia concreta.
+
+Evidencia y recuperación: `docs/PUNTOS-CORRECCION-DESPLEGADA.md` y
+`docs/PUNTOS-CORRECCION-RELEASE.json`; activación documentada en `0b45e67`.
+Este cierre prevalece sobre notas históricas de candidato pendiente o sin push.
+Sincronización autorizada mediante push normal solo a `fix/puntos-noviembre-local`.
+Actualización exclusivamente documental: sin código, SQL, operaciones productivas,
+otros módulos ni merge a main.
+
 ## Puntos: corrección activada - 27/10/2026
 
 Aplicadas únicamente las funciones de lectura `technician_ranking_between` y
