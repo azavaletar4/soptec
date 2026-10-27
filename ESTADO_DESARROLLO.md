@@ -140,7 +140,13 @@ en el commit anterior, sin cambios de código — no se repitió).
 **Pendiente**: validación funcional real del propietario desde panel web
 y celular (Android, App de Campo).
 
-## Asistencia A2 — implementada LOCALMENTE, sin migrar ni desplegar (26/10/2026)
+## Asistencia A2 — implementada y DESPLEGADA, pendiente de cierre (26-27/10/2026)
+
+**Estado confirmado por el propietario (27/10/2026)**: implementada y
+desplegada en producción (ver "Activación CONJUNTA A2 + A2.1 — DESPLEGADA"
+más abajo). **No se declara completamente cerrada** hasta validar el
+funcionamiento real de vacaciones/permisos desde el panel — mismo
+criterio que se usó para cerrar A0/A1.
 
 Rama propia `feature/asistencia-a2-local` (sobre el tip ya cerrado de A0/A1).
 Alcance pedido por el propietario: vacaciones por rango de fechas, descansos
@@ -203,15 +209,17 @@ y `npm run build` limpios.
 solo procedimiento conjunto autorizado por el propietario — ver sección
 "Activación CONJUNTA A2 + A2.1 — DESPLEGADA" más abajo para el detalle
 completo (migración aplicada y verificada, imagen desplegada, backend
-conservado, verificaciones post-despliegue). Validación funcional real
-del propietario queda pendiente.
+conservado, verificaciones post-despliegue). **Confirmado por el
+propietario (27/10/2026): implementada y desplegada, pero NO cerrada
+todavía** — pendiente validar el funcionamiento real de vacaciones/
+permisos desde el panel.
 
 **Límite documentado aquí QUEDÓ CORREGIDO por A2.1 (ver sección siguiente)**:
 ya no se trata "media jornada" como exención del día completo — ahora exige
 turno + horas reales y una marcación real, igual que un permiso por horas.
 
 ## Asistencia A2.1 — horarios parciales RECURRENTES por trabajador,
-## implementada LOCALMENTE, sin migrar ni desplegar (26/10/2026)
+## implementada y DESPLEGADA, pendiente de cierre (26-27/10/2026)
 
 Requisito operativo real del propietario: dos trabajadores que todos los
 sábados trabajan media jornada, uno por la mañana y otro por la tarde.
@@ -307,8 +315,12 @@ pasa 100% al ejecutarla sola). Mismo patrón que A0/A1.
 
 **ACTIVADA en producción el 2026-10-27 ~02:44 UTC** junto con A2 base, en
 el mismo procedimiento conjunto — ver sección "Activación CONJUNTA A2 +
-A2.1 — DESPLEGADA" más abajo. Validación funcional real del propietario
-con los dos trabajadores reales (sábado mañana/tarde) queda pendiente.
+A2.1 — DESPLEGADA" más abajo. **Horarios reales ya guardados en
+producción** (confirmado por el propietario): Alhely Lozano (sábado
+08:00–13:30, mañana) y Angie Laguna (sábado 13:30–19:00, tarde).
+**Implementada y desplegada, NO cerrada todavía** — pendiente validar
+las marcaciones reales del sábado (que la tardanza/falta de cada una se
+calcule contra su propio horario, no el global).
 
 ### Preparación de activación CONJUNTA A2 + A2.1 (Claude Code, 26/10/2026 ~23:50 UTC)
 
@@ -433,6 +445,19 @@ producción en un solo procedimiento. Confirmación de respaldo/versiones
   real de vacaciones/permisos desde el panel. `feature/asistencia-a2-local`
   sigue **sin push** a GitHub — push y sincronización con Codex quedan
   para autorización separada.
+
+**Confirmación del propietario (27/10/2026) — estado consolidado**:
+
+- A0/A1: **cerrada y validada**.
+- A2/A2.1: **implementadas y desplegadas**, horarios reales ya guardados
+  en producción (Alhely Lozano sábado 08:00–13:30 mañana; Angie Laguna
+  sábado 13:30–19:00 tarde). **No se declaran completamente cerradas**
+  hasta validar las marcaciones reales del sábado y el funcionamiento de
+  vacaciones/permisos — no repetir auditorías ni pruebas mientras tanto,
+  solo esperar esa confirmación real.
+- Rama `feature/asistencia-a2-local` **pusheada a GitHub** (ver
+  `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md` para el commit exacto) —
+  disponible para Codex.
 
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 

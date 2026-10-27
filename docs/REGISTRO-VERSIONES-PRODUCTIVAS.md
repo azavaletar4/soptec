@@ -12,14 +12,24 @@ el 2026-10-26; actualizado tras activar la corrección de contadores y verificar
 el primer muestreo de contadores; frontend de devoluciones verificado a las
 17:16 UTC — no es una suposición desde git.
 
-**Nota (27/10/2026 ~02:45 UTC)**: Asistencia A0/A1/A2/A2.1 — las 4 fases
-están **APLICADAS y DESPLEGADAS en producción**. A0/A1 cerrada y pusheada
-desde el 26/10. A2 (vacaciones/descanso/permisos por horas/medias
-jornadas) y A2.1 (horarios parciales RECURRENTES por trabajador) se
-activaron en conjunto el 27/10 ~02:44 UTC — migraciones aplicadas en
-orden, frontend desplegado selectivamente, backend conservado exacto.
-Detalle completo en `ESTADO_DESARROLLO.md` ("Asistencia A2" / "Asistencia
-A2.1" / "Activación CONJUNTA A2 + A2.1 — DESPLEGADA").
+**Nota (27/10/2026, confirmación del propietario)**: Asistencia
+A0/A1/A2/A2.1 — las 4 fases están **APLICADAS y DESPLEGADAS en
+producción**.
+
+- **A0/A1: cerrada y validada.**
+- **A2/A2.1: implementadas y desplegadas, NO cerradas todavía** —
+  pendiente validar marcaciones reales del sábado y el funcionamiento de
+  vacaciones/permisos. Horarios parciales recurrentes (A2.1) ya guardados
+  en producción: Alhely Lozano (sábado 08:00–13:30, mañana) y Angie
+  Laguna (sábado 13:30–19:00, tarde).
+
+Migraciones aplicadas en orden (`20261028000000_asistencia_a2_novedades.sql`,
+después `20261028010000_asistencia_a2_horarios_personales.sql`), frontend
+desplegado selectivamente, backend conservado exacto. Detalle completo en
+`ESTADO_DESARROLLO.md` ("Asistencia A2" / "Asistencia A2.1" / "Activación
+CONJUNTA A2 + A2.1 — DESPLEGADA"). Rama `feature/asistencia-a2-local`
+pusheada a GitHub (commit exacto en la tabla de abajo) — no repetir
+auditorías ni pruebas hasta la validación real del propietario.
 
 ## Estado actual (2026-10-26)
 
@@ -183,12 +193,27 @@ media jornada de sábado), en un solo procedimiento conjunto.
   navegador) ni de A2.1 (14/14 SQL + 5/5 navegador) — se asumieron
   vigentes; esta activación solo verificó lo específico de producción
   (hash histórico, permisos reales, imagen compilada, contenedores).
-- **Pendiente**: validación funcional real del propietario, en especial
-  con los dos técnicos reales de media jornada de sábado (uno por la
-  mañana, otro por la tarde) y con el uso real de vacaciones/permisos
-  desde el panel. Rama `feature/asistencia-a2-local` sigue **sin push**
-  a GitHub — push y sincronización con Codex quedan para cuando el
-  propietario lo autorice por separado.
+- **Horarios reales guardados en producción** (A2.1, confirmado por el
+  propietario el 27/10/2026): Alhely Lozano — sábado 08:00–13:30
+  (mañana); Angie Laguna — sábado 13:30–19:00 (tarde).
+- **Confirmación del propietario (27/10/2026)**: A0/A1 cerrada y
+  validada; A2/A2.1 implementadas y desplegadas, **NO cerradas
+  todavía** — pendiente validar marcaciones reales del sábado (que la
+  tardanza/falta de cada técnico se calcule contra su propio horario) y
+  el funcionamiento real de vacaciones/permisos desde el panel. No
+  repetir auditorías ni pruebas mientras tanto.
+- Rama `feature/asistencia-a2-local`: push a GitHub autorizado el
+  27/10/2026 (sin force push) — ver "Sincronización con GitHub" más abajo
+  para el commit exacto y la confirmación de `git ls-remote`.
+
+#### Sincronización con GitHub (27/10/2026)
+
+Push autorizado explícitamente por el propietario, sin force push y sin
+sobrescribir trabajo ajeno (rama nueva en `origin`, no existía antes).
+Confirmado con `git ls-remote --heads origin feature/asistencia-a2-local`
+tras el push: el SHA remoto coincide exactamente con el HEAD local. Sin
+cambios en `main`; esta rama sigue siendo la única referencia compartida
+con Codex para A2/A2.1 hasta que el propietario autorice un merge/PR.
 
 ### Devoluciones implementadas, desplegadas y validadas — flujo cerrado
 
