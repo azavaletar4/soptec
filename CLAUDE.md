@@ -1,5 +1,24 @@
 # SmartRayco — guía para Claude Code
 
+## Despliegue visual A3 completado ? 27/10/2026
+
+Mejora de cuatro pesta?as del commit `233f230` **DESPLEGADA** el
+27/10/2026 a las 13:34:58 UTC (08:34:58 Per?), con autorizaci?n expl?cita.
+Frontend activo: `smartrayco-asistencia-visual:233f230-20261027T133357Z`; imagen
+`sha256:b1d21a1c3a2d8656b98040316b76b5458e7ba1b619d41f4d14426d15278ba038`.
+Backend `16831c6` conservado: contenedor
+`cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154`,
+StartedAt `2026-10-26T20:44:49.856235867Z`, misma imagen y sin reinicio.
+A0?A3, Devoluciones, Puntos y dem?s m?dulos conservados; solo cuatro fuentes
+de interfaz de Asistencia cambian respecto a A3. Sin SQL ni cambios de datos.
+API, panel, Asistencia y Campo HTTP 200; index y recursos comprobados por SHA-256.
+Se mantienen todos los overrides anteriores y se a?ade al final
+`/opt/smartrayco-staging/asistencia-visual-233f230-20261027T133357Z/promotion/frontend.override.json`.
+Respaldo recuperable de A3 anterior disponible en PC y VM, OCI ?ntegro (17 blobs).
+Detalle, cadena Compose y rollback: `docs/ASISTENCIA-VISUAL-DESPLEGADA.md`.
+Esta secci?n prevalece sobre las notas hist?ricas de mejora visual local pendiente.
+No se inicia ninguna fase nueva.
+
 ## Cierre de sesión y continuidad — 27/10/2026
 
 - **A0/A1 y A2/A2.1 cerradas administrativamente.** A0/A1 también validadas;

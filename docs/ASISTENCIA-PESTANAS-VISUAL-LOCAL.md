@@ -1,6 +1,12 @@
 # Control de Asistencia — pestañas, mejora visual local
 
-## Estado compartido vigente
+## Estado vigente: desplegada
+
+La mejora visual 233f230 ya est? publicada y verificada (27/10/2026).
+Detalle: [ASISTENCIA-VISUAL-DESPLEGADA.md](ASISTENCIA-VISUAL-DESPLEGADA.md).
+Las secciones siguientes conservan la evidencia de preparaci?n local.
+
+## Antecedente: estado al validar localmente
 
 El propietario confirma que **A3 funciona correctamente y está validada**.
 Esto supera las notas anteriores de aceptación funcional pendiente de A3.
