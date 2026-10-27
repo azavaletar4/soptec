@@ -1,6 +1,6 @@
 # SmartRayco — Estado de desarrollo
 
-## TR-069 Huawei HWTC1D3691B7 — conectado real, corrección de identificación local sin desplegar (27/10/2026)
+## TR-069 Huawei HWTC1D3691B7 — conectado real, corrección de identificación DESPLEGADA (27/10/2026)
 
 **1. Interfaz de gestión operativa.** Se aplicó a la ONT de prueba
 `HWTC1D3691B7` (1/2/2:24, OLT ZTE C300) el patrón real de gestión OMCI
@@ -56,24 +56,34 @@ OLT/ONT/MikroTik): `matchTr069Device` encuentra el dispositivo real y
 
 **6. Estado preciso.** La comunicación TR-069 real con esta Huawei está
 **confirmada** (3 Informs reales, equipo físico). La corrección de
-identificación está **implementada y probada localmente — commit
-`5104253` en `main`, NO desplegada todavía** (ni backend ni frontend).
-El panel en producción sigue mostrando "Esperando conexión" para esta
-ONT hasta que se despliegue esta corrección.
+identificación está **implementada, probada y DESPLEGADA en
+producción** (2026-10-27 ~20:18 UTC, autorización expresa): backend
+`smartrayco-backend-tr069fix:5104253-20261027T201808Z` (sobre
+`...tr069enable:516faba-...`, solo 3 archivos); frontend sin cambios
+(el commit no lo requiere, no toca ningún archivo de `src/views`ni
+`src/stores`). Verificado con el código REAL ya desplegado y datos
+reales de Supabase: `matchTr069Device('HWTC1D3691B7', [...])` resuelve
+al dispositivo real (`485754431D3691B7`, `last_seen_at` reciente) — el
+panel ya debería derivar "Conectado" en la próxima carga.
+Caddy/GenieACS/Mongo sin reiniciar; `mikrotik-reconcile` corrió un
+ciclo limpio (0 perfiles de cliente tocados). Rollback preparado
+(imagen anterior respaldada con SHA256), no usado.
 
-**7. Pendiente.** (a) Autorización explícita para el despliegue
-selectivo de backend+frontend con este código; (b) comprobación visual
-real en el panel de que pasa a mostrar "Conectado" una vez desplegado;
-(c) una prueba controlada aparte, todavía no intentada, de
+**7. Pendiente.** (a) Comprobación visual real en el panel (login como
+staff) de que `HWTC1D3691B7` efectivamente muestra "Conectado"; (b) una
+prueba controlada aparte, todavía no intentada ni autorizada, de
 administración de WiFi vía TR-069 sobre este mismo equipo.
 
-Commits relevantes en `main` (todos locales, commit documental de esta
-sección incluido): `516faba` (botón "Habilitar TR-069" guiado, solo
-ADMIN/SUPERADMIN), `5a1cfc0` (gestión OMCI independiente para Huawei),
-`f61f771` (sintaxis de reversión de línea completa, más segura),
-`877bec6` (preparación final de la prueba real, respaldo conservado),
-`94d447e` (incidente y recuperación), `5104253` (corrección de
-identificación de serial). Detalle consolidado, con pointers a cada
+Commits relevantes en `main`: `516faba` (botón "Habilitar TR-069"
+guiado, solo ADMIN/SUPERADMIN), `5a1cfc0` (gestión OMCI independiente
+para Huawei), `f61f771` (sintaxis de reversión de línea completa, más
+segura), `877bec6` (preparación final de la prueba real, respaldo
+conservado), `94d447e` (incidente y recuperación), `5104253`
+(corrección de identificación de serial), `83f06b4` (sincronización de
+continuidad anterior). En `diagnostico/tr069-genieacs-readonly`
+(rama de producción real): `7105679`/`8968e69` (despliegue de esta
+corrección). Publicado en GitHub en rama propia, nunca sobre `main`
+(ver nota de sincronización). Detalle consolidado, con pointers a cada
 documento específico: `docs/TR069-CONTINUIDAD-HUAWEI-20261028.md`.
 
 Asistencia, Puntos, App de Campo (devoluciones, equipos seriados) y el

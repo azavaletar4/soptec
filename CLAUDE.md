@@ -18,7 +18,7 @@ los errores y rollbacks anteriores son antecedentes, no incidentes activos.
 Seguimiento de ciclos y certificación integral de 3.000 clientes siguen
 pendientes, pero no invalidan la recuperación real ya confirmada.
 
-## TR-069 Huawei (HWTC1D3691B7) — gestión independiente operativa, corrección de identificación PROBADA LOCALMENTE sin desplegar (27/10/2026)
+## TR-069 Huawei (HWTC1D3691B7) — gestión independiente operativa, corrección de identificación DESPLEGADA (27/10/2026)
 
 **Comunicación TR-069 real CONFIRMADA.** La interfaz de gestión OMCI
 independiente (VLAN 200, IP `10.15.15.200`, patrón tomado de 6 Huawei
@@ -45,17 +45,26 @@ backend, todas en verde; verificado con datos reales de Supabase
 (solo lectura) que el panel ya derivaría "Conectado" en vez de
 "Esperando conexión" con esta corrección.
 
-**Estado preciso: implementado y probado LOCALMENTE — NO desplegado.**
-Commits en `main` (sin push a `origin/main` todavía, verificar
-divergencia antes de sincronizar — ver nota más abajo):
-`516faba` (botón guiado), `5a1cfc0` (gestión independiente OMCI),
-`f61f771` (sintaxis de reversión más segura), `877bec6` (preparación
-final), `94d447e` (incidente y recuperación), `5104253` (corrección de
-identificación de serial).
+**Estado preciso: corrección de identificación DESPLEGADA en
+producción** (2026-10-27 ~20:18 UTC, autorización expresa). Backend
+`smartrayco-backend-tr069fix:5104253-20261027T201808Z` (sobre
+`...tr069enable:516faba-...`, solo `olt.ts`/`gponVendorId.ts`/
+`gponSerial.ts` nuevo); frontend sin cambios (el commit no lo requiere).
+Verificado con el código REAL desplegado y datos reales de Supabase:
+`matchTr069Device` ya resuelve `HWTC1D3691B7` ↔ `485754431D3691B7`.
+Rollback preparado, no usado (imagen anterior respaldada con SHA256).
+Publicado en GitHub en rama propia (no `main`, ver nota de
+sincronización en el doc consolidado) y en
+`diagnostico/tr069-genieacs-readonly` (commits `7105679`/`8968e69`, ya
+en producción). Commits en `main`: `516faba` (botón guiado), `5a1cfc0`
+(gestión independiente OMCI), `f61f771` (sintaxis de reversión más
+segura), `877bec6` (preparación final), `94d447e` (incidente y
+recuperación), `5104253` (corrección de identificación de serial),
+`83f06b4` (sincronización de continuidad).
 
-**Pendiente**: autorización de despliegue selectivo (backend+frontend
-con este código), comprobación visual real de que el panel muestra
-"Conectado", y una prueba controlada aparte de administración WiFi vía
+**Pendiente**: comprobación visual real (login en el panel) de que
+`HWTC1D3691B7` muestra "Conectado", y una prueba controlada aparte de
+administración WiFi vía
 TR-069 (no intentada todavía). Detalle completo y consolidado:
 [TR069-CONTINUIDAD-HUAWEI-20261028.md](docs/TR069-CONTINUIDAD-HUAWEI-20261028.md).
 Equipos seriados, custodia, devoluciones, Asistencia y Puntos permanecen

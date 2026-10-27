@@ -4,11 +4,13 @@
 
 **Comunicación TR-069 real CONFIRMADA** con la ONT de prueba
 `HWTC1D3691B7` (1/2/2:24, OLT ZTE C300 real, `10.15.15.2`). La
-**corrección de identificación de serial está implementada y probada
-localmente — commit `5104253` en `main` — pero NO está desplegada**.
-Mientras no se despliegue, el panel en producción sigue mostrando
-"Esperando conexión" para esta ONT aunque TR-069 esté realmente
-conectado.
+**corrección de identificación de serial — commit `5104253` en `main`
+— está implementada, probada y DESPLEGADA en producción** (2026-10-27
+~20:18 UTC, autorización expresa): backend
+`smartrayco-backend-tr069fix:5104253-20261027T201808Z`. Verificado con
+el código real desplegado y datos reales de Supabase que ya resuelve
+la identidad correctamente. Pendiente solo la comprobación visual real
+(login en el panel) de que efectivamente se ve "Conectado".
 
 ## 1. Interfaz de gestión OMCI independiente — operativa
 
@@ -83,28 +85,33 @@ Supabase (solo lectura, nada escrito en OLT/ONT/MikroTik):
 y `deriveTr069EnableStatus(...)` ya deriva `'conectado'` con el
 `last_seen_at` real.
 
-## 6. Estado preciso (no confundir implementado con desplegado)
+## 6. Estado preciso (actualizado tras el despliegue, 20:18 UTC)
 
 | | Estado |
 |---|---|
 | TR-069 conectado con la Huawei real | **Confirmado** (3 Informs reales) |
-| Corrección de identificación de serial | **Implementada y probada localmente** |
-| Despliegue de esa corrección | **NO hecho** — pendiente de autorización |
-| Comprobación visual de "Conectado" en el panel | Pendiente (requiere el despliegue) |
+| Corrección de identificación de serial | **Implementada, probada y DESPLEGADA** |
+| Imagen activa | `smartrayco-backend-tr069fix:5104253-20261027T201808Z` |
+| Frontend | Sin cambios (el commit no lo requiere) |
+| Verificación con código real + datos reales | `matchTr069Device` ya resuelve `HWTC1D3691B7` ↔ `485754431D3691B7` |
+| Rollback | Preparado (imagen anterior respaldada, SHA256), no usado |
+| Comprobación visual de "Conectado" en el panel | Pendiente (login real, no probado todavía) |
 
 ## 7. Pendiente
 
-1. Autorización explícita para el despliegue selectivo (backend +
-   frontend) con el código de `main` hasta `5104253`.
-2. Comprobación visual real, post-despliegue, de que el panel pasa de
-   "Esperando conexión" a "Conectado" para `HWTC1D3691B7`.
-3. Prueba controlada aparte — todavía no intentada — de administración
-   de WiFi vía TR-069 sobre este mismo equipo.
+1. Comprobación visual real (login en el panel) de que `HWTC1D3691B7`
+   pasa a mostrar "Conectado".
+2. Prueba controlada aparte — todavía no intentada ni autorizada — de
+   administración de WiFi vía TR-069 sobre este mismo equipo.
 
-## Commits (todos en `main`, locales — ver nota de sincronización)
+## Commits
 
-`516faba`, `5a1cfc0`, `f61f771`, `877bec6`, `94d447e`, `5104253`, más el
-commit documental de esta actualización.
+En `main` (locales, ver nota de sincronización): `516faba`, `5a1cfc0`,
+`f61f771`, `877bec6`, `94d447e`, `5104253`, `83f06b4` (continuidad),
+más el commit documental de esta actualización. En
+`diagnostico/tr069-genieacs-readonly` (rama de producción real, ya
+desplegada): `0480b3a`/`2974cd6` (botón guiado) y `7105679`/`8968e69`
+(corrección de serial).
 
 ## Nota de sincronización con GitHub
 
