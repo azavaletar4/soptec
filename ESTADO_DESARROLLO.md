@@ -107,22 +107,32 @@ solo servicio, sin push a GitHub):
    del paso 2: configuración efectiva verificada antes, `backend Running`
    (no recreado) en el log, ID de contenedor y `StartedAt` idénticos.
 
+4. `smartrayco-asistencia-polish:070c777-20261026T220705Z` (commit
+   `070c777` — corrige `class="input"` inexistente en el formulario
+   personal ADMIN/TECNICO_RED, mismo defecto que `cd0d0c9` ya corrigió
+   en la bandeja SUPERADMIN) sobre el paso 3. Confirmado antes de
+   promover (grep sobre el JS compilado) que la imagen conserva las 5
+   funciones: ambas correcciones visuales, aprobación/rechazo, A0/A1 y
+   Devoluciones+Puntos. Misma disciplina: configuración efectiva
+   verificada antes, `backend Running` (no recreado) en el log, ID de
+   contenedor y `StartedAt` idénticos.
+
 **Backend: nunca reconstruido ni reiniciado** en ningún paso de Asistencia
 — sigue en `smartrayco-backend-counters:16831c6-...`, mismo contenedor
-desde la corrección de Fase 175 (confirmado también tras el paso 3).
-Analítica de Tráfico sigue operativa (ciclos de ~670+ muestras sin error,
-solo Administrador) después de los 3 despliegues de frontend.
+desde la corrección de Fase 175 (confirmado también tras el paso 4).
+Analítica de Tráfico sigue operativa después de los 4 despliegues de
+frontend.
 
 Rollback del frontend preparado, no usado:
-`smartrayco-asistencia-approve-rollback:20261026T213734Z` →
-`/opt/smartrayco-staging/asistencia-approve-263f66e-20261026T213734Z/recovery/frontend.tar`.
+`smartrayco-asistencia-polish-rollback:20261026T220705Z` →
+`/opt/smartrayco-staging/asistencia-polish-070c777-20261026T220705Z/recovery/frontend.tar`.
 
-Pruebas (commit `263f66e`, datos ficticios/Postgres aislado, ninguna
-solicitud real resuelta): 9/9 unitarias + 9/9 navegador (incluye el caso
-exacto reportado por el propietario: aprobar sin escribir nada, rechazar
-bloqueado con aviso visible, quién/cuándo tras resolver) + `vue-tsc`
-limpio. **Pendiente**: validación funcional real del propietario desde
-panel web y celular (Android, App de Campo).
+Pruebas (commit `070c777`, datos ficticios/Postgres aislado, ninguna
+solicitud real resuelta): 9/9 navegador + `vue-tsc` limpio para ambas
+correcciones visuales (el caso de aprobación/rechazo ya estaba verificado
+en el commit anterior, sin cambios de código — no se repitió).
+**Pendiente**: validación funcional real del propietario desde panel web
+y celular (Android, App de Campo).
 
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 

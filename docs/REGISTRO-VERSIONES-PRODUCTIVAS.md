@@ -16,13 +16,13 @@ el primer muestreo de contadores; frontend de devoluciones verificado a las
 
 | | Backend | Frontend |
 |---|---|---|
-| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` + aprobación `263f66e` |
-| Commit anterior | `53f284c` | `4db50f9` |
-| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-asistencia-approve:263f66e-20261026T213734Z` |
-| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Fuente real (`4db50f9`, ya con Puntos/Devoluciones/A0-A1/visual móvil) + corrección de aprobación/rechazo SUPERADMIN; nada más tocado |
-| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 21:38:39 UTC |
-| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1 (exclusión SUPERADMIN, desplegable móvil, aprobación/rechazo corregidos) |
-| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-approve-263f66e-20261026T213734Z/recovery/frontend.tar`, tag `smartrayco-asistencia-approve-rollback:20261026T213734Z` |
+| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` + aprobación `263f66e` + diseño bandeja `cd0d0c9` + widget personal `070c777` |
+| Commit anterior | `53f284c` | `263f66e` |
+| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-asistencia-polish:070c777-20261026T220705Z` |
+| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Fuente real (`070c777`, sobre `263f66e`) + corrección visual de las tarjetas SUPERADMIN (`class="input"` inexistente → `field-input`/`field-label`) y del formulario personal ADMIN/TECNICO_RED (mismo bug); nada más tocado |
+| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 22:07:05 UTC |
+| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1 (exclusión SUPERADMIN, desplegable móvil, aprobación/rechazo corregidos, bandeja SUPERADMIN y formulario personal con diseño correcto) |
+| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-polish-070c777-20261026T220705Z/recovery/frontend.tar`, tag `smartrayco-asistencia-polish-rollback:20261026T220705Z` (apunta a la imagen `263f66e` previa) |
 
 ### Asistencia A0/A1 — migración aplicada y frontend desplegado (2026-10-26)
 
@@ -76,6 +76,52 @@ aprobó/rechazó y cuándo (hora de Perú).
   (incluye el caso exacto reportado) + `vue-tsc` limpio. **Pendiente**:
   validación funcional real del propietario desde panel web y celular
   Android (App de Campo).
+
+#### Paso 4: corrección visual combinada — bandeja SUPERADMIN y formulario personal ADMIN/TECNICO_RED (2026-10-26 ~22:07 UTC)
+
+Problema real reportado (visual únicamente, aprobación/rechazo ya
+funcionaban desde el paso 3): tanto la bandeja de administración de
+SUPERADMIN como el formulario personal de reporte de ausencia (ADMIN/
+TECNICO_RED) usaban `class="input"` — una clase que **no existe** en
+`style.css` (la real es `field-input`/`field-label`) — por eso ambos se
+veían sin estilo, diminutos y amontonados. Corrección 100% visual, sin
+tocar lógica/RPC/RLS/historial:
+
+- Bandeja SUPERADMIN (`cd0d0c9`): tarjetas anchas (`.surface`) en grilla,
+  una por solicitud, con comentario de decisión en `textarea.field-input`,
+  Aprobar/Rechazar en `md:grid-cols-[2fr_1fr]`, muestra quién resolvió y
+  cuándo (`formatFechaHora`, hora de Perú).
+- Formulario personal ADMIN/TECNICO_RED (`070c777`): mismo patrón
+  `field-label`/`field-input` en Motivo (select) y Observación (textarea);
+  se conserva el desplegable compacto (`v-show`, no `v-if`) y el
+  historial "Mis solicitudes".
+- `070c777` sobre `cd0d0c9` sobre `263f66e` →
+  `smartrayco-asistencia-polish:070c777-20261026T220705Z`. Confirmado por
+  grep sobre el JS compilado, ANTES de promover, que la imagen conserva
+  las 5 funcionalidades: formulario personal corregido, tarjetas
+  SUPERADMIN corregidas, aprobación/rechazo del paso 3, A0/A1 y
+  Devoluciones+Puntos.
+- Misma disciplina que los pasos 2 y 3: `docker compose ... config`
+  verificado con ambos overrides (`backend.override.json` +
+  `frontend.override.json`) ANTES de aplicar — sin incidentes. Backend
+  `smartrayco-backend-1` confirmado con el mismo ID de contenedor
+  (`cd577bcaa95c...`) y el mismo `StartedAt`
+  (`2026-10-26T20:44:49.856235867Z`) antes y después del despliegue. API
+  responde `{"status":"ok",...}`; panel alcanzable (HTTP 200).
+- Rollback del frontend preparado, no usado: tag
+  `smartrayco-asistencia-polish-rollback:20261026T220705Z` (imagen
+  `263f66e` previa, respaldada en
+  `/opt/smartrayco-staging/asistencia-polish-070c777-20261026T220705Z/recovery/frontend.tar`).
+- Pruebas (commit `070c777`, previas al despliegue, datos ficticios/
+  Postgres aislado, ninguna solicitud real resuelta): 9/9 navegador +
+  `vue-tsc` limpio. Verificación visual adicional a 390px (mobile) y
+  escritorio vía captura de pantalla local (fixture temporal, nunca
+  comiteado). **Pendiente**: validación funcional real del propietario
+  desde panel web y celular Android.
+- **Commits locales, sin push a GitHub**: toda la cadena
+  `feature/asistencia-a0-a1-local` (incluido `070c777` y este registro
+  documental) permanece exclusivamente local — `git ls-remote
+  --heads origin feature/asistencia-a0-a1-local` sigue vacío.
 
 ### Devoluciones implementadas, desplegadas y validadas — flujo cerrado
 
