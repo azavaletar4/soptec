@@ -87,6 +87,13 @@ PPPoE, provisionado combinado y proxy NBI bloqueados en este candidato. No está
 desplegado, no escribió nada y aún no tiene vía habilitada de aplicar/revertir.
 Prueba física requiere autorización independiente y contrato exacto verificado.
 Procedimiento: `docs/TR069-WIFI-PREPARACION-SEGURA-20261027.md`.
+**Validación visual local posterior completada:** Chrome con stores ficticios,
+9 capturas etiquetadas como simulación, escritorio/móvil, respaldo descargado,
+confirmación cancelable y mensajes pendiente/error. Banda explícita o «Banda
+desconocida» por red; no inferir 5 GHz por SSID. Comparación exige nuevo Inform
+y fecha nueva de SSID; Inform solo no confirma. 37/37 pruebas y TypeScript PASS.
+Sin tareas, producción ni habilitación de escritura. Evidencia/procedimiento:
+`docs/TR069-WIFI-VALIDACION-VISUAL-20261027.md`.
 Detalle completo y consolidado:
 [TR069-CONTINUIDAD-HUAWEI-20261028.md](docs/TR069-CONTINUIDAD-HUAWEI-20261028.md).
 Equipos seriados, custodia, devoluciones, Asistencia y Puntos permanecen

@@ -17,6 +17,7 @@ const props = withDefaults(
     open: boolean;
     title: string;
     message: string;
+    wrapMessage?: boolean;
     /** true = accion irreversible (Eliminar definitivamente): boton rojo + texto de advertencia. */
     danger?: boolean;
     /** true = caja ambar con ⚠️ alrededor del mensaje — advertencia no destructiva (ej. choque de horario) que de todos modos se puede confirmar. */
@@ -112,7 +113,7 @@ onBeforeUnmount(() => {
     <div v-if="open" class="modal-overlay" role="dialog" aria-modal="true" :aria-labelledby="titleId">
       <div ref="panelRef" class="w-full max-w-sm modal-panel max-h-[90vh] overflow-y-auto">
         <h2 :id="titleId" class="text-lg font-semibold mb-1">{{ title }}</h2>
-        <p v-if="!warning" class="text-sm text-slate-600 mb-1">{{ message }}</p>
+        <p v-if="!warning" class="text-sm text-slate-600 mb-1" :class="{ 'whitespace-pre-line break-all': wrapMessage }">{{ message }}</p>
         <p v-if="danger" class="text-xs text-red-600 font-medium mb-3">Esta acción no se puede deshacer.</p>
         <p v-if="warning" class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-1">
           ⚠️ {{ message }}

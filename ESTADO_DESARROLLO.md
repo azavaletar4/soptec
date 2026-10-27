@@ -95,6 +95,14 @@ GET de caché. Rutas de escritura WiFi/PPPoE/provision y proxy NBI bloqueadas;
 sin vía habilitada para aplicar/revertir, sin claves ni tareas reales. No
 desplegado. Contrato exacto y prueba física siguen por verificar antes de escribir.
 Ver `docs/TR069-WIFI-PREPARACION-SEGURA-20261027.md` para pruebas y procedimiento.
+**Validación visual local posterior completada:** componente real en Chrome con
+stores ficticios, 9 capturas de simulación y cero llamadas a equipos. Verificados
+identidad, instancia, respaldo descargado, confirmación cancelable, roles y
+mensajes en escritorio/móvil. Banda desconocida explícita si no hay dato; banda
+conocida solo desde parámetro explícito. Comparación exige Inform posterior y
+fecha SSID nueva, sin refresh. 37/37 pruebas y TypeScript frontend/backend PASS.
+Sin habilitar aplicación/reversión ni tocar producción. Evidencia y procedimiento
+de Inform/lectura/reversión: `docs/TR069-WIFI-VALIDACION-VISUAL-20261027.md`.
 
 **Pendiente:** vía específica de ejecución autorizada y prueba controlada de modificación de WiFi desde SmartRayco
 sobre esta misma ONT, todavía no intentada ni autorizada. Antes de ejecutarla,

@@ -1,0 +1,70 @@
+{
+  "result": "PASS",
+  "component": "src/views/tr069/Tr069View.vue",
+  "synthetic": true,
+  "realEquipmentCalls": 0,
+  "exceptions": [],
+  "checks": [
+    "banda desconocida sin inferir por SSID",
+    "bandas explícitas sintéticas",
+    "selección sin defecto e instancia exacta",
+    "serial GPON y deviceId visibles",
+    "confirmación cancelable",
+    "respaldo descargado conserva SSID",
+    "Inform nuevo sin valor nuevo no confirma",
+    "pendiente/error/valor observado",
+    "TECNICO_RED sin preparación",
+    "ADMIN y SUPERADMIN",
+    "móvil"
+  ],
+  "calls": [
+    {
+      "operation": "GET_CACHE",
+      "serial": "485754431D3691B7"
+    },
+    {
+      "operation": "PREPARE_ONLY",
+      "serial": "485754431D3691B7",
+      "payload": {
+        "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+        "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5",
+        "ssid": "PRUEBA-LOCAL-SSID",
+        "expectedSsid": "WirelessNet-5G",
+        "expectedTimestamp": "2026-10-27T19:45:10.554Z",
+        "confirmed": true
+      }
+    },
+    {
+      "operation": "GET_CACHE",
+      "serial": "HWTC1D3691B7"
+    },
+    {
+      "operation": "GET_CACHE",
+      "serial": "HWTC1D3691B7"
+    },
+    {
+      "operation": "GET_CACHE",
+      "serial": "HWTC1D3691B7"
+    },
+    {
+      "operation": "PREPARE_ONLY",
+      "serial": "485754431D3691B7",
+      "payload": {
+        "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+        "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5",
+        "ssid": "PRUEBA-LOCAL-SSID",
+        "expectedSsid": "WirelessNet-5G",
+        "expectedTimestamp": "2026-10-27T19:45:10.554Z",
+        "confirmed": true
+      }
+    },
+    {
+      "operation": "GET_CACHE",
+      "serial": "485754431D3691B7"
+    },
+    {
+      "operation": "GET_CACHE",
+      "serial": "485754431D3691B7"
+    }
+  ]
+}

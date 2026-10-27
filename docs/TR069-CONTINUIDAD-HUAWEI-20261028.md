@@ -104,6 +104,12 @@ y `deriveTr069EnableStatus(...)` ya deriva `'conectado'` con el
 
 ## 7. Pendiente
 
+Validación visual posterior local completada, sin tareas ni producción: 9 capturas
+de simulación, formulario real en escritorio/móvil, respaldo descargado y roles.
+Banda desconocida cuando falta evidencia; nuevo Inform y fecha SSID nueva para
+comparar. Aplicar/revertir siguen bloqueados. Ver
+[TR069-WIFI-VALIDACION-VISUAL-20261027.md](TR069-WIFI-VALIDACION-VISUAL-20261027.md).
+
 Preparación WiFi posterior implementada solo local, sin tareas ni despliegue:
 formulario de un SSID, identidad exacta, Enable desconocido visible, preparación
 ADMIN/SUPERADMIN para la Huawei de prueba, respaldo y comparación GET. Escrituras

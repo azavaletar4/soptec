@@ -14,7 +14,7 @@ afterEach(() => { globalThis.fetch = originalFetch; });
 const path = 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5';
 const timestamp = '2026-10-27T19:45:10.554Z';
 function device(serial = '485754431D3691B7', id = WIFI_TEST_DEVICE) {
-  return { _id: id, _deviceId: { _SerialNumber: serial }, InternetGatewayDevice: { LANDevice: { 1: { WLANConfiguration: {
+  return { _id: id, _lastInform: '2026-10-27T20:32:31.480Z', _deviceId: { _SerialNumber: serial }, InternetGatewayDevice: { LANDevice: { 1: { WLANConfiguration: {
     1: { SSID: { _value: 'Red uno', _timestamp: timestamp, _writable: true }, KeyPassphrase: { _value: 'SYNTHETIC_SECRET' } },
     5: { SSID: { _value: 'Red cinco', _timestamp: timestamp, _writable: true } },
   } } } } };
@@ -43,10 +43,18 @@ test('serial ASCII y hexadecimal identifican la misma ONT completa; Enable ausen
   const inventory = await readWifiInventory('http://nbi.invalid', WIFI_TEST_SERIAL);
   assert.equal(inventory.deviceId, WIFI_TEST_DEVICE);
   assert.deepEqual(inventory.networks.map(n => [n.ssid, n.enabled]), [['Red uno', null], ['Red cinco', null]]);
+  assert.ok(inventory.networks.every(n => n.band === 'Banda desconocida'));
   assert.ok(!JSON.stringify(inventory).includes('SYNTHETIC_SECRET'));
   const query = JSON.parse(new URL(calls[0]).searchParams.get('query')!);
   assert.deepEqual(query['_deviceId._SerialNumber'].$in, [WIFI_TEST_SERIAL, '485754431D3691B7']);
   assert.equal((await readWifiInventory('http://nbi.invalid', '485754431D3691B7')).serial, WIFI_TEST_SERIAL);
+});
+test('banda solo desde parámetro explícito: no del nombre SSID ni del número de instancia', async () => {
+  const row = device();
+  Object.assign(row.InternetGatewayDevice.LANDevice[1].WLANConfiguration[1], { OperatingFrequencyBand: { _value: '5GHz' } });
+  Object.assign(row.InternetGatewayDevice.LANDevice[1].WLANConfiguration[5], { OperatingFrequencyBand: { _value: '2.4GHz' } });
+  nbi([row]);
+  assert.deepEqual((await readWifiInventory('http://nbi.invalid', WIFI_TEST_SERIAL)).networks.map(n => n.band), ['5 GHz', '2.4 GHz']);
 });
 test('serial inválido no consulta NBI', async () => {
   const calls = nbi(); await assert.rejects(readWifiInventory('http://nbi.invalid', '1D3691B7')); assert.equal(calls.length, 0);
@@ -120,10 +128,12 @@ for (const role of ['TECNICO_RED', 'SOPORTE', 'CLIENTE', undefined] as const) te
 test('comparación posterior exige identidad, instancia y timestamp más nuevo; no confunde caché con aceptación física', async () => {
   nbi(); const plan = await prepareWifiSsid('http://nbi.invalid', WIFI_TEST_SERIAL, payload());
   const inv = await readWifiInventory('http://nbi.invalid', WIFI_TEST_SERIAL);
-  assert.match(compareWifiPlan(plan, inv), /Sin evidencia/);
+  assert.match(compareWifiPlan(plan, inv), /Pendiente/);
   assert.match(compareWifiPlan(plan, { ...inv, deviceId: 'otro' }), /Identidad distinta/);
   inv.networks.find(n => n.path === path)!.timestamp = new Date(Date.parse(plan.preparedAt)+1000).toISOString();
   inv.networks.find(n => n.path === path)!.ssid = plan.after;
+  assert.match(compareWifiPlan(plan, inv), /Pendiente/);
+  inv.lastInform = new Date(Date.parse(plan.preparedAt)+2000).toISOString();
   assert.match(compareWifiPlan(plan, inv), /falta confirmación/);
 });
 

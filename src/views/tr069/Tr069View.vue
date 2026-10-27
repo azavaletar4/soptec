@@ -61,6 +61,7 @@ const linkError = ref<string | null>(null);
 const configModalDevice = ref<Tr069Device | null>(null);
 const configForm = ref({ wifiSsid: '' });
 const configDeviceId = ref<string | null>(null);
+const configCanonicalSerial = ref<string | null>(null);
 const configPlan = ref<WifiSsidPlan | null>(null);
 const configWifiNetworks = ref<WifiNetwork[]>([]);
 const configWifiPath = ref('');
@@ -74,6 +75,7 @@ async function openConfigModal(device: Tr069Device) {
   configModalDevice.value = device;
   configForm.value = { wifiSsid: '' };
   configDeviceId.value = null;
+  configCanonicalSerial.value = null;
   configPlan.value = null;
   configWifiNetworks.value = [];
   configWifiPath.value = '';
@@ -84,6 +86,7 @@ async function openConfigModal(device: Tr069Device) {
     const wifi = await tr069Store.fetchWifiNetworks(device.cpe_serial);
     if (configModalDevice.value?.id !== device.id) return;
     configDeviceId.value = wifi.deviceId;
+    configCanonicalSerial.value = wifi.serial;
     configWifiNetworks.value = wifi.networks;
     configWifiPath.value = '';
     if (!wifi.found) configError.value = 'No se encontró una identidad GenieACS única para esta ONT.';
@@ -104,8 +107,8 @@ async function handleSaveConfig() {
   }
   const payload = { deviceId: configDeviceId.value, path: network.path, ssid: configForm.value.wifiSsid,
     expectedSsid: network.ssid, expectedTimestamp: network.timestamp, confirmed: true };
-  const ok = await confirmDialog({ title: 'Confirmar preparación de un SSID', confirmLabel: 'Preparar sin aplicar',
-    message: `${device.cpe_serial}\n${network.path}\nActual: ${network.ssid}\nPropuesto: ${payload.ssid}\nSolo se guardará un plan descargable. No se enviará al equipo.` });
+  const ok = await confirmDialog({ title: 'Confirmar preparación de un SSID', confirmLabel: 'Preparar sin aplicar', wrapMessage: true,
+    message: `Huawei: ${configCanonicalSerial.value}\nSerial TR-069: ${device.cpe_serial}\nInstancia: ${network.path}\nActual: ${network.ssid}\nPropuesto: ${payload.ssid}\nSolo se guardará un plan descargable. No se enviará al equipo.` });
   if (!ok || configModalDevice.value?.id !== device.id) return;
   configSaving.value = true;
   configError.value = null;
@@ -482,6 +485,8 @@ async function handleUnlink() {
         <form class="w-full max-w-sm modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleSaveConfig">
           <h2 class="text-lg font-semibold mb-1">Preparar nombre WiFi</h2>
           <p class="text-xs text-slate-500 mb-4 font-mono">{{ configModalDevice.cpe_serial }}</p>
+          <p v-if="configCanonicalSerial" class="text-xs mb-2">Serial GPON completo: {{ configCanonicalSerial }}</p>
+          <p v-if="configDeviceId" class="text-xs break-all mb-3">Dispositivo GenieACS: {{ configDeviceId }}</p>
 
           <p class="text-xs text-slate-500 mb-3">
             Preparación sin aplicar, solo para la Huawei HWTC1D3691B7. PPPoE y contraseñas no se pueden cambiar.
@@ -500,10 +505,10 @@ async function handleUnlink() {
               <label class="block text-xs text-slate-600 mb-1">Red a cambiar</label>
               <select v-model="configWifiPath" class="field-input">
                 <option value="">Selecciona una red</option>
-                <option v-for="n in configWifiNetworks" :key="n.path" :value="n.path">{{ n.ssid ?? 'SSID no disponible' }} — {{ n.path.split('.').pop() }} ({{ n.enabled === null ? 'estado sin verificar' : n.enabled ? 'habilitada' : 'desactivada' }})</option>
+                <option v-for="n in configWifiNetworks" :key="n.path" :value="n.path">{{ n.ssid ?? 'SSID no disponible' }} — {{ n.band }} — instancia {{ n.path.split('.').pop() }} ({{ n.enabled === null ? 'estado sin verificar' : n.enabled ? 'habilitada' : 'desactivada' }})</option>
               </select>
               <p v-if="configWifiPath" class="text-xs break-all">Instancia: {{ configWifiPath }}</p>
-              <p v-if="configWifiPath" class="text-xs">Fecha del SSID (Perú): {{ configSelectedNetwork?.timestamp ? new Date(configSelectedNetwork.timestamp).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'Sin fecha verificable' }}. Banda sin verificar.</p>
+              <p v-if="configWifiPath" class="text-xs">{{ configSelectedNetwork?.band }}. Fecha del SSID (Perú): {{ configSelectedNetwork?.timestamp ? new Date(configSelectedNetwork.timestamp).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'Sin fecha verificable' }}.</p>
             </div>
             <div class="mb-2">
               <label class="block text-xs text-slate-600 mb-1">Nuevo SSID</label>
@@ -512,7 +517,7 @@ async function handleUnlink() {
           </div>
 
           <p v-if="configError" class="text-sm text-red-600 mb-3">{{ configError }}</p>
-          <p v-if="configResult" class="text-sm text-green-600 mb-3">{{ configResult }}</p>
+          <p v-if="configResult" role="status" class="text-sm text-slate-700 mb-3">{{ configResult }}</p>
           <div v-if="configPlan" class="text-xs mb-3">
             <p>Plan confirmado: {{ configPlan.before }} → {{ configPlan.after }}. Instancia: {{ configPlan.path }}.</p>
             <p>Reversión prevista: restaurar «{{ configPlan.before }}» en esa misma instancia, con autorización.</p>

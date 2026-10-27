@@ -17,7 +17,7 @@ export async function readWifiInventory(nbiUrl: string, serial: string): Promise
   const rows = await res.json() as Device[];
   const match = matchTr069Device(canonical, rows.map(device => ({ device, cpe_serial: device._deviceId?._SerialNumber ?? null })));
   if (match.rejection === 'AMBIGUOUS') throw new Error('Identidad GenieACS ambigua; detener');
-  if (!match.device) return { found: false, deviceId: null, serial: canonical, networks: [] };
+  if (!match.device) return { found: false, deviceId: null, serial: canonical, lastInform: null, networks: [] };
   const device = match.device.device;
   if (typeof device._id !== 'string' || !device._id) throw new Error('Identificador GenieACS inválido');
   const networks: WifiInventory['networks'] = [];
@@ -31,16 +31,20 @@ export async function readWifiInventory(nbiUrl: string, serial: string): Promise
       const node = wlan as Node;
       const ssid = node.SSID as Node | undefined;
       const enabled = (node.Enable as Node | undefined)?._value;
+      // Solo evidencia explícita, nunca índice, canal o texto del SSID.
+      const band = (node.OperatingFrequencyBand as Node | undefined)?._value;
       networks.push({
         path: `InternetGatewayDevice.LANDevice.${lanIndex}.WLANConfiguration.${index}`,
         ssid: typeof ssid?._value === 'string' ? ssid._value : null,
         enabled: typeof enabled === 'boolean' ? enabled : null,
         writable: typeof ssid?._writable === 'boolean' ? ssid._writable : null,
         timestamp: typeof ssid?._timestamp === 'string' ? ssid._timestamp : null,
+        band: band === '2.4GHz' ? '2.4 GHz' : band === '5GHz' ? '5 GHz' : 'Banda desconocida',
       });
     }
   }
-  return { found: true, deviceId: device._id, serial: canonical, networks };
+  return { found: true, deviceId: device._id, serial: canonical,
+    lastInform: typeof device._lastInform === 'string' ? device._lastInform : null, networks };
 }
 
 export async function prepareWifiSsid(nbiUrl: string, serial: string, input: unknown): Promise<WifiSsidPlan> {
@@ -62,5 +66,6 @@ export async function prepareWifiSsid(nbiUrl: string, serial: string, input: unk
   if (body.expectedSsid !== network.ssid || body.expectedTimestamp !== network.timestamp) throw new Error('La caché cambió; vuelva a consultar y confirmar');
   if (body.ssid === network.ssid) throw new Error('El SSID nuevo debe ser diferente');
   return { mode: 'preparation_only', deviceId: inventory.deviceId, serial: WIFI_TEST_SERIAL,
-    path: network.path, before: network.ssid, after: body.ssid, baselineTimestamp: network.timestamp, preparedAt: new Date().toISOString() };
+    path: network.path, before: network.ssid, after: body.ssid, baselineTimestamp: network.timestamp,
+    baselineInform: inventory.lastInform, preparedAt: new Date().toISOString() };
 }

@@ -4,6 +4,10 @@ Continúa `b349d68` y su informe de caché. **Implementado localmente; no
 desplegado, sin push ni tareas reales. No se ha probado escribir en la Huawei.**
 Asistencia, Puntos, Campo y la divergencia de main se conservan.
 
+Validación posterior: [formulario visualmente validado en laboratorio local](TR069-WIFI-VALIDACION-VISUAL-20261027.md).
+Añade banda explícita/desconocida y comparación con nuevo Inform. Las pruebas
+iniciales registradas abajo corresponden a `47cea2c`; no se habilitó escritura.
+
 ## Comportamiento preparado
 
 - Se reutiliza el formulario de `/tr069`, ahora «Consultar WiFi» y «Preparar
