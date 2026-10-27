@@ -1,8 +1,10 @@
 # SmartRayco — Estado de desarrollo
 
-## Campo: dirección por contrato desplegada - 27/10/2026
+## Campo: dirección por contrato - fase cerrada - 27/10/2026
 
-Corrección `fc9047f` desplegada exclusivamente en frontend, con autorización:
+**IMPLEMENTADA, DESPLEGADA Y VALIDADA.** Corrección funcional `fc9047f`.
+Validación del propietario: conforme; cierre formal aprobado el 27/10/2026.
+Imagen productiva conservada:
 `smartrayco-campo-direccion:fc9047f-20261027T145104Z`. Altas, Averías y Rutinas muestran
 dirección y código del contrato exacto. Si falta dirección, se identifica la
 alternativa general del cliente; Maps/Waze usan solo su GPS completo cuando
@@ -14,10 +16,12 @@ API, Campo y recursos publicados verificados; 118 comprobaciones móviles sobre
 el frontend público con sesión/órdenes ficticias y llamadas de datos bloqueadas.
 Conservar toda la cadena Compose y agregar al final
 `/opt/smartrayco-staging/campo-direccion-fc9047f-20261027T145104Z/promotion/frontend.override.json`.
-Respaldo saliente ff3077f verificado en PC/VM (19 blobs OCI), rollback preparado
-y no usado. Evidencia y comandos: `docs/CAMPO-DIRECCION-DESPLEGADA.md` y
+Respaldo saliente ff3077f existente, verificado en PC/VM (19 blobs OCI):
+`/opt/smartrayco-staging/campo-direccion-fc9047f-20261027T145104Z/recovery/frontend.tar`. Rollback preparado y no usado. Evidencia y comandos: `docs/CAMPO-DIRECCION-DESPLEGADA.md` y
 `docs/CAMPO-DIRECCION-RELEASE.json`. Este estado prevalece sobre notas anteriores
 de corrección local o frontend ff3077f activo. Sin force push ni merge a main.
+Fase cerrada, sin pendientes; reabrir solo ante incidencias concretas. Este cierre
+es exclusivamente documental, sin pruebas, migraciones ni nuevos despliegues.
 
 ## Cierre administrativo de la corrección de puntos - 27/10/2026
 
