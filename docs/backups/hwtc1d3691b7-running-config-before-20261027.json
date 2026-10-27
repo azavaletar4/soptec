@@ -1,0 +1,8 @@
+{
+  "capturedAt": "2026-10-27T19:36:17.943Z",
+  "position": "1/2/2:24",
+  "serial": "HWTC1D3691B7",
+  "omccState": "1/2/2:24    enable       enable      working      1(GPON)",
+  "interfaceBlock": "interface gpon-onu_1/2/2:24\r\n  description \"PRUEBA\"\r\n  sn-bind enable sn\r\n  tcont 1 profile SMARTOLT-100M-UP\r\n  gemport 1 tcont 1\r\n  gemport 1 traffic-limit downstream SMARTOLT-100M-DOWN \r\n  service-port 1 vport 1 user-vlan 120 vlan 120 \r",
+  "ponOnuMngBlock": "pon-onu-mng gpon-onu_1/2/2:24\r\n  service 1 gemport 1 vlan 120\r\n  tr069-mgmt 1 state unlock\r\n  tr069-mgmt 1 acs http://192.168.55.201:7547\r"
+}
