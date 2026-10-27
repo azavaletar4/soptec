@@ -1,5 +1,14 @@
 # SmartRayco — Estado de desarrollo
 
+## TR-069: activación detenida - 27/10/2026
+
+Corrección 30bbb54 autorizada, todavía NO desplegada. Discrepancia en la
+validación del respaldo del frontend; procedimiento detenido antes de construir
+o promover imágenes. Frontend fc9047f y backend 16831c6 siguen intactos.
+Sin migraciones ni operaciones sobre ONTs. Evidencia y pendiente exacto:
+[TR069-ACTIVACION-CONTROLADA.md](docs/TR069-ACTIVACION-CONTROLADA.md).
+
+
 ## Campo: dirección por contrato - fase cerrada - 27/10/2026
 
 **IMPLEMENTADA, DESPLEGADA Y VALIDADA.** Corrección funcional `fc9047f`.
