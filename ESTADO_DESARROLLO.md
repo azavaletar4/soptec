@@ -313,6 +313,75 @@ selectivo del frontend correspondiente. Validación funcional real del
 propietario con los dos trabajadores reales queda para después de ese
 despliegue.
 
+### Preparación de activación CONJUNTA A2 + A2.1 (Claude Code, 26/10/2026 ~23:50 UTC)
+
+Verificación de solo lectura contra Supabase de producción y la VM, sin
+aplicar nada:
+
+- **Dependencias confirmadas presentes** en Supabase de producción (lectura
+  directa): `asistencia_registros`, `asistencia_solicitudes`,
+  `asistencia_solicitud_eventos`, `asistencia_config_eventos`,
+  `company_settings`, `feriados`, `profiles` (`role`/`active` con los tipos
+  esperados), `current_user_role()`, `asistencia_config_auditar()`,
+  `reportar_ausencia_hoy`, `resolver_ausencia`, `asistencia_ausencias_resumen`
+  — mismas firmas que usan las dos migraciones nuevas.
+- **`mark_attendance_ingreso` de producción leído directamente**
+  (`pg_get_functiondef`) y comparado byte a byte contra el cuerpo original
+  de Fase 117: **idéntico, sin modificaciones intermedias** — el
+  `CREATE OR REPLACE` de A2.1 parte exactamente de esa base, no de una
+  suposición.
+- **Sin colisión de nombres**: `asistencia_novedades` y
+  `asistencia_horarios_personales` (tablas, funciones, triggers) confirmados
+  **ausentes** en producción — ninguna de las dos migraciones puede chocar
+  con algo ya aplicado.
+- **Orden de aplicación obligatorio**: `20261028000000_asistencia_a2_novedades.sql`
+  primero, `20261028010000_asistencia_a2_horarios_personales.sql` después
+  (esta última referencia `asistencia_novedades` y reemplaza
+  `mark_attendance_ingreso`).
+- **Rollback conjunto preparado y verificado end-to-end en Postgres
+  aislado**: `scripts/sql/asistencia-a2-rollback.sql` (orden inverso:
+  A2.1 primero, A2 después). Simulando una novedad y un horario personal
+  "ya reales" antes de revertir: los datos **nunca se borran** (sin
+  `DROP TABLE`), `mark_attendance_ingreso` vuelve a quedar **byte a byte
+  idéntico** a la versión real de Fase 117, las 3 RPC de novedades quedan
+  sin permiso de ejecución, y la escritura directa de horarios personales
+  queda bloqueada incluso para SUPERADMIN (solo lectura). Tampoco toca
+  `asistencia_config_auditar`/`asistencia_config_eventos` ni los triggers
+  de A0/A1 (infraestructura compartida, sigue en uso). 8/8 PASS
+  (`server/tests/asistenciaA2Rollback.test.cjs`, nueva).
+- **Versiones reales de producción confirmadas por `docker ps`/`docker
+  inspect` en la VM** (26/10/2026 ~23:45 UTC): frontend activo
+  `smartrayco-asistencia-polish:070c777-20261026T220705Z` (contenedor
+  `873d8b1c...`, `StartedAt` 2026-10-26T22:08:13Z); backend activo
+  `smartrayco-backend-counters:16831c6-20261026T162650Z` (contenedor
+  `cd577bcaa95c...`, `StartedAt` 2026-10-26T20:44:49Z) — coinciden
+  exactamente con lo documentado aquí y en
+  `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md`. Overrides reales localizados:
+  `/opt/smartrayco-staging/asistencia-polish-070c777-20261026T220705Z/frontend.override.json`
+  y `/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json`
+  — el despliegue selectivo futuro reutiliza el override de backend
+  EXACTO (conservar, nunca reconstruir) y crea un override de frontend
+  nuevo apuntando a la imagen de A2/A2.1.
+- **El despliegue selectivo NO afectará backend/Puntos/Devoluciones/
+  Analítica**: `git diff --stat 070c777..HEAD` confirma que el único
+  código tocado desde el frontend activo es `src/components/asistencia/`,
+  `src/lib/asistencia*`, `src/stores/asistencia.ts`,
+  `src/views/asistencia/AsistenciaView.vue` y `src/types/domain.ts` (tipos
+  agregados, no removidos) — **cero cambios** en `server/src/` (backend) ni
+  en ningún archivo de Puntos, Devoluciones o Analítica. `npm run build`
+  real + `grep` sobre el `dist/` compilado confirma presentes, en el mismo
+  bundle: las RPC de A2/A2.1, los componentes de Puntos
+  (`WorkOrderPointsEditor`, `RankingTecnicosView`), Devoluciones
+  (`CampoCustodiaView`) y Analítica (`AnaliticaView`) — ninguna función
+  existente se pierde al construir la imagen nueva.
+- **No se repitieron las pruebas ya aprobadas** de A2 (13/13 SQL + 5/5
+  navegador) ni de A2.1 (14/14 SQL + 5/5 navegador) — se asumen vigentes;
+  solo se agregó la verificación nueva de rollback.
+- **Nada aplicado ni desplegado en esta preparación**: sin `apply_migration`,
+  sin `bash deploy/update.sh`, sin tocar contenedores. Pendiente
+  únicamente la autorización explícita del propietario para los pasos de
+  migración + despliegue selectivo conjunto.
+
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 
 El propietario confirma que el **25/10/2026** se realizaron **tres instalaciones

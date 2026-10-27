@@ -12,7 +12,7 @@ el 2026-10-26; actualizado tras activar la corrección de contadores y verificar
 el primer muestreo de contadores; frontend de devoluciones verificado a las
 17:16 UTC — no es una suposición desde git.
 
-**Nota (26/10/2026 ~22:35 UTC, actualizada ~23:40 UTC)**: A0/A1 de
+**Nota (26/10/2026 ~22:35 UTC, actualizada ~23:50 UTC)**: A0/A1 de
 Asistencia quedó cerrada, validada en producción y pusheada a
 `origin/feature/asistencia-a0-a1-local` (sin force). A2 (vacaciones/
 descanso/permisos por horas/medias jornadas) y A2.1 (horarios parciales
@@ -20,8 +20,14 @@ RECURRENTES por trabajador, ej. dos técnicos con media jornada de sábado)
 están **implementadas LOCALMENTE** en `feature/asistencia-a2-local`
 (`20261028000000_asistencia_a2_novedades.sql` y
 `20261028010000_asistencia_a2_horarios_personales.sql`, en ese orden),
-**sin aplicar ni desplegar** — las imágenes activas de abajo no cambiaron.
-Detalle en `ESTADO_DESARROLLO.md` ("Asistencia A2" / "Asistencia A2.1").
+**sin aplicar ni desplegar** — las imágenes activas de abajo no cambiaron
+(reconfirmado por `docker ps`/`docker inspect` real el 26/10 ~23:45 UTC:
+mismo contenedor/`StartedAt` para ambas). Activación conjunta PREPARADA Y
+VERIFICADA (dependencias, orden, rollback end-to-end en Postgres aislado,
+`git diff`/`grep` confirmando que Puntos/Devoluciones/Analítica/backend
+quedan intactos) — pendiente autorización explícita del propietario para
+aplicar y desplegar. Detalle en `ESTADO_DESARROLLO.md` ("Asistencia A2" /
+"Asistencia A2.1" / "Preparación de activación CONJUNTA A2 + A2.1").
 
 ## Estado actual (2026-10-26)
 
