@@ -535,12 +535,18 @@ export function configureTr069ManagementWanCommands(
 /**
  * Reversion — quita SOLO lo que configureTr069ManagementWanCommands() haya
  * agregado de nuevo (nunca lo que ya existia antes de esta operación,
- * reflejado en `applied`). Sintaxis "no <comando>" es la convención
- * estándar Cisco-like que ya usa esta CLI en otros contextos — pero, a
- * diferencia de las líneas de escritura (ya confirmadas contra el equipo
- * real antes de usarse), esta ruta de REMOCIÓN específica todavía NO se
- * probó contra el equipo real. Confirmar antes de usar en la prueba
- * controlada.
+ * reflejado en `applied`). Cada línea de "no" repite la línea ORIGINAL
+ * completa (todos sus parámetros) — la convención Cisco-like más segura y
+ * ampliamente compatible para deshacer una línea de config puntual, misma
+ * que ya describe el encabezado de este archivo. Orden: modificadores
+ * antes que su objeto base (ej. "no gemport traffic-limit" antes de
+ * "no gemport tcont"), y pon-onu-mng completo antes de la interfaz — el
+ * espejo exacto, en reversa, de configureTr069ManagementWanCommands().
+ *
+ * A diferencia de las líneas de escritura (ya confirmadas contra el
+ * equipo real por esta misma prueba), esta ruta de REMOCIÓN todavía NO se
+ * ejecutó contra el equipo real — confirmar bloque por bloque la primera
+ * vez que se use de verdad.
  */
 export function removeTr069ManagementWanCommands(
   rawParams: Tr069ManagementWanParams,
@@ -549,22 +555,23 @@ export function removeTr069ManagementWanCommands(
   const p = safeTr069ManagementWanParams(rawParams);
   const cmds: string[] = ['enable', 'configure terminal', `pon-onu-mng ${onuInterface(p.ref, p.onuId)}`];
 
-  if (applied.tr069Tag) cmds.push(`no tr069-mgmt ${p.veipId} tag`);
-  if (applied.tr069Acs) cmds.push(`no tr069-mgmt ${p.veipId} acs`);
+  if (applied.tr069Tag) cmds.push(`no tr069-mgmt ${p.veipId} tag pri ${p.priority} vlan ${p.managementVlan}`);
+  if (applied.tr069Acs) cmds.push(`no tr069-mgmt ${p.veipId} acs ${p.acsUrl}`);
   if (applied.tr069State) cmds.push(`tr069-mgmt ${p.veipId} state lock`);
   if (applied.veipPortBinding) cmds.push(`no veip ${p.veipId} port udp ${p.veipPort} host ${p.iphostId}`);
-  if (applied.ipHostDns) cmds.push(`no ip-host ${p.iphostId} primary-dns`);
-  if (applied.ipHostAddress) cmds.push(`no ip-host ${p.iphostId} ip`);
+  if (applied.ipHostDns) cmds.push(`no ip-host ${p.iphostId} primary-dns ${p.primaryDns} second-dns ${p.secondaryDns}`);
+  if (applied.ipHostAddress) cmds.push(`no ip-host ${p.iphostId} ip ${p.managementIp} mask ${p.managementMask} gateway ${p.gateway}`);
   if (applied.switchportBind) cmds.push(`no switchport-bind switch_0/1 veip ${p.veipId}`);
-  if (applied.serviceMgmt) cmds.push(`no service mgmt gemport ${p.gemportId}`);
+  if (applied.serviceMgmt) cmds.push(`no service mgmt gemport ${p.gemportId} iphost ${p.iphostId} vlan ${p.managementVlan}`);
   cmds.push('exit');
 
   if (applied.interfaceBlock) {
     cmds.push(
       onuInterface2(p),
-      `no service-port ${p.vportId}`,
-      `no gemport ${p.gemportId}`,
-      `no tcont ${p.tcontId}`,
+      `no service-port ${p.vportId} vport ${p.vportId} user-vlan ${p.managementVlan} vlan ${p.managementVlan}`,
+      `no gemport ${p.gemportId} traffic-limit downstream ${p.trafficProfile}`,
+      `no gemport ${p.gemportId} tcont ${p.tcontId}`,
+      `no tcont ${p.tcontId} profile ${p.tcontProfile}`,
       'exit',
     );
   }

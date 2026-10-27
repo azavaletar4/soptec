@@ -104,19 +104,20 @@ test('reversion simetrica: deshace exactamente lo que se aplico cuando TODO era 
     'enable',
     'configure terminal',
     'pon-onu-mng gpon-onu_1/2/2:24',
-    'no tr069-mgmt 1 tag',
-    'no tr069-mgmt 1 acs',
+    'no tr069-mgmt 1 tag pri 2 vlan 200',
+    'no tr069-mgmt 1 acs http://192.168.55.201:7547',
     'tr069-mgmt 1 state lock',
     'no veip 1 port udp 1232 host 2',
-    'no ip-host 2 primary-dns',
-    'no ip-host 2 ip',
+    'no ip-host 2 primary-dns 8.8.8.8 second-dns 8.8.4.4',
+    'no ip-host 2 ip 10.15.15.200 mask 255.255.255.0 gateway 10.15.15.1',
     'no switchport-bind switch_0/1 veip 1',
-    'no service mgmt gemport 2',
+    'no service mgmt gemport 2 iphost 2 vlan 200',
     'exit',
     'interface gpon-onu_1/2/2:24',
-    'no service-port 2',
-    'no gemport 2',
-    'no tcont 2',
+    'no service-port 2 vport 2 user-vlan 200 vlan 200',
+    'no gemport 2 traffic-limit downstream SMARTOLT-VOIPMNG-10M',
+    'no gemport 2 tcont 2',
+    'no tcont 2 profile SMARTOLT-VOIPMNG-10M',
     'exit',
   ]);
 });
@@ -128,7 +129,7 @@ test('reversion parcial: si tr069-mgmt state/acs YA existian antes (no los aplic
   });
   assert.ok(!cmds.some((c) => c.includes('tr069-mgmt 1 acs')));
   assert.ok(!cmds.some((c) => c === 'tr069-mgmt 1 state lock'));
-  assert.ok(cmds.includes('no tr069-mgmt 1 tag'));
+  assert.ok(cmds.includes('no tr069-mgmt 1 tag pri 2 vlan 200'));
 });
 
 // ---- parsers (extractManagementIpAssignments / extractPonOnuMngBlock / extractOnuInterfaceBlock) ----
@@ -285,5 +286,5 @@ test('plan ok: el rollback que trae es exactamente la reversion de lo que trae "
   if (!result.ok) return;
   // lo que se omitio en "commands" (porque ya existia) tampoco debe aparecer en el rollback
   assert.ok(!result.rollbackCommands.some((c) => c.includes('tr069-mgmt 1 acs')));
-  assert.ok(result.rollbackCommands.includes('no ip-host 2 ip'));
+  assert.ok(result.rollbackCommands.includes('no ip-host 2 ip 10.15.15.200 mask 255.255.255.0 gateway 10.15.15.1'));
 });
