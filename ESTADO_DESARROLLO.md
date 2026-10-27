@@ -199,13 +199,12 @@ vacío no ensucia pantalla); 4/4 unitarias nuevas
 `asistenciaAusencias.test.ts` para `cuentaFalta` con novedad. `vue-tsc`
 y `npm run build` limpios.
 
-**Pendiente para activar en producción** (nada de esto se hizo en esta
-sesión): autorización explícita y separada para aplicar
-`20261028000000_asistencia_a2_novedades.sql` en Supabase, y para el
-despliegue selectivo del frontend correspondiente (mismo mecanismo de
-override de 1 solo servicio ya usado en A0/A1, conservando el backend
-`smartrayco-backend-counters:16831c6-...` sin tocar). Validación funcional
-real del propietario queda para después de ese despliegue.
+**ACTIVADA en producción el 2026-10-27 ~02:44 UTC** junto con A2.1, en un
+solo procedimiento conjunto autorizado por el propietario — ver sección
+"Activación CONJUNTA A2 + A2.1 — DESPLEGADA" más abajo para el detalle
+completo (migración aplicada y verificada, imagen desplegada, backend
+conservado, verificaciones post-despliegue). Validación funcional real
+del propietario queda pendiente.
 
 **Límite documentado aquí QUEDÓ CORREGIDO por A2.1 (ver sección siguiente)**:
 ya no se trata "media jornada" como exención del día completo — ahora exige
@@ -306,12 +305,10 @@ una invocación por archivo) — combinarlas en una sola invocación de
 paralelo y interfieran entre sí (fallos falsos confirmados: cada suite
 pasa 100% al ejecutarla sola). Mismo patrón que A0/A1.
 
-**Pendiente para activar en producción**: autorización explícita y
-separada para aplicar `20261028010000_asistencia_a2_horarios_personales.sql`
-(después de la migración de A2 base, en ese orden) y para el despliegue
-selectivo del frontend correspondiente. Validación funcional real del
-propietario con los dos trabajadores reales queda para después de ese
-despliegue.
+**ACTIVADA en producción el 2026-10-27 ~02:44 UTC** junto con A2 base, en
+el mismo procedimiento conjunto — ver sección "Activación CONJUNTA A2 +
+A2.1 — DESPLEGADA" más abajo. Validación funcional real del propietario
+con los dos trabajadores reales (sábado mañana/tarde) queda pendiente.
 
 ### Preparación de activación CONJUNTA A2 + A2.1 (Claude Code, 26/10/2026 ~23:50 UTC)
 
@@ -381,6 +378,61 @@ aplicar nada:
   sin `bash deploy/update.sh`, sin tocar contenedores. Pendiente
   únicamente la autorización explícita del propietario para los pasos de
   migración + despliegue selectivo conjunto.
+
+### Activación CONJUNTA A2 + A2.1 — DESPLEGADA (Claude Code, 2026-10-27 ~02:44 UTC)
+
+Autorización explícita del propietario para activar ambas fases en
+producción en un solo procedimiento. Confirmación de respaldo/versiones
+(paso 1), migraciones (paso 2) y despliegue (pasos 3-4) de la sección
+"Preparación" de arriba, ya ejecutados y verificados reales:
+
+- **Migraciones aplicadas EN ORDEN** al proyecto Supabase de producción
+  `mzupdnjegfwmpajywckd`: `20261028000000_asistencia_a2_novedades.sql`,
+  después `20261028010000_asistencia_a2_horarios_personales.sql`. Verificado
+  entre cada una (lectura directa, no suposición): 113 marcaciones de
+  `asistencia_registros` con **el mismo hash** antes/después de ambas;
+  tablas nuevas creadas vacías; permisos `authenticated`/`anon` correctos
+  en las 3 RPC de novedades y en `asistencia_horarios_personales` (2
+  políticas RLS); `mark_attendance_ingreso` confirmado con la nueva
+  precedencia (contiene referencias reales a `asistencia_novedades` y
+  `asistencia_horarios_personales`).
+- **Frontend desplegado selectivamente**: `smartrayco-asistencia-a2-full:7ed8dcd-20261027T000500Z`
+  (commit `7ed8dcd`, HEAD de `feature/asistencia-a2-local` en el momento
+  del despliegue, sobre `070c777`). Confirmado por `grep` sobre el JS
+  compilado ANTES de promover: A2, A2.1, Devoluciones, Puntos, Analítica
+  y la corrección de aprobación/rechazo de A1 — las 6 funciones presentes
+  en la misma imagen.
+- **Backend NUNCA tocado**: configuración efectiva de Compose verificada
+  con `-f backend.override.json -f frontend.override.json` ANTES de
+  aplicar (`backend: smartrayco-backend-counters:16831c6-...`, `frontend:
+  smartrayco-asistencia-a2-full:7ed8dcd-...`, ningún otro servicio en el
+  override). El log del despliegue mostró `backend Running` (nunca
+  `Recreate`); ID de contenedor `cd577bcaa95c...` y `StartedAt`
+  `2026-10-26T20:44:49.856235867Z` idénticos antes/después — confirmado
+  por `docker inspect` real tras el despliegue.
+- **Verificación post-despliegue real** (red interna de Docker, sin
+  exponer credenciales): API `{"status":"ok","service":"smartrayco-api",...}`;
+  panel sirviendo el HTML de la SPA; `asistencia_novedades` reconocida
+  por el gateway real de PostgREST (`42501 permission denied` para
+  `anon` — confirma que la tabla existe y que el RLS es el correcto, no
+  un 404 de tabla inexistente). Puntos/Devoluciones/Analítica: sin
+  cambios de código/backend/BD que los afecten (confirmado antes del
+  despliegue), no se repitió su prueba funcional — solo se confirmó su
+  presencia en la imagen y que el backend que sirve Analítica nunca se
+  reinició.
+- **Respaldo y rollback**: imagen anterior (`070c777`) respaldada en
+  `/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/recovery/frontend.tar`
+  y tag `smartrayco-asistencia-a2-full-rollback:20261027T000500Z`. SQL
+  `scripts/sql/asistencia-a2-rollback.sql` disponible (verificado
+  end-to-end antes de esta activación, nunca borra datos).
+- **No se repitieron las pruebas ya aprobadas** de A2/A2.1 — solo se
+  verificó lo específico de producción (hash histórico, permisos reales,
+  imagen compilada, contenedores, API/panel).
+- **Pendiente**: validación funcional real del propietario, en especial
+  con los dos técnicos reales de media jornada de sábado y con el uso
+  real de vacaciones/permisos desde el panel. `feature/asistencia-a2-local`
+  sigue **sin push** a GitHub — push y sincronización con Codex quedan
+  para autorización separada.
 
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 

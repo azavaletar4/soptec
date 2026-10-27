@@ -12,34 +12,26 @@ el 2026-10-26; actualizado tras activar la corrección de contadores y verificar
 el primer muestreo de contadores; frontend de devoluciones verificado a las
 17:16 UTC — no es una suposición desde git.
 
-**Nota (26/10/2026 ~22:35 UTC, actualizada ~23:50 UTC)**: A0/A1 de
-Asistencia quedó cerrada, validada en producción y pusheada a
-`origin/feature/asistencia-a0-a1-local` (sin force). A2 (vacaciones/
-descanso/permisos por horas/medias jornadas) y A2.1 (horarios parciales
-RECURRENTES por trabajador, ej. dos técnicos con media jornada de sábado)
-están **implementadas LOCALMENTE** en `feature/asistencia-a2-local`
-(`20261028000000_asistencia_a2_novedades.sql` y
-`20261028010000_asistencia_a2_horarios_personales.sql`, en ese orden),
-**sin aplicar ni desplegar** — las imágenes activas de abajo no cambiaron
-(reconfirmado por `docker ps`/`docker inspect` real el 26/10 ~23:45 UTC:
-mismo contenedor/`StartedAt` para ambas). Activación conjunta PREPARADA Y
-VERIFICADA (dependencias, orden, rollback end-to-end en Postgres aislado,
-`git diff`/`grep` confirmando que Puntos/Devoluciones/Analítica/backend
-quedan intactos) — pendiente autorización explícita del propietario para
-aplicar y desplegar. Detalle en `ESTADO_DESARROLLO.md` ("Asistencia A2" /
-"Asistencia A2.1" / "Preparación de activación CONJUNTA A2 + A2.1").
+**Nota (27/10/2026 ~02:45 UTC)**: Asistencia A0/A1/A2/A2.1 — las 4 fases
+están **APLICADAS y DESPLEGADAS en producción**. A0/A1 cerrada y pusheada
+desde el 26/10. A2 (vacaciones/descanso/permisos por horas/medias
+jornadas) y A2.1 (horarios parciales RECURRENTES por trabajador) se
+activaron en conjunto el 27/10 ~02:44 UTC — migraciones aplicadas en
+orden, frontend desplegado selectivamente, backend conservado exacto.
+Detalle completo en `ESTADO_DESARROLLO.md` ("Asistencia A2" / "Asistencia
+A2.1" / "Activación CONJUNTA A2 + A2.1 — DESPLEGADA").
 
 ## Estado actual (2026-10-26)
 
 | | Backend | Frontend |
 |---|---|---|
-| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` + aprobación `263f66e` + diseño bandeja `cd0d0c9` + widget personal `070c777` |
-| Commit anterior | `53f284c` | `263f66e` |
-| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` | `smartrayco-asistencia-polish:070c777-20261026T220705Z` |
-| Construida vía | Overlay exclusivo de `trafficAnalyticsService.ts` sobre la imagen backend Fase 175 activa; runtime/dependencias conservados | Fuente real (`070c777`, sobre `263f66e`) + corrección visual de las tarjetas SUPERADMIN (`class="input"` inexistente → `field-input`/`field-label`) y del formulario personal ADMIN/TECNICO_RED (mismo bug); nada más tocado |
-| Desplegado | 2026-10-26 16:27:41 UTC | 2026-10-26 22:07:05 UTC |
-| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1 (exclusión SUPERADMIN, desplegable móvil, aprobación/rechazo corregidos, bandeja SUPERADMIN y formulario personal con diseño correcto) |
-| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-polish-070c777-20261026T220705Z/recovery/frontend.tar`, tag `smartrayco-asistencia-polish-rollback:20261026T220705Z` (apunta a la imagen `263f66e` previa) |
+| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` + aprobación `263f66e` + diseño bandeja `cd0d0c9` + widget personal `070c777` + A2/A2.1 `7ed8dcd` |
+| Commit anterior | `53f284c` | `070c777` |
+| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` (SIN CAMBIOS) | `smartrayco-asistencia-a2-full:7ed8dcd-20261027T000500Z` |
+| Construida vía | Sin reconstruir — mismo contenedor desde Fase 175 | Fuente real (`7ed8dcd`, sobre `070c777`) + Asistencia A2 (vacaciones/descanso/permiso por horas/media jornada) + A2.1 (horarios parciales recurrentes por trabajador); nada más tocado |
+| Desplegado | 2026-10-26 16:27:41 UTC (sin cambios desde entonces) | 2026-10-27 02:44:18 UTC |
+| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1/A2/A2.1 completa (exención SUPERADMIN, ausencias, vacaciones/descansos/permisos, horarios parciales recurrentes, tardanza/falta por horario individual) |
+| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/recovery/frontend.tar`, tag `smartrayco-asistencia-a2-full-rollback:20261027T000500Z` (apunta a la imagen `070c777` previa); SQL: `scripts/sql/asistencia-a2-rollback.sql` (A2.1 y A2, verificado end-to-end, nunca borra datos) |
 
 ### Asistencia A0/A1 — migración aplicada y frontend desplegado (2026-10-26)
 
@@ -139,6 +131,64 @@ tocar lógica/RPC/RLS/historial:
   `feature/asistencia-a0-a1-local` (incluido `070c777` y este registro
   documental) permanece exclusivamente local — `git ls-remote
   --heads origin feature/asistencia-a0-a1-local` sigue vacío.
+
+#### Paso 5: activación CONJUNTA de Asistencia A2 + A2.1 (2026-10-27 ~02:44 UTC)
+
+Autorización explícita del propietario para activar en producción A2
+(vacaciones/descanso/permiso por horas/media jornada) y A2.1 (horarios
+parciales recurrentes por trabajador — el caso real de dos técnicos con
+media jornada de sábado), en un solo procedimiento conjunto.
+
+- **Migraciones aplicadas en orden** a Supabase de producción (proyecto
+  `mzupdnjegfwmpajywckd`): `20261028000000_asistencia_a2_novedades.sql`
+  primero, `20261028010000_asistencia_a2_horarios_personales.sql`
+  después. Verificación entre cada una: 113 marcaciones históricas de
+  `asistencia_registros` con el mismo hash antes/después de ambas (ningún
+  dato histórico tocado); tablas nuevas vacías tras aplicar; permisos
+  `authenticated`/`anon` correctos en las 3 RPC de novedades; RLS de
+  `asistencia_horarios_personales` con sus 2 políticas; `mark_attendance_ingreso`
+  confirmado con la nueva precedencia (permiso excepcional > horario
+  habitual > horario general) por lectura directa de su definición.
+- **Frontend desplegado selectivamente**: `smartrayco-asistencia-a2-full:7ed8dcd-20261027T000500Z`
+  (commit `7ed8dcd`, sobre `070c777`). Confirmado por `grep` sobre el JS
+  compilado ANTES de promover: A2, A2.1, Devoluciones, Puntos, Analítica y
+  la corrección de aprobación/rechazo de A1 — las 6 funciones presentes
+  en la misma imagen.
+- **Backend NUNCA tocado**: configuración efectiva de Compose verificada
+  con ambos overrides (`fase175-counters-16831c6-.../backend.override.json`
+  + el nuevo `asistencia-a2-full-.../frontend.override.json`) ANTES de
+  aplicar — `backend: smartrayco-backend-counters:16831c6-...`,
+  `frontend: smartrayco-asistencia-a2-full:7ed8dcd-...`, ningún otro
+  servicio en el override. El log del despliegue mostró `backend Running`
+  (nunca `Recreate`); contenedor `cd577bcaa95c...` y `StartedAt`
+  `2026-10-26T20:44:49.856235867Z` idénticos antes/después.
+- **Verificación post-despliegue real** (vía red interna de Docker):
+  API `{"status":"ok","service":"smartrayco-api",...}`; panel sirviendo
+  el HTML de la SPA; tabla `asistencia_novedades` reconocida por el
+  gateway real de PostgREST (`42501 permission denied` para `anon` —
+  confirma que existe y que el RLS es el correcto, no un 404 de tabla
+  inexistente). Puntos/Devoluciones/Analítica no se re-probaron
+  funcionalmente (sin cambios de código ni de backend/BD que los
+  afecten; confirmado por `git diff` antes del despliegue) — solo se
+  confirmó su presencia en la imagen y que el backend que los sirve
+  (Analítica) nunca se reinició.
+- **Respaldo y rollback**: imagen anterior (`070c777`) respaldada en
+  `/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/recovery/frontend.tar`
+  y tag `smartrayco-asistencia-a2-full-rollback:20261027T000500Z`. SQL:
+  `scripts/sql/asistencia-a2-rollback.sql` (A2.1 y A2, en ese orden
+  inverso) ya verificado end-to-end en Postgres aislado antes de esta
+  activación — nunca borra `asistencia_novedades`/`asistencia_horarios_personales`
+  ni la auditoría compartida de A0/A1.
+- **No se repitieron las pruebas ya aprobadas** de A2 (13/13 SQL + 5/5
+  navegador) ni de A2.1 (14/14 SQL + 5/5 navegador) — se asumieron
+  vigentes; esta activación solo verificó lo específico de producción
+  (hash histórico, permisos reales, imagen compilada, contenedores).
+- **Pendiente**: validación funcional real del propietario, en especial
+  con los dos técnicos reales de media jornada de sábado (uno por la
+  mañana, otro por la tarde) y con el uso real de vacaciones/permisos
+  desde el panel. Rama `feature/asistencia-a2-local` sigue **sin push**
+  a GitHub — push y sincronización con Codex quedan para cuando el
+  propietario lo autorice por separado.
 
 ### Devoluciones implementadas, desplegadas y validadas — flujo cerrado
 

@@ -1,5 +1,28 @@
 # SmartRayco — guía para Claude Code
 
+## Asistencia A0/A1/A2/A2.1 — TODAS DESPLEGADAS en producción (27/10/2026)
+
+**Estado vigente**: las 4 fases de Asistencia están aplicadas y
+desplegadas en producción. A2 (vacaciones/descanso/permisos por
+horas/medias jornadas) y A2.1 (horarios parciales recurrentes por
+trabajador) se activaron el 2026-10-27 ~02:44 UTC, en un procedimiento
+conjunto autorizado por el propietario: migraciones
+`20261028000000_asistencia_a2_novedades.sql` y
+`20261028010000_asistencia_a2_horarios_personales.sql` aplicadas en ese
+orden a Supabase de producción; frontend
+`smartrayco-asistencia-a2-full:7ed8dcd-20261027T000500Z` desplegado
+selectivamente; backend `smartrayco-backend-counters:16831c6-...`
+conservado exacto (mismo contenedor/`StartedAt`, confirmado por
+`docker inspect`). API/panel verificados en vivo; Puntos/Devoluciones/
+Analítica confirmados intactos (sin cambios de código/backend/BD, sin
+repetir sus pruebas). Rollback preparado y verificado:
+`scripts/sql/asistencia-a2-rollback.sql` + tag
+`smartrayco-asistencia-a2-full-rollback:20261027T000500Z`. Detalle
+completo en `ESTADO_DESARROLLO.md` ("Activación CONJUNTA A2 + A2.1 —
+DESPLEGADA"). **Pendiente**: validación funcional real del propietario
+con los dos técnicos de media jornada de sábado; push de
+`feature/asistencia-a2-local` a GitHub (no autorizado todavía).
+
 ## Asistencia semiautomática A0/A1 — CERRADA y validada en producción (26/10/2026)
 
 El propietario cerró A0/A1 explícitamente el 2026-10-26: desplegada,
@@ -48,14 +71,15 @@ intactas. ADMIN marca/reporta desde el panel web y técnico desde Campo
   aislado): 9/9 navegador + `vue-tsc` limpio para ambas correcciones
   visuales; unitarias/pruebas de aprobación-rechazo previas sin cambios de
   código, no repetidas. No se resolvió ninguna solicitud real.
-- **A2 implementada LOCALMENTE** en `feature/asistencia-a2-local` (sin migrar
-  ni desplegar): vacaciones por rango, descansos programados, permisos por
-  horas y medias jornadas — SUPERADMIN programa y aprueba en un solo paso,
-  ADMIN/TECNICO_RED solo consultan sus propias novedades. Migración
-  `20261028000000_asistencia_a2_novedades.sql`, componente `NovedadesPanel.vue`
-  (montado en Control de Asistencia y en el widget compartido Campo/panel).
-  13/13 SQL + 5/5 navegador + unitarias PASS, `vue-tsc`/build limpios.
-- **A2.1 implementada LOCALMENTE** (requisito operativo real: dos técnicos
+- **A2 DESPLEGADA en producción** (2026-10-27 ~02:44 UTC): vacaciones por
+  rango, descansos programados, permisos por horas y medias jornadas —
+  SUPERADMIN programa y aprueba en un solo paso, ADMIN/TECNICO_RED solo
+  consultan sus propias novedades. Migración
+  `20261028000000_asistencia_a2_novedades.sql` **APLICADA**, componente
+  `NovedadesPanel.vue` (montado en Control de Asistencia y en el widget
+  compartido Campo/panel) **ACTIVO**. 13/13 SQL + 5/5 navegador +
+  unitarias PASS, `vue-tsc`/build limpios.
+- **A2.1 DESPLEGADA en producción** (requisito operativo real: dos técnicos
   que todos los sábados trabajan media jornada, uno por la mañana y otro
   por la tarde): horarios parciales RECURRENTES por trabajador (tabla
   `asistencia_horarios_personales`, día de la semana 1..6 + turno + horas
@@ -69,16 +93,17 @@ intactas. ADMIN marca/reporta desde el panel web y técnico desde Campo
   **Corrige la limitación documentada de A2**: `media_jornada` ya NO exime
   el día completo (ahora exige turno + horas reales, igual forma que
   `permiso_horas`, y requiere una marcación real como cualquier otro día).
-  Migración `20261028010000_asistencia_a2_horarios_personales.sql`,
-  componente `HorariosPersonalesPanel.vue`. 14/14 SQL + 5/5 navegador + 2
-  unitarias nuevas PASS, `vue-tsc`/build limpios. **Ejecutar las suites de
-  Asistencia de una por una** (`node --test server/tests/<archivo>`) — en
-  paralelo los contenedores Docker aislados interfieren entre sí y dan
-  fallos falsos (confirmado: cada suite 100% verde por separado, no es una
-  regresión real).
+  Migración `20261028010000_asistencia_a2_horarios_personales.sql`
+  **APLICADA**, componente `HorariosPersonalesPanel.vue` **ACTIVO**.
+  14/14 SQL + 5/5 navegador + 2 unitarias nuevas PASS, `vue-tsc`/build
+  limpios. **Ejecutar las suites de Asistencia de una por una**
+  (`node --test server/tests/<archivo>`) — en paralelo los contenedores
+  Docker aislados interfieren entre sí y dan fallos falsos (confirmado:
+  cada suite 100% verde por separado, no es una regresión real).
   Detalle completo de A2/A2.1 en `ESTADO_DESARROLLO.md` ("Asistencia A2" /
-  "Asistencia A2.1"). Pendiente autorización explícita separada para
-  aplicar ambas migraciones y desplegar.
+  "Asistencia A2.1" / "Activación CONJUNTA A2 + A2.1 — DESPLEGADA").
+  Pendiente: validación funcional real del propietario; push a GitHub
+  (no autorizado todavía).
 
 ## Antes de empezar
 
