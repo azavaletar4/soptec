@@ -1,0 +1,1530 @@
+{
+  "checkedAt": "2026-10-27T20:35:42.726Z",
+  "readOnly": true,
+  "source": "GenieACS NBI GET /devices, cache only; no tasks or refresh",
+  "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+  "lastInform": "2026-10-27T20:32:31.480Z",
+  "roots": [
+    "InternetGatewayDevice"
+  ],
+  "cachedObjects": [
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.LANWLANConfigurationNumberOfEntries",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.APWMMParameter",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AuthenticationServiceMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AutoChannelEnable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AutoRateFallBackEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BSSID",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BasicAuthenticationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BasicDataTransmitRates",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BasicEncryptionModes",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BeaconAdvertisementEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BeaconType",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Channel",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.ChannelPlus",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.ChannelsInUse",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.DeviceOperationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.DistanceFromRoot",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Enable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.IEEE11iAuthenticationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.IEEE11iEncryptionModes",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.InsecureOOBAccessEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.LocationDescription",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.LowerLayers",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.MACAddressControlEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.MaxBitRate",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Name",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.OperationalDataTransmitRates",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PeerBSSID",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PossibleChannels",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PossibleDataTransmitRates",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.RadioEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.RegulatoryDomain",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSIDAdvertisementEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.STAWMMParameter",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Standard",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Stats",
+      "object": true,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Status",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalBytesReceived",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalBytesSent",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalIntegrityFailures",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalPSKFailures",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalPacketsReceived",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalPacketsSent",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TransmitPower",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TransmitPowerSupported",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.UAPSDEnable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.UAPSDSupported",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WEPEncryptionLevel",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WEPKey",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WEPKeyIndex",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WMMEnable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WMMSupported",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WPAAuthenticationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WPAEncryptionModes",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WPS",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_AdvanceConf",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_AssociateNum",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_AttachConf",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_HT20",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_Mode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_PowerValue",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RFBand",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RadiuServer",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RadiusKey",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RadiusPort",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RetryTimeout",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_Service",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_Standard",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_SupportedStandards",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_VLAN",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WPAand11iAuthenticationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WPAand11iEncryptionModes",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WPSKeyWord",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WebVisibility",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WorkMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_IEEE80211wEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.APWMMParameter",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AssociatedDevice",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AuthenticationServiceMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AutoChannelEnable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AutoRateFallBackEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BSSID",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BasicAuthenticationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BasicDataTransmitRates",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BasicEncryptionModes",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BeaconAdvertisementEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BeaconType",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Channel",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.ChannelPlus",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.ChannelsInUse",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.DeviceOperationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.DistanceFromRoot",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Enable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.IEEE11iAuthenticationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.IEEE11iEncryptionModes",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.InsecureOOBAccessEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.LocationDescription",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.LowerLayers",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.MACAddressControlEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.MaxBitRate",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Name",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.OperationalDataTransmitRates",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PeerBSSID",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PossibleChannels",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PossibleDataTransmitRates",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PreSharedKey",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.RadioEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.RegulatoryDomain",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSIDAdvertisementEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.STAWMMParameter",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Standard",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Stats",
+      "object": true,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Status",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalBytesReceived",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalBytesSent",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalIntegrityFailures",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalPSKFailures",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalPacketsReceived",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalPacketsSent",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TransmitPower",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TransmitPowerSupported",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.UAPSDEnable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.UAPSDSupported",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WEPEncryptionLevel",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WEPKey",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WEPKeyIndex",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WMMEnable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WMMSupported",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WPAAuthenticationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WPAEncryptionModes",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WPS",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_AdvanceConf",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_AssociateNum",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_AttachConf",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_HT20",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_Mode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_PowerValue",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RFBand",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RadiuServer",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RadiusKey",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RadiusPort",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RetryTimeout",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_Service",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_Standard",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_SupportedStandards",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_VLAN",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WPAand11iAuthenticationMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WPAand11iEncryptionModes",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WPSKeyWord",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WebVisibility",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WorkMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_IEEE80211wEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WiFi",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnectionNumberOfEntries",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnectionNumberOfEntries",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection",
+      "object": true,
+      "writable": null,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.AddressingType",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.AutoDisconnectTime",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.ConnectionStatus",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.ConnectionTrigger",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.ConnectionType",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.DHCPClient",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.DNSEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.DNSOverrideAllowed",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.DNSServers",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.DefaultGateway",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.Enable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.IdleDisconnectTime",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.LastConnectionError",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.MACAddressOverride",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.MaxMTUSize",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.NATEnabled",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.Name",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.PortMapping",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.PortMappingNumberOfEntries",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.PossibleConnectionTypes",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.RSIPAvailable",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.Reset",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.RouteProtocolRx",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.ShapingBurstSize",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.ShapingRate",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.Stats",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.SubnetMask",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.Uptime",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.WarnDisconnectDelay",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_6RDTunnel",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_ClientID",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_DDNSConfiguration",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_DHCPOPTION125",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_DHCPServer",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_DMZ",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_DefaultPri",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_Dnsv4ProxyForV6",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_DscpToPbitTbl",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_ExServiceList",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_ExtendDHCPOPTION60",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPArpEcho",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPArpEnable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPArpRetry",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPv4Enable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPv6",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPv6Enable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPv6LLA",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPv6MultiCastVLAN",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPv6OPTION16",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPv6OPTION17",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_IPv6_PortForwardNumberOfEntries",
+      "object": false,
+      "writable": false,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_LANBIND",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_LowerLayers",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_MultiCastVLAN",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_NPTv6Enable",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_NatType",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_PRI",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_PortTrigger",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_PriPolicy",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_RouteProtocolAuthKey",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_RouteProtocolAuthMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_RouteProtocolRxMode",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_SERVICELIST",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_UpstreamWAN",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_VLAN",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.X_HW_VenderClassID",
+      "object": false,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.X_HW_PPPOE_EMLUATOR",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.X_HW_PPPoE_BridgeWAN_AutoEmulator",
+      "object": true,
+      "writable": true,
+      "type": null
+    },
+    {
+      "path": "InternetGatewayDevice.X_HW_WiFiDiagnostic",
+      "object": true,
+      "writable": true,
+      "type": null
+    }
+  ],
+  "parameters": [
+    {
+      "path": "InternetGatewayDevice.DeviceInfo.HardwareVersion",
+      "value": "46AD.D",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": null,
+      "timestamp": "2026-10-27T20:32:31.481Z"
+    },
+    {
+      "path": "InternetGatewayDevice.DeviceInfo.ProvisioningCode",
+      "value": "[VALUE_WITHHELD]",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": null,
+      "timestamp": "2026-10-27T20:32:31.481Z"
+    },
+    {
+      "path": "InternetGatewayDevice.DeviceInfo.SoftwareVersion",
+      "value": "V5R023C00S342",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": null,
+      "timestamp": "2026-10-27T20:32:31.481Z"
+    },
+    {
+      "path": "InternetGatewayDevice.DeviceInfo.SpecVersion",
+      "value": "[VALUE_WITHHELD]",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": null,
+      "timestamp": "2026-10-27T20:32:31.481Z"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase",
+      "value": "[REDACTED]",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": true,
+      "timestamp": "2026-10-27T19:45:10.554Z"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID",
+      "value": "RAYCO 18",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": true,
+      "timestamp": "2026-10-27T19:45:10.554Z"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.KeyPassphrase",
+      "value": "[REDACTED]",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": true,
+      "timestamp": "2026-10-27T19:45:10.554Z"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID",
+      "value": "WirelessNet-5G",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": true,
+      "timestamp": "2026-10-27T19:45:10.554Z"
+    },
+    {
+      "path": "InternetGatewayDevice.ManagementServer.ConnectionRequestURL",
+      "value": "[VALUE_WITHHELD]",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": true,
+      "timestamp": "2026-10-27T20:32:31.481Z"
+    },
+    {
+      "path": "InternetGatewayDevice.ManagementServer.PeriodicInformEnable",
+      "value": "[VALUE_WITHHELD]",
+      "hasCachedValue": true,
+      "type": "xsd:boolean",
+      "writable": true,
+      "timestamp": "2026-10-27T19:45:10.560Z"
+    },
+    {
+      "path": "InternetGatewayDevice.ManagementServer.PeriodicInformInterval",
+      "value": 300,
+      "hasCachedValue": true,
+      "type": "xsd:unsignedInt",
+      "writable": true,
+      "timestamp": "2026-10-27T19:45:10.561Z"
+    },
+    {
+      "path": "InternetGatewayDevice.ManagementServer.PeriodicInformTime",
+      "value": "[VALUE_WITHHELD]",
+      "hasCachedValue": true,
+      "type": "xsd:dateTime",
+      "writable": true,
+      "timestamp": "2026-10-27T19:45:10.561Z"
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.ExternalIPAddress",
+      "value": "10.15.15.200",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": true,
+      "timestamp": "2026-10-27T20:32:31.481Z"
+    },
+    {
+      "path": "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.2.WANIPConnection.1.MACAddress",
+      "value": "[VALUE_WITHHELD]",
+      "hasCachedValue": true,
+      "type": "xsd:string",
+      "writable": false,
+      "timestamp": "2026-10-27T19:45:10.546Z"
+    }
+  ]
+}

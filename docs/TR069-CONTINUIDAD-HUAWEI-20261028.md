@@ -104,6 +104,12 @@ y `deriveTr069EnableStatus(...)` ya deriva `'conectado'` con el
 
 ## 7. Pendiente
 
+Diagnóstico posterior de administración, solo lectura (27/10): árbol cacheado
+`InternetGatewayDevice`, WLAN 1/5 con SSID y KeyPassphrase; Enable/seguridad/bandas
+sin valores, WANPPPConnection anunciado sin instancia legible. Escritura no
+probada. Preparar guardas locales antes de la primera prueba; detalles y
+evidencia en [TR069-ADMINISTRACION-HUAWEI-SOLO-LECTURA-20261027.md](TR069-ADMINISTRACION-HUAWEI-SOLO-LECTURA-20261027.md).
+
 1. Autorizar una prueba controlada aparte de modificación de WiFi desde
    SmartRayco en `HWTC1D3691B7`, acordando el cambio y su reversión.
 2. En esa futura prueba, comprobar que el cambio se aplica realmente y que
@@ -135,3 +141,7 @@ en solo lectura confirmó `origin/main` en `88dec40` y la rama remota
 retoma). Se conserva `main` local, sin fusionar ramas ni sobrescribir cambios
 ajenos. La confirmación visual se guarda en un nuevo commit documental local;
 su publicación requiere autorización expresa del propietario antes de un push.
+La publicación de `1ae1603` fue posteriormente autorizada y completada en
+`docs/tr069-continuidad-confirmada-20261027`, sin modificar `origin/main`
+(`88dec40`). El diagnóstico de administración posterior se guarda solo local,
+sin nuevo push ni merge y sin resolver la divergencia.

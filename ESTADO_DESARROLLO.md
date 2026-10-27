@@ -75,7 +75,19 @@ desde Claude que `HWTC1D3691B7` muestra «TR-069: Conectado», que
 línea. Es evidencia aportada por el propietario; en esta retoma no se
 hicieron nuevas consultas ni cambios productivos.
 
-**Pendiente:** prueba controlada de modificación de WiFi desde SmartRayco
+**Diagnóstico de administración posterior (27/10, solo lectura):** GET de caché
+GenieACS confirmó `InternetGatewayDevice`, SSID y KeyPassphrase en WLAN 1/5,
+con `_writable=true` anunciado pero escritura sin probar. Enable, banda y
+seguridad tienen nombres sin valores; WANPPPConnection está anunciado sin
+instancia ni usuario PPPoE legible. No inferir bandas por índice/SSID. La lectura
+WiFi actual filtra Enable=true y ocultaría ambas redes. Faltan identidad
+normalizada en administración, validación de path/contrato exacto, roles solo
+ADMIN/SUPERADMIN también en proxy y operaciones WiFi/PPPoE separadas. El botón
+de administración actual abre configuración ACS en OLT, no WiFi. Sin tareas
+ni cambios productivos; evidencia, límites y procedimiento reversible en
+`docs/TR069-ADMINISTRACION-HUAWEI-SOLO-LECTURA-20261027.md`.
+
+**Pendiente:** preparar guardas locales y prueba controlada de modificación de WiFi desde SmartRayco
 sobre esta misma ONT, todavía no intentada ni autorizada. Antes de ejecutarla,
 acordar el cambio y su reversión; después, comprobar su aplicación real y
 la continuidad de internet/PPPoE. La conexión TR-069 y el botón habilitado

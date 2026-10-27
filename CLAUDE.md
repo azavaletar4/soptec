@@ -69,7 +69,16 @@ Esta evidencia no implica que se haya probado modificar WiFi.
 **Pendiente**: autorizar una prueba controlada aparte de cambio de WiFi desde
 SmartRayco sobre esta ONT, acordar el cambio y su reversión, y comprobar su
 aplicación real y la continuidad de internet/PPPoE. No intentada todavía.
-Esta retoma es solo documental, sin nuevas consultas ni cambios productivos.
+La retoma de confirmación visual (`1ae1603`) fue solo documental.
+**Diagnóstico posterior de administración, solo lectura (27/10):** GET de caché
+GenieACS confirma raíz `InternetGatewayDevice`, SSID/KeyPassphrase en WLAN 1 y
+5; `_writable=true` no acredita escritura probada. Enable, banda y seguridad
+sin valores; WANPPPConnection anunciado sin instancia/usuario legible. La lectura
+WiFi actual exige Enable=true y oculta estas redes. Antes de probar: identidad
+normalizada en administración, path validado, contrato exacto, solo ADMIN/SUPERADMIN
+(incluido proxy) y operación WiFi separada de PPPoE. «Administrar TR-069» aún abre
+asignación de ACS en OLT. Sin cambios productivos ni tareas de GenieACS.
+Detalle y preparación reversible: `docs/TR069-ADMINISTRACION-HUAWEI-SOLO-LECTURA-20261027.md`.
 Detalle completo y consolidado:
 [TR069-CONTINUIDAD-HUAWEI-20261028.md](docs/TR069-CONTINUIDAD-HUAWEI-20261028.md).
 Equipos seriados, custodia, devoluciones, Asistencia y Puntos permanecen
