@@ -1,11 +1,14 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import type { WifiInventory, WifiSsidPlan } from '@/lib/tr069WifiPlan';
 import type { WifiTrialStatus } from '@/lib/tr069WifiTrial';
 export type { WifiNetwork } from '@/lib/tr069WifiPlan';
 import type { OltTr069AcsProfile, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
+import type { Tr069InventorySnapshot } from '@/types/tr069Inventory';
+import { partitionTr069Inventory, validateTr069Snapshot } from '@/lib/tr069Inventory';
+import { readAllClientPages } from '@/lib/clientLifecycle';
 
 export interface DeviceChangeResult {
   ok: boolean;
@@ -23,24 +26,42 @@ export interface DeviceChangeResult {
 // genieacsSync.ts) solo se usa para lo que requiere contactar al NBI de
 // GenieACS (sincronizar, recolectar metricas).
 export const useTr069Store = defineStore('tr069', () => {
-  const devices = ref<Tr069Device[]>([]);
+  const cachedDevices = ref<Tr069Device[]>([]);
+  const inventory = ref<Tr069InventorySnapshot | null>(null);
+  const inventoryWarning = ref<string | null>(null);
+  const partition = computed(() => partitionTr069Inventory(cachedDevices.value, inventory.value));
+  const devices = computed(() => partition.value.current);
+  const historicalDevices = computed(() => partition.value.historical);
+  const unverifiedDevices = computed(() => partition.value.unverified);
+  let requestGeneration = 0;
   const loading = ref(false);
   const error = ref<string | null>(null);
   const syncing = ref(false);
 
   async function fetchDevices() {
+    const generation = ++requestGeneration;
     loading.value = true;
     error.value = null;
-    const { data, error: err } = await supabase
-      .from('tr069_devices')
-      .select('*, contracts:service_contracts(id, contract_number)')
-      .order('last_seen_at', { ascending: false, nullsFirst: false });
-    loading.value = false;
-    if (err) {
-      error.value = err.message;
-      throw err;
+    // Resultados independientes: perder la caché no debe fingir cero CPE en NBI,
+    // y perder NBI nunca convierte registros guardados en retirados.
+    const [cacheResult, liveResult] = await Promise.allSettled([
+      readAllClientPages<Tr069Device>((from, to) => supabase.from('tr069_devices')
+        .select('*, contracts:service_contracts(id, contract_number)', { count: 'exact' })
+        .order('id').range(from, to)),
+      apiFetch<Tr069InventorySnapshot>('/api/tr069-sync/inventory', {}, 35_000).then(validateTr069Snapshot),
+    ]);
+    if (generation !== requestGeneration) return;
+    if (cacheResult.status === 'fulfilled') cachedDevices.value = cacheResult.value;
+    if (liveResult.status === 'fulfilled') {
+      inventory.value = liveResult.value;
+      inventoryWarning.value = null;
+    } else {
+      inventoryWarning.value = inventory.value
+        ? 'No se pudo actualizar GenieACS. Se conserva la última comprobación; no se confirma ninguna retirada nueva.'
+        : 'No se pudo comprobar GenieACS. Los registros guardados tienen presencia sin verificar.';
     }
-    devices.value = (data ?? []) as unknown as Tr069Device[];
+    if (cacheResult.status === 'rejected') error.value = 'No se pudieron consultar las asociaciones e históricos guardados. Se conserva la información anterior.';
+    loading.value = false;
   }
 
   async function fetchLatestMetric(tr069DeviceId: string) {
@@ -63,17 +84,19 @@ export const useTr069Store = defineStore('tr069', () => {
       .select('*, contracts:service_contracts(id, contract_number)')
       .single();
     if (err) throw err;
-    const idx = devices.value.findIndex((d) => d.id === tr069DeviceId);
-    if (idx !== -1) devices.value[idx] = data as unknown as Tr069Device;
+    const idx = cachedDevices.value.findIndex((d) => d.id === tr069DeviceId);
+    if (idx !== -1) cachedDevices.value[idx] = data as unknown as Tr069Device;
     return data as unknown as Tr069Device;
   }
 
   async function triggerSync() {
     syncing.value = true;
     try {
-      return await apiFetch<{ ok: boolean; synced: number; created: number; total: number }>('/api/tr069-sync', {
+      const result = await apiFetch<{ ok: boolean; synced: number; created: number; total: number; inventory: Tr069InventorySnapshot }>('/api/tr069-sync', {
         method: 'POST',
       });
+      // La vista refresca inventario y caché con el mismo control de respuestas tardías.
+      return result;
     } finally {
       syncing.value = false;
     }
@@ -172,6 +195,10 @@ export const useTr069Store = defineStore('tr069', () => {
     prepareWifiSsid: (serial: string, payload: { deviceId: string; path: string; ssid: string; expectedSsid: string; expectedTimestamp: string; confirmed: boolean }) =>
       apiFetch<WifiSsidPlan>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}/prepare`, { method: 'POST', body: JSON.stringify(payload) }),
     devices,
+    inventory,
+    inventoryWarning,
+    historicalDevices,
+    unverifiedDevices,
     loading,
     error,
     syncing,

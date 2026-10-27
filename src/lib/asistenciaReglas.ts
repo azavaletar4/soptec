@@ -10,16 +10,13 @@ import type { AsistenciaEstado, AsistenciaRegistro, CompanySettings } from '@/ty
 
 /** 0 = domingo ... 6 = sabado, en hora de Peru (America/Lima) — mismo criterio que el servidor. */
 export function diaSemanaLima(date = new Date()): number {
-  const lima = new Date(date.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-  return lima.getDay();
+  return new Date(`${fechaLimaISO(date)}T00:00:00Z`).getUTCDay();
 }
 
 export function fechaLimaISO(date = new Date()): string {
-  const lima = new Date(date.toLocaleString('en-US', { timeZone: 'America/Lima' }));
-  const yyyy = lima.getFullYear();
-  const mm = String(lima.getMonth() + 1).padStart(2, '0');
-  const dd = String(lima.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const value = (type: string) => parts.find(p => p.type === type)!.value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 export function esDiaLaborable(dow: number, feriadosHoy: boolean): boolean {
@@ -45,18 +42,24 @@ export const ESTADO_BADGE_CLASS: Record<AsistenciaEstado, string> = {
 
 export function formatHora(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
+}
+
+/** Fecha y hora real del evento (nunca la de renderizado), siempre en horario de Peru. */
+export function formatFechaHora(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'medium', timeStyle: 'short' });
 }
 
 /** Fechas ISO (YYYY-MM-DD) laborables entre desde/hasta inclusive — excluye domingos y feriados, usado para calcular faltas del reporte mensual. */
 export function diasLaborablesEnRango(desde: string, hasta: string, feriadosSet: Set<string>): string[] {
   const dias: string[] = [];
-  const cursor = new Date(`${desde}T00:00:00`);
-  const fin = new Date(`${hasta}T00:00:00`);
+  const cursor = new Date(`${desde}T00:00:00Z`);
+  const fin = new Date(`${hasta}T00:00:00Z`);
   while (cursor <= fin) {
     const iso = cursor.toISOString().slice(0, 10);
-    if (cursor.getDay() !== 0 && !feriadosSet.has(iso)) dias.push(iso);
-    cursor.setDate(cursor.getDate() + 1);
+    if (cursor.getUTCDay() !== 0 && !feriadosSet.has(iso)) dias.push(iso);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dias;
 }

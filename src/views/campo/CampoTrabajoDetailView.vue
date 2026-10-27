@@ -38,6 +38,7 @@ import { saveDraft, loadDraft, clearDraft } from '@/lib/formDrafts';
 import { MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { mapsLink, telLink, waLink, wazeLink } from '@/lib/phone';
+import { fieldOrderLocation, isOrderContract } from '@/lib/fieldOrderLocation';
 import { countOcupadosReales } from '@/lib/napOccupancy';
 import {
   isTrasladoServicioRoutine,
@@ -200,12 +201,9 @@ const trabajoDescripcion = computed(() => {
   return jobType === 'installation' ? (raw as Installation).notes : (raw as Ticket).description;
 });
 
-// El GPS de la instalacion (Fase 38) vive en el contrato, no en el cliente —
-// importante en clientes con 2+ servicios, para no mostrarle al tecnico la
-// ubicacion de la casa equivocada. Si el contrato todavia no tiene GPS
-// propio (linea vieja sin backfill), cae a la ficha del cliente y despues al
-// join de instalaciones/tickets como ultimo respaldo.
-const gps = computed(() => {
+// Compatibilidad para órdenes sin contrato: conservar su resolución anterior.
+// Con contrato explícito, fieldOrderLocation usa solo su propio par GPS completo.
+const legacyGps = computed(() => {
   const lat = activeContract.value?.latitude ?? clientDetail.value?.latitude ?? trabajo.value?.latitude ?? null;
   const lng = activeContract.value?.longitude ?? clientDetail.value?.longitude ?? trabajo.value?.longitude ?? null;
   return lat != null && lng != null ? { lat, lng } : null;
@@ -217,6 +215,15 @@ const gps = computed(() => {
 const clientDetail = ref<Client | null>(null);
 const activeContract = ref<ServiceContract | null>(null);
 const loadingClientInfo = ref(false);
+// Solo la ficha visible y la navegación: conservar el contexto técnico existente.
+const displayContract = computed(() => trabajo.value?.contractId
+  ? (isOrderContract(trabajo.value, activeContract.value) ? activeContract.value : null)
+  : activeContract.value);
+const fieldLocation = computed(() => fieldOrderLocation(
+  trabajo.value ?? { clientId: null, contractId: null, direccion: null },
+  clientDetail.value, activeContract.value, legacyGps.value,
+));
+const gps = computed(() => fieldLocation.value.gps);
 
 async function loadClientInfo(clientId: string) {
   loadingClientInfo.value = true;
@@ -1830,7 +1837,14 @@ async function handleCloseSubmit() {
           {{ jobType === 'installation' ? 'Instalación' : jobType === 'routine' ? 'Rutina' : 'Avería' }}
         </span>
         <p class="font-semibold">{{ trabajo.clienteNombre }}</p>
-        <p v-if="trabajo.direccion" class="text-xs text-slate-500 mt-0.5">{{ trabajo.direccion }}</p>
+        <div data-field-order-location class="text-xs mt-1 min-w-0 break-words">
+          <p v-if="trabajo.contractId && displayContract" class="font-semibold text-slate-700">Contrato: {{ fieldLocation.contractNumber || 'Sin código registrado' }}</p>
+          <p v-if="fieldLocation.address" class="text-slate-600 mt-0.5">{{ fieldLocation.address }}</p>
+          <p v-if="fieldLocation.source === 'contract'" class="text-slate-500">Dirección del contrato seleccionado</p>
+          <p v-else-if="fieldLocation.source === 'client'" class="text-slate-500">{{ fieldLocation.address ? 'Dirección general del cliente: el contrato no tiene dirección registrada.' : 'Sin dirección registrada en el contrato ni en la ficha del cliente.' }}</p>
+          <p v-else-if="fieldLocation.source === 'unavailable' && !loadingClientInfo" class="text-amber-700">No se pudo verificar la ubicación del contrato de esta orden. Solicita su revisión antes de dirigirte al servicio.</p>
+          <p v-if="trabajo.contractId && displayContract && !gps" class="text-slate-500 mt-0.5">Sin GPS completo registrado en este contrato.</p>
+        </div>
         <p v-if="trabajoDescripcion" class="text-xs text-slate-600 mt-2">{{ trabajoDescripcion }}</p>
 
         <div class="grid grid-cols-2 gap-2 mt-3">
@@ -1853,7 +1867,7 @@ async function handleCloseSubmit() {
           <dd v-if="clientDetail.email" class="text-slate-700 text-right truncate">{{ clientDetail.email }}</dd>
 
           <dt class="text-slate-400">Zona</dt>
-          <dd class="text-slate-700 text-right">{{ activeContract?.zones?.name ?? '—' }}</dd>
+          <dd class="text-slate-700 text-right">{{ displayContract?.zones?.name ?? '—' }}</dd>
 
           <dt class="text-slate-400">GPS registrado</dt>
           <dd class="text-right font-mono">
@@ -1863,24 +1877,24 @@ async function handleCloseSubmit() {
             <span v-else class="text-slate-700">Sin registrar</span>
           </dd>
 
-          <template v-if="activeContract">
+          <template v-if="displayContract">
             <dt class="text-slate-400">Contrato</dt>
-            <dd class="text-slate-700 text-right font-mono">{{ activeContract.contract_number ?? '—' }}</dd>
+            <dd class="text-slate-700 text-right font-mono">{{ displayContract.contract_number ?? '—' }}</dd>
 
             <dt class="text-slate-400">Plan</dt>
             <dd class="text-slate-700 text-right">
-              {{ activeContract.plans?.name ?? '—' }}
-              <span v-if="activeContract.plans" class="text-slate-400">({{ activeContract.plans.download_speed }}/{{ activeContract.plans.upload_speed }} Mbps)</span>
+              {{ displayContract.plans?.name ?? '—' }}
+              <span v-if="displayContract.plans" class="text-slate-400">({{ displayContract.plans.download_speed }}/{{ displayContract.plans.upload_speed }} Mbps)</span>
             </dd>
 
             <dt class="text-slate-400">Usuario PPPoE</dt>
-            <dd class="text-slate-700 text-right font-mono">{{ activeContract.pppoe_username ?? '—' }}</dd>
+            <dd class="text-slate-700 text-right font-mono">{{ displayContract.pppoe_username ?? '—' }}</dd>
 
-            <dt v-if="activeContract.mikrotik_profile" class="text-slate-400">Perfil MikroTik</dt>
-            <dd v-if="activeContract.mikrotik_profile" class="text-slate-700 text-right">{{ activeContract.mikrotik_profile }}</dd>
+            <dt v-if="displayContract.mikrotik_profile" class="text-slate-400">Perfil MikroTik</dt>
+            <dd v-if="displayContract.mikrotik_profile" class="text-slate-700 text-right">{{ displayContract.mikrotik_profile }}</dd>
 
-            <dt v-if="activeContract.xui_username" class="text-slate-400">Usuario IPTV</dt>
-            <dd v-if="activeContract.xui_username" class="text-slate-700 text-right font-mono">{{ activeContract.xui_username }}</dd>
+            <dt v-if="displayContract.xui_username" class="text-slate-400">Usuario IPTV</dt>
+            <dd v-if="displayContract.xui_username" class="text-slate-700 text-right">{{ displayContract.xui_username }}</dd>
           </template>
         </dl>
         <p v-else class="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">Sin ficha adicional disponible.</p>

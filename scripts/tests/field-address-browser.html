@@ -1,0 +1,58 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"></div>
+<script type="module">
+// Vista real, API ficticia, sin backend ni conexiones a producción.
+import '/src/style.css';
+import { createApp } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory, RouterView } from 'vue-router';
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const actor=id(1),job=id(2),client=id(3);
+const query=new URLSearchParams(location.search), type=query.get('type')||'installation', scenario=query.get('case')||'second';
+const target=scenario==='third'?6:5;
+const person={id:client,first_name:'Cliente',last_name:'Ficticio',phone:null,phone_2:null,email:null,address:'Domicilio general ficticio',latitude:-11,longitude:-76,document_type:'dni',document_number:'00000000'};
+const services=[4,5,6].map((n,i)=>({id:id(n),client_id:client,contract_number:`CTR-TEST-00${i+1}`,status:'active',client_code:`TEST-${i+1}`,installation_address:['Primer domicilio ficticio','Segundo domicilio ficticio','Tercer domicilio ficticio'][i],latitude:-12-i/10,longitude:-77-i/10,plans:null,zones:null}));
+const selected=services.find(c=>c.id===id(target));
+if(scenario==='fallback')selected.installation_address='   ';
+if(scenario==='no-gps')selected.latitude=null;
+if(scenario==='missing')services.splice(services.indexOf(selected),1);
+if(scenario==='wrong-client')selected.client_id=id(99);
+const contractId=scenario==='no-contract'?null:id(target);
+window.__calls=[];window.__writes=[];window.__release=null;
+window.EventSource=class {addEventListener(){} close(){}};
+const realFetch=window.fetch.bind(window);
+window.fetch=async(input,init={})=>{
+ const url=new URL(typeof input==='string'?input:input.url,location.href),method=init.method??'GET';
+ if(url.origin===location.origin&&!url.pathname.startsWith('/api/'))return realFetch(input,init);
+ const name=url.pathname.split('/').at(-1);window.__calls.push({path:url.pathname,query:url.search,method});
+ const json=(v,status=200)=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json'}});
+ if(!['GET','HEAD'].includes(method)){
+  if(name==='my_field_order_points')return json({jobPoints:4,personalPoints:2,crewSize:2,status:'resolved'});
+  if(name==='my_inventory_custody')return json({units:[],materials:[],pendingReturnRequests:[]});
+  window.__writes.push({path:url.pathname,method});throw Error('Escritura bloqueada en la prueba');
+ }
+ if(url.pathname.startsWith('/api/campo-inventory/'))return json({context:{jobType:type,jobId:job,actorId:actor,clientId:client,contractId},items:[],next:null});
+ if(url.pathname.startsWith('/api/'))return json({error:'Fuera del escenario'},503);
+ if(name==='clients')return json(person);
+ if(name==='service_contracts'){
+  if(scenario==='delayed')await new Promise(r=>window.__release=r);
+  if(scenario==='failed')return json({message:'Fallo ficticio de consulta'},403);
+  return json(services);
+ }
+ if(name==='job_assignees')return json([{job_type:type,job_id:job,technician_id:actor,role:'leader',profile:{full_name:'Técnico ficticio'}}]);
+ return json([]);
+};
+const pinia=createPinia();setActivePinia(pinia);
+const {useAuthStore}=await import('/src/stores/auth.ts');const auth=useAuthStore();auth.user={id:actor};auth.role='TECNICO_RED';auth.loading=false;
+const {supabase}=await import('/src/lib/supabase.ts');
+supabase.auth.getSession=async()=>({data:{session:{access_token:'synthetic-session'}},error:null});
+supabase.channel=()=>({on(){return this;},subscribe(){return this;}});supabase.removeChannel=async()=> 'ok';
+await new Promise((resolve,reject)=>{const r=indexedDB.open('smartrayco-campo',1);r.onupgradeneeded=()=>{for(const s of ['closures','drafts'])if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s);};r.onsuccess=()=>{r.result.close();resolve();};r.onerror=reject;});
+const raw={id:job,client_id:client,contract_id:contractId,assigned_to:actor,status:type==='ticket'?'resolved':'completed',clients:person,title:'Orden ficticia',created_at:'2026-10-27T10:00:00Z',scheduled_date:null,direccion_destino:'Destino original de rutina',tipo_rutina:'mantenimiento',subtipo:null};
+if(type==='installation'){const {useInstallationsStore}=await import('/src/stores/installations.ts');useInstallationsStore().installations=[raw];}
+if(type==='ticket'){const {useTicketsStore}=await import('/src/stores/tickets.ts');useTicketsStore().tickets=[raw];}
+if(type==='routine'){const {useRoutinesStore}=await import('/src/stores/routines.ts');useRoutinesStore().routines=[raw];}
+const {default:View}=await import('/src/views/campo/CampoTrabajoDetailView.vue');
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/campo/:tipo/:id',component:View}]});await router.push(`/campo/${type}/${job}`);await router.isReady();
+const app=createApp(RouterView).use(pinia).use(router);app.mount('#app');
+window.__ready=true;window.__unmount=()=>app.unmount();
+</script></body></html>

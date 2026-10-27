@@ -1,0 +1,168 @@
+{
+  "source": "8968e69",
+  "base": "734c180",
+  "files": [
+    {
+      "name": "src/components/asistencia/AsistenciaPanel.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/components/asistencia/AusenciasPanel.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/components/asistencia/HorariosPersonalesPanel.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/components/asistencia/IntercambiosPanel.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/components/asistencia/NovedadesPanel.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/components/campo/CampoJobPoints.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/components/layout/AppLayout.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/__tests__/asistenciaAusencias.test.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/__tests__/asistenciaHorariosPersonales.test.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/__tests__/asistenciaIntercambios.test.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/__tests__/asistenciaNovedades.test.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/__tests__/fieldOrderLocation.test.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/asistenciaAusencias.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/asistenciaHorariosPersonales.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/asistenciaIntercambios.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/asistenciaNovedades.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/asistenciaReglas.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/fieldOrderLocation.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/lib/tr069Inventory.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/stores/asistencia.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/types/domain.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/types/tr069Inventory.ts",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/views/asistencia/AsistenciaView.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/views/campo/CampoTrabajoDetailView.vue",
+      "source": "8968e69"
+    },
+    {
+      "name": "src/stores/tr069.ts",
+      "source": "8968e69",
+      "threeWayBase": "734c180",
+      "conflicts": 0
+    },
+    {
+      "name": "src/views/tr069/Tr069View.vue",
+      "source": "8968e69",
+      "threeWayBase": "734c180",
+      "conflicts": 0
+    }
+  ],
+  "testFiles": [
+    "scripts/tests/field-address-browser.html",
+    "scripts/tests/field-address-browser.mjs",
+    "scripts/tests/november-points-browser.mjs",
+    "server/tests/asistenciaA0A1.browser.test.cjs",
+    "server/tests/asistenciaA0A1.test.cjs",
+    "server/tests/asistenciaA2HorariosPersonales.browser.test.cjs",
+    "server/tests/asistenciaA2HorariosPersonales.test.cjs",
+    "server/tests/asistenciaA2Novedades.browser.test.cjs",
+    "server/tests/asistenciaA2Novedades.test.cjs",
+    "server/tests/asistenciaA2Rollback.test.cjs",
+    "server/tests/asistenciaA3Intercambios.browser.test.cjs",
+    "server/tests/asistenciaA3Intercambios.test.cjs",
+    "server/tests/asistenciaTabs.browser.test.cjs",
+    "server/tests/fixtures/asistencia-a0-a1.html",
+    "server/tests/fixtures/asistencia-a2-horarios-personales.html",
+    "server/tests/fixtures/asistencia-a2-novedades.html",
+    "server/tests/fixtures/asistencia-a3.html",
+    "server/tests/fixtures/asistencia-tabs.html"
+  ],
+  "production": {
+    "frontend": "sha256:902b127b24626500b41463c79010561856a4016cb16fb7605b50d68946780958",
+    "backend": "sha256:b3d27b540141954bf5164bb2b716bcd98f0bd973dc8fabf3caa099233580f9eb",
+    "frontendTag": "smartrayco-tr069enable:516faba-20261027T181713Z"
+  },
+  "recoveredRuntime": [
+    "index.ts",
+    "services/debtHoldService.ts",
+    "routes/tr069sync.ts",
+    "services/tr069Inventory.ts",
+    "services/trafficAnalyticsService.ts"
+  ],
+  "preservedTrialBase": "3c6b085",
+  "branches": [
+    "diagnostico/tr069-genieacs-readonly",
+    "feature/asistencia-a2-local",
+    "feature/asistencia-a3-local",
+    "fix/puntos-noviembre-local",
+    "fix/campo-direccion-contrato-local"
+  ],
+  "featureCommits": [
+    "263f66e",
+    "070c777",
+    "3cecefa",
+    "a0d832b",
+    "71944f5",
+    "233f230",
+    "ff3077f",
+    "fc9047f",
+    "30bbb54",
+    "0480b3a",
+    "7105679",
+    "16831c6"
+  ]
+}

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useAsistenciaStore } from '@/stores/asistencia';
+import { useAuthStore } from '@/stores/auth';
+import { exentoDeAsistencia } from '@/lib/asistenciaAusencias';
 import {
   diaSemanaLima,
   esDiaLaborable,
@@ -11,6 +13,12 @@ import {
   horaIngresoEsperadaLabel,
 } from '@/lib/asistenciaReglas';
 import { getErrorMessage } from '@/lib/errors';
+import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
+import NovedadesPanel from '@/components/asistencia/NovedadesPanel.vue';
+import HorariosPersonalesPanel from '@/components/asistencia/HorariosPersonalesPanel.vue';
+import { horarioPersonalDeDia } from '@/lib/asistenciaHorariosPersonales';
+import IntercambiosPanel from '@/components/asistencia/IntercambiosPanel.vue';
+import { fetchIntercambios, type Intercambio } from '@/lib/asistenciaIntercambios';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 
 // Widget de marcacion de jornada (Fase 117) — un solo componente compartido
@@ -18,28 +26,48 @@ import ConfirmModal from '@/components/ConfirmModal.vue';
 // Web (resto del staff): misma logica de GPS/cronometro en un solo lugar en
 // vez de duplicarla en dos pantallas.
 const store = useAsistenciaStore();
+const auth = useAuthStore();
+const exento = computed(() => exentoDeAsistencia(auth.role));
 const loading = ref(false);
 const actionError = ref<string | null>(null);
 const actionNotice = ref<string | null>(null);
 
+const intercambios = ref<Intercambio[]>([]);
+const calendarioListo = ref(false);
+const hoyLima = computed(() => fechaLimaISO(new Date(now.value)));
+const intercambioHoy = computed(() => intercambios.value.find(i => i.user_id === auth.user?.id && i.estado === 'activo' && [i.fecha_descanso, i.fecha_trabajo].includes(hoyLima.value)));
+async function cargarIntercambios() {
+  calendarioListo.value = false;
+  try { intercambios.value = await fetchIntercambios(); calendarioListo.value = true; actionError.value = null; }
+  catch (e) { actionError.value = getErrorMessage(e, 'No se pudo cargar su calendario. Reintente antes de marcar.'); }
+}
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
+  if (exento.value) return;
   timer = setInterval(() => {
     now.value = Date.now();
   }, 1000);
-  await Promise.all([store.fetchSettings(), store.fetchFeriados(), store.fetchHoy()]);
+  await Promise.all([store.fetchSettings(), store.fetchFeriados(), store.fetchHoy(), store.fetchHorariosPersonales(), cargarIntercambios()]);
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
 
-const dow = computed(() => diaSemanaLima());
-const esFeriadoHoy = computed(() => store.feriados.some((f) => f.fecha === fechaLimaISO()));
-const laborable = computed(() => esDiaLaborable(dow.value, esFeriadoHoy.value));
+const dow = computed(() => diaSemanaLima(new Date(now.value)));
+const esFeriadoHoy = computed(() => store.feriados.some((f) => f.fecha === hoyLima.value));
+const laborable = computed(() => calendarioListo.value && (intercambioHoy.value ? intercambioHoy.value.fecha_trabajo === hoyLima.value : esDiaLaborable(dow.value, esFeriadoHoy.value)));
 const esLunes = computed(() => dow.value === 1);
-const horaEsperada = computed(() => (store.settings ? horaIngresoEsperadaLabel(store.settings, dow.value) : '—'));
+// Si hay un horario personal recurrente para hoy (ej. sabado media jornada),
+// manda sobre el horario general de la compañia — nunca se inventa una hora,
+// es exactamente la que SUPERADMIN configuro en "Horarios parciales habituales".
+const horarioPersonalHoy = computed(() => horarioPersonalDeDia(store.horariosPersonales, dow.value));
+const horaEsperada = computed(() => {
+  if (intercambioHoy.value?.fecha_trabajo === hoyLima.value) return intercambioHoy.value.hora_ingreso.slice(0, 5);
+  if (horarioPersonalHoy.value) return horarioPersonalHoy.value.hora_ingreso.slice(0, 5);
+  return store.settings ? horaIngresoEsperadaLabel(store.settings, dow.value) : '—';
+});
 
 function getPosition(): Promise<GeolocationPosition | null> {
   return new Promise((resolve) => {
@@ -139,18 +167,25 @@ function formatCountdown(ms: number): string {
 </script>
 
 <template>
-  <div class="surface p-3.5">
+  <p v-if="exento" class="text-sm">SUPERADMIN está exento del control de asistencia. Gestiona solicitudes y configuración desde Control de Asistencia.</p>
+  <div v-else class="surface p-3.5">
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-sm font-semibold">🕐 Marcación de Jornada</h2>
       <span v-if="store.hoy" class="badge text-[10px]" :class="ESTADO_BADGE_CLASS[store.hoy.estado]">{{ store.hoy.estado }}</span>
     </div>
 
-    <p v-if="!laborable" class="text-xs text-slate-500">
+    <p v-if="!calendarioListo" role="alert" class="text-xs text-red-600">No se pudo confirmar su calendario. <button class="btn-secondary" @click="cargarIntercambios">Reintentar</button></p>
+    <p v-else-if="intercambioHoy?.fecha_descanso === hoyLima" class="text-xs text-indigo-700">Descanso autorizado por intercambio. Compensas el {{ intercambioHoy.fecha_trabajo }}.</p>
+    <p v-else-if="!laborable" class="text-xs text-slate-500">
       {{ esFeriadoHoy ? '📅 Hoy es feriado — no hay marcación de jornada.' : '📅 Hoy domingo — no hay marcación de jornada.' }}
     </p>
 
     <template v-else>
-      <p v-if="esLunes" class="text-xs font-medium text-sky-700 bg-sky-500/10 rounded-lg px-2.5 py-1.5 mb-3">
+      <p v-if="intercambioHoy?.fecha_trabajo === hoyLima" class="text-xs text-indigo-700 mb-3">Jornada compensatoria autorizada — Ingreso {{ horaEsperada }}, salida {{ intercambioHoy.hora_salida.slice(0, 5) }}. Descanso vinculado: {{ intercambioHoy.fecha_descanso }}.</p>
+      <p v-else-if="horarioPersonalHoy" class="text-xs font-medium text-violet-700 bg-violet-500/10 rounded-lg px-2.5 py-1.5 mb-3">
+        📌 Hoy es tu horario habitual ({{ horarioPersonalHoy.turno === 'manana' ? 'mañana' : 'tarde' }}) — Ingreso {{ horaEsperada }}, salida {{ horarioPersonalHoy.hora_salida.slice(0, 5) }}
+      </p>
+      <p v-else-if="esLunes" class="text-xs font-medium text-sky-700 bg-sky-500/10 rounded-lg px-2.5 py-1.5 mb-3">
         📌 Hoy Lunes: Reunión Semanal — Ingreso {{ horaEsperada }}
       </p>
       <p v-else class="text-xs font-medium text-slate-600 bg-slate-100 rounded-lg px-2.5 py-1.5 mb-3">
@@ -208,6 +243,11 @@ function formatCountdown(ms: number): string {
 
     <p v-if="actionNotice" class="text-xs text-amber-600 mt-2.5">{{ actionNotice }}</p>
     <p v-if="actionError" class="text-xs text-red-600 mt-2.5">{{ actionError }}</p>
+
+    <AusenciasPanel />
+    <IntercambiosPanel />
+    <NovedadesPanel />
+    <HorariosPersonalesPanel />
 
     <ConfirmModal
       :open="!!pendingAction"

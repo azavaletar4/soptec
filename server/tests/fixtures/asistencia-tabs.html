@@ -1,0 +1,29 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Control de Asistencia — datos ficticios</title></head>
+<body><div id="app"></div><script type="module">
+import '/src/style.css';
+import { createApp, h } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
+import { useAuthStore } from '/src/stores/auth.ts';
+import { useAsistenciaStore } from '/src/stores/asistencia.ts';
+import AsistenciaView from '/src/views/asistencia/AsistenciaView.vue';
+const NativeDate=Date;
+window.Date=class extends NativeDate { constructor(...args){super(...(args.length?args:['2026-11-03T15:00:00Z']));} static now(){return new NativeDate('2026-11-03T15:00:00Z').getTime();} };
+const pinia=createPinia();setActivePinia(pinia);
+const auth=useAuthStore();auth.role=new URLSearchParams(location.search).get('role')||'SUPERADMIN';
+auth.user={id:'00000000-0000-0000-0000-000000000001',email:'demo@example.invalid'};
+const store=useAsistenciaStore();
+store.settings={id:1,lunes_hora_ingreso:'07:30',resto_hora_ingreso:'08:00',almuerzo_min:120,tolerancia_min:5,oficina_lat:-12.04,oficina_lng:-77.03,oficina_radio_m:1550};
+store.horariosPersonales=[
+ {id:'horario-1',user_id:'00000000-0000-0000-0000-000000000003',dia_semana:6,turno:'manana',hora_ingreso:'08:00:00',hora_salida:'13:30:00',profile:{full_name:'Lucía Mendoza',email:'lucia@example.invalid'}},
+ {id:'horario-2',user_id:'00000000-0000-0000-0000-000000000004',dia_semana:6,turno:'tarde',hora_ingreso:'13:30:00',hora_salida:'19:00:00',profile:{full_name:'Jorge Salazar',email:'jorge@example.invalid'}},
+];
+store.fetchSettings=async()=>{};store.fetchFeriados=async()=>{};store.fetchHorariosPersonales=async()=>{};
+const registros=[
+ {id:'registro-1',user_id:'00000000-0000-0000-0000-000000000003',fecha:'2026-11-03',hora_ingreso:'2026-11-03T13:01:00Z',estado:'Puntual',minutos_tardanza:0,exceso_almuerzo_min:0},
+ {id:'registro-2',user_id:'00000000-0000-0000-0000-000000000004',fecha:'2026-11-03',hora_ingreso:'2026-11-03T13:02:00Z',inicio_almuerzo:'2026-11-03T14:45:00Z',estado:'En Almuerzo',minutos_tardanza:0,exceso_almuerzo_min:0},
+];
+store.fetchRango=async()=>registros;store.fetchTablero=async fecha=>{store.tablero=registros.filter(r=>r.fecha===fecha);};
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/:pathMatch(.*)*',component:{render:()=>null}}]});await router.push('/asistencia');
+createApp({render:()=>h(AsistenciaView)}).use(pinia).use(router).mount('#app');
+</script></body></html>

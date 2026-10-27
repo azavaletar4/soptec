@@ -32,6 +32,23 @@ interface CounterStateRow {
   updated_at: string;
 }
 
+/** Read-only batches keep UUID IN filters below the HTTP request-size limit.
+ * Discard partial results on failure: missing states would reset baselines.
+ */
+export async function loadTrafficCounterStates(contractIds: string[], database = supabaseAdmin) {
+  const states: CounterStateRow[] = [];
+  const batchSize = 100;
+  for (let offset = 0; offset < contractIds.length; offset += batchSize) {
+    const { data, error } = await database
+      .from('mikrotik_traffic_counters_state')
+      .select('contract_id, last_rx_bytes, last_tx_bytes, updated_at')
+      .in('contract_id', contractIds.slice(offset, offset + batchSize));
+    if (error) return { data: null, error };
+    states.push(...(data as CounterStateRow[] | null ?? []));
+  }
+  return { data: states, error: null };
+}
+
 interface MikrotikInterface {
   name: string;
   type?: string;
@@ -205,10 +222,7 @@ async function runSampleOnce(): Promise<TrafficSampleReport> {
     const relevantContracts = (contracts ?? []) as ContractRow[];
     if (relevantContracts.length === 0) continue;
 
-    const { data: statesData, error: stErr } = await supabaseAdmin
-      .from('mikrotik_traffic_counters_state')
-      .select('contract_id, last_rx_bytes, last_tx_bytes, updated_at')
-      .in('contract_id', relevantContracts.map((c) => c.id));
+    const { data: statesData, error: stErr } = await loadTrafficCounterStates(relevantContracts.map((c) => c.id));
     if (stErr) {
       errors.push({ deviceName: device.name, message: stErr.message });
       continue;

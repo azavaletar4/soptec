@@ -1,0 +1,13 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>A0/A1 fixture local</title></head>
+<body><div id="app"></div><script type="module">
+import { createApp, h } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { useAuthStore } from '/src/stores/auth.ts';
+import AusenciasPanel from '/src/components/asistencia/AusenciasPanel.vue';
+import AsistenciaPanel from '/src/components/asistencia/AsistenciaPanel.vue';
+const pinia=createPinia();setActivePinia(pinia);
+const auth=useAuthStore();auth.role=new URLSearchParams(location.search).get('role') || 'TECNICO_RED';
+auth.user={id:'00000000-0000-0000-0000-000000000003'};
+const web=new URLSearchParams(location.search).get('surface')==='web';
+createApp({render:()=>web ? h(AsistenciaPanel) : h(AusenciasPanel,{administracion:auth.role==='SUPERADMIN'})}).use(pinia).mount('#app');
+</script></body></html>
