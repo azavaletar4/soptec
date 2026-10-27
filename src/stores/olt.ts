@@ -21,6 +21,18 @@ export interface OltDevice {
 
 export type OltSerialStatus = Pick<OltOnt, 'status' | 'description' | 'rx_power' | 'tx_power' | 'telemetry'>;
 
+export interface Tr069EnableGuidedResult {
+  ont: OltOnt;
+  vendor: { prefix: string; name: string | null };
+  thirdPartyVendor: boolean;
+}
+
+export interface Tr069EnableStatusResult {
+  tr069_enabled: boolean;
+  requestInFlight: boolean;
+  matchedDevice: { cpe_serial: string; last_seen_at: string | null } | null;
+}
+
 export interface OltOnt {
   retired_at?: string | null;
   telemetry?: OntTelemetryPresentation;
@@ -42,6 +54,9 @@ export interface OltOnt {
   plan_id: string | null;
   tr069_enabled: boolean;
   tr069_acs_url: string | null;
+  /** Habilitacion GUIADA (boton individual, 2026-10-27) — null si nunca se habilito por ese flujo o si se revirtio. */
+  tr069_enabled_by?: string | null;
+  tr069_enabled_at?: string | null;
   status: 'online' | 'offline' | 'unknown';
   admin_state: 'enable' | 'disable';
   rx_power: number | null;
@@ -706,6 +721,21 @@ export const useOltStore = defineStore('olt', () => {
     return updated;
   }
 
+  // ---- Habilitacion GUIADA de TR-069 (boton individual, 2026-10-27) ----
+
+  async function enableTr069Guided(deviceId: string, ontDbId: string) {
+    const result = await apiFetch<Tr069EnableGuidedResult>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/tr069/enable-guided`, {
+      method: 'POST',
+    });
+    const idx = onts.value.findIndex((o) => o.id === ontDbId);
+    if (idx !== -1) onts.value[idx] = enforceOntEvidence({ ...onts.value[idx]!, ...result.ont });
+    return result;
+  }
+
+  function fetchTr069EnableStatus(deviceId: string, ontDbId: string) {
+    return apiFetch<Tr069EnableStatusResult>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/tr069/status`);
+  }
+
   return {
     devices,
     onts,
@@ -743,6 +773,8 @@ export const useOltStore = defineStore('olt', () => {
     disconnectOltEvents,
     assignTr069,
     removeTr069,
+    enableTr069Guided,
+    fetchTr069EnableStatus,
     fetchRunningConfig,
     updateOntMeta,
     fetchOntsByClient,

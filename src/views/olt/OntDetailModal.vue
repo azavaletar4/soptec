@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useOltStore, type OltOnt, type OltDevice } from '@/stores/olt';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useOltStore, type OltOnt, type OltDevice, type Tr069EnableStatusResult } from '@/stores/olt';
+import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { runSignalRefresh } from '@/lib/signalRefreshFlow';
+import { gponVendorFromSerial, isThirdPartyOnt } from '@/lib/gponVendorId';
+import { deriveTr069EnableStatus, canManageTr069, TR069_ENABLE_STATUS_LABEL, type Tr069EnableStatus } from '@/lib/tr069EnableStatus';
 
 // Replica el layout del panel de detalle de ONU estilo SmartOLT (columna de
 // identidad/config a la izquierda, grafico + estado en vivo a la derecha,
@@ -16,9 +19,86 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; openTr069: [ont: OltOnt]; editZone: [ont: OltOnt] }>();
 
 const oltStore = useOltStore();
+const auth = useAuthStore();
 
 const signalLoading = ref(false);
 const signalError = ref<string | null>(null);
+
+// ---- Habilitacion GUIADA de TR-069 (boton individual, 2026-10-27) ----
+// Solo ADMIN/SUPERADMIN ven el boton — el backend (POST .../tr069/enable-guided,
+// requireRole(...TR069_ENABLE_ROLES)) es quien realmente lo exige; esto es
+// solo para no mostrar una accion que de todas formas el servidor rechazaria.
+const canEnableTr069Guided = computed(() => ['SUPERADMIN', 'ADMIN'].includes(auth.role ?? ''));
+
+const detectedVendor = computed(() => gponVendorFromSerial(props.ont.serial));
+const thirdPartyVendor = computed(() => isThirdPartyOnt(detectedVendor.value, props.device.brand));
+
+const tr069Status = ref<Tr069EnableStatusResult | null>(null);
+const tr069Enabling = ref(false);
+const tr069EnableError = ref<string | null>(null);
+const showEnableConfirm = ref(false);
+let tr069PollTimer: ReturnType<typeof setTimeout> | null = null;
+let tr069PollAttempts = 0;
+const TR069_POLL_MAX_ATTEMPTS = 12; // ~3 min a 15s por intento — suficiente para un primer Inform real, sin sondear para siempre.
+const TR069_POLL_INTERVAL_MS = 15000;
+
+const tr069EnableStatus = computed<Tr069EnableStatus>(() =>
+  deriveTr069EnableStatus({
+    tr069Enabled: props.ont.tr069_enabled,
+    requestInFlight: tr069Enabling.value || (tr069Status.value?.requestInFlight ?? false),
+    lastError: tr069EnableError.value,
+    matchedDevice: tr069Status.value?.matchedDevice ?? null,
+    nowMs: Date.now(),
+  }),
+);
+
+async function refreshTr069Status() {
+  try {
+    tr069Status.value = await oltStore.fetchTr069EnableStatus(props.device.id, props.ont.id);
+  } catch {
+    // Solo-lectura de apoyo visual: si falla, el badge se queda con el ultimo valor conocido.
+  }
+}
+
+function stopTr069Poll() {
+  if (tr069PollTimer) clearTimeout(tr069PollTimer);
+  tr069PollTimer = null;
+}
+
+function scheduleTr069Poll() {
+  stopTr069Poll();
+  if (tr069PollAttempts >= TR069_POLL_MAX_ATTEMPTS) return;
+  tr069PollTimer = setTimeout(async () => {
+    tr069PollAttempts += 1;
+    await refreshTr069Status();
+    if (tr069EnableStatus.value === 'esperando_conexion' || tr069EnableStatus.value === 'habilitando') scheduleTr069Poll();
+  }, TR069_POLL_INTERVAL_MS);
+}
+
+async function confirmEnableTr069Guided() {
+  showEnableConfirm.value = false;
+  tr069Enabling.value = true;
+  tr069EnableError.value = null;
+  try {
+    await oltStore.enableTr069Guided(props.device.id, props.ont.id);
+    tr069PollAttempts = 0;
+    await refreshTr069Status();
+    scheduleTr069Poll();
+  } catch (e) {
+    tr069EnableError.value = getErrorMessage(e, 'Error al habilitar TR-069 en la OLT');
+  } finally {
+    tr069Enabling.value = false;
+  }
+}
+
+onMounted(() => {
+  if (props.ont.tr069_enabled) {
+    refreshTr069Status().then(() => {
+      if (tr069EnableStatus.value === 'esperando_conexion') scheduleTr069Poll();
+    });
+  }
+});
+onBeforeUnmount(stopTr069Poll);
 
 // ---- WAN/PPPoE por OMCI (Fase 75/76) — ver zteCommands.ts
 // configureWanPppoeCommands. "Autorizar ONU" ya lo hace solo cuando tiene la
@@ -205,15 +285,25 @@ async function toggleConfig() {
                 <template v-if="ont.telemetry.historical.at">Registro: {{ ont.telemetry.historical.at }}.</template>
               </p>
               <div class="flex justify-between items-center">
-                <span class="text-slate-500">Perfil TR-069</span>
-                <span class="badge" :class="ont.tr069_enabled ? 'bg-emerald-500/15 text-emerald-700' : 'bg-slate-200 text-slate-600'">
-                  {{ ont.tr069_enabled ? 'Activo' : 'Inactivo' }}
+                <span class="text-slate-500">TR-069</span>
+                <span
+                  class="badge"
+                  :class="{
+                    conectado: 'bg-emerald-500/15 text-emerald-700',
+                    esperando_conexion: 'bg-amber-500/15 text-amber-700',
+                    habilitando: 'bg-amber-500/15 text-amber-700',
+                    error: 'bg-red-500/15 text-red-600',
+                    no_habilitado: 'bg-slate-200 text-slate-600',
+                  }[tr069EnableStatus]"
+                >
+                  {{ TR069_ENABLE_STATUS_LABEL[tr069EnableStatus] }}
                 </span>
               </div>
               <div v-if="ont.tr069_enabled" class="flex justify-between gap-3">
                 <span class="text-slate-500">ACS</span>
                 <span class="text-right font-mono text-xs break-all">{{ ont.tr069_acs_url }}</span>
               </div>
+              <p v-if="tr069EnableError" class="text-xs text-red-600">{{ tr069EnableError }}</p>
               <div class="flex justify-between">
                 <span class="text-slate-500">VLAN</span>
                 <span>{{ ont.vlan ?? '—' }}</span>
@@ -237,7 +327,23 @@ async function toggleConfig() {
           <button class="btn-secondary" @click="toggleConfig">
             {{ configOpen ? 'Ocultar running-config' : 'Ver running-config' }}
           </button>
-          <button class="btn-primary" @click="emit('openTr069', ont)">Gestionar TR-069</button>
+          <button v-if="canManageTr069(tr069EnableStatus)" class="btn-primary" @click="emit('openTr069', ont)">
+            Administrar TR-069
+          </button>
+          <button
+            v-else-if="canEnableTr069Guided && (tr069EnableStatus === 'no_habilitado' || tr069EnableStatus === 'error')"
+            class="btn-primary"
+            @click="showEnableConfirm = true"
+          >
+            Habilitar TR-069
+          </button>
+          <button
+            v-else-if="tr069EnableStatus === 'habilitando' || tr069EnableStatus === 'esperando_conexion'"
+            class="btn-secondary"
+            disabled
+          >
+            {{ TR069_ENABLE_STATUS_LABEL[tr069EnableStatus] }}
+          </button>
           <button class="btn-ghost ml-auto" @click="emit('close')">Cerrar</button>
         </div>
 
@@ -276,6 +382,47 @@ async function toggleConfig() {
               Comando enviado a la OLT. Revisá si el equipo ya empieza a navegar.
             </p>
           </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Confirmacion de habilitacion guiada de TR-069 (boton individual, 2026-10-27) -->
+  <Teleport to="body">
+    <div v-if="showEnableConfirm" class="modal-overlay" @click.self="showEnableConfirm = false">
+      <div class="w-full max-w-md modal-panel">
+        <h2 class="text-lg font-semibold mb-1">Habilitar TR-069 — {{ ont.serial }}</h2>
+        <p class="text-xs text-slate-500 font-mono mb-4">{{ interfaceRef }}</p>
+
+        <dl class="space-y-2 text-sm mb-4">
+          <div class="flex justify-between gap-3">
+            <dt class="text-slate-500">Fabricante detectado</dt>
+            <dd class="text-right">{{ detectedVendor.name ?? `Desconocido (${detectedVendor.prefix || '—'})` }}</dd>
+          </div>
+          <div class="flex justify-between gap-3">
+            <dt class="text-slate-500">Metodo</dt>
+            <dd class="text-right">OMCI via OLT (pon-onu-mng / tr069-mgmt)</dd>
+          </div>
+        </dl>
+
+        <p v-if="thirdPartyVendor" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+          <strong>Compatibilidad no verificada:</strong> esta ONT es {{ detectedVendor.name ?? 'de un fabricante distinto' }},
+          no {{ device.brand.toUpperCase() }} (la marca de esta OLT). El comando OMCI que se va a ejecutar nunca se
+          confirmó de punta a punta contra un equipo de este fabricante — puede que no reporte a GenieACS aunque la
+          OLT acepte el comando sin error. Esta es la primera prueba real.
+        </p>
+        <p class="text-xs text-slate-600 mb-4">
+          Solo se configura <strong>esta ONT</strong>: no se toca Internet, la VLAN de servicio, PPPoE ni ninguna
+          otra ONT. Se usa siempre el perfil ACS por defecto de esta OLT. Se vuelve a verificar el serial en vivo en
+          esta posición antes de escribir nada — si no coincide, se detiene sin aplicar ningún cambio.
+        </p>
+        <p v-if="tr069EnableError" class="text-xs text-red-600 mb-4">{{ tr069EnableError }}</p>
+
+        <div class="flex justify-end gap-2">
+          <button class="btn-ghost" :disabled="tr069Enabling" @click="showEnableConfirm = false">Cancelar</button>
+          <button class="btn-primary" :disabled="tr069Enabling" @click="confirmEnableTr069Guided">
+            {{ tr069Enabling ? 'Habilitando...' : 'Confirmar y habilitar' }}
+          </button>
         </div>
       </div>
     </div>

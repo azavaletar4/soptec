@@ -33,12 +33,16 @@ import {
   listTrafficProfilesCommands,
   setTr069AcsCommands,
   disableTr069Commands,
+  fullRunningConfigCommand,
   type ZteInterfaceRef,
 } from '../ssh/zteCommands';
 import {
   parseUnconfiguredOnts,
   parseProfileNames,
+  parseFullRunningConfig,
 } from '../ssh/zteParsers';
+import { TR069_ENABLE_ROLES, validateTr069EnableRequest, verifyLivePosition } from '../services/tr069Enable';
+import { createSingleFlightGuard } from '../services/singleFlightGuard';
 import { createSupabaseProvisioningStore } from '../services/oltProvisioningStore';
 import { classifyImportCandidates, type LinkedPosition } from '../services/oltImportDescriptionGuard';
 import {
@@ -56,6 +60,15 @@ const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
 // Gestionar ONTs (activar/desactivar, eliminar, autorizar, TR-069) si es
 // trabajo del tecnico de campo con el equipo ya dado de alta.
 const ONT_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
+// Habilitacion GUIADA de TR-069 (boton individual, 2026-10-27): el propietario
+// pidio esta accion puntual SOLO para ADMIN/SUPERADMIN, mas angosta que
+// ONT_WRITE (que si incluye TECNICO_RED para el modal manual existente).
+// TR069_ENABLE_ROLES vive en services/tr069Enable.ts para que la regla de
+// permisos sea una sola fuente de verdad, compartida con validateTr069EnableRequest.
+
+// Guardia en memoria contra 2 solicitudes de habilitacion simultaneas sobre
+// la MISMA ONT (requisito 9) — ver services/singleFlightGuard.ts.
+const tr069EnableGuard = createSingleFlightGuard();
 // New authorization and reconciliation roles live in oltProvisioning.ts.
 
 const DEVICE_PUBLIC_FIELDS = 'id, name, host, brand, telnet_port, username, zone_id, is_active, created_at';
@@ -1261,11 +1274,138 @@ oltRoutes.delete('/:id/onts/:ontDbId/tr069', requireRole(...ONT_WRITE), async (c
 
   const { data, error } = await supabaseAdmin
     .from('olt_onts')
-    .update({ tr069_enabled: false }).is('retired_at', null)
+    // Reversion individual (requisito 10): limpia tambien quien/cuando lo
+    // habilito — "habilitado por X el Y" deja de tener sentido una vez
+    // desactivado. No toca service-port/VLAN/PPPoE: mismo alcance exacto
+    // que disableTr069Commands() (pon-onu-mng/tr069-mgmt unicamente).
+    .update({ tr069_enabled: false, tr069_enabled_by: null, tr069_enabled_at: null }).is('retired_at', null)
     .eq('id', ont.id)
     .select()
     .single();
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
   return c.json(presentOntData(data));
+});
+
+/**
+ * Habilitacion GUIADA de TR-069 por ONT (boton individual, 2026-10-27,
+ * primer metodo experimental: OMCI via la OLT). A diferencia de
+ * POST /:id/onts/:ontDbId/tr069 (generico, URL/VEIP a mano, ONT_WRITE), esta
+ * ruta:
+ *   1. Exige ADMIN/SUPERADMIN (TR069_ENABLE_ROLES) - validado en backend,
+ *      nunca solo ocultando el boton en el frontend.
+ *   2. Valida identidad/vinculo ANTES de tocar la OLT (validateTr069EnableRequest,
+ *      logica pura — ver services/tr069Enable.ts y sus pruebas).
+ *   3. Reverifica el serial EN VIVO en la posicion exacta (fullRunningConfigCommand,
+ *      ya validado contra el equipo real) antes de escribir nada — nunca confia
+ *      ciegamente en el ultimo sync guardado.
+ *   4. Usa SIEMPRE el perfil ACS por defecto de esta OLT (olt_tr069_acs_profiles),
+ *      nunca una URL escrita a mano por este flujo.
+ *   5. Guarda quien/cuando (tr069_enabled_by/at) - requisito 8, minimo cambio
+ *      de esquema.
+ * No toca service-port/VLAN/PPPoE de esta ni de ninguna otra ONT: el unico
+ * comando que se ejecuta es setTr069AcsCommands() (igual que el flujo manual).
+ */
+oltRoutes.post('/:id/onts/:ontDbId/tr069/enable-guided', requireRole(...TR069_ENABLE_ROLES), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
+  const user = c.get('user');
+
+  if (!tr069EnableGuard.tryAcquire(ont.id)) {
+    return c.json({ error: 'Ya hay una solicitud de habilitación en curso para esta ONT.' }, 409);
+  }
+
+  try {
+    const { data: serviceContract } = ont.contract_id
+      ? await supabaseAdmin.from('service_contracts').select('id').eq('id', ont.contract_id).maybeSingle()
+      : { data: null };
+
+    const check = validateTr069EnableRequest({
+      role: user.role,
+      oltBrand: device.brand,
+      ont: {
+        serial: ont.serial,
+        retired_at: ont.retired_at,
+        tr069_enabled: ont.tr069_enabled,
+        client_id: ont.client_id,
+        contract_id: ont.contract_id,
+        service_contract: serviceContract ?? null,
+      },
+    });
+    if (!check.ok) {
+      return c.json({ error: check.message, rejection: check.rejection, vendor: check.vendor }, 422);
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from('olt_tr069_acs_profiles')
+      .select('acs_url')
+      .eq('olt_device_id', device.id)
+      .eq('is_default', true)
+      .maybeSingle();
+    if (!profile?.acs_url) {
+      return c.json({ error: 'No hay un perfil ACS por defecto configurado para esta OLT. Configúralo primero en "Perfil ACS".' }, 422);
+    }
+
+    const ref: ZteInterfaceRef = { shelf: ont.frame, slot: ont.slot, port: ont.port };
+    const veip = 1;
+
+    const result = await withOltLock(device.id, async () => {
+      // Paso 1 (solo lectura): reverifica el serial EN VIVO en esta posicion
+      // exacta — nunca se escribe sobre una posicion sin volver a confirmarla.
+      const configOut = await runTelnetCommands(telnetTargetFor(device), fullRunningConfigCommand(), { timeoutMs: 120000 });
+      const fullConfig = parseFullRunningConfig(configOut[1] ?? '');
+      const key = `${ref.shelf}/${ref.slot}/${ref.port}:${ont.ont_id}`;
+      const liveSerial = fullConfig.get(key)?.serial ?? null;
+      const positionCheck = verifyLivePosition({ expectedSerial: ont.serial, liveSerial });
+      if (!positionCheck.ok) return { kind: 'position_mismatch' as const, message: positionCheck.message! };
+
+      // Paso 2 (unica escritura): exactamente el mismo comando que el modal manual.
+      await runTelnetCommands(telnetTargetFor(device), setTr069AcsCommands(ref, ont.ont_id, veip, profile.acs_url));
+      return { kind: 'applied' as const };
+    });
+
+    if (result.kind === 'position_mismatch') {
+      return c.json({ error: result.message }, 409);
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('olt_onts')
+      .update({ tr069_enabled: true, tr069_acs_url: profile.acs_url, tr069_enabled_by: user.id, tr069_enabled_at: new Date().toISOString() })
+      .is('retired_at', null)
+      .eq('id', ont.id)
+      .select()
+      .single();
+    if (error) return c.json({ error: error.message }, 400);
+    oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: data });
+    return c.json({ ont: presentOntData(data), vendor: check.vendor, thirdPartyVendor: check.thirdPartyVendor });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al habilitar TR-069 en la OLT' }, 502);
+  } finally {
+    tr069EnableGuard.release(ont.id);
+  }
+});
+
+/**
+ * Estado de confirmacion de identidad (requisito 6/7): busca en tr069_devices
+ * (ya sincronizada por el scheduler, server/src/services/tr069Scheduler.ts)
+ * un dispositivo cuyo cpe_serial coincida EXACTO con el de esta ONT. Nunca
+ * basta con "apareció algún CPE nuevo" — tiene que ser ESTE serial.
+ */
+oltRoutes.get('/:id/onts/:ontDbId/tr069/status', requireRole(...STAFF_READ), async (c) => {
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont) return c.json({ error: 'ONT no encontrada' }, 404);
+
+  const { data: matchedDevice } = await supabaseAdmin
+    .from('tr069_devices')
+    .select('cpe_serial, last_seen_at')
+    .ilike('cpe_serial', ont.serial)
+    .maybeSingle();
+
+  return c.json({
+    tr069_enabled: ont.tr069_enabled,
+    requestInFlight: tr069EnableGuard.has(ont.id),
+    matchedDevice: matchedDevice ?? null,
+  });
 });
