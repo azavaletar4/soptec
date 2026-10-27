@@ -1,0 +1,11 @@
+{
+  "genieacs_id": "00259E-HG8145X6%2D13-485754431D3691B7",
+  "manufacturer": "Huawei Technologies Co., Ltd",
+  "oui": "00259E",
+  "productClass": "HG8145X6-13",
+  "tr069Serial": "485754431D3691B7",
+  "gponSerial": "HWTC1D3691B7",
+  "note": "El serial TR-069 (ManagementServer) y el serial GPON (OLT) NO son el mismo string para este equipo Huawei: comparten el sufijo 1D3691B7 pero difieren en longitud/prefijo.",
+  "lastInform": "2026-10-27T19:47:30.397Z",
+  "externalIp": "10.15.15.200"
+}
