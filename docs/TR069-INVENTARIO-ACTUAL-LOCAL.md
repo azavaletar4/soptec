@@ -1,6 +1,9 @@
 # TR-069: inventario actual separado del histórico
 
-Estado: IMPLEMENTADO Y PROBADO LOCALMENTE. Pendiente de autorización productiva.
+Estado: IMPLEMENTADO Y PROBADO LOCALMENTE, NO DESPLEGADO. Respaldos recuperables
+verificados; autorización anterior pendiente y confirmación de reanudación
+obligatoria. Huawei no probada. Estado y siguiente paso:
+[TR069-CONTINUIDAD-CLAUDE-CODE.md](TR069-CONTINUIDAD-CLAUDE-CODE.md).
 Rama independiente: `diagnostico/tr069-genieacs-readonly`.
 
 ## Causa comprobada y alcance

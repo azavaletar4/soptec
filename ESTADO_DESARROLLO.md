@@ -1,13 +1,17 @@
 # SmartRayco — Estado de desarrollo
 
-## TR-069: activación detenida - 27/10/2026
+## TR-069: continuidad para Claude Code - 27/10/2026
 
-Corrección 30bbb54 autorizada, todavía NO desplegada. Discrepancia en la
-validación del respaldo del frontend; procedimiento detenido antes de construir
-o promover imágenes. Frontend fc9047f y backend 16831c6 siguen intactos.
-Sin migraciones ni operaciones sobre ONTs. Evidencia y pendiente exacto:
-[TR069-ACTIVACION-CONTROLADA.md](docs/TR069-ACTIVACION-CONTROLADA.md).
-
+Corrección funcional `30bbb54`, todavía **NO DESPLEGADA**. Huawei **NO probada**.
+Bloqueo OCI resuelto reutilizando A3: frontend 20 blobs/498 archivos y backend
+19 blobs/406 archivos, ambos recuperados en Docker local, sin red ni arranque.
+Pruebas locales: 22 de servicio, 29 de navegador, compilación y tipos aprobados.
+Producción conservada: frontend fc9047f, backend 16831c6, overrides intactos.
+Siguiente paso: revalidar estado productivo y solicitar confirmación expresa
+antes de reanudar el despliegue controlado de backend y frontend. Autorización
+anterior pendiente; no migraciones ni operaciones de ONTs.
+Continuidad, imágenes, respaldos, cadena Compose y límites del rollback:
+[TR069-CONTINUIDAD-CLAUDE-CODE.md](docs/TR069-CONTINUIDAD-CLAUDE-CODE.md).
 
 ## Campo: dirección por contrato - fase cerrada - 27/10/2026
 

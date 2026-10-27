@@ -3,7 +3,16 @@
 Fecha: 27/10/2026. Corrección autorizada: `30bbb54`.
 Rama: `diagnostico/tr069-genieacs-readonly`.
 
-## Resultado
+## Estado posterior: bloqueo resuelto, despliegue aún pendiente
+
+Ambos respaldos ya fueron validados y recuperados en Docker local: frontend
+20 blobs/498 archivos; backend 19 blobs/406 archivos. El error era comparar
+configuración con índice OCI, ya resuelto en A3. No hubo despliegue ni prueba
+Huawei. El bloqueo descrito abajo es el antecedente histórico, no un pendiente
+de integridad actual. Continuidad vigente y confirmación requerida:
+[TR069-CONTINUIDAD-CLAUDE-CODE.md](TR069-CONTINUIDAD-CLAUDE-CODE.md).
+
+## Resultado del intento inicial
 
 NO DESPLEGADO. Se respetó la instrucción de detenerse ante discrepancias.
 La prevalidación y exportación de respaldos concluyeron, pero falló una

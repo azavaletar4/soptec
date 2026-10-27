@@ -1,0 +1,53 @@
+{
+  "functionalCommit": "30bbb54",
+  "status": "BACKUPS_VERIFIED_NOT_DEPLOYED",
+  "huaweiTested": false,
+  "tests": {
+    "verifierTests": 5,
+    "passed": 5,
+    "network": false
+  },
+  "productionUnchanged": true,
+  "components": {
+    "frontend": {
+      "image": "sha256:dac71cc991c71f494ba9eb9b489eb4c6ad0c11fdc4eedfaf26989c08fc2136d0",
+      "configDigest": "sha256:293c420bde52161ab0eb343ea8cb0bb001855fea382a7a16d1d1abdae5dd7964",
+      "verification": {
+        "expectedDigest": "sha256:dac71cc991c71f494ba9eb9b489eb4c6ad0c11fdc4eedfaf26989c08fc2136d0",
+        "rootDigestMatches": true,
+        "allBlobDigestsVerified": true,
+        "verifiedBlobCount": 20,
+        "runtimeConfigCount": 1,
+        "archiveSha256": "61a19559e60529788cc32c2c3cd8e5599066a9d56a1454b235e1b74b0f0bddae"
+      },
+      "recovery": {
+        "loaded": true,
+        "imageId": "sha256:dac71cc991c71f494ba9eb9b489eb4c6ad0c11fdc4eedfaf26989c08fc2136d0",
+        "network": "none",
+        "started": false,
+        "filesVerified": 498,
+        "archiveSha256": "61a19559e60529788cc32c2c3cd8e5599066a9d56a1454b235e1b74b0f0bddae"
+      }
+    },
+    "backend": {
+      "image": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+      "configDigest": "sha256:c2688b9e82427b8872967e7a9163e50921b6d9c8ef05094e20677be87ebc22be",
+      "verification": {
+        "expectedDigest": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+        "rootDigestMatches": true,
+        "allBlobDigestsVerified": true,
+        "verifiedBlobCount": 19,
+        "runtimeConfigCount": 1,
+        "archiveSha256": "a470af78a26149f565621ccdfe615b47e285487cb26192b8bdca2a6a2f87e423"
+      },
+      "recovery": {
+        "loaded": true,
+        "imageId": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+        "network": "none",
+        "started": false,
+        "filesVerified": 406,
+        "archiveSha256": "a470af78a26149f565621ccdfe615b47e285487cb26192b8bdca2a6a2f87e423"
+      }
+    }
+  }
+}
