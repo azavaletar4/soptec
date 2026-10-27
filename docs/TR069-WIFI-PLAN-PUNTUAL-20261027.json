@@ -1,0 +1,47 @@
+{
+  "status": "NOT_READY_NO_AUTHORIZATION",
+  "preparationOnly": true,
+  "selection": "Proposal only; owner has not selected or authorized this network/name",
+  "readAt": "2026-10-27T21:05:30.874Z",
+  "serial": "HWTC1D3691B7",
+  "reportedSerial": "485754431D3691B7",
+  "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+  "ontId": "8d3eb272-b90b-48b9-b834-2176e6003b6b",
+  "contractId": "bf6b0f88-3c55-4c9b-aca2-5dfa739e738c",
+  "contractNumber": "CTR-2026-00214",
+  "clientId": "d996f03f-2fde-4210-9307-1489d2c6e5fc",
+  "parameter": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID",
+  "before": "WirelessNet-5G",
+  "proposed": "WirelessNet-5G-PRUEBA",
+  "type": "xsd:string",
+  "backupSource": "GenieACS cache; not a fresh read from CPE",
+  "backupValueTimestamp": "2026-10-27T20:37:30.393Z",
+  "backupAgeSecondsAtRead": 1680,
+  "lastInform": "2026-10-27T21:02:30.453Z",
+  "announcedWritable": true,
+  "writeCompatibilityTested": false,
+  "enabled": null,
+  "band": "Banda desconocida",
+  "rollback": {
+    "parameter": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID",
+    "value": "WirelessNet-5G",
+    "type": "xsd:string",
+    "requiresIndependentAuthorization": true
+  },
+  "pending": [
+    "Owner selection of instance and proposed name",
+    "Confirm effective current SSID: cache value older than last Inform",
+    "TR069 service_contract_id is null; execution must validate exact ONT contract without creating associations",
+    "No apply/rollback path enabled in current SmartRayco candidate",
+    "Separate authorization for single SSID, rollback and scoped verification"
+  ],
+  "prohibitedChanges": [
+    "WiFi password",
+    "PPPoE",
+    "WAN",
+    "VLAN 120",
+    "VLAN 200",
+    "ManagementServer",
+    "other ONTs"
+  ]
+}

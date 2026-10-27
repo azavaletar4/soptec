@@ -120,7 +120,7 @@ for (const role of ['ADMIN', 'SUPERADMIN'] as const) test(`${role}: ruta real pe
 });
 for (const role of ['TECNICO_RED', 'SOPORTE', 'CLIENTE', undefined] as const) test(`${role ?? 'sin identidad'}: requireRole real bloquea preparación y vías alternativas sin contactar NBI`, async () => {
   const calls = nbi(); const app = appFor(role);
-  for (const route of ['/wifi/'+WIFI_TEST_SERIAL+'/prepare', '/wifi/x', '/pppoe/x', '/provision/x', '/proxy/devices/x/tasks']) {
+  for (const route of ['/wifi/'+WIFI_TEST_SERIAL+'/prepare', '/wifi/x', '/wifi/'+WIFI_TEST_SERIAL+'/trial/change', '/wifi/'+WIFI_TEST_SERIAL+'/trial/restore', '/wifi/'+WIFI_TEST_SERIAL+'/trial/verify', '/pppoe/x', '/provision/x', '/proxy/devices/x/tasks']) {
     assert.equal((await app.request(route, { method: 'POST', body: '{}' })).status, 403);
   }
   assert.equal(calls.length, 0);
@@ -176,6 +176,10 @@ test('routers completos: JWT firmado y perfil ficticios, requireAuth/requireRole
       assert.equal(nbiGets-before, allowed ? 1 : 0);
       for (const route of ['/api/genieacs-sync/wifi/'+WIFI_TEST_SERIAL, '/api/genieacs-sync/pppoe/x', '/api/genieacs-sync/provision/x', '/api/genieacs/devices/x/tasks']) {
         assert.equal((await app.request(route, { method: 'POST', headers, body: '{}' })).status, allowed ? 423 : 403);
+      }
+      for (const action of ['change', 'restore', 'verify']) {
+        assert.equal((await app.request('/api/genieacs-sync/wifi/'+WIFI_TEST_SERIAL+'/trial/'+action,
+          { method: 'POST', headers, body: '{}' })).status, allowed ? 409 : 403, 'Sin flag de despliegue no se habilitan escrituras');
       }
     }
   } finally {

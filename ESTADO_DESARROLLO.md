@@ -2,6 +2,20 @@
 
 ## TR-069 Huawei HWTC1D3691B7 — conectado real, corrección de identificación DESPLEGADA (27/10/2026)
 
+**Último resultado de administración WiFi (27/10, 16:26 Perú, prevalece):**
+autorizada implementación/despliegue, cambio real reservado al propietario.
+Función manual de un SSID (WLANConfiguration.5.SSID), contrato exacto
+CTR-2026-00214, ADMIN/SUPERADMIN, respaldo persistente, lectura/verificación y
+restauración: implementada solo local. 42/42 pruebas, TypeScript y navegador
+simulado PASS. **NO desplegada; botón real NO disponible.** Promoción detenida
+antes de recrear servicios: HTML de base frontend no reproducible respecto al
+artefacto activo, riesgo de incorporar diferencias de otras fases. No se buscó
+sortear la comprobación. Backups completos y etiquetas rollback preparadas;
+frontend/backend/Caddy/Mongo/GenieACS mantienen IDs/imágenes/inicio. Cero tareas
+reales enviadas por Codex, sin cambios de ONT, PPPoE, WAN/VLAN o asociaciones.
+Pendiente alinear compilación/base con artefacto activo para promoción selectiva.
+`docs/TR069-WIFI-DESPLIEGUE-DETENIDO-20261027.md` conserva prueba y rollback.
+
 **1. Interfaz de gestión operativa.** Se aplicó a la ONT de prueba
 `HWTC1D3691B7` (1/2/2:24, OLT ZTE C300) el patrón real de gestión OMCI
 independiente ya usado por 6 Huawei GPT-2741GNAC reales de esta misma
@@ -103,6 +117,17 @@ conocida solo desde parámetro explícito. Comparación exige Inform posterior y
 fecha SSID nueva, sin refresh. 37/37 pruebas y TypeScript frontend/backend PASS.
 Sin habilitar aplicación/reversión ni tocar producción. Evidencia y procedimiento
 de Inform/lectura/reversión: `docs/TR069-WIFI-VALIDACION-VISUAL-20261027.md`.
+**Preflight real posterior de primera prueba, solo GET (27/10 16:05 Perú):**
+un dispositivo NBI, una ONT no retirada, cliente prueba zava y contrato activo
+CTR-2026-00214 concordantes; sin duplicados en las consultas dirigidas ni tareas
+pendientes. Registro TR-069 único con service_contract_id=null, sin modificar.
+WLAN 1 RAYCO 18 y WLAN 5 WirelessNet-5G: banda/Enable desconocidos, writable
+anunciado true, valores de 15:37 Perú frente a Inform 16:02. Respaldo cacheado
+real guardado (28 minutos de antigüedad al leer), vigencia física no corroborada.
+Propuesta WLAN 5.SSID → WirelessNet-5G-PRUEBA no seleccionada/autorizada aún;
+**NO lista para ejecutar**: SSID efectivo, vínculo administrativo incompleto y
+vía de aplicar/revertir bloqueada siguen como condiciones. Sin nuevas asociaciones,
+tareas o despliegue. `docs/TR069-WIFI-PRIMERA-PRUEBA-PREFLIGHT-20261027.md`.
 
 **Pendiente:** vía específica de ejecución autorizada y prueba controlada de modificación de WiFi desde SmartRayco
 sobre esta misma ONT, todavía no intentada ni autorizada. Antes de ejecutarla,

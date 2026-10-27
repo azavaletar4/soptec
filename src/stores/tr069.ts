@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import type { WifiInventory, WifiSsidPlan } from '@/lib/tr069WifiPlan';
+import type { WifiTrialStatus } from '@/lib/tr069WifiTrial';
 export type { WifiNetwork } from '@/lib/tr069WifiPlan';
 import type { OltTr069AcsProfile, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 
@@ -165,6 +166,9 @@ export const useTr069Store = defineStore('tr069', () => {
   }
 
   return {
+    wifiTrialStatus: (serial: string) => apiFetch<WifiTrialStatus>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}/trial/status`),
+    wifiTrialAction: (serial: string, action: 'change' | 'restore' | 'verify', payload: object = {}) =>
+      apiFetch<WifiTrialStatus>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}/trial/${action}`, { method: 'POST', body: JSON.stringify(payload) }),
     prepareWifiSsid: (serial: string, payload: { deviceId: string; path: string; ssid: string; expectedSsid: string; expectedTimestamp: string; confirmed: boolean }) =>
       apiFetch<WifiSsidPlan>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}/prepare`, { method: 'POST', body: JSON.stringify(payload) }),
     devices,

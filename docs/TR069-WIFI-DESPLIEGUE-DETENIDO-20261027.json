@@ -1,0 +1,38 @@
+{
+    "at":  "2026-10-27T21:26:46.587022+00:00",
+    "allServicesUnchanged":  true,
+    "deployAttempted":  false,
+    "services":  {
+                     "frontend":  {
+                                      "id":  "655ce80ff224db6636d64d2b4228b862be293a0d2d5ae3249f3c2662d3d69b66",
+                                      "image":  "sha256:902b127b24626500b41463c79010561856a4016cb16fb7605b50d68946780958",
+                                      "unchanged":  true
+                                  },
+                     "backend":  {
+                                     "id":  "62d7f2b0f6e1a997f21a595fb2026c7130ffcdabef567e935ebd253e8c98934d",
+                                     "image":  "sha256:b3d27b540141954bf5164bb2b716bcd98f0bd973dc8fabf3caa099233580f9eb",
+                                     "unchanged":  true
+                                 },
+                     "caddy":  {
+                                   "id":  "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+                                   "image":  "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+                                   "unchanged":  true
+                               },
+                     "mongo":  {
+                                   "id":  "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+                                   "image":  "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+                                   "unchanged":  true
+                               },
+                     "genieacs":  {
+                                      "id":  "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+                                      "image":  "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+                                      "unchanged":  true
+                                  }
+                 },
+    "backupHashes":  {
+                         "backend":  "93f88d04e7af7895d11bfe414dce4e33a12fd5b735963f17fe687524f6c6abdc",
+                         "frontend":  "3cd6b1dd31c2465cb927160c9e4c8ce3b03465d7d0e382dfa39e60b945823e0b"
+                     },
+    "buildGate":  "BASELINE_FRONTEND_NOT_REPRODUCIBLE",
+    "ssidTasksSentByCodex":  0
+}

@@ -1,0 +1,93 @@
+{
+  "checkedAt": "2026-10-27T21:05:30.874Z",
+  "readOnly": true,
+  "methods": [
+    "GET"
+  ],
+  "gponSerial": "HWTC1D3691B7",
+  "genieacsCandidates": [
+    {
+      "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+      "reportedSerial": "485754431D3691B7",
+      "lastInform": "2026-10-27T21:02:30.453Z",
+      "networks": [
+        {
+          "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1",
+          "ssid": "RAYCO 18",
+          "timestamp": "2026-10-27T20:37:30.393Z",
+          "writable": true,
+          "enabled": null,
+          "band": "Banda desconocida"
+        },
+        {
+          "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5",
+          "ssid": "WirelessNet-5G",
+          "timestamp": "2026-10-27T20:37:30.393Z",
+          "writable": true,
+          "enabled": null,
+          "band": "Banda desconocida"
+        }
+      ]
+    }
+  ],
+  "onts": [
+    {
+      "id": "8d3eb272-b90b-48b9-b834-2176e6003b6b",
+      "serial": "HWTC1D3691B7",
+      "client_id": "d996f03f-2fde-4210-9307-1489d2c6e5fc",
+      "contract_id": "bf6b0f88-3c55-4c9b-aca2-5dfa739e738c",
+      "retired_at": null
+    }
+  ],
+  "contracts": [
+    {
+      "id": "bf6b0f88-3c55-4c9b-aca2-5dfa739e738c",
+      "client_id": "d996f03f-2fde-4210-9307-1489d2c6e5fc",
+      "contract_number": "CTR-2026-00214",
+      "client_code": "00000000",
+      "status": "active"
+    }
+  ],
+  "clients": [
+    {
+      "id": "d996f03f-2fde-4210-9307-1489d2c6e5fc",
+      "first_name": "prueba",
+      "last_name": "zava",
+      "client_code": null
+    }
+  ],
+  "contractOnts": [
+    {
+      "id": "8d3eb272-b90b-48b9-b834-2176e6003b6b",
+      "serial": "HWTC1D3691B7",
+      "client_id": "d996f03f-2fde-4210-9307-1489d2c6e5fc",
+      "contract_id": "bf6b0f88-3c55-4c9b-aca2-5dfa739e738c",
+      "retired_at": null
+    }
+  ],
+  "tr069Rows": [
+    {
+      "id": "228cf2cb-6faa-42ea-ad13-2a8b7822a841",
+      "cpe_serial": "485754431D3691B7",
+      "genieacs_id": "00259E-HG8145X6%2D13-485754431D3691B7",
+      "service_contract_id": null,
+      "last_seen_at": "2026-10-27T21:02:30.453+00:00"
+    }
+  ],
+  "sameGenieacsRows": [
+    {
+      "id": "228cf2cb-6faa-42ea-ad13-2a8b7822a841",
+      "cpe_serial": "485754431D3691B7",
+      "genieacs_id": "00259E-HG8145X6%2D13-485754431D3691B7",
+      "service_contract_id": null,
+      "last_seen_at": "2026-10-27T21:02:30.453+00:00"
+    }
+  ],
+  "pendingTasks": [
+    {
+      "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+      "count": 0,
+      "tasks": []
+    }
+  ]
+}

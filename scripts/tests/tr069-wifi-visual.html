@@ -24,6 +24,23 @@ store.fetchDevices=async()=>{store.devices=[{id:'synthetic-huawei',cpe_serial:'4
 window.inventory={found:true,deviceId,serial,lastInform:'2026-10-27T20:32:31.480Z',networks:[
  {path:'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1',ssid:'RAYCO 18',enabled:null,writable:true,timestamp,band:'Banda desconocida'},
  {path:'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5',ssid:'WirelessNet-5G',enabled:null,writable:true,timestamp,band:'Banda desconocida'}]};
+window.trialRecord=null;
+const trialEnabled=new URL(location.href).searchParams.get('trial')==='1';
+store.wifiTrialStatus=async()=>({enabled:trialEnabled,record:structuredClone(window.trialRecord),message:window.trialRecord?'Consulta de estado simulada':'Sin cambios enviados.'});
+store.wifiTrialAction=async(requested,action,payload)=>{
+ window.calls.push({operation:'TRIAL_'+action.toUpperCase(),serial:requested,payload});
+ if(!['ADMIN','SUPERADMIN'].includes(auth.role))throw Error('No tienes permisos');
+ if(action==='verify'){
+  const op=window.trialRecord.operations.at(-1);op.state='verified';window.inventory.networks[1].ssid=op.after;
+  return {enabled:true,record:structuredClone(window.trialRecord),message:'SSID verificado en GenieACS. Comprueba también la red y navegación.'};
+ }
+ if(!payload.confirmed)throw Error('Sin confirmación');
+ const before=window.inventory.networks[1].ssid;
+ if(action==='change')window.trialRecord={version:1,serial,deviceId,contractNumber:'CTR-2026-00214',path:window.inventory.networks[1].path,originalSsid:before,originalTimestamp:timestamp,operations:[]};
+ window.trialRecord.operations.push({requestId:payload.requestId,kind:action==='restore'?'restore':'change',actorId:'synthetic-user',before,
+  after:action==='restore'?window.trialRecord.originalSsid:payload.ssid,sentAt:new Date().toISOString(),state:'queued',taskId:'synthetic-task'});
+ return {enabled:true,record:structuredClone(window.trialRecord),message:'Cambio encolado, no confirmado. Espera el próximo Inform y pulsa Verificar resultado.'};
+};
 store.fetchWifiNetworks=async requested=>{window.calls.push({operation:'GET_CACHE',serial:requested});return structuredClone(window.inventory);};
 store.prepareWifiSsid=async(requested,payload)=>{
  window.calls.push({operation:'PREPARE_ONLY',serial:requested,payload});

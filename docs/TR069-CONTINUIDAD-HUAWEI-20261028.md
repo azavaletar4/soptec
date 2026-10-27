@@ -2,6 +2,12 @@
 
 ## Estado que prevalece
 
+**Administración WiFi posterior:** función manual local implementada con
+42/42 pruebas PASS; despliegue autorizado pero detenido ante HTML base frontend
+no reproducible. No se promovió, botón real no disponible, contenedores intactos
+y cero tareas enviadas por Codex. No reabrir conexión TR-069. Véase
+[TR069-WIFI-DESPLIEGUE-DETENIDO-20261027.md](TR069-WIFI-DESPLIEGUE-DETENIDO-20261027.md).
+
 **Comunicación TR-069 real CONFIRMADA** con la ONT de prueba
 `HWTC1D3691B7` (1/2/2:24, OLT ZTE C300 real, `10.15.15.2`). La
 **corrección de identificación de serial — commit `5104253` en `main`
@@ -103,6 +109,13 @@ y `deriveTr069EnableStatus(...)` ya deriva `'conectado'` con el
 | Modificar WiFi desde SmartRayco | **No probado todavía** |
 
 ## 7. Pendiente
+
+Preflight real posterior, solo GET (27/10 16:05 Perú): identidad única y vínculo
+ONT→cliente→CTR-2026-00214 confirmados, TR-069.service_contract_id=null y cero
+tareas pendientes. Respaldo SSID cacheado de 15:37; vigencia efectiva pendiente.
+Propuesta WLAN 5 WirelessNet-5G → WirelessNet-5G-PRUEBA no autorizada, prueba
+todavía NO lista. No se modificó asociación ni se habilitó escritura. Detalle:
+[TR069-WIFI-PRIMERA-PRUEBA-PREFLIGHT-20261027.md](TR069-WIFI-PRIMERA-PRUEBA-PREFLIGHT-20261027.md).
 
 Validación visual posterior local completada, sin tareas ni producción: 9 capturas
 de simulación, formulario real en escritorio/móvil, respaldo descargado y roles.

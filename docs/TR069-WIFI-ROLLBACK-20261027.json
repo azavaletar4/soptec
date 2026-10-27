@@ -1,0 +1,9 @@
+{
+  "services": {
+    "backend": {
+      "image": "smartrayco-wifi-backend-rollback:20261027",
+      "environment": { "TR069_WIFI_TRIAL_ENABLED": "" }
+    },
+    "frontend": { "image": "smartrayco-wifi-frontend-rollback:20261027" }
+  }
+}

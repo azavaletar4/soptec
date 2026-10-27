@@ -20,6 +20,17 @@ pendientes, pero no invalidan la recuperación real ya confirmada.
 
 ## TR-069 Huawei (HWTC1D3691B7) — gestión independiente operativa, corrección de identificación DESPLEGADA (27/10/2026)
 
+**Último resultado WiFi — prevalece (27/10, 16:26 Perú):** el propietario
+autorizó implementar/desplegar, reservando el cambio SSID para su clic manual.
+Candidato de escritura/restauración de solo WLAN 5.SSID implementado local,
+42/42 pruebas y TypeScript PASS; 6 capturas con stores ficticios. **Despliegue
+DETENIDO, botón real NO disponible:** la base frontend reconstruida no reproduce
+el HTML activo (`BASELINE_FRONTEND_NOT_REPRODUCIBLE`). No forzar promoción ni
+mezclar fases. Imágenes/configuración respaldadas; 5 contenedores verificados
+sin cambios y `deployAttempted=false`. Cero tareas reales enviadas por Codex.
+No reabrir diagnóstico de conexión. Detalle, rollback y siguiente paso:
+`docs/TR069-WIFI-DESPLIEGUE-DETENIDO-20261027.md`.
+
 **Comunicación TR-069 real CONFIRMADA.** La interfaz de gestión OMCI
 independiente (VLAN 200, IP `10.15.15.200`, patrón tomado de 6 Huawei
 GPT-2741GNAC reales ya configuradas en la OLT) quedó aplicada y
@@ -94,6 +105,15 @@ desconocida» por red; no inferir 5 GHz por SSID. Comparación exige nuevo Infor
 y fecha nueva de SSID; Inform solo no confirma. 37/37 pruebas y TypeScript PASS.
 Sin tareas, producción ni habilitación de escritura. Evidencia/procedimiento:
 `docs/TR069-WIFI-VALIDACION-VISUAL-20261027.md`.
+**Preflight puntual real posterior (27/10 16:05 Perú, solo GET):** serial único
+confirmado, ONT→cliente prueba zava→contrato activo CTR-2026-00214 concordantes;
+registro TR-069 único pero service_contract_id sigue null. Cero tareas pendientes.
+SSID RAYCO 18 (WLAN 1) y WirelessNet-5G (WLAN 5), ambos banda/Enable desconocidos,
+writable anunciado true; valores de 15:37 Perú, no renovados por el Inform 16:02.
+Propuesta no autorizada: WLAN 5.SSID → WirelessNet-5G-PRUEBA. **Todavía no lista:**
+confirmar selección/SSID efectivo, tratamiento del vínculo nulo sin cambiarlo y
+vía de ejecución/reversión aún bloqueada. Plan, respaldo y autorización puntual:
+`docs/TR069-WIFI-PRIMERA-PRUEBA-PREFLIGHT-20261027.md`. Sin cambios productivos.
 Detalle completo y consolidado:
 [TR069-CONTINUIDAD-HUAWEI-20261028.md](docs/TR069-CONTINUIDAD-HUAWEI-20261028.md).
 Equipos seriados, custodia, devoluciones, Asistencia y Puntos permanecen

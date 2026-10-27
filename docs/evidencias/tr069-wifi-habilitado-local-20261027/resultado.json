@@ -1,0 +1,53 @@
+{
+  "result": "PASS",
+  "synthetic": true,
+  "realEquipmentCalls": 0,
+  "exceptions": [],
+  "checks": [
+    "instancia 1 bloqueada",
+    "confirmación cancelable",
+    "solo SSID 5",
+    "encolado no confirmado",
+    "restauración bloqueada hasta verificar",
+    "respaldo persistente simulado",
+    "confirmación de restauración",
+    "restaurado simulado"
+  ],
+  "calls": [
+    {
+      "operation": "GET_CACHE",
+      "serial": "485754431D3691B7"
+    },
+    {
+      "operation": "TRIAL_CHANGE",
+      "serial": "485754431D3691B7",
+      "payload": {
+        "requestId": "01205d76-e415-491b-bb16-cf14e002c75a",
+        "confirmed": true,
+        "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+        "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5",
+        "ssid": "PRUEBA-LOCAL-SSID",
+        "expectedSsid": "WirelessNet-5G",
+        "expectedTimestamp": "2026-10-27T19:45:10.554Z"
+      }
+    },
+    {
+      "operation": "TRIAL_VERIFY",
+      "serial": "485754431D3691B7",
+      "payload": {}
+    },
+    {
+      "operation": "TRIAL_RESTORE",
+      "serial": "485754431D3691B7",
+      "payload": {
+        "requestId": "150f1003-69cd-44dd-b62f-faa60d37cdb4",
+        "confirmed": true
+      }
+    },
+    {
+      "operation": "TRIAL_VERIFY",
+      "serial": "485754431D3691B7",
+      "payload": {}
+    }
+  ]
+}
