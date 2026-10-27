@@ -1,5 +1,19 @@
 # SmartRayco — Estado de desarrollo
 
+## Estado vigente: A3 migrada, desplegada y verificada técnicamente
+
+Frontend A3 `71944f5` promovido el **27/10/2026 05:21:22 UTC (00:21 Perú)**.
+Imagen activa `smartrayco-asistencia-a3:71944f5-20261027T041727Z`.
+La migración A3 ya aplicada quedó conservada: **no se volvió a ejecutar**.
+API, panel, Asistencia, Campo y assets publicados comprobados. Backend `16831c6`
+conservado con el mismo contenedor, imagen, StartedAt y override.
+**Pendiente validación funcional real A3; no declararla cerrada funcionalmente.**
+Este estado prevalece sobre las notas anteriores de activación detenida o
+frontend pendiente, conservadas como antecedentes. A0/A1 sigue cerrada y validada;
+A2/A2.1 cerradas administrativamente con su seguimiento operativo pendiente.
+
+Detalle: `docs/ASISTENCIA-A3-FRONTEND-DESPLEGADO.md`.
+
 ## Estado vigente: SQL A3 aplicada y verificada; frontend A3 NO desplegado
 
 La migración `20261029000000_asistencia_a3_intercambios.sql` del candidato

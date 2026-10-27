@@ -1,5 +1,19 @@
 # Registro de versiones productivas — SmartRayco
 
+## Estado vigente: A3 migrada, desplegada y verificada técnicamente
+
+Frontend A3 `71944f5` promovido el **27/10/2026 05:21:22 UTC (00:21 Perú)**.
+Imagen activa `smartrayco-asistencia-a3:71944f5-20261027T041727Z`.
+La migración A3 ya aplicada quedó conservada: **no se volvió a ejecutar**.
+API, panel, Asistencia, Campo y assets publicados comprobados. Backend `16831c6`
+conservado con el mismo contenedor, imagen, StartedAt y override.
+**Pendiente validación funcional real A3; no declararla cerrada funcionalmente.**
+Este estado prevalece sobre las notas anteriores de activación detenida o
+frontend pendiente, conservadas como antecedentes. A0/A1 sigue cerrada y validada;
+A2/A2.1 cerradas administrativamente con su seguimiento operativo pendiente.
+
+Detalle: `docs/ASISTENCIA-A3-FRONTEND-DESPLEGADO.md`.
+
 ## Estado vigente: SQL A3 aplicada y verificada; frontend A3 NO desplegado
 
 La migración `20261029000000_asistencia_a3_intercambios.sql` del candidato
@@ -106,13 +120,13 @@ auditorías ni pruebas hasta la validación real del propietario.
 
 | | Backend | Frontend |
 |---|---|---|
-| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` + aprobación `263f66e` + diseño bandeja `cd0d0c9` + widget personal `070c777` + A2/A2.1 `7ed8dcd` |
-| Commit anterior | `53f284c` | `070c777` |
-| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` (SIN CAMBIOS) | `smartrayco-asistencia-a2-full:7ed8dcd-20261027T000500Z` |
-| Construida vía | Sin reconstruir — mismo contenedor desde Fase 175 | Fuente real (`7ed8dcd`, sobre `070c777`) + Asistencia A2 (vacaciones/descanso/permiso por horas/media jornada) + A2.1 (horarios parciales recurrentes por trabajador); nada más tocado |
-| Desplegado | 2026-10-26 16:27:41 UTC (sin cambios desde entonces) | 2026-10-27 02:44:18 UTC |
-| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1/A2/A2.1 completa (exención SUPERADMIN, ausencias, vacaciones/descansos/permisos, horarios parciales recurrentes, tardanza/falta por horario individual) |
-| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/recovery/frontend.tar`, tag `smartrayco-asistencia-a2-full-rollback:20261027T000500Z` (apunta a la imagen `070c777` previa); SQL: `scripts/sql/asistencia-a2-rollback.sql` (A2.1 y A2, verificado end-to-end, nunca borra datos) |
+| Commit base real | `b379028` + Fase 175 `53f284c` + corrección local `16831c6` | `87ddfd3` + Fase 175 `99dc78b` + custodia `fb56057` (`c11f6a8`) + A0/A1 `711a7fc` + visual `4db50f9` + aprobación `263f66e` + diseño bandeja `cd0d0c9` + widget personal `070c777` + A2/A2.1 `7ed8dcd` + A3 `71944f5` |
+| Commit anterior | `53f284c` | `7ed8dcd` |
+| Imagen activa | `smartrayco-backend-counters:16831c6-20261026T162650Z` (SIN CAMBIOS) | `smartrayco-asistencia-a3:71944f5-20261027T041727Z` |
+| Construida vía | Sin reconstruir ni recrear durante A3; contenedor activo conservado | Fuente exacta `71944f5`, dist verificado y runtime sobre imagen A2-full saliente; solo integración Asistencia A3 |
+| Desplegado | Imagen Fase 175 desde 2026-10-26 16:27:41 UTC; contenedor actual desde 20:44:49 UTC, conservado en A3 | 2026-10-27 05:21:22 UTC |
+| Funcionalidades incorporadas | Fase 36…174b + Fase 175 + lectura de contadores en lotes de 100 UUID | Puntos + Analítica + Devoluciones + Asistencia A0/A1/A2/A2.1 + A3 (intercambio de descansos, desplegado y verificado técnicamente; aceptación real pendiente) |
+| Rollback | `fase175-counters-16831c6-20261026T162650Z/recovery/backend.tar`, tag `smartrayco-backend-counters-rollback:20261026T162650Z` | `/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/recovery/frontend.tar`, tag `smartrayco-asistencia-a3-rollback:asistencia-a3-71944f5-20261027T034446Z` (A2-full); SQL `scripts/sql/asistencia-a3-rollback.sql`, solo con cero intercambios, incluso cancelados |
 
 ### Asistencia A0/A1 — migración aplicada y frontend desplegado (2026-10-26)
 

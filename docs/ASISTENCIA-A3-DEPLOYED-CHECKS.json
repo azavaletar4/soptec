@@ -1,0 +1,140 @@
+{
+  "checkedAt": "2026-10-27T05:22:45.920Z",
+  "migrationReexecuted": false,
+  "security": {
+    "read_only": "on",
+    "intercambios": 0,
+    "rls": true,
+    "policies": [
+      {
+        "name": "asistencia_intercambios_lectura",
+        "command": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "using": "((current_user_role() = 'SUPERADMIN'::user_role) OR ((user_id = auth.uid()) AND (current_user_role() = ANY (ARRAY['ADMIN'::user_role, 'TECNICO_RED'::user_role]))))"
+      }
+    ],
+    "direct_select_authenticated": true,
+    "direct_insert_authenticated": false,
+    "direct_update_authenticated": false,
+    "direct_delete_authenticated": false,
+    "direct_select_anon": false,
+    "rpc": [
+      {
+        "name": "asistencia_intercambio_cancelar(uuid,text)",
+        "definer": true,
+        "path": [
+          "search_path=public"
+        ],
+        "authenticated": true,
+        "anon": false
+      },
+      {
+        "name": "asistencia_intercambio_crear(uuid,uuid,date,date,time without time zone,time without time zone)",
+        "definer": true,
+        "path": [
+          "search_path=public"
+        ],
+        "authenticated": true,
+        "anon": false
+      },
+      {
+        "name": "asistencia_intercambios_resumen(date,date,date,uuid)",
+        "definer": true,
+        "path": [
+          "search_path=public"
+        ],
+        "authenticated": true,
+        "anon": false
+      },
+      {
+        "name": "mark_attendance_fin_almuerzo(numeric,numeric)",
+        "definer": true,
+        "path": [
+          "search_path=public"
+        ],
+        "authenticated": true,
+        "anon": false
+      },
+      {
+        "name": "mark_attendance_ingreso(numeric,numeric)",
+        "definer": true,
+        "path": [
+          "search_path=public"
+        ],
+        "authenticated": true,
+        "anon": false
+      },
+      {
+        "name": "mark_attendance_inicio_almuerzo()",
+        "definer": true,
+        "path": [
+          "search_path=public"
+        ],
+        "authenticated": true,
+        "anon": false
+      },
+      {
+        "name": "mark_attendance_salida(numeric,numeric)",
+        "definer": true,
+        "path": [
+          "search_path=public"
+        ],
+        "authenticated": true,
+        "anon": false
+      }
+    ],
+    "horarios": [
+      {
+        "nombre": "Alhely Lozano",
+        "dia": 6,
+        "ingreso": "08:00:00",
+        "salida": "13:30:00"
+      },
+      {
+        "nombre": "ANGIE LAGUNA",
+        "dia": 6,
+        "ingreso": "13:30:00",
+        "salida": "19:00:00"
+      }
+    ]
+  },
+  "backend": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+  "backendStartedAt": "2026-10-26T20:44:49.856235867Z",
+  "backendUnchanged": true,
+  "http": [
+    {
+      "path": "/api/health",
+      "status": 200
+    },
+    {
+      "path": "/",
+      "status": 200
+    },
+    {
+      "path": "/asistencia",
+      "status": 200
+    },
+    {
+      "path": "/campo",
+      "status": 200
+    },
+    {
+      "path": "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang-DE69D1v7.js",
+      "status": 200,
+      "hashMatches": true
+    },
+    {
+      "path": "assets/AsistenciaView-CFCstrUS.js",
+      "status": 200,
+      "hashMatches": true
+    },
+    {
+      "path": "assets/index-BLRjQC2d.js",
+      "status": 200,
+      "hashMatches": true
+    }
+  ],
+  "realFunctionalValidationPending": true
+}

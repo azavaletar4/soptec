@@ -36,10 +36,268 @@
     "previousFunctionsPreserved": 14,
     "dataTablesUnchanged": 8
   },
-  "status": "PAUSED_AFTER_VERIFIER_FAILURE",
+  "status": "DEPLOYED_TECHNICALLY_VERIFIED",
   "verifierFailure": {
     "cause": "Parser excluded digits in a3 function names",
     "corrected": true,
     "deploymentNotResumed": true
+  },
+  "frontendPreflight": {
+    "backupsVerified": true,
+    "ociBlobs": 16,
+    "effectiveImages": {
+      "backend": "smartrayco-backend-counters:16831c6-20261026T162650Z",
+      "frontend": "smartrayco-asistencia-a2-full:7ed8dcd-20261027T000500Z"
+    },
+    "composeFiles": [
+      "/opt/smartrayco/docker-compose.onprem.yml",
+      "/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json",
+      "/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/frontend.override.json"
+    ],
+    "otherContainers": [
+      {
+        "name": "/smartrayco-backend-1",
+        "id": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+        "image": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+        "startedAt": "2026-10-26T20:44:49.856235867Z"
+      },
+      {
+        "name": "/smartrayco-caddy-1",
+        "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+        "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+        "startedAt": "2026-10-21T19:37:56.248715181Z"
+      },
+      {
+        "name": "/smartrayco-mongo-1",
+        "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+        "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+        "startedAt": "2026-10-21T19:37:56.208636545Z"
+      },
+      {
+        "name": "/smartrayco-genieacs-1",
+        "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+        "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+        "startedAt": "2026-10-21T19:37:56.23339486Z"
+      }
+    ],
+    "pythonTarFilterSupported": true,
+    "checkedAt": "2026-10-27T05:18:57.511Z",
+    "sqlDefinitionsMatched": 7
+  },
+  "build": {
+    "source": "D:\\SmartRayco\\scripts\\inventory-auth-lab\\runtime\\asistencia-a3-worktree\\.env.a3-recovery\\source-71944f5",
+    "sourceArchiveSha256": "9b89068e5a08bdebc14edeaca74d7f1044983411ba2a434162502742b559fdd5",
+    "environmentMatchesActive": true,
+    "custodySettingPreserved": true,
+    "tag": "smartrayco-asistencia-a3:71944f5-20261027T041727Z",
+    "image": "sha256:09b1c008bbdf391020cdc65f0380427fd365e2656117bd9894d49666a7f8a138",
+    "backendUnchanged": true,
+    "distFilesVerified": 123,
+    "distHashes": {
+      "assets/ActivosFijosView-DMsnBiBh.js": "abfc53008670615fc29d83c8b96319425f99e0dcabfd763c8cd44519b7978d62",
+      "assets/AnaliticaView-CvC6DJdc.js": "3415157212fb8dcc74497124c898ab464923d43e5d3a255c093222de02635fe6",
+      "assets/apexcharts.ssr.esm-fe46cd2d-9CakV-nF.js": "9e8c90ca0bc7a3cff8652476bb73eea77cd3b697c49d184c9670205447c2a45e",
+      "assets/AppLayout.vue_vue_type_script_setup_true_lang-sAaRdBfz.js": "3b8e60c27e97fbe3a341d6f7a433baa9b0a77abad9517a55287edbcb80ac55a0",
+      "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang-DE69D1v7.js": "9180cf1b275bc2ed75838cf3b3a5f778aac4e9d9955cc90b6a8012cec1fba69f",
+      "assets/AsistenciaView-CFCstrUS.js": "59a897f45cb0fbd3d307ca2e8fcbba6e09952cdec6d985296a0ff413cafe5618",
+      "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang-A-by-vKP.js": "355baaf199f2e84a8cc5a991bc8f80d761c6e71be9a91816c524ce3dc81c2889",
+      "assets/CajaChicaView-ClQvEPrK.js": "95bad4184980d2b5c0ad3b7e6e7b1a602405a3bbda057845bd8ea6e19e273846",
+      "assets/CambiarPasswordView-CIpUUH9V.js": "4951dc681daf8b6b22457b244d45140b046ea3129a4b0996b605d93098ac8192",
+      "assets/CampoCustodiaView-C7a60jr7.js": "1c9d8988c6cba402d62c745737eb6df44f3c3aa20c2385608bf922eea7a9b82f",
+      "assets/CampoCustodiaView.vue_vue_type_script_setup_true_lang-BAlZoY4f.js": "0ec03202022c7ce26d0b7737784678301cdeb16d7b11d6a0f35ba4531d2b4af2",
+      "assets/CampoDashboardView-DI1azXXE.js": "6d98c46e9ba8330042472614c2577ada125c50384a23091c4f0d483e5ed5c8fb",
+      "assets/CampoMiCustodiaView-D9xLpYyA.js": "27128f55ed264adc0dca1f20bf9188444953d83ec6eb2ad70b7a49970f99736d",
+      "assets/CampoTrabajoDetailView-BSQJE5CH.js": "0e91dfc6d37f51fba3f0272e0b2012c5a01e788f07a92c2df5d9938df992aafc",
+      "assets/catalogs-B6zcRLdz.js": "fcf43626723bdbf2f61cacd4da4a09a4852af5f7684360ee0e5d5a6c7a67139b",
+      "assets/ClientDetailView-CWeBfKsh.js": "547660caa171d9de28f261c273f2ec706efffa20ccc7d433ac47433e0c247ced",
+      "assets/clientEquipmentPhotos-CYqasodC.js": "df4574ee79b250591f0a05783ebb3975c1954a3cd17724922388111a8c38aa97",
+      "assets/ClientesMapView-C3k5IOCd.js": "8ecf6a6aa46a3bf24137313128d14558a402ce409f621df32092fdf24c693ffd",
+      "assets/ClientesView-DdOVmZJv.js": "25a4a72162a4c6330f4fce7bbae3a9399d317a8b31698836427638f55228fdae",
+      "assets/clientLifecycle-C66tkUhY.js": "4d411ec5be0ff57947303550fec78c63904af1be1468cdf8b0b44e8211e2a934",
+      "assets/clientPhotos-Bkwk6QTP.js": "67de6f2c2fb61a2648eccb5f8631ba2f040bf05b3dcc4a36dafe8e78ae03ccb2",
+      "assets/ClientRetirementDialog.vue_vue_type_script_setup_true_lang-CKx9b9rV.js": "90055ddf0c564b85441e0e07ba4d2142a1bbb08bf58373a70ebd9ff125e841e7",
+      "assets/clients-De7GFjh5.js": "ef0dee89a376041b4ac41a8db72af21dc97d7a747382dfe99d1ddda20a968cdc",
+      "assets/ClientServiceDetailView-5zVByeek.js": "197c8fd8d540772190920cc7dc3e49aff791f04409b53620672030154598b1df",
+      "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang-CXD2dpSb.js": "217e57b511f0407053b404cd5b8e30bff53693582e8547ce9dfa1e491f70254c",
+      "assets/contracts-DDyN1-LR.js": "3e9feefcc106c5da68a598e430aeb7130f91e31a85ed22ce0130c0dbe3f0af25",
+      "assets/CortesView-Xcp7-Nk5.js": "1003f267934e8d7c681e3ae47976d3d3984c06828910649a917fdd3404d81408",
+      "assets/CrewAssignEditor.vue_vue_type_script_setup_true_lang-DpNlDxkz.js": "78caa53a93c6e8d35dbbfc39ed10250ea863e86302a9670396f87e4c2c1097ab",
+      "assets/DashboardView-dzE0R5qC.js": "f8b603f43e3753e7f0325519d7f80fa2d3880debccf46678a4704e58b8ac0d94",
+      "assets/DateRangeFilter.vue_vue_type_script_setup_true_lang-wFumegaz.js": "c7608ad0e1b0e883751dd7b6331212130a4c1b6832506222ff899da2ffa298a3",
+      "assets/descuentosCompensacion-DGoO5vXM.js": "41bdfca9e085c71c7429abc51f568ea54c2cfbe3c312cbf6a84d462f899b0ed2",
+      "assets/DevolucionesView-Cnkeeaof.js": "af40c967f1d30fa05b7fafbccd91d682bc192eb039d073665aa1663adae056ee",
+      "assets/DispatchBoardView-DFWydQYO.js": "fbdadd615ece8162c975dc9858875e96470ffb018510027e8e7c6d13d43bb65a",
+      "assets/domain-DTnkHfJg.js": "156072554a2c1608b309636106260d77af1c3ea4ecbff2a5072592d584f3d038",
+      "assets/elapsedTime-B7QjnEzO.js": "93ae344cbd661c44c460b65fbfd40a466e461f9420536cf25922b04e51174cd3",
+      "assets/equipmentPhotoType-CbTyU5Rj.js": "8d7bca3636fee9aa2bcf59e47f7ebabf9d0c52b1d6c01647ad3120d2e545b24b",
+      "assets/FacturacionView-CfF2mWIY.js": "b1931bfbb3480d977d5cd9306ce2e59cbf76fa330df748475f0bbd2349346f20",
+      "assets/FacturacionView-P51cOe60.css": "68245245aff5975510da0a5e528bb7b7c04572d2d51667d1068c53a451a9bc71",
+      "assets/fieldInventoryOperation-Bqo0EyGc.js": "836b76f6cf8f1ae7f21469807587ded798ac35e3bbad75cf3b07828818325971",
+      "assets/fieldProgress-CZSvaN1d.js": "1dcd9d5ee1fc5d83aee5d7ff997d48b6473937945f9a7937054da5bc7e6c2a40",
+      "assets/FlotaView-DsHuT3_Q.js": "092bed6a3b8ad105c3b7ae89c570971d2924b99a1098e17c3430f0a226a8434f",
+      "assets/foFibra-NTYo3Ot0.js": "66bd1db7b26b3dc39243fe3d34f6a7c0d024a7e038ca0dd9c7724692baa39cde",
+      "assets/HistoricoAtendidosView-B7Tvlyt0.js": "5391cf18d52f530f83d403073df4bdfb1399b395228274e6faf2740306e6136a",
+      "assets/imageCompression-CZrI0dQN.js": "ed702e0c7420682fa3678e1b85ec4fcedff967ffd8e6c06f5b8894d74080ee38",
+      "assets/ImportMapView-yEGlNCW2.js": "78b22f28e1aade2a8e3f29163d5d092253767fe69de8e0287aa7d42d1e260845",
+      "assets/index-B2um1Xke.css": "3bcb73f3fc11cb70fd304659001f4df72a44422909d1ac469839da7fdafbc7ea",
+      "assets/index-BLRjQC2d.js": "dc01411f68ccc2ce9413d5ddaa5923c5b51a9228ed7e322b3bc49dc016188ceb",
+      "assets/infraElementos-DrxyiSnK.js": "48e16bd64639ab496ed5fb01ba346f3a4bda72d393c4d3b43bb5862a8d18abe6",
+      "assets/InstalacionDetailView-D-ZTthUY.js": "6056803cdff8008bdbbcd51dee7ec2d1291fa2b57221b62844f0e85e7c1a31ea",
+      "assets/InstalacionesView-DV4BZt5E.js": "9189f065a35741f589873317868a17fe08cc7dba6eb95efecc1456ba08b52756",
+      "assets/installations-2wc1AOSA.js": "4fdcd38321f80b36e1f6b500add75b06de709d007c13799f308da8e3ff7f09e4",
+      "assets/InventarioAlbumView-BxN4qXQV.js": "1450cd8dcca051bebf11e555805d2164243e8871cfd7e037a4500b02ce772296",
+      "assets/InventarioConciliacionView-C8ZhS3do.js": "5bec9b27897ccf1ecae5e4984d78300cbb95679aad61f928c68bf63f51b4dc24",
+      "assets/InventarioCustodiaView-BMtNxUC4.js": "d2714c38fe577d3d8bbb1de94199f21bf5f52701a767456b28d72885f0f6b3d9",
+      "assets/InventarioProductoView-oepJ5_BX.js": "e6aeb7cdcd953b5ca016ea50744ca2c042d4ee690c495bc8cf395bb0ca1011dd",
+      "assets/InventarioView-B7NSyIWO.js": "d4dcaab6c176b6e866286faa77139d3592bfe60ec523052d498bc49a0d94c865",
+      "assets/inventory-DMo0ZGZv.js": "3da45a1c68085ecd48d2174cf46ad5445454e1028b9722191a48e232a9bfb027",
+      "assets/inventoryPresentation-BKwDbcl0.js": "ce65ae25c1ee6a49542debd339a72795eb180cb9f0ca6125105515e9db94c5b9",
+      "assets/InventorySearchResults.vue_vue_type_script_setup_true_lang-DlJ7t3gA.js": "d100251f4572c7caeeeea701b84627c9b04c7849870de9b6d3ee694095932630",
+      "assets/inventoryUnits-D77g5zvL.js": "0eaaab8ba04ba055d76e26f040db372f1cd721104ab9bb24929cba5f19c9ac69",
+      "assets/jobAssignees-DwtyQt2P.js": "f5aff0bacb59b64dba49f6dbf4e7ce95ed056814c368515592fdcb3042132a4c",
+      "assets/leaflet-CIGW-MKW.css": "fcd9fbeec3e87013f776847f0e76395d4d7eba07d982964933a41bd07503e6fe",
+      "assets/LoginView-8aVlIgU_.js": "93c9d38d794198571221110cb58bd7265d153d896bbee2d3d567ea6cd00c504b",
+      "assets/logo-icon-BLKDjdZa.js": "03cfd73a39cf345b800e289e4a166a2deb9a6a7133f21c8c069a7f1b19cc538d",
+      "assets/logo-icon-JbUtx3QJ.png": "01595f40e970f1825fd285582dabea3c231ddd15ec8cd08ba26881d407d446de",
+      "assets/mapIcons-D1S92751.js": "4d5d9d74fec2b5f01cbfb4f45c1a369371583382fe0b34e612e15d83c62ee77b",
+      "assets/materialInventoryOutcome-xSdnZKYW.js": "53f5df0fc42b62792c15c186434d7f992d2ea5b7ffdf013eb256e8d72be02f89",
+      "assets/materialMovementPresentation-DaZ01CsN.js": "fca39d231809c7a92698febde39ef5a726865d24c6eb56098a2278b0a33e5168",
+      "assets/mikrotik-C0-fmVJL.js": "5dcf310594cd545b97a9bbfc67d2bcfb51ab2fd2e1b0c548e7282873da84e730",
+      "assets/MikrotikDetailView-CNvdBYDJ.js": "12979bac8a6b7971d4b44b4c0249b72c581c2a90d69521a4232fd2331d661f83",
+      "assets/mikrotikDeviceRole-eJjItOfE.js": "01f248bfb14e0adf1c3a3667dcc7277ef265326a3ab3f2246a1c6fa24bb60f7f",
+      "assets/MikrotikDevicesView-Bc21Hlkf.js": "1dd56a005b14dc701684c584efd5fc3de99e9dc06b9199bd64050c2eef270f0b",
+      "assets/MoveAlbumMenu.vue_vue_type_script_setup_true_lang-DCmuOFrw.js": "cae540f00535717d1b98d14d4d6f6dcd66db96e572dc1925e4ff3d7364ac1c6f",
+      "assets/napOccupancy-BzXnx-La.js": "cc68255ddf13066a1551e01d743bc0dd8f7e254b2d519f34fe2e26c96878cbd5",
+      "assets/nativeApp-B9u-XyPD.js": "65e7844f0b2f4f0af94ab4b59fce530ce1868716109998a992a6aeb98183bf99",
+      "assets/olt-Cjg1unes.js": "f2e8aaca11e7c9da7b099160765653c2c66f94261920bf6b0a41deeefbae9a52",
+      "assets/oltAlertPresentation-DuFjnK97.js": "c2bb6adb38b7fb8d81123b11bf30ff1b476755c804081f5e19b0e53dedfae90f",
+      "assets/OltDetailView-CPiAYUC5.js": "e5e8b82e3bc64414664ec43d76e89f2c8762fda6fa0f93d8ef447722138e6495",
+      "assets/OltDevicesView-C3HARq9X.js": "4ceb5a80b360345a0256d76291dd303e8c278e51f58ce7db79ebd612d1e12b0a",
+      "assets/ontZoneSync-Dbk0EOzL.js": "d0e5b40dbd120d8741c9225cf808e9cf1ec36adcdb2a6fe2d5eed186308d307e",
+      "assets/OperacionesHoyView-CnLMIt1C.js": "37caacd863a587784a07b245aa9113fab7f9ccbee1c8807212c4ab825ac36e24",
+      "assets/orderInventory-CE0pGcdv.js": "a8458f3143a0ff27f3ef9a9407d949a1abe62960c456c530d53b01c7901a95c9",
+      "assets/phone-DeMz4mPO.js": "f9c48819b897c5824d8f9474512c8799ce47d96f9fd35067619418ba34c64999",
+      "assets/PlanesView-Dp3upgJ4.js": "fac1189f3c5dce2e73baa0d1ad683150318b12957838b8e718cba3b84e636c12",
+      "assets/ProspectosView-9DJyCz8f.js": "aa8085a6e7379b9c7302c042876ccb6beafa2f3f1b7774ad78aa5281ba8e292b",
+      "assets/prospects-CrR2m1Yz.js": "0ecbd1b93a8d28b401eb41f31e2cd6ae88b3533e6565157275fe115df7765510",
+      "assets/qr-scanner-worker.min-D85Z9gVD.js": "f9d5a00a24ef3c0f52453748a018feec9441c0031c7068e41606c744a26491f5",
+      "assets/qr-scanner-worker.min-PJMWJc5V.js": "f4d8445f5a15c4e5f71a8c8c062c6443f09db370b8d3fe1fbdc7fe7889630d14",
+      "assets/RankingTecnicosView-B-6ccbbK.js": "95b9ee9ed94da6581e731ced1592ca499065be9e3a34a1fa4383ec466d53dfbb",
+      "assets/RecoveryModal.vue_vue_type_script_setup_true_lang-DzyMpEZ2.js": "f56748c1adffad3c8fd4e1f1c54e8cd075b4a9a2421a8c2051a647240d1d5a71",
+      "assets/RedMapView-ByGuWrTV.js": "2a37f8a3c6ea0fa0320adb3d5dd9dd5dd9a8396b7e7a59892bcc91a11f5a5b28",
+      "assets/ReportesView-CkThaO9_.js": "566edad0eb9cdf69df1bc0df3d4a8279432982892e5cf9d26a7547f613f873bc",
+      "assets/RoutineDetailView-Dlmpx9ZP.js": "9b9b1b187ec589a2c9769044c87bf99a610ee2e4c31ced86f556f67b6eddd8b3",
+      "assets/routines-Dbmw0BuK.js": "10c528fe279155301ef0a2c4e4ebcbf8fe830ab9095fed371fb2f34dc4a73352",
+      "assets/routineTraslado-B20k8hUc.js": "67a02e405164be5788f35c894d8f15d5ef96d5aecb144364b9aaee6e3961b36f",
+      "assets/RutinasView-BIhgM7Rc.js": "119d3f8dc0dc63a16cff94808eaecf13ec242f632a6d1cf6614f625b8169644c",
+      "assets/scheduleConflict-BSTbO0v6.js": "7176582cb69e64b71c1cebb0964360542dc5d435acc557d998bd87ca4187a191",
+      "assets/ServidoresView-C02Uz4fw.js": "3fd71e87ca2e522c32f54d765dc97fe683d82396ef301a85f55c630cb9221584",
+      "assets/singleActiveJob-DiG-7Q3E.js": "a1d5f2013bc3b741fee88c9bead9d7808c43a13e7dfc0f693575e7e009db20d1",
+      "assets/SpliceDiagramModal.vue_vue_type_script_setup_true_lang-DUoBlaTQ.js": "f1179bd335884e9ccf16d6a504935bf07c4679868bd49af45470da585b1602fb",
+      "assets/technicianCustody-BU9gzkU2.js": "24cbde5c264f940d058a9f1238341d26234e368c4cc0fed1394c8234c6bceef1",
+      "assets/ticketApprovals-CeCuA8ob.js": "4046710e64844452f7e48837eee21d7443bdf0cb4f35c9469e77f65b20ea32e3",
+      "assets/TicketDetailView-Dr-8gQsX.js": "b86fc9384f35d44740176d192ea704d113b1bb6215701b8b7ad32998d8c36700",
+      "assets/ticketMotivoAveria-C-e57W6U.js": "002e352e1a9230d1c9c77e81a070184cbffa5b2dc01c2d2683fbdb6c7b984614",
+      "assets/tickets-Dt5H75I-.js": "58db575d7b6350a9b63416558f22c929e4905c1641e40c0b394ac565fe33ca1b",
+      "assets/tr069-DFVIIKUe.js": "db7f9121fab2c7ab207307a285dc5b555589953b33c1fab3167a4f64b70e52a3",
+      "assets/Tr069View-C-VVOOQ2.js": "6a4afb888f38b27692540b74e64fb09f7cc5f476e236c8e1fe5f302247a583a7",
+      "assets/turnos-DKU6Nwm1.js": "6ca99264def4c651c18d7e92c533ff65f369c63aa6b4db38bdd7c6919f09b744",
+      "assets/useAsyncAction-Bk_XD3Jq.js": "234844a3134d46ddc45172de282f66bb060a748cfb57b73bd4992ae1a0bf17e7",
+      "assets/useOntEvidenceClock-Cz3kA34r.js": "2091fcdd8f5ebf14bb3d1ace9f190f8914ce42944dbdd93a4a11583da0d581ae",
+      "assets/usePersonalRead-0m_Xw8c2.js": "732b4035db02bdbe4ec451c16b1b1c7f241d94ec5b011e1ab1f34b089f4d8ca4",
+      "assets/useToast-DHvvMaKJ.js": "17b6f6d74d8787ac4efcbb0d877da64dda2580c1bdd09c6a338b81f8cb36fcf3",
+      "assets/useUnifiedJobs-BfRS3IvK.js": "0c72491bb492466b38ca23d7bf97dae0014ef3f1ffec416b2497b79bf4c26f45",
+      "assets/useWorkOrderFinality-D60zCeY6.js": "f6ea9fa17b2027f797761369de4b4b0c9196913e2e40f6e077d2cd725b66e866",
+      "assets/UsuariosView-Ciue-RHT.js": "d4cbf5d1364103a0f746bdfbc4cb8fc2cb60125889301d3dc083978153d2880f",
+      "assets/vehiculoAlertas-D0_xd9VL.js": "8dca545f253e2c6e2aa274fafaf29881129b5bb1b41367a59c9cc9a5d705c9c5",
+      "assets/vehiculos-B2EHmONc.js": "1abdfc357e1385f6b138ed76c0ef494530c12ffe14c236175c7b877fa1957bf3",
+      "assets/vue3-apexcharts-B43YR0iC.js": "63b929d1dd25539e7a024f4878ae4204dd18f9b4837a568327c6dfb8f2f2252b",
+      "assets/workOrderFinality-DHGiT7_2.js": "8fdd900a22150c2799d7d195942570ab2a66ff7cbdfba6c0b2623353fd8a34ec",
+      "assets/workOrderPoints-Ctbn_-lp.js": "30593e08d1ca28ea43c1dde28cfae5b3e1a14dfc5d787897b9f34c734636b640",
+      "assets/WorkOrderPointsEditor.vue_vue_type_script_setup_true_lang-Ddj42pUH.js": "afd17873df6903bd6493546c381a403d972e26571b9dc3d55f5d633fd16fa9f6",
+      "assets/ZonasView-DYorVM9I.js": "04690dfb1252804bba6a5daf9a0b867c4a6ec41a051f3f27d6e8b499bf00d7f0",
+      "index.html": "bfc1aef98cb06321b19a1582397f695df986f58a3fdb69697e8601f6d16c4888"
+    },
+    "markersVerified": [
+      "asistencia_intercambio_crear",
+      "asistencia_intercambio_cancelar",
+      "asistencia_intercambios_resumen",
+      "reportar_ausencia_hoy",
+      "resolver_ausencia",
+      "asistencia_novedad_crear",
+      "asistencia_horarios_personales",
+      "Solicitar devolución"
+    ],
+    "compiled": true
+  },
+  "candidate": {
+    "image": "sha256:09b1c008bbdf391020cdc65f0380427fd365e2656117bd9894d49666a7f8a138",
+    "assetsVerified": 123,
+    "runtimeConfigPreserved": true,
+    "onlyFrontendImageChanges": true,
+    "override": "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/promotion/frontend.override.json",
+    "overrideSha256": "0b9ddcc0dffefb51b61d1c4aa5b32cc8c41cd773da967162bc9e7a6f187d99d0",
+    "composeFiles": [
+      "/opt/smartrayco/docker-compose.onprem.yml",
+      "/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json",
+      "/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/frontend.override.json",
+      "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/promotion/frontend.override.json"
+    ],
+    "effectiveConfigSha256": "02b0e63dff0d3c648e5adbb9dd5fcab949d70e463a61aafb5f8cfa8781ce4a3c"
+  },
+  "promotion": {
+    "tag": "smartrayco-asistencia-a3:71944f5-20261027T041727Z",
+    "image": "sha256:09b1c008bbdf391020cdc65f0380427fd365e2656117bd9894d49666a7f8a138",
+    "id": "7a89a04412d171894dfcdbf4d49cff1753b43420a539299db6c051982f3f30f5",
+    "startedAt": "2026-10-27T05:21:22.676231739Z",
+    "backendId": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+    "backendStartedAt": "2026-10-26T20:44:49.856235867Z",
+    "backendUnchanged": true,
+    "otherContainersUnchanged": true,
+    "composeFiles": [
+      "/opt/smartrayco/docker-compose.onprem.yml",
+      "/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json",
+      "/opt/smartrayco-staging/asistencia-a2-full-20261027T000500Z/frontend.override.json",
+      "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z/promotion/frontend.override.json"
+    ],
+    "promotedAt": "2026-10-27T05:21:23.052340+00:00"
+  },
+  "http": {
+    "checkedAt": "2026-10-27T05:21:31.659Z",
+    "results": [
+      {
+        "path": "/api/health",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/asistencia",
+        "status": 200
+      },
+      {
+        "path": "/campo",
+        "status": 200
+      },
+      {
+        "path": "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang-DE69D1v7.js",
+        "status": 200,
+        "hashMatches": true
+      },
+      {
+        "path": "assets/AsistenciaView-CFCstrUS.js",
+        "status": 200,
+        "hashMatches": true
+      },
+      {
+        "path": "assets/index-BLRjQC2d.js",
+        "status": 200,
+        "hashMatches": true
+      }
+    ],
+    "frontendImage": "sha256:09b1c008bbdf391020cdc65f0380427fd365e2656117bd9894d49666a7f8a138",
+    "backendUnchanged": true
   }
 }
