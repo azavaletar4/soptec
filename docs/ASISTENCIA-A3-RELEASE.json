@@ -1,0 +1,45 @@
+{
+  "commit": "71944f5",
+  "verifierCommit": "6af43cd",
+  "stage": "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z",
+  "imageTag": "smartrayco-asistencia-a3:71944f5-20261027T041727Z",
+  "preflight": {
+    "checkedAt": "2026-10-27T04:19:08.364Z",
+    "sourceFiles": [
+      "src/components/asistencia/AsistenciaPanel.vue",
+      "src/components/asistencia/IntercambiosPanel.vue",
+      "src/lib/__tests__/asistenciaIntercambios.test.ts",
+      "src/lib/asistenciaIntercambios.ts",
+      "src/views/asistencia/AsistenciaView.vue"
+    ],
+    "backupStillCurrent": true,
+    "verifiedArchive": {
+      "expectedDigest": "sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+      "rootDigestMatches": true,
+      "allBlobDigestsVerified": true,
+      "verifiedBlobCount": 16,
+      "runtimeConfigCount": 1,
+      "archiveSha256": "da12ddbb50b4889e4a7ffe48138ff29709592628f1637f640c5ebfe9b321a53e"
+    },
+    "remoteSqlHashesVerified": true,
+    "backendUnchanged": true,
+    "overridesUnchanged": true,
+    "migrationSha256": "24a4495d8b22526527e81e664aedc2a68ba4e33626963d3fa881caa0bc22cdc9",
+    "guardedSqlSha256": "18571feb934320d8560ca07a6f68744f59c7dd61c31dac93696afbe58510a39e"
+  },
+  "sql": {
+    "applied": true,
+    "verified": true,
+    "appliedAt": "2026-10-27T04:19:31.653Z",
+    "checkedAt": "2026-10-27T04:21:29.494Z",
+    "functionBodiesMatched": 7,
+    "previousFunctionsPreserved": 14,
+    "dataTablesUnchanged": 8
+  },
+  "status": "PAUSED_AFTER_VERIFIER_FAILURE",
+  "verifierFailure": {
+    "cause": "Parser excluded digits in a3 function names",
+    "corrected": true,
+    "deploymentNotResumed": true
+  }
+}

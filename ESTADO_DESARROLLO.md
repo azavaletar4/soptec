@@ -1,5 +1,18 @@
 # SmartRayco — Estado de desarrollo
 
+## Estado vigente: SQL A3 aplicada y verificada; frontend A3 NO desplegado
+
+La migración `20261029000000_asistencia_a3_intercambios.sql` del candidato
+`71944f5` se aplicó exclusivamente al proyecto `mzupdnjegfwmpajywckd` el
+27/10/2026 a las 04:19:31 UTC (26/10, 23:19 Perú). Su verificación posterior
+está completada. La activación se detuvo antes de construir/promover frontend
+por un fallo del parser de verificación, corregido después solo para comprobar
+el SQL. **El frontend sigue en A2/A2.1 `7ed8dcd`; A3 NO está activada de punta
+a punta.** Esta nota prevalece sobre los estados anteriores de A3 sin migrar
+o lista para activación completa. No reaplicar la migración.
+
+Detalle: `docs/ASISTENCIA-A3-SQL-APLICADA-FRONTEND-PENDIENTE.md`.
+
 ## Estado vigente: respaldos verificados; A3 todavía NO activada
 
 **APTO para retomar la activación controlada.** Se identificó y corrigió el
