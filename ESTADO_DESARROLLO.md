@@ -1,5 +1,180 @@
 # SmartRayco — Estado de desarrollo
 
+## TR-069 Huawei HWTC1D3691B7 — conectado real, corrección de identificación local sin desplegar (27/10/2026)
+
+**1. Interfaz de gestión operativa.** Se aplicó a la ONT de prueba
+`HWTC1D3691B7` (1/2/2:24, OLT ZTE C300) el patrón real de gestión OMCI
+independiente ya usado por 6 Huawei GPT-2741GNAC reales de esta misma
+OLT: VLAN 200 dedicada, IP de gestión `10.15.15.200` (libre, verificada
+antes de asignar), sin tocar `tcont 1`/`gemport 1`/`service-port 1`
+(Internet, VLAN 120). Ejecutado en 3 bloques pequeños, verificando cada
+uno antes de continuar. **GenieACS recibió 3 Informs reales** (Inform
+inicial + 2 periódicos a intervalos de 300s) del equipo real, confirmados
+por log CWMP y NBI — evidencia conservada en `docs/backups/`.
+
+**2. Internet y PPPoE conservados.** La sesión PPPoE real del cliente de
+prueba (`10.10.10.244`) mantuvo uptime continuo durante toda la
+operación, sin ningún reinicio. El propietario reportó una pérdida de
+ping a `8.8.8.8` durante la prueba; se verificó solo lectura (OLT,
+PPPoE, Informs de GenieACS) sin encontrar ninguna interrupción real en
+esas capas durante la ventana del incidente. El internet se recuperó al
+reconectar el cable de red del **equipo de prueba** (no el WAN de la
+Huawei). **No se atribuye causa definitiva a TR-069** — se documenta la
+hipótesis mejor respaldada por la evidencia (lado del cable/NIC del
+equipo de prueba), no como hecho confirmado. Detalle completo:
+`docs/TR069-HUAWEI-INCIDENTE-Y-RECUPERACION-20261027.md`.
+
+**3. Diferencia de representación del serial GPON identificada.**
+GenieACS reporta el serial de esta Huawei como `485754431D3691B7`
+(16 caracteres hex) mientras la OLT usa `HWTC1D3691B7` (4 ASCII + 8 hex).
+Son el **mismo serial GPON de 8 bytes** (ITU-T G.984.3): decodificando
+`48575443` byte a byte da literalmente `H`,`W`,`T`,`C`. La comparación
+literal que ya existía en el panel nunca encontraba esta coincidencia,
+aunque fuera la misma ONT real reportando correctamente.
+
+**4. Corrección implementada — commit local `5104253`.** Nuevo
+`src/lib/gponSerial.ts`: `normalizeGponSerial` (decodifica el vendor ID
+hex si corresponde; nunca inventa un formato no reconocido),
+`gponSerialsMatch`, `matchTr069Device` (comparación EXACTA del serial
+normalizado completo — nunca parcial ni por substring; serial inválido,
+sin coincidencia o coincidencia ambigua **nunca vinculan
+automáticamente**). Aplicado a los 2 consumidores reales que comparaban
+serial literal: `GET /:id/onts/:ontDbId/tr069/status` (botón "Habilitar
+TR-069" guiado) y `GET /onts/status` (panel genérico `Tr069View.vue`) en
+`server/src/routes/olt.ts`. `gponVendorId.ts` también normaliza antes de
+leer el prefijo de fabricante. Compatibilidad con ZTE y formatos ya
+admitidos conservada sin cambios (passthrough).
+
+**5. Pruebas aprobadas.** 26 pruebas nuevas (Huawei real, ZTE, formatos
+inválidos, casos ambiguos, null/vacío) — todas en verde. `tsc`
+backend/frontend limpio. 452 pruebas de `src/lib/__tests__` y 247 de
+`server/src/services/__tests__` existentes, sin regresión. Verificado
+además con los datos REALES de Supabase (solo lectura, sin tocar
+OLT/ONT/MikroTik): `matchTr069Device` encuentra el dispositivo real y
+`deriveTr069EnableStatus` ya deriva `'conectado'` en vez de
+`'esperando_conexion'` con el serial y el `last_seen_at` reales.
+
+**6. Estado preciso.** La comunicación TR-069 real con esta Huawei está
+**confirmada** (3 Informs reales, equipo físico). La corrección de
+identificación está **implementada y probada localmente — commit
+`5104253` en `main`, NO desplegada todavía** (ni backend ni frontend).
+El panel en producción sigue mostrando "Esperando conexión" para esta
+ONT hasta que se despliegue esta corrección.
+
+**7. Pendiente.** (a) Autorización explícita para el despliegue
+selectivo de backend+frontend con este código; (b) comprobación visual
+real en el panel de que pasa a mostrar "Conectado" una vez desplegado;
+(c) una prueba controlada aparte, todavía no intentada, de
+administración de WiFi vía TR-069 sobre este mismo equipo.
+
+Commits relevantes en `main` (todos locales, commit documental de esta
+sección incluido): `516faba` (botón "Habilitar TR-069" guiado, solo
+ADMIN/SUPERADMIN), `5a1cfc0` (gestión OMCI independiente para Huawei),
+`f61f771` (sintaxis de reversión de línea completa, más segura),
+`877bec6` (preparación final de la prueba real, respaldo conservado),
+`94d447e` (incidente y recuperación), `5104253` (corrección de
+identificación de serial). Detalle consolidado, con pointers a cada
+documento específico: `docs/TR069-CONTINUIDAD-HUAWEI-20261028.md`.
+
+Asistencia, Puntos, App de Campo (devoluciones, equipos seriados) y el
+resto de las fases ya cerradas documentadas más abajo **no se tocaron**
+y permanecen en su estado vigente — esta entrada no las reabre ni
+reemplaza.
+
+## Asistencia A0/A1 — estado real verificado por Claude Code (26/10/2026)
+
+**La propuesta de abajo quedó superada por una implementación real de Codex,
+no reflejada aquí hasta esta verificación.** Rama `feature/asistencia-a0-a1-local`,
+worktree `scripts/inventory-auth-lab/runtime/asistencia-a0-a1-worktree`, commit
+`1fa2c5937f587bab8230679c8975d29cdb43e2b4` ("feat(asistencia): implementar A0 y
+A1 con permisos y ausencias auditadas"), base `734c180` (incluye `c11f6a8`,
+el mismo commit que ya es ancestro del frontend realmente desplegado — sin
+tocar ningún archivo de `server/src/`, solo SQL + frontend).
+
+**Ese commit NO es la versión completa**: hay cambios locales sin commitear
+en 12 archivos (incluida la migración `20261027010000_asistencia_a0_a1.sql`)
+que agregan la exención real de SUPERADMIN (no cuenta en el resumen de
+ausencias, no puede ejecutar las RPC de marcación) — sin esa capa, el
+requisito "SUPERADMIN no aparece en faltas/tardanzas/pendientes" no se
+cumple. Verificado el 26/10/2026 por Claude Code, solo contra el estado
+ACTUAL (con los cambios sin commitear aplicados), sin modificar código:
+17/17 SQL (`server/tests/asistenciaA0A1.test.cjs`, Postgres aislado), 7/7
+navegador (`server/tests/asistenciaA0A1.browser.test.cjs`, Chrome headless
+con API ficticia) y 11/11 unitarias (`asistenciaAusencias.test.ts` +
+`asistenciaReglas.test.ts`) — 35/35, mismos números reportados por Codex.
+`vue-tsc` limpio. Migración aditiva, no toca filas existentes de
+`asistencia_registros` (confirmado por las propias pruebas: snapshot
+histórico idéntico antes/después). **Nada de esto está commiteado,
+pusheado, aplicado ni desplegado todavía** — requiere autorización
+explícita por separado para cada paso.
+
+## Asistencia semiautomática — propuesta de Fase A (26/10/2026, historia conservada)
+
+Diagnóstico focalizado y diseño preparados, **sin implementar ni desplegar**.
+Se reutilizarán AsistenciaPanel (Campo y modal ADMIN), store y Control de
+Asistencia; el servidor es Supabase RPC/RLS. El catálogo actual confirma que
+ADMIN aún puede configurar horarios/feriados: debe restringirse a SUPERADMIN.
+No existe el circuito de solicitudes en las fuentes/objetos revisados.
+Primera entrega propuesta A0+A1: técnico/ADMIN reportan ausencia de hoy en Perú,
+siempre «Pendiente de justificar»; SUPERADMIN aprueba/rechaza con bitácora,
+idempotencia y sin modificar marcaciones históricas. Vacaciones por rango,
+medios días, descansos e intercambio vinculado continúan en A2/A3, no como
+trabajo implementado. Detalle, archivos y pruebas futuras:
+`docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md`.
+Solo metadatos en READ ONLY y documentación local; sin código, escrituras,
+migraciones, pruebas operativas, commit ni push. Equipos/custodia/devoluciones
+permanecen cerrados; versiones productivas y meta de 3.000 clientes intactas.
+
+## Equipos seriados, custodia e instalación — fase cerrada operativamente
+
+El propietario confirma que el **25/10/2026** se realizaron **tres instalaciones
+reales exitosas** con instalación de equipos desde App de Campo. El circuito
+está implementado y desplegado: **entrega al técnico → custodia → instalación
+y devolución**, operativo y **sin defectos reportados**. Devolución y recepción
+administrativa ya fueron validadas y cerradas por el propietario el 26/10/2026.
+No volver a tratar esta fase como desarrollo pendiente ni exigir repetir las
+pruebas anteriores para reconocer su cierre operativo.
+
+Alcance de la evidencia: es la confirmación expresa del propietario sobre las
+tres instalaciones. No acredita por separado cada categoría ONT, Mesh y TV Box,
+ni verificaciones individuales de serie/MAC, contrato o movimientos de custodia.
+No inventar esos detalles ni confundir cierre operativo con certificación
+individual por categoría. Versiones productivas documentadas conservadas:
+frontend `c11f6a8`, backend `16831c6`. La meta permanente de estabilidad y
+rendimiento para al menos **3.000 clientes** se mantiene como requisito
+transversal; no reabre esta fase operativa.
+
+Esta actualización es solo documental: sin pruebas, auditorías, código,
+consultas productivas, migraciones ni cambios de inventario/contratos.
+
+
+## App de Campo: devoluciones implementadas, desplegadas y validadas (26/10/2026)
+
+Acceso recuperado en Mi custodia para materiales y equipos seriados. La ruta
+`/campo/mi-custodia` publicada retenía la vista antigua «Solo consulta»;
+ahora reutiliza los formularios existentes. Código previo `fb56057`,
+publicación aprobada `c11f6a8`. Frontend activo `smartrayco-campo-returns:c11f6a8-20261026T171151Z`,
+imagen `sha256:b6c98bc654906516d8a72eb4d5cdf21d2380d6eda7e1aaffddaff03a0858f84a`, arranque `2026-10-26T17:14:07.85212786Z`.
+Backend `16831c6` intacto, sin reconstruir ni reiniciar; Puntos y Analítica
+conservados. Sin SQL, tablas, rutas o permisos nuevos ni cambios de datos reales.
+
+25/25 pruebas SQL/unitarias previas aplicables; candidato compilado y dominio
+público PASS con datos ficticios: equipo + material parcial, pendiente de
+recepción y técnico bloqueado de Inventario general. Puntos/Alta/Avería/Rutina,
+panel HTTPS y API PASS; cero mutaciones de negocio reales. Respaldo OCI y
+rollback verificados, no usados.
+**Validación del propietario confirmada el 26/10/2026:** probó
+satisfactoriamente la devolución desde App de Campo en Android y la recepción
+administrativa. **Ambas pruebas funcionales COMPLETADAS; flujo probado y
+cerrado.** Devoluciones de materiales y equipos seriados implementadas,
+desplegadas y validadas funcionalmente; frontend `c11f6a8`, backend `16831c6`
+sin cambios. Antecedentes publicados: `c11f6a8` y documentación `6a8dadd`.
+No volver a registrar devolución o recepción como pendientes ni repetir las
+pruebas anteriores. Este cierre sustituye las notas de aceptación pendiente
+de informes previos, conservadas solo como antecedentes. Sin código, pruebas
+u operaciones productivas nuevas en esta actualización. La limitación previa de rechazo/historial
+resuelto de equipos no se amplió. Detalle: `docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`.
+
 ## Estado vigente compartido — Fase 175 operativa (26/10/2026)
 
 **Problema corregido y funcionalidad desplegada:** backend activo `16831c6`

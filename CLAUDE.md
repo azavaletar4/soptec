@@ -18,6 +18,92 @@ los errores y rollbacks anteriores son antecedentes, no incidentes activos.
 Seguimiento de ciclos y certificación integral de 3.000 clientes siguen
 pendientes, pero no invalidan la recuperación real ya confirmada.
 
+## TR-069 Huawei (HWTC1D3691B7) — gestión independiente operativa, corrección de identificación PROBADA LOCALMENTE sin desplegar (27/10/2026)
+
+**Comunicación TR-069 real CONFIRMADA.** La interfaz de gestión OMCI
+independiente (VLAN 200, IP `10.15.15.200`, patrón tomado de 6 Huawei
+GPT-2741GNAC reales ya configuradas en la OLT) quedó aplicada y
+operativa en la ONT de prueba `HWTC1D3691B7` (1/2/2:24): GenieACS recibió
+**3 Informs reales**. Internet (VLAN 120) y PPPoE del cliente se
+conservaron durante toda la prueba — hubo un incidente de navegación
+reportado por el propietario que se recuperó al reconectar el cable de
+red del equipo de prueba; no se atribuye causa definitiva a TR-069 (ni
+la sesión PPPoE ni los Informs mostraron ninguna interrupción durante la
+ventana del incidente).
+
+**Hallazgo e identificación:** GenieACS reporta el serial de esta Huawei
+como `485754431D3691B7` (16 hex, vendor ID también hex-codificado),
+mientras la OLT usa `HWTC1D3691B7` (ASCII + hex) — es el mismo serial
+GPON de 8 bytes (ITU-T G.984.3), otra representación. La comparación
+literal que ya existía nunca encontraba la coincidencia. **Corregido en
+local, commit `5104253`**: nuevo `src/lib/gponSerial.ts`
+(`normalizeGponSerial`/`matchTr069Device`, comparación exacta completa,
+nunca parcial; inválido/ambiguo nunca vincula solo), aplicado a los 2
+consumidores reales (`GET .../tr069/status` y `GET /onts/status` en
+`server/src/routes/olt.ts`). 26 pruebas nuevas + 452 frontend + 247
+backend, todas en verde; verificado con datos reales de Supabase
+(solo lectura) que el panel ya derivaría "Conectado" en vez de
+"Esperando conexión" con esta corrección.
+
+**Estado preciso: implementado y probado LOCALMENTE — NO desplegado.**
+Commits en `main` (sin push a `origin/main` todavía, verificar
+divergencia antes de sincronizar — ver nota más abajo):
+`516faba` (botón guiado), `5a1cfc0` (gestión independiente OMCI),
+`f61f771` (sintaxis de reversión más segura), `877bec6` (preparación
+final), `94d447e` (incidente y recuperación), `5104253` (corrección de
+identificación de serial).
+
+**Pendiente**: autorización de despliegue selectivo (backend+frontend
+con este código), comprobación visual real de que el panel muestra
+"Conectado", y una prueba controlada aparte de administración WiFi vía
+TR-069 (no intentada todavía). Detalle completo y consolidado:
+[TR069-CONTINUIDAD-HUAWEI-20261028.md](docs/TR069-CONTINUIDAD-HUAWEI-20261028.md).
+Equipos seriados, custodia, devoluciones, Asistencia y Puntos permanecen
+cerrados tal como están documentados abajo — esta sección no los reabre.
+
+## Devoluciones de App de Campo — estado vigente (26/10/2026)
+
+Acceso implementado y desplegado en `/campo/mi-custodia`: «Solicitar devolución»
+para materiales y equipos bajo custodia. El artefacto anterior conservaba una
+vista de solo consulta; se incorporó selectivamente el código ya aprobado
+`fb56057`, con publicación `c11f6a8`. Frontend `smartrayco-campo-returns:c11f6a8-20261026T171151Z`;
+backend `16831c6` conservado sin reinicio. Sin SQL ni permisos nuevos.
+Pruebas de navegador del candidato/publicado con datos ficticios PASS;
+25/25 SQL/unitarias previas conservadas. **Devoluciones de materiales y
+equipos seriados implementadas, desplegadas y validadas funcionalmente**.
+El propietario confirmó expresamente el **26/10/2026** que probó
+satisfactoriamente la devolución desde App de Campo en Android y su recepción
+administrativa. **Ambas pruebas COMPLETADAS; flujo probado y cerrado.**
+No volver a registrarlas como pendientes ni repetir pruebas anteriores.
+Frontend `c11f6a8`, backend `16831c6` sin cambios; antecedentes publicados:
+`c11f6a8` y documentación `6a8dadd`. Este cierre prevalece sobre las notas
+de aceptación pendiente de informes anteriores, conservadas como antecedentes.
+Sin pruebas nuevas ni operaciones productivas en esta actualización.
+Detalle/rollback: `docs/CUSTODIA-DEVOLUCIONES-CORRECCION-LOCAL.md`;
+versiones exactas en `docs/REGISTRO-VERSIONES-PRODUCTIVAS.md`.
+
+## Equipos seriados, custodia e instalación — fase cerrada operativamente
+
+El propietario confirma que el **25/10/2026** se realizaron **tres instalaciones
+reales exitosas** con instalación de equipos desde App de Campo. El circuito
+está implementado y desplegado: **entrega al técnico → custodia → instalación
+y devolución**, operativo y **sin defectos reportados**. Devolución y recepción
+administrativa ya fueron validadas y cerradas por el propietario el 26/10/2026.
+No volver a tratar esta fase como desarrollo pendiente ni exigir repetir las
+pruebas anteriores para reconocer su cierre operativo.
+
+Alcance de la evidencia: es la confirmación expresa del propietario sobre las
+tres instalaciones. No acredita por separado cada categoría ONT, Mesh y TV Box,
+ni verificaciones individuales de serie/MAC, contrato o movimientos de custodia.
+No inventar esos detalles ni confundir cierre operativo con certificación
+individual por categoría. Versiones productivas documentadas conservadas:
+frontend `c11f6a8`, backend `16831c6`. La meta permanente de estabilidad y
+rendimiento para al menos **3.000 clientes** se mantiene como requisito
+transversal; no reabre esta fase operativa.
+
+Esta actualización es solo documental: sin pruebas, auditorías, código,
+consultas productivas, migraciones ni cambios de inventario/contratos.
+
 ## Capacidad mínima (requisito permanente)
 
 SmartRayco debe soportar al menos **3.000 clientes** con estabilidad y
