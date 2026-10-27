@@ -9,8 +9,11 @@
 ~20:18 UTC, autorización expresa): backend
 `smartrayco-backend-tr069fix:5104253-20261027T201808Z`. Verificado con
 el código real desplegado y datos reales de Supabase que ya resuelve
-la identidad correctamente. Pendiente solo la comprobación visual real
-(login en el panel) de que efectivamente se ve "Conectado".
+la identidad correctamente. El propietario confirmó al retomar desde Claude
+«TR-069: Conectado», «Administrar TR-069» habilitado y el equipo en línea en
+GenieACS. La comprobación visual está completada; modificar WiFi desde
+SmartRayco sigue sin probarse. Esta actualización registra su confirmación,
+sin nuevas consultas ni cambios en producción.
 
 ## 1. Interfaz de gestión OMCI independiente — operativa
 
@@ -95,14 +98,17 @@ y `deriveTr069EnableStatus(...)` ya deriva `'conectado'` con el
 | Frontend | Sin cambios (el commit no lo requiere) |
 | Verificación con código real + datos reales | `matchTr069Device` ya resuelve `HWTC1D3691B7` ↔ `485754431D3691B7` |
 | Rollback | Preparado (imagen anterior respaldada, SHA256), no usado |
-| Comprobación visual de "Conectado" en el panel | Pendiente (login real, no probado todavía) |
+| Comprobación visual en el panel | **Confirmada por el propietario:** «TR-069: Conectado» y «Administrar TR-069» habilitado |
+| Pantalla GenieACS | Equipo en línea, confirmado por el propietario |
+| Modificar WiFi desde SmartRayco | **No probado todavía** |
 
 ## 7. Pendiente
 
-1. Comprobación visual real (login en el panel) de que `HWTC1D3691B7`
-   pasa a mostrar "Conectado".
-2. Prueba controlada aparte — todavía no intentada ni autorizada — de
-   administración de WiFi vía TR-069 sobre este mismo equipo.
+1. Autorizar una prueba controlada aparte de modificación de WiFi desde
+   SmartRayco en `HWTC1D3691B7`, acordando el cambio y su reversión.
+2. En esa futura prueba, comprobar que el cambio se aplica realmente y que
+   internet/PPPoE continúan funcionando. Todavía no intentada ni autorizada;
+   el estado conectado y el botón habilitado no acreditan escritura WiFi.
 
 ## Commits
 
@@ -122,3 +128,10 @@ de código). Por eso este trabajo se publicó en una rama nueva, nunca
 sobre `origin/main` directamente — sin fusionar ni forzar nada. Ver el
 commit de esta misma actualización para el nombre exacto de la rama
 publicada.
+
+Retoma documental desde Codex (27/10/2026): consulta de referencias de GitHub
+en solo lectura confirmó `origin/main` en `88dec40` y la rama remota
+`feature/tr069-huawei-gestion-independiente` en `2fedaed` (base local de esta
+retoma). Se conserva `main` local, sin fusionar ramas ni sobrescribir cambios
+ajenos. La confirmación visual se guarda en un nuevo commit documental local;
+su publicación requiere autorización expresa del propietario antes de un push.

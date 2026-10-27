@@ -69,10 +69,17 @@ Caddy/GenieACS/Mongo sin reiniciar; `mikrotik-reconcile` corrió un
 ciclo limpio (0 perfiles de cliente tocados). Rollback preparado
 (imagen anterior respaldada con SHA256), no usado.
 
-**7. Pendiente.** (a) Comprobación visual real en el panel (login como
-staff) de que `HWTC1D3691B7` efectivamente muestra "Conectado"; (b) una
-prueba controlada aparte, todavía no intentada ni autorizada, de
-administración de WiFi vía TR-069 sobre este mismo equipo.
+**7. Confirmación visual completada.** El propietario confirmó al retomar
+desde Claude que `HWTC1D3691B7` muestra «TR-069: Conectado», que
+«Administrar TR-069» está habilitado y que GenieACS muestra el equipo en
+línea. Es evidencia aportada por el propietario; en esta retoma no se
+hicieron nuevas consultas ni cambios productivos.
+
+**Pendiente:** prueba controlada de modificación de WiFi desde SmartRayco
+sobre esta misma ONT, todavía no intentada ni autorizada. Antes de ejecutarla,
+acordar el cambio y su reversión; después, comprobar su aplicación real y
+la continuidad de internet/PPPoE. La conexión TR-069 y el botón habilitado
+no acreditan por sí solos que la escritura WiFi funcione.
 
 Commits relevantes en `main`: `516faba` (botón "Habilitar TR-069"
 guiado, solo ADMIN/SUPERADMIN), `5a1cfc0` (gestión OMCI independiente

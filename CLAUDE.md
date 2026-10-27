@@ -62,10 +62,15 @@ segura), `877bec6` (preparación final), `94d447e` (incidente y
 recuperación), `5104253` (corrección de identificación de serial),
 `83f06b4` (sincronización de continuidad).
 
-**Pendiente**: comprobación visual real (login en el panel) de que
-`HWTC1D3691B7` muestra "Conectado", y una prueba controlada aparte de
-administración WiFi vía
-TR-069 (no intentada todavía). Detalle completo y consolidado:
+**Confirmación visual completada por el propietario**, comunicada al retomar
+desde Claude: `HWTC1D3691B7` muestra «TR-069: Conectado», el botón
+«Administrar TR-069» está habilitado y GenieACS muestra el equipo en línea.
+Esta evidencia no implica que se haya probado modificar WiFi.
+**Pendiente**: autorizar una prueba controlada aparte de cambio de WiFi desde
+SmartRayco sobre esta ONT, acordar el cambio y su reversión, y comprobar su
+aplicación real y la continuidad de internet/PPPoE. No intentada todavía.
+Esta retoma es solo documental, sin nuevas consultas ni cambios productivos.
+Detalle completo y consolidado:
 [TR069-CONTINUIDAD-HUAWEI-20261028.md](docs/TR069-CONTINUIDAD-HUAWEI-20261028.md).
 Equipos seriados, custodia, devoluciones, Asistencia y Puntos permanecen
 cerrados tal como están documentados abajo — esta sección no los reabre.
