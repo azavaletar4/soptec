@@ -1,8 +1,11 @@
 # SmartRayco — guía para Claude Code
 
-## Asistencia semiautomática A0/A1 — ACTIVA en producción (26/10/2026)
+## Asistencia semiautomática A0/A1 — CERRADA y validada en producción (26/10/2026)
 
-A0/A1 desplegadas y operativas. SUPERADMIN gestiona configuración y
+El propietario cerró A0/A1 explícitamente el 2026-10-26: desplegada,
+operativa y validada en producción. No reabrir esta fase ni repetir su
+auditoría — continuar con A2 (ver sección propia más abajo). SUPERADMIN
+gestiona configuración y
 aprueba/rechaza, pero está **exento de asistencia**: no tiene horario,
 marcación ni reporte personal; no suma faltas, tardanzas ni pendientes de
 marcación — confirmado por `asistencia_ausencias_resumen` y el trigger de
@@ -36,14 +39,18 @@ intactas. ADMIN marca/reporta desde el panel web y técnico desde Campo
   `/opt/smartrayco-staging/asistencia-polish-070c777-20261026T220705Z/recovery/frontend.tar`).
 - Rama `feature/asistencia-a0-a1-local`, commits `1fa2c59` → `fb7c3e2` →
   `0dfecfa` → `d984e56` → `711a7fc` → `4db50f9` → `0143c5c` → `263f66e` →
-  `4723f30` → `cd0d0c9` → `070c777`. **Sin push a GitHub** — el despliegue
-  usó el mecanismo selectivo (override de 1 solo servicio), no el checkout
-  de `/opt/smartrayco`. A2/A3 no iniciadas.
+  `4723f30` → `cd0d0c9` → `070c777` → `33637f5`. **Pusheada a GitHub el
+  2026-10-26** (`origin/feature/asistencia-a0-a1-local`, sin force push,
+  sin PR abierto todavía) — el despliegue en la VM siguió usando el
+  mecanismo selectivo (override de 1 solo servicio), el push es solo para
+  respaldo/colaboración con Codex en GitHub, no afecta lo ya desplegado.
 - Pruebas (commit `070c777`, previas al despliegue, datos ficticios/Postgres
   aislado): 9/9 navegador + `vue-tsc` limpio para ambas correcciones
   visuales; unitarias/pruebas de aprobación-rechazo previas sin cambios de
-  código, no repetidas. No se resolvió ninguna solicitud real. Validación
-  funcional real desde panel/celular: **pendiente del propietario**.
+  código, no repetidas. No se resolvió ninguna solicitud real.
+- **A2 EN DESARROLLO** (rama propia, sin migrar/desplegar todavía): vacaciones
+  por rango de fechas, descansos programados, permisos por horas y medias
+  jornadas. Ver sección "Asistencia A2" más abajo para alcance y estado.
 
 ## Antes de empezar
 
