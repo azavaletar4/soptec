@@ -1,5 +1,24 @@
 # Registro de versiones productivas — SmartRayco
 
+## Cierre definitivo de Fase A3 - 27/10/2026
+
+**A3 implementada, desplegada, aprobada y validada visualmente por el propietario.
+Cierre administrativo definitivo autorizado expresamente.**
+
+Frontend visual `233f230`: `smartrayco-asistencia-visual:233f230-20261027T133357Z`.
+Backend conservado `16831c6`. Despliegue documentado en el commit `d958555`
+y en `docs/ASISTENCIA-VISUAL-DESPLEGADA.md`, con evidencias y rollback disponibles.
+
+La validación operativa de intercambios reales continuará durante el uso diario,
+sin bloquear ni reabrir el cierre administrativo. **A0-A3 permanecen cerradas**;
+solo se reabrirán ante incidencias concretas, sin repetir auditorías ni pruebas
+ya aprobadas por el solo seguimiento operativo.
+
+Esta declaración prevalece sobre las notas históricas de fases abiertas,
+validaciones pendientes o mejora visual sin publicar que se conservan abajo.
+Actualización exclusivamente documental: sin código, SQL, permisos, consultas
+ni cambios productivos; sin merge a main ni inicio de nuevas fases.
+
 ## Despliegue visual A3 completado ? 27/10/2026
 
 Mejora de cuatro pesta?as del commit `233f230` **DESPLEGADA** el
