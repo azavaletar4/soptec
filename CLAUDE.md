@@ -1,16 +1,22 @@
 # SmartRayco — guía para Claude Code
 
-## TR-069: continuidad para Claude Code - 27/10/2026
+## TR-069: inventario ACS actual — DESPLEGADO - 27/10/2026
 
-Corrección funcional `30bbb54`, todavía **NO DESPLEGADA**. Huawei **NO probada**.
-Bloqueo OCI resuelto reutilizando A3: frontend 20 blobs/498 archivos y backend
-19 blobs/406 archivos, ambos recuperados en Docker local, sin red ni arranque.
-Pruebas locales: 22 de servicio, 29 de navegador, compilación y tipos aprobados.
-Producción conservada: frontend fc9047f, backend 16831c6, overrides intactos.
-Siguiente paso: revalidar estado productivo y solicitar confirmación expresa
-antes de reanudar el despliegue controlado de backend y frontend. Autorización
-anterior pendiente; no migraciones ni operaciones de ONTs.
-Continuidad, imágenes, respaldos, cadena Compose y límites del rollback:
+Corrección funcional `30bbb54` **DESPLEGADA** con autorización expresa del
+propietario (16:14 UTC / 11:14 Perú). Backend
+`smartrayco-backend-tr069:30bbb54-20261027T161415Z` (solo 3 archivos sobre
+`16831c6`, sin el resto del árbol de la rama). Frontend
+`smartrayco-tr069:30bbb54-20261027T161438Z` (sobre `fc9047f`). Huawei nueva
+**todavía NO probada** — prueba posterior y separada.
+NBI de GenieACS devuelve 0 CPE (lista vacía, no error) antes y después;
+`tr069_devices` sigue en 2 filas con sus mismas asociaciones de contrato
+(1 vinculado, 1 sin vincular), sin cambios — el scheduler automático ya
+corrió una vez y confirmó "0 nuevos, 0 actualizados, 0 en GenieACS". Caddy,
+GenieACS y Mongo sin reiniciar (mismo `StartedAt`). Sin migraciones ni
+operaciones de ONTs/OLT/MikroTik. Sin merge a main ni force push.
+Detalle completo, comprobaciones e instrucciones de rollback:
+[TR069-DESPLEGADO.md](docs/TR069-DESPLEGADO.md). Antecedente de la
+continuidad previa a este despliegue:
 [TR069-CONTINUIDAD-CLAUDE-CODE.md](docs/TR069-CONTINUIDAD-CLAUDE-CODE.md).
 
 ## Campo: dirección por contrato - fase cerrada - 27/10/2026
