@@ -1,0 +1,37 @@
+{
+  "backups": [
+    {
+      "stage": "/opt/smartrayco-staging/asistencia-a3-71944f5-20261027T034446Z",
+      "archiveBytes": 27967488,
+      "archiveSha256": "da12ddbb50b4889e4a7ffe48138ff29709592628f1637f640c5ebfe9b321a53e",
+      "manifest": [
+        {
+          "configPath": "blobs/sha256/37c1b8efbfa476f44fe047bf5c044fecb3a78d61e7ed7954f5afc5dd155c6c1a",
+          "configSha256": "sha256:37c1b8efbfa476f44fe047bf5c044fecb3a78d61e7ed7954f5afc5dd155c6c1a",
+          "repoTags": [
+            "smartrayco-asistencia-a3-rollback:asistencia-a3-71944f5-20261027T034446Z"
+          ]
+        }
+      ]
+    }
+  ],
+  "containers": [
+    {
+      "name": "/smartrayco-frontend-1",
+      "id": "5ed0853222f375a388ef8410843ca024445ef3015b345ccc137fd6e007fa2286",
+      "image": "sha256:afb272698444096271026ff940615a8d66fa1d367b094f1182861a99e9f4418e",
+      "tag": "smartrayco-asistencia-a2-full:7ed8dcd-20261027T000500Z",
+      "startedAt": "2026-10-27T02:44:18.038826098Z",
+      "running": true
+    },
+    {
+      "name": "/smartrayco-backend-1",
+      "id": "cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154",
+      "image": "sha256:6631d4a124b631f7bedd3d8c2b6f6c8ab7e524e264385ae2fae2b46e3f67047e",
+      "tag": "smartrayco-backend-counters:16831c6-20261026T162650Z",
+      "startedAt": "2026-10-26T20:44:49.856235867Z",
+      "running": true
+    }
+  ],
+  "readOnly": true
+}

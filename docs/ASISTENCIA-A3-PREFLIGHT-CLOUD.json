@@ -1,0 +1,192 @@
+{
+    "read_only":  "on",
+    "checked_at":  "2026-10-27T03:39:56.121668+00:00",
+    "tables":  [
+                   {
+                       "name":  "profiles",
+                       "exists":  true
+                   },
+                   {
+                       "name":  "company_settings",
+                       "exists":  true
+                   },
+                   {
+                       "name":  "feriados",
+                       "exists":  true
+                   },
+                   {
+                       "name":  "asistencia_registros",
+                       "exists":  true
+                   },
+                   {
+                       "name":  "asistencia_solicitudes",
+                       "exists":  true
+                   },
+                   {
+                       "name":  "asistencia_novedades",
+                       "exists":  true
+                   },
+                   {
+                       "name":  "asistencia_horarios_personales",
+                       "exists":  true
+                   },
+                   {
+                       "name":  "asistencia_config_eventos",
+                       "exists":  true
+                   }
+               ],
+    "a3_absent":  true,
+    "functions":  [
+                      {
+                          "name":  "asistencia_config_auditar()",
+                          "body_md5":  "07a925dabbfa55d620fc951dc91b8e80",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  false,
+                          "anon_execute":  false
+                      },
+                      {
+                          "name":  "asistencia_guardar_historial()",
+                          "body_md5":  "fa10d335e59cf29902b6acd2fdc630d6",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  false,
+                          "anon_execute":  false
+                      },
+                      {
+                          "name":  "asistencia_novedad_cancelar(uuid,integer,text)",
+                          "body_md5":  "1288b8a682a36cd80049d16e3cb26906",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  true,
+                          "anon_execute":  false
+                      },
+                      {
+                          "name":  "asistencia_novedad_crear(uuid,uuid,text,date,date,text,time without time zone,time without time zone,text)",
+                          "body_md5":  "4191d479a2fc9b10551cb7237d24177f",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  true,
+                          "anon_execute":  false
+                      },
+                      {
+                          "name":  "current_user_role()",
+                          "body_md5":  "d4d2d3cd85c4d4e7d1be768b0bad070b",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  true,
+                          "anon_execute":  true
+                      },
+                      {
+                          "name":  "mark_attendance_fin_almuerzo(numeric,numeric)",
+                          "body_md5":  "654525d19267658efd19c69fdfeaa002",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  true,
+                          "anon_execute":  false
+                      },
+                      {
+                          "name":  "mark_attendance_ingreso(numeric,numeric)",
+                          "body_md5":  "12c523fedba9d6356cd715c309264eda",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  true,
+                          "anon_execute":  false
+                      },
+                      {
+                          "name":  "mark_attendance_inicio_almuerzo()",
+                          "body_md5":  "5caa29032cf0880a6850fa01c3c48bf2",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  true,
+                          "anon_execute":  false
+                      },
+                      {
+                          "name":  "mark_attendance_salida(numeric,numeric)",
+                          "body_md5":  "2cda170f37893f65827b8056c1b2c44f",
+                          "security_definer":  true,
+                          "config":  [
+                                         "search_path=public"
+                                     ],
+                          "authenticated_execute":  true,
+                          "anon_execute":  false
+                      }
+                  ],
+    "horarios":  [
+                     {
+                         "name":  "Alhely Lozano",
+                         "weekday":  6,
+                         "turno":  "manana",
+                         "ingreso":  "08:00:00",
+                         "salida":  "13:30:00"
+                     },
+                     {
+                         "name":  "ANGIE LAGUNA",
+                         "weekday":  6,
+                         "turno":  "tarde",
+                         "ingreso":  "13:30:00",
+                         "salida":  "19:00:00"
+                     }
+                 ],
+    "policies":  [
+                     {
+                         "table":  "asistencia_horarios_personales",
+                         "name":  "asistencia_horarios_personales_escritura_superadmin",
+                         "command":  "ALL",
+                         "using":  "(current_user_role() = \u0027SUPERADMIN\u0027::user_role)",
+                         "check":  "(current_user_role() = \u0027SUPERADMIN\u0027::user_role)"
+                     },
+                     {
+                         "table":  "asistencia_horarios_personales",
+                         "name":  "asistencia_horarios_personales_lectura",
+                         "command":  "SELECT",
+                         "using":  "((current_user_role() = \u0027SUPERADMIN\u0027::user_role) OR (user_id = auth.uid()))",
+                         "check":  null
+                     },
+                     {
+                         "table":  "asistencia_novedades",
+                         "name":  "asistencia_novedades_lectura",
+                         "command":  "SELECT",
+                         "using":  "((current_user_role() = \u0027SUPERADMIN\u0027::user_role) OR (user_id = auth.uid()))",
+                         "check":  null
+                     }
+                 ],
+    "rls":  [
+                {
+                    "table":  "asistencia_config_eventos",
+                    "enabled":  true
+                },
+                {
+                    "table":  "asistencia_horarios_personales",
+                    "enabled":  true
+                },
+                {
+                    "table":  "asistencia_novedades",
+                    "enabled":  true
+                },
+                {
+                    "table":  "asistencia_registros",
+                    "enabled":  true
+                },
+                {
+                    "table":  "asistencia_solicitudes",
+                    "enabled":  true
+                }
+            ]
+}

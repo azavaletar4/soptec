@@ -1,5 +1,18 @@
 # SmartRayco — guía para Claude Code
 
+## Estado vigente: A3 NO activada
+
+La activación del candidato `71944f5` fue autorizada por el propietario, pero
+se detuvo en el paso 2 al fallar la verificación de la imagen respaldada.
+No se aplicó la migración A3, no se construyó ni promovió frontend, y no se
+recreó backend. Esta nota prevalece sobre cualquier indicación de activación
+completada. A3 sigue pendiente de activación y validación operativa real.
+
+Se actualiza documentación y se sincroniza la rama A3 conforme a la autorización;
+el push no representa despliegue. A0/A1 y A2/A2.1 mantienen su estado anterior.
+
+Detalle: `docs/ASISTENCIA-A3-ACTIVACION-DETENIDA.md`.
+
 ## Estado vigente de A3
 
 A3 implementada y validada localmente en `feature/asistencia-a3-local`,
