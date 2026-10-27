@@ -19,6 +19,9 @@ sin activar la fecha de Compose que no estaba compilada. Main remoto `88dec40`
 conservado; la rama integra sus 4 commits pendientes sin forzar historial.
 Continuidad técnica/futuros builds: `docs/FRONTEND-CONSOLIDACION-CONTINUIDAD-20261027.md`.
 Este estado prevalece sobre la parada anterior, conservada abajo como antecedente.
+Git: rama de integración publicada con push normal; main local alineado por
+fast-forward, 21 archivos pendientes previos respaldados/conservados. Main remoto
+sigue `88dec40`; incorporarlo por PR revisada, sin force ni nuevos merges amplios.
 
 Lee primero `ESTADO_DESARROLLO.md` (raíz del repo) — tiene el estado real
 (implementado/desplegado/pendiente), la arquitectura, el último commit

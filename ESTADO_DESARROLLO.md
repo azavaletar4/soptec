@@ -35,6 +35,9 @@ Procedimiento, fuentes, ramas, hashes, límites y pendientes:
 `docs/FRONTEND-CONSOLIDACION-CONTINUIDAD-20261027.md`.
 Las fases cerradas y los antecedentes siguientes se conservan; este estado
 prevalece sobre las notas históricas de parada o de implementación pendiente.
+Git final: rama de integración publicada normalmente; main local alineado mediante
+fast-forward y 21 archivos pendientes previos acreditados sin pérdida de contenido.
+Main remoto continúa en `88dec40`, sin merge/push directo; incorporación por PR.
 
 ## TR-069 Huawei HWTC1D3691B7 — conectado real, corrección de identificación DESPLEGADA (27/10/2026)
 

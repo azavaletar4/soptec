@@ -8,6 +8,13 @@
 
 Base canónica: rama **`integration/frontend-productivo-tr069-20261027`**, worktree
 `D:/SmartRayco/scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`.
+La rama se publicó con push normal. `main` **local** se avanzó a esta misma línea
+por fast-forward, sin tocar main remoto. Se respaldaron y verificaron los 21
+archivos pendientes previos: los ya idénticos a fuentes integradas quedaron
+absorbidos sin perder contenido; los demás conservan su estado local. El respaldo
+está en `scripts/inventory-auth-lab/runtime/main-before-frontend-consolidation-20261027/`.
+El checkout raíz ya contiene la base consolidada y configuración pública local
+de build coherente con la publicación; no se modificaron credenciales productivas.
 Los commits posteriores de publicación/documentación conservan las mismas fuentes
 de aplicación de `288f2d8`. No usar una rama antigua como base por el solo hecho
 de tener una fase cerrada. La identificación verificable del frontend publicado
