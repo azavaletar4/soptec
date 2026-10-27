@@ -1,0 +1,48 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"></div>
+<script type="module">
+import '/src/style.css';
+import { createApp } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
+import { useAuthStore } from '/src/stores/auth.ts';
+import { useTr069Store } from '/src/stores/tr069.ts';
+import { useOltStore } from '/src/stores/olt.ts';
+import { supabase } from '/src/lib/supabase.ts';
+import View from '/src/views/tr069/Tr069View.vue';
+const pinia=createPinia();setActivePinia(pinia);
+const auth=useAuthStore();auth.role='SUPERADMIN';auth.user={id:'synthetic-admin'};auth.loading=false;
+supabase.auth.getSession=async()=>({data:{session:{access_token:'synthetic'}},error:null});
+useOltStore().fetchOntStatusBySerials=async()=>({});
+const old=(id,serial,contract)=>({id,genieacs_id:id,cpe_serial:serial,cpe_oui:'TEST',cpe_product_class:'F670L',model_name:'ZTE anterior ficticia',firmware_version:null,wan_ip:null,ssid:null,last_seen_at:'2026-09-22T06:29:00Z',created_at:'2026-09-01T00:00:00Z',updated_at:'2026-09-22T00:00:00Z',service_contract_id:contract?'contract-office':null,contracts:contract?{id:'contract-office',contract_number:'CTR-TEST-0073'}:null,notes:'Conservar historial'});
+window.cache=[old('acs-zte-old','ZTE-ANTERIOR',true),old('acs-legacy','LEGACY-OLD',false)];
+window.huawei={genieacs_id:'acs-huawei-new',cpe_serial:'HUAWEI-NUEVA',cpe_oui:'HWT',cpe_product_class:'Huawei',model_name:'Huawei ficticia',firmware_version:null,wan_ip:null,ssid:null,last_seen_at:'2026-10-28T10:00:00Z'};
+window.snapshot={checkedAt:'2026-10-28T10:00:00Z',total:0,devices:[]};
+window.fail=new URLSearchParams(location.search).has('offline');window.calls=[];window.syncs=0;
+window.replaceSnapshot=devices=>window.snapshot={checkedAt:'2026-10-28T10:00:00Z',total:devices.length,devices};
+const real=window.fetch.bind(window);
+window.fetch=async(input,init={})=>{
+ const url=new URL(typeof input==='string'?input:input.url,location.href),method=init.method||'GET';
+ if(url.origin===location.origin&&!url.pathname.startsWith('/api/'))return real(input,init);
+ window.calls.push({path:url.pathname,method});
+ const json=(data,status=200,headers={})=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json',...headers}});
+ if(url.pathname==='/api/tr069-sync/inventory'){
+  const data=structuredClone(window.snapshot),fail=window.fail;
+  if(window.hold){window.hold=false;await new Promise(r=>window.release=r);}
+  return json(fail?{error:'NBI ficticio no disponible'}:data,fail?502:200);
+ }
+ if(url.pathname==='/api/tr069-sync'&&method==='POST'){
+  window.syncs++;
+  if(window.fail)return json({error:'NBI no disponible'},502);
+  for(const live of window.snapshot.devices)if(!window.cache.some(d=>d.genieacs_id===live.genieacs_id))window.cache.push({...old('saved-huawei',live.cpe_serial,false),...live,id:'saved-huawei'});
+  return json({ok:true,synced:0,created:1,total:window.snapshot.total,inventory:window.snapshot});
+ }
+ if(url.pathname.endsWith('/tr069_devices')&&method==='GET'){
+  const offset=Number(url.searchParams.get('offset')||0);
+  return json(offset?[]:window.cache,200,{'Content-Range':`0-${window.cache.length-1}/${window.cache.length}`});
+ }
+ throw Error('Operación ajena o escritura bloqueada: '+method+' '+url.pathname);
+};
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/:pathMatch(.*)*',component:View}]});
+await router.push('/tr069');await router.isReady();
+const app=createApp(View).use(pinia).use(router);app.mount('#app');window.store=useTr069Store();window.ready=true;
+</script></body></html>

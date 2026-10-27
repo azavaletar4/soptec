@@ -39,6 +39,12 @@ async function loadOntStatuses() {
 const actionError = ref<string | null>(null);
 const actionMessage = ref<string | null>(null);
 const collectingAll = ref(false);
+const showSaved = ref(false);
+
+async function handleReadInventory() {
+  await tr069Store.fetchDevices();
+  await loadOntStatuses();
+}
 
 const expandedId = ref<string | null>(null);
 const metricsById = ref<Record<string, Tr069PerformanceMetric | null>>({});
@@ -295,10 +301,12 @@ async function handleUnlink() {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">TR-069 / GenieACS</h1>
-        <p class="text-slate-600 text-sm mt-1">{{ tr069Store.devices.length }} CPEs reportados por GenieACS</p>
+        <p class="text-slate-600 text-sm mt-1">{{ tr069Store.inventory ? `${tr069Store.devices.length} CPE registrados en la última comprobación de GenieACS` : 'Inventario actual de GenieACS sin verificar' }}</p>
+        <p v-if="tr069Store.inventory" class="text-xs text-slate-500">Comprobado: {{ formatDate(tr069Store.inventory.checkedAt) }} · Estar registrado no confirma que el CPE esté conectado ahora.</p>
       </div>
-      <div class="flex gap-2">
-        <button class="btn-ghost" :disabled="collectingAll" @click="handleCollectAll">
+      <div class="flex flex-wrap gap-2">
+        <button class="btn-ghost" :disabled="tr069Store.loading" @click="handleReadInventory">Actualizar lista</button>
+        <button class="btn-ghost" :disabled="collectingAll || !tr069Store.devices.length || !!tr069Store.inventoryWarning" @click="handleCollectAll">
           {{ collectingAll ? 'Recolectando...' : 'Recolectar métricas' }}
         </button>
         <button class="btn-primary" :disabled="tr069Store.syncing" @click="handleSync">
@@ -309,6 +317,8 @@ async function handleUnlink() {
 
     <p v-if="actionMessage" class="mb-4 text-sm text-emerald-600">{{ actionMessage }}</p>
     <p v-if="actionError" class="mb-4 text-sm text-red-600">{{ actionError }}</p>
+    <p v-if="tr069Store.inventoryWarning" role="status" class="mb-4 text-sm text-amber-700">{{ tr069Store.inventoryWarning }}</p>
+    <p v-if="tr069Store.error" role="status" class="mb-4 text-sm text-amber-700">{{ tr069Store.error }}</p>
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[1000px]">
@@ -330,12 +340,11 @@ async function handleUnlink() {
           </tr>
           <tr v-else-if="!tr069Store.devices.length">
             <td colspan="8" class="px-4 py-6 text-center text-slate-500">
-              No hay dispositivos TR-069 sincronizados aún. Verifica que el stack de GenieACS esté corriendo
-              (<code class="text-xs">GENIEACS_NBI</code> en el backend) y presiona "Sincronizar con GenieACS".
+              {{ tr069Store.inventory ? 'La última consulta completa de GenieACS no contiene CPE registrados.' : 'No se ha podido confirmar el inventario actual. Los registros guardados se muestran por separado.' }}
             </td>
           </tr>
           <template v-for="device in tr069Store.devices" :key="device.id">
-            <tr class="border-t border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleExpand(device)">
+            <tr class="border-t border-slate-200 hover:bg-slate-50" @click="device.registeredLocally && toggleExpand(device)">
               <td class="px-4 py-3">
                 <div class="font-mono text-xs">{{ device.cpe_serial }}</div>
                 <div class="text-[10px] text-slate-500">{{ device.cpe_oui }}</div>
@@ -371,10 +380,13 @@ async function handleUnlink() {
               <td class="px-4 py-3">{{ device.ssid ?? '—' }}</td>
               <td class="px-4 py-3">
                 <span v-if="device.contracts" class="badge bg-sky-500/15 text-sky-700">{{ device.contracts.contract_number }}</span>
+                <span v-else-if="!device.registeredLocally" class="text-slate-500 text-xs">Pendiente de sincronizar · sin contrato asignado</span>
                 <span v-else class="text-slate-500 text-xs">Sin vincular</span>
               </td>
               <td class="px-4 py-3 text-slate-600">{{ formatDate(device.last_seen_at) }}</td>
               <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap text-xs" @click.stop>
+                <span v-if="!device.registeredLocally" class="text-slate-500">Sincroniza para gestionar este CPE</span>
+                <template v-else>
                 <button class="text-sky-600 hover:underline" @click="openLinkModal(device)">Vincular</button>
                 <button class="text-sky-600 hover:underline" @click="openConfigModal(device)">Configurar</button>
                 <button class="text-slate-600 hover:underline" :disabled="refreshingId === device.id" @click="handleRefresh(device)">
@@ -386,6 +398,7 @@ async function handleUnlink() {
                 <button class="text-slate-600 hover:underline" @click="toggleExpand(device)">
                   {{ expandedId === device.id ? 'Ocultar' : 'Métricas' }}
                 </button>
+                </template>
               </td>
             </tr>
             <tr v-if="expandedId === device.id" class="border-t border-slate-200 bg-slate-50">
@@ -410,6 +423,25 @@ async function handleUnlink() {
         </tbody>
       </table>
     </div>
+
+    <section class="surface p-4 mt-4" aria-label="Registros históricos de TR-069">
+      <button class="btn-ghost" :aria-expanded="showSaved" @click="showSaved = !showSaved">{{ showSaved ? 'Ocultar' : 'Ver' }} registros guardados ({{ tr069Store.historicalDevices.length + tr069Store.unverifiedDevices.length }})</button>
+      <div v-if="showSaved" class="mt-3 space-y-3">
+        <p class="text-sm text-slate-600">Se conservan contratos, asociaciones y métricas. No se borra ni desvincula ningún equipo automáticamente.</p>
+        <p v-if="!tr069Store.historicalDevices.length && !tr069Store.unverifiedDevices.length" class="text-sm text-slate-500">Sin registros guardados fuera del inventario comprobado.</p>
+        <article v-for="device in tr069Store.historicalDevices" :key="device.id" class="border-t pt-3 text-sm">
+          <p class="font-mono break-all">{{ device.cpe_serial }} · {{ device.model_name || device.cpe_product_class || 'Modelo no registrado' }}</p>
+          <p class="text-amber-700">Histórico: ausente en la última consulta completa del ACS</p>
+          <p>Contrato conservado: {{ device.contracts?.contract_number || 'Sin vincular' }}</p>
+          <p class="text-slate-500">Último reporte guardado: {{ formatDate(device.last_seen_at) }}</p>
+        </article>
+        <article v-for="device in tr069Store.unverifiedDevices" :key="device.id" class="border-t pt-3 text-sm">
+          <p class="font-mono break-all">{{ device.cpe_serial }} · {{ device.model_name || device.cpe_product_class || 'Modelo no registrado' }}</p>
+          <p class="text-amber-700">Presencia sin verificar: no se acredita que esté retirado</p>
+          <p>Contrato conservado: {{ device.contracts?.contract_number || 'Sin vincular' }}</p>
+        </article>
+      </div>
+    </section>
 
     <Teleport to="body">
       <div v-if="linkModalDevice" class="modal-overlay">

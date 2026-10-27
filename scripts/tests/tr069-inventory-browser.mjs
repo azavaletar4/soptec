@@ -1,0 +1,90 @@
+// Only loopback Vite. Every external request is blocked; API responses synthetic.
+import { createServer } from 'vite';
+import { spawn } from 'node:child_process';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import assert from 'node:assert/strict';
+process.env.VITE_SUPABASE_URL='https://tr069.invalid';
+process.env.VITE_SUPABASE_ANON_KEY='synthetic';
+const server=await createServer({server:{host:'127.0.0.1',port:0,strictPort:false}});
+await server.listen();
+const base=server.resolvedUrls.local[0];
+const profile=await mkdtemp(join(tmpdir(),'rayco-tr069-inventory-'));
+const chrome=spawn('C:/Program Files/Google/Chrome/Application/chrome.exe',[
+  '--headless=new','--no-first-run','--disable-background-networking','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'
+],{windowsHide:true,stdio:['ignore','ignore','pipe']});
+let ws;let seq=0;const pending=new Map();const errors=[];let checks=0;
+try {
+  const endpoint=await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Chrome timeout')),20000);let log='';
+    chrome.stderr.on('data',b=>{log+=b;const m=log.match(/DevTools listening on (ws:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1]);}});
+    chrome.on('error',reject);
+  });
+  ws=new WebSocket(endpoint);await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j;});
+  ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);pending.delete(m.id);if(p)m.error?p.reject(Error(JSON.stringify(m.error))):p.resolve(m.result);}if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails);};
+  const send=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params,sessionId}));});
+  const {targetId}=await send('Target.createTarget',{url:'about:blank'});
+  const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
+  const c=(method,params={})=>send(method,params,sessionId);
+  await c('Page.enable');await c('Runtime.enable');
+  await c('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]});
+  ws.addEventListener('message',async e=>{
+    const m=JSON.parse(e.data);if(m.method!=='Fetch.requestPaused')return;
+    const {requestId,request}=m.params;
+    if(request.url.startsWith(base))await c('Fetch.continueRequest',{requestId});
+    else await c('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'});
+  });
+  const evaluate=async expression=>{const r=await c('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
+  const wait=async expression=>{for(let i=0;i<150;i++){if(await evaluate(expression))return;await new Promise(r=>setTimeout(r,100));}throw Error('Timeout: '+expression);};
+  const check=async(expression,expected=true)=>{assert.deepEqual(await evaluate(expression),expected);checks++;};
+  await c('Page.navigate',{url:base+'scripts/tests/tr069-inventory-browser.html'});
+  await wait('window.ready && !store.loading');
+  await check('store.devices.length',0);
+  await check('store.historicalDevices.length',2);
+  await check('document.querySelector("table").innerText.includes("ZTE-ANTERIOR")',false);
+  await evaluate('Array.from(document.querySelectorAll("button")).find(b=>b.innerText.includes("Ver registros guardados")).click()');
+  await wait('document.body.innerText.includes("CTR-TEST-0073")');
+  await check('document.body.innerText.includes("Histórico: ausente")');
+  await check('document.querySelector("section[aria-label]").querySelectorAll("button").length',1);
+  await evaluate('replaceSnapshot([huawei]);store.fetchDevices()');await wait('!store.loading');
+  await check('store.devices[0].cpe_serial','HUAWEI-NUEVA');
+  await check('store.devices[0].service_contract_id',null);
+  await check('document.querySelector("table").innerText.includes("ZTE-ANTERIOR")',false);
+  await check('document.querySelector("table").innerText.includes("Sincroniza para gestionar")');
+  await check('document.querySelector("table").innerText.includes("CTR-TEST-0073")',false);
+  await evaluate('window.fail=true;store.fetchDevices()');await wait('!store.loading');
+  await check('store.devices[0].cpe_serial','HUAWEI-NUEVA');
+  await check('!!store.inventoryWarning');
+  await check('store.historicalDevices.length',2);
+  await evaluate('window.fail=false;window.snapshot={checkedAt:"2026-10-28T10:00:00Z",total:9,devices:[]};store.fetchDevices()');await wait('!store.loading');
+  await check('store.devices.length',1);
+  await check('!!store.inventoryWarning');
+  await evaluate('replaceSnapshot([huawei]);store.fetchDevices()');await wait('!store.loading && !store.inventoryWarning');
+  await evaluate('Array.from(document.querySelectorAll("button")).find(b=>b.innerText.includes("Sincronizar con GenieACS")).click()');
+  await wait('window.syncs===1 && !store.loading && store.devices[0].registeredLocally');
+  await check('store.devices[0].service_contract_id',null);
+  await check('store.historicalDevices.find(d=>d.cpe_serial==="ZTE-ANTERIOR").contracts.contract_number','CTR-TEST-0073');
+  // Respuesta anterior tardía no puede retirar el Huawei que acaba de comprobarse.
+  await evaluate('replaceSnapshot([]);window.hold=true;window.older=store.fetchDevices();true');await wait('!!window.release');
+  await evaluate('replaceSnapshot([huawei]);store.fetchDevices()');await wait('!store.loading');
+  await evaluate('window.release();window.older');
+  await check('store.devices[0].cpe_serial','HUAWEI-NUEVA');
+  await check('store.historicalDevices.length',2);
+  await evaluate('replaceSnapshot([]);store.fetchDevices()');await wait('!store.loading');
+  await check('store.devices.length',0);
+  await check('store.historicalDevices.length',3);
+  await check('window.cache.find(d=>d.cpe_serial==="ZTE-ANTERIOR").service_contract_id','contract-office');
+  await c('Page.navigate',{url:base+'scripts/tests/tr069-inventory-browser.html?offline=1'});
+  await wait('window.ready && !store.loading');
+  await check('store.inventory',null);
+  await check('store.historicalDevices.length',0);
+  await check('store.unverifiedDevices.length',2);
+  await check('store.devices.length',0);
+  await evaluate('Array.from(document.querySelectorAll("button")).find(b=>b.innerText.includes("Ver registros guardados")).click()');
+  await wait('document.body.innerText.includes("Presencia sin verificar")');
+  await check('document.body.innerText.includes("Histórico: ausente")',false);
+  await check('document.body.innerText.includes("CTR-TEST-0073")');
+  assert.deepEqual(errors,[]);checks++;
+  console.log(`TR069_INVENTORY_BROWSER_OK: ${checks} checks; real view/store; synthetic API only; no production traffic`);
+} finally {if(ws)ws.close();chrome.kill();await server.close();}
