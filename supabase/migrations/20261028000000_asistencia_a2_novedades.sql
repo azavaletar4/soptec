@@ -10,6 +10,14 @@
 -- docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md). ADMIN/TECNICO_RED
 -- solo consultan sus propias novedades (RLS) y mantienen su marcacion/A1
 -- intactas. SUPERADMIN sigue exento: no puede ser el user_id objetivo.
+--
+-- media_jornada lleva turno + hora_inicio/hora_fin REALES (igual forma que
+-- permiso_horas) — es un permiso EXCEPCIONAL de un solo dia. La migracion
+-- 20261028010000_asistencia_a2_horarios_personales.sql (siguiente) usa esas
+-- horas para calcular tardanza/falta contra la mitad que si se trabaja, en
+-- vez de eximir el dia completo; y agrega el horario HABITUAL recurrente
+-- (semanal, por dia de la semana) como tabla aparte, para no mezclar ambos
+-- conceptos (ver esa migracion para el detalle).
 begin;
 
 create table public.asistencia_novedades (
@@ -32,8 +40,10 @@ create table public.asistencia_novedades (
   check (fecha_fin >= fecha_inicio),
   -- Vacaciones/descanso: rango de dias completos, sin turno ni horas.
   check (tipo not in ('vacaciones','descanso_programado') or (turno is null and hora_inicio is null and hora_fin is null)),
-  -- Media jornada: un solo dia, turno obligatorio, sin horas sueltas.
-  check (tipo <> 'media_jornada' or (fecha_inicio = fecha_fin and turno is not null and turno in ('manana','tarde') and hora_inicio is null and hora_fin is null)),
+  -- Media jornada: un solo dia, turno + rango horario real (igual que un
+  -- permiso por horas) — así el servidor puede calcular tardanza/falta
+  -- contra la mitad que SÍ se trabaja, sin eximir el día completo.
+  check (tipo <> 'media_jornada' or (fecha_inicio = fecha_fin and turno is not null and turno in ('manana','tarde') and hora_inicio is not null and hora_fin is not null and hora_fin > hora_inicio)),
   -- Permiso por horas: un solo dia, rango horario valido, sin turno.
   check (tipo <> 'permiso_horas' or (fecha_inicio = fecha_fin and turno is null and hora_inicio is not null and hora_fin is not null and hora_fin > hora_inicio)),
   check ((estado = 'activa' and cancelled_at is null and cancelled_by is null) or (estado = 'cancelada' and cancelled_at is not null and cancelled_by is not null))
@@ -68,8 +78,8 @@ begin
   if p_tipo in ('vacaciones','descanso_programado') and (p_turno is not null or p_hora_inicio is not null or p_hora_fin is not null) then
     raise exception 'Vacaciones/descanso no usan turno ni horas';
   end if;
-  if p_tipo = 'media_jornada' and (p_fecha_inicio <> p_fecha_fin or p_turno is null or p_turno not in ('manana','tarde') or p_hora_inicio is not null or p_hora_fin is not null) then
-    raise exception 'Media jornada requiere un solo día y turno mañana/tarde';
+  if p_tipo = 'media_jornada' and (p_fecha_inicio <> p_fecha_fin or p_turno is null or p_turno not in ('manana','tarde') or p_hora_inicio is null or p_hora_fin is null or p_hora_fin <= p_hora_inicio) then
+    raise exception 'Media jornada requiere un solo día, turno y un rango de horas válido (la mitad que sí se trabaja)';
   end if;
   if p_tipo = 'permiso_horas' and (p_fecha_inicio <> p_fecha_fin or p_turno is not null or p_hora_inicio is null or p_hora_fin is null or p_hora_fin <= p_hora_inicio) then
     raise exception 'Permiso por horas requiere un solo día y un rango de horas válido';

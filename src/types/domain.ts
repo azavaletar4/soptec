@@ -1071,3 +1071,23 @@ export interface NovedadResumen {
   hora_inicio: string | null;
   hora_fin: string | null;
 }
+
+/**
+ * Horario parcial RECURRENTE (semanal) por trabajador — Fase A2.1. Distinto
+ * de una novedad: no es un permiso de un día, es el patrón habitual de ese
+ * día de la semana (ej. todos los sábados). `dia_semana` usa el mismo
+ * criterio que `extract(dow from ...)`/`diaSemanaLima` (0=domingo..6=sábado),
+ * pero el servidor solo acepta 1..6 (domingo queda fuera de alcance).
+ */
+export interface HorarioPersonal {
+  id: string;
+  user_id: string;
+  dia_semana: number;
+  turno: NovedadTurno;
+  hora_ingreso: string;
+  hora_salida: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  profile?: Pick<StaffProfile, 'id' | 'full_name' | 'email'> | null;
+}

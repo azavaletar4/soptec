@@ -15,6 +15,8 @@ import {
 import { getErrorMessage } from '@/lib/errors';
 import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
 import NovedadesPanel from '@/components/asistencia/NovedadesPanel.vue';
+import HorariosPersonalesPanel from '@/components/asistencia/HorariosPersonalesPanel.vue';
+import { horarioPersonalDeDia } from '@/lib/asistenciaHorariosPersonales';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 
 // Widget de marcacion de jornada (Fase 117) — un solo componente compartido
@@ -36,7 +38,7 @@ onMounted(async () => {
   timer = setInterval(() => {
     now.value = Date.now();
   }, 1000);
-  await Promise.all([store.fetchSettings(), store.fetchFeriados(), store.fetchHoy()]);
+  await Promise.all([store.fetchSettings(), store.fetchFeriados(), store.fetchHoy(), store.fetchHorariosPersonales()]);
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
@@ -46,7 +48,14 @@ const dow = computed(() => diaSemanaLima());
 const esFeriadoHoy = computed(() => store.feriados.some((f) => f.fecha === fechaLimaISO()));
 const laborable = computed(() => esDiaLaborable(dow.value, esFeriadoHoy.value));
 const esLunes = computed(() => dow.value === 1);
-const horaEsperada = computed(() => (store.settings ? horaIngresoEsperadaLabel(store.settings, dow.value) : '—'));
+// Si hay un horario personal recurrente para hoy (ej. sabado media jornada),
+// manda sobre el horario general de la compañia — nunca se inventa una hora,
+// es exactamente la que SUPERADMIN configuro en "Horarios parciales habituales".
+const horarioPersonalHoy = computed(() => horarioPersonalDeDia(store.horariosPersonales, dow.value));
+const horaEsperada = computed(() => {
+  if (horarioPersonalHoy.value) return horarioPersonalHoy.value.hora_ingreso.slice(0, 5);
+  return store.settings ? horaIngresoEsperadaLabel(store.settings, dow.value) : '—';
+});
 
 function getPosition(): Promise<GeolocationPosition | null> {
   return new Promise((resolve) => {
@@ -158,7 +167,10 @@ function formatCountdown(ms: number): string {
     </p>
 
     <template v-else>
-      <p v-if="esLunes" class="text-xs font-medium text-sky-700 bg-sky-500/10 rounded-lg px-2.5 py-1.5 mb-3">
+      <p v-if="horarioPersonalHoy" class="text-xs font-medium text-violet-700 bg-violet-500/10 rounded-lg px-2.5 py-1.5 mb-3">
+        📌 Hoy es tu horario habitual ({{ horarioPersonalHoy.turno === 'manana' ? 'mañana' : 'tarde' }}) — Ingreso {{ horaEsperada }}, salida {{ horarioPersonalHoy.hora_salida.slice(0, 5) }}
+      </p>
+      <p v-else-if="esLunes" class="text-xs font-medium text-sky-700 bg-sky-500/10 rounded-lg px-2.5 py-1.5 mb-3">
         📌 Hoy Lunes: Reunión Semanal — Ingreso {{ horaEsperada }}
       </p>
       <p v-else class="text-xs font-medium text-slate-600 bg-slate-100 rounded-lg px-2.5 py-1.5 mb-3">
@@ -219,6 +231,7 @@ function formatCountdown(ms: number): string {
 
     <AusenciasPanel />
     <NovedadesPanel />
+    <HorariosPersonalesPanel />
 
     <ConfirmModal
       :open="!!pendingAction"

@@ -205,14 +205,113 @@ sesión): autorización explícita y separada para aplicar
 despliegue selectivo del frontend correspondiente (mismo mecanismo de
 override de 1 solo servicio ya usado en A0/A1, conservando el backend
 `smartrayco-backend-counters:16831c6-...` sin tocar). Validación funcional
-real del propietario queda para después de ese despliegue. Límite conocido
-y documentado del alcance: con la arquitectura actual de
-`asistencia_registros` (una sola marca de ingreso/salida por día, sin hora
-de fin de jornada configurada), "media jornada" se trata para fines de
-falta/tardanza como exención del día completo (igual que vacaciones/descanso),
-distinguida solo por su etiqueta en reportes — no hay reconciliación de
-asistencia parcial dentro del mismo día; revisar solo si el negocio
-necesita ese nivel de detalle a futuro.
+real del propietario queda para después de ese despliegue.
+
+**Límite documentado aquí QUEDÓ CORREGIDO por A2.1 (ver sección siguiente)**:
+ya no se trata "media jornada" como exención del día completo — ahora exige
+turno + horas reales y una marcación real, igual que un permiso por horas.
+
+## Asistencia A2.1 — horarios parciales RECURRENTES por trabajador,
+## implementada LOCALMENTE, sin migrar ni desplegar (26/10/2026)
+
+Requisito operativo real del propietario: dos trabajadores que todos los
+sábados trabajan media jornada, uno por la mañana y otro por la tarde.
+Alcance: horarios parciales **recurrentes** (semanales) por trabajador,
+configurables únicamente por SUPERADMIN, reutilizando el sistema de
+asistencia existente — distintos de los permisos **excepcionales** de un
+solo día de A2 (`asistencia_novedades`). Cada trabajador marca ingreso y
+salida dentro de su turno; tardanzas y faltas se calculan según su horario
+individual, sin marcar ausente la otra mitad del día. Sin horas inventadas:
+siempre las que SUPERADMIN configura explícitamente.
+
+**Modelo** (`supabase/migrations/20261028010000_asistencia_a2_horarios_personales.sql`,
+sin aplicar): tabla `asistencia_horarios_personales` (`user_id, dia_semana
+1..6, turno, hora_ingreso, hora_salida`), `unique(user_id, dia_semana)` — a
+lo sumo un horario por colaborador/día, upsert lo reemplaza sin duplicar.
+Domingo (`dia_semana=0`) queda **fuera de alcance**: convertirlo en
+laborable para alguien es "A3: Intercambio de descanso" (no iniciada), no
+este requisito. RLS: SUPERADMIN ve/escribe todo; ADMIN/TECNICO_RED solo
+leen su propia fila (igual patrón que `asistencia_novedades`). Escritura
+directa (sin RPC), igual patrón que `feriados`/`company_settings` — un
+trigger `asistencia_horario_personal_guard` valida que el objetivo sea
+ADMIN/TECNICO_RED activo (nunca SUPERADMIN, que sigue exento) y reutiliza
+íntegramente el trigger/tabla de auditoría de configuración ya aplicados
+(`asistencia_config_auditar`/`asistencia_config_eventos`) — sin tabla ni
+política de auditoría nueva.
+
+**Corrección de la limitación documentada de A2**: el tipo `media_jornada`
+de `asistencia_novedades` pasó de "sin turno/horas, exime el día completo"
+a **exigir turno + hora_inicio/hora_fin reales** (misma forma que
+`permiso_horas`) — ya NO exime el día completo; si la persona no marca
+ningún ingreso ese día, sigue siendo una falta real. `novedadEximeDiaCompleto`
+(`src/lib/asistenciaNovedades.ts`) ahora solo incluye `vacaciones` y
+`descanso_programado`.
+
+**`mark_attendance_ingreso` (Fase 117) corregido vía `CREATE OR REPLACE`**
+en esta nueva migración (nunca se edita el archivo ya aplicado de Fase 117;
+el resto de la función —domingo/feriado bloqueados, una sola marca por
+día, geocerca— no cambia). Precedencia para la tardanza, de más a menos
+específica: permiso excepcional de HOY (`media_jornada` reemplaza el
+horario del día completo; `permiso_horas` conserva el horario base pero
+nunca cuenta tardanza dentro de su ventana) > horario HABITUAL recurrente
+de ese día de la semana > horario general de `company_settings`. Si no hay
+fila en ninguna de las dos tablas, el comportamiento es EXACTAMENTE el de
+antes (sin regresión, verificado). El cálculo ahora vive donde debe —
+servidor, no el cliente — por eso se **eliminó** la supresión de tardanza
+que A2 hacía en el navegador (`tardanzaSuprimidaPorPermiso`): ya no hace
+falta, el dato guardado (`minutos_tardanza`/`estado`) ya es correcto.
+
+**Frontend**: `HorariosPersonalesPanel.vue` (nuevo), montado como
+configuración SUPERADMIN en Control de Asistencia ("Horarios parciales
+habituales", separado y con lenguaje distinto de "Vacaciones, descansos y
+permisos" de `NovedadesPanel.vue`, para no confundir lo habitual con lo
+excepcional) y como "📌 Mi horario habitual" de solo lectura en el widget
+compartido Campo/panel. El propio widget de marcación (`AsistenciaPanel.vue`)
+ahora muestra la hora de ingreso/salida REAL de ese día si existe un
+horario personal, en vez de la hora general de la compañía. El tablero
+(`AsistenciaView.vue`) muestra un badge "📌 Horario habitual" junto a la
+marcación de cada colaborador, distinto del badge de novedad excepcional.
+
+**Decisión de alcance explícita**: la hora de salida (`hora_salida`) del
+horario personal es informativa/de validación de consistencia
+(`hora_salida > hora_ingreso`) — `mark_attendance_salida` NO quedó
+bloqueada por horario, igual que para cualquier otro colaborador hoy (nunca
+hubo validación de hora de salida en el sistema). No se asume que estos dos
+trabajadores dejan de tener obligación el resto de la semana — un horario
+personal solo reemplaza el cómputo de UN día de la semana puntual; los
+demás días siguen el horario general salvo que también se configuren.
+
+**Pruebas** (datos ficticios, ninguna escritura productiva): 14/14
+PostgreSQL aislado (`server/tests/asistenciaA2HorariosPersonales.test.cjs`:
+permisos por rol, objetivo inválido, domingo/rango de horas rechazados,
+upsert sin duplicar, RLS, auditoría, y la precedencia REAL de
+`mark_attendance_ingreso` simulando reloj con `date -s` dentro del
+contenedor aislado —`--cap-add SYS_TIME`, `--network none`, verificado que
+NO afecta al host ni a otros contenedores—: sin horario personal se
+mantiene el comportamiento global; horario "mañana"/"tarde" calcula
+tardanza contra su propia hora aunque contradiga el horario general;
+permiso excepcional de hoy manda sobre el horario habitual; permiso por
+horas suprime tardanza solo dentro de su ventana; domingo sigue bloqueado
+siempre); 5/5 navegador
+(`server/tests/asistenciaA2HorariosPersonales.browser.test.cjs`: programar,
+eliminar, consulta de solo lectura, widget vacío no ensucia pantalla); 2
+unitarias nuevas (`src/lib/__tests__/asistenciaHorariosPersonales.test.ts`)
++ ajuste de las pruebas existentes de A2 para el nuevo `media_jornada` con
+horas reales. `vue-tsc` y `npm run build` limpios.
+
+**Importante para reproducir las pruebas**: ejecutar cada suite de
+Asistencia en su propio comando (`node --test server/tests/<archivo>`,
+una invocación por archivo) — combinarlas en una sola invocación de
+`node --test` hace que varios contenedores Docker aislados corran en
+paralelo y interfieran entre sí (fallos falsos confirmados: cada suite
+pasa 100% al ejecutarla sola). Mismo patrón que A0/A1.
+
+**Pendiente para activar en producción**: autorización explícita y
+separada para aplicar `20261028010000_asistencia_a2_horarios_personales.sql`
+(después de la migración de A2 base, en ese orden) y para el despliegue
+selectivo del frontend correspondiente. Validación funcional real del
+propietario con los dos trabajadores reales queda para después de ese
+despliegue.
 
 ## Equipos seriados, custodia e instalación — fase cerrada operativamente
 

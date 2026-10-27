@@ -30,28 +30,23 @@ export function novedadTexto(n: Pick<AsistenciaNovedad | NovedadResumen, 'tipo' 
   return base;
 }
 
-/** Tipos que eximen el día completo de falta/tardanza (vacaciones, descanso,
- *  media jornada) — un permiso por horas NO exime el día completo, solo
- *  suprime la tardanza dentro de su ventana (ver tardanzaSuprimidaPorPermiso). */
+/**
+ * Tipos que eximen el día completo de falta aunque no haya ningún ingreso
+ * marcado (vacaciones, descanso programado). **media_jornada ya NO exime el
+ * día completo** (corrección A2.1): ahora lleva turno + horas reales y el
+ * servidor (mark_attendance_ingreso) calcula la tardanza contra la mitad
+ * que sí se trabaja — si la persona no marca ningún ingreso ese día, sigue
+ * siendo una falta real, igual que un permiso por horas. Antes de A2.1 no
+ * existía forma de acotar "la otra mitad" sin horas reales, así que se
+ * eximía el día entero; ese límite documentado queda corregido aquí.
+ */
 export function novedadEximeDiaCompleto(tipo: NovedadTipo): boolean {
-  return tipo === 'vacaciones' || tipo === 'descanso_programado' || tipo === 'media_jornada';
+  return tipo === 'vacaciones' || tipo === 'descanso_programado';
 }
 
 /** true si alguna novedad (propia o del resumen multiusuario) cubre esa fecha con un tipo que exime el día completo. */
 export function diaAutorizado(fecha: string, novedades: Pick<NovedadResumen, 'fecha' | 'tipo'>[]): boolean {
   return novedades.some((n) => n.fecha === fecha && novedadEximeDiaCompleto(n.tipo));
-}
-
-/**
- * true si un ingreso real cae dentro de la ventana de un permiso por horas de
- * ese mismo día — la tardanza calculada por el servidor (mark_attendance_ingreso)
- * sigue siendo el hecho técnico real (nunca se reescribe), pero no se muestra
- * ni se cuenta como tardanza indebida en el tablero/reporte.
- */
-export function tardanzaSuprimidaPorPermiso(horaIngresoIso: string, novedadesDelDia: Pick<NovedadResumen, 'fecha' | 'tipo' | 'hora_fin'>[]): boolean {
-  const fechaIngreso = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(horaIngresoIso));
-  const horaLima = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(horaIngresoIso));
-  return novedadesDelDia.some((n) => n.tipo === 'permiso_horas' && n.fecha === fechaIngreso && !!n.hora_fin && horaLima <= n.hora_fin.slice(0, 5));
 }
 
 export async function fetchNovedadesResumen(desde: string, hasta: string): Promise<NovedadResumen[]> {

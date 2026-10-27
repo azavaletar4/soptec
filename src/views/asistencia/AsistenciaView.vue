@@ -5,8 +5,10 @@ import 'leaflet/dist/leaflet.css';
 import { useAuthStore } from '@/stores/auth';
 import AusenciasPanel from '@/components/asistencia/AusenciasPanel.vue';
 import NovedadesPanel from '@/components/asistencia/NovedadesPanel.vue';
+import HorariosPersonalesPanel from '@/components/asistencia/HorariosPersonalesPanel.vue';
 import { AUSENCIA_LABEL, cuentaFalta, exentoDeAsistencia, fetchAusenciasResumen, type AusenciaResumen } from '@/lib/asistenciaAusencias';
-import { diaAutorizado, fetchNovedadesResumen, NOVEDAD_BADGE_CLASS, novedadTexto, tardanzaSuprimidaPorPermiso } from '@/lib/asistenciaNovedades';
+import { diaAutorizado, fetchNovedadesResumen, NOVEDAD_BADGE_CLASS, novedadTexto } from '@/lib/asistenciaNovedades';
+import { horarioPersonalDeDia, horarioPersonalTexto } from '@/lib/asistenciaHorariosPersonales';
 import type { NovedadResumen } from '@/types/domain';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useAsistenciaStore } from '@/stores/asistencia';
@@ -35,7 +37,7 @@ const tableroReady = ref(false);
 const catalogs = useCatalogsStore();
 
 onMounted(async () => {
-  await Promise.all([catalogs.fetchStaff(), store.fetchSettings(), store.fetchFeriados()]);
+  await Promise.all([catalogs.fetchStaff(), store.fetchSettings(), store.fetchFeriados(), store.fetchHorariosPersonales()]);
   await loadTablero();
 });
 
@@ -74,11 +76,12 @@ interface FilaTablero {
   falta: boolean;
   ausencia?: AusenciaResumen;
   novedadesDelDia: NovedadResumen[];
-  tardanzaSuprimida: boolean;
+  horarioHabitual?: ReturnType<typeof horarioPersonalDeDia>;
 }
 const filas = computed<FilaTablero[]>(() => {
   if (!tableroReady.value) return [];
   const q = search.value.trim().toLowerCase();
+  const diaSemana = new Date(`${fecha.value}T00:00:00`).getDay();
   return catalogs.staff
     .filter(p => !exentoDeAsistencia(p.role))
     .filter((p) => !q || (p.full_name ?? p.email).toLowerCase().includes(q))
@@ -87,19 +90,23 @@ const filas = computed<FilaTablero[]>(() => {
       // "Falta" solo tiene sentido para un dia laborable ya pasado (o de hoy,
       // una vez transcurrido el dia) sin ningun ingreso marcado — un dia de
       // hoy a media mañana sin marcar todavia no es una falta, es "sin marcar".
+      // La tardanza/falta en si ya viene calculada por el servidor contra el
+      // horario REAL de cada persona (horario habitual recurrente o permiso
+      // excepcional de hoy, ver mark_attendance_ingreso) — aqui solo se
+      // muestran como contexto, sin recalcular ni suprimir nada en el cliente.
       const ausencia = ausenciasDia.value.find(a => a.user_id === p.id);
       const novedadesDelDia = novedadesDia.value.filter(n => n.user_id === p.id);
       const autorizado = diaAutorizado(fecha.value, novedadesDelDia);
       const falta = cuentaFalta(!!registro?.hora_ingreso, ausencia?.estado, fecha.value, fechaLimaISO(), esLaborable.value, ['ADMIN', 'TECNICO_RED'].includes(p.role), autorizado);
-      const tardanzaSuprimida = !!registro?.hora_ingreso && registro.minutos_tardanza > 0 && tardanzaSuprimidaPorPermiso(registro.hora_ingreso, novedadesDelDia);
-      return { profile: p, registro, falta, ausencia, novedadesDelDia, tardanzaSuprimida };
+      const horarioHabitual = horarioPersonalDeDia(store.horariosPersonales.filter(h => h.user_id === p.id), diaSemana);
+      return { profile: p, registro, falta, ausencia, novedadesDelDia, horarioHabitual };
     })
     .sort((a, b) => (a.profile.full_name ?? a.profile.email).localeCompare(b.profile.full_name ?? b.profile.email));
 });
 
 const resumenHoy = computed(() => ({
   puntuales: filas.value.filter((f) => f.registro?.estado === 'Puntual').length,
-  tardanzas: filas.value.filter((f) => !f.tardanzaSuprimida && (f.registro?.estado === 'Tardanza' || (f.registro && f.registro.minutos_tardanza > 0))).length,
+  tardanzas: filas.value.filter((f) => f.registro?.estado === 'Tardanza' || (f.registro && f.registro.minutos_tardanza > 0)).length,
   enAlmuerzo: filas.value.filter((f) => f.registro?.estado === 'En Almuerzo').length,
   faltas: filas.value.filter((f) => f.falta).length,
 }));
@@ -219,13 +226,11 @@ const reporte = computed<FilaReporte[]>(() => {
       const diasConIngreso = new Set(propios.filter((r) => r.hora_ingreso).map((r) => r.fecha));
       const solicitudes = ausenciasMes.value.filter(a => a.user_id === p.id);
       const novedadesPropias = novedadesMes.value.filter(n => n.user_id === p.id);
-      const tardanzaMin = propios.reduce((sum, r) => {
-        if (r.hora_ingreso && r.minutos_tardanza > 0 && tardanzaSuprimidaPorPermiso(r.hora_ingreso, novedadesPropias)) return sum;
-        return sum + (r.minutos_tardanza || 0);
-      }, 0);
+      // minutos_tardanza ya viene calculado por el servidor contra el horario
+      // real de cada persona (habitual o permiso excepcional) — se suma tal cual.
       return {
         profile: p,
-        tardanzaMin,
+        tardanzaMin: propios.reduce((sum, r) => sum + (r.minutos_tardanza || 0), 0),
         excesoAlmuerzoMin: propios.reduce((sum, r) => sum + (r.exceso_almuerzo_min || 0), 0),
         diasTrabajados: diasConIngreso.size,
         pendientes: solicitudes.filter(a => a.estado === 'pendiente').length,
@@ -328,6 +333,7 @@ async function handleSaveSettings() {
 
     <AusenciasPanel administracion @changed="loadTablero(); cargarReporte()" />
     <NovedadesPanel administracion @changed="loadTablero(); cargarReporte()" />
+    <HorariosPersonalesPanel administracion @changed="loadTablero()" />
     <p class="text-sm mb-3">SUPERADMIN está exento: no se incluye en indicadores laborales ni pendientes de marcación. Sus marcaciones históricas se conservan.</p>
     <p class="text-sm mb-3">Ausencias: {{ ausenciasDia.filter(a => a.estado === 'pendiente').length }} pendientes · {{ ausenciasDia.filter(a => a.estado === 'aprobada').length }} justificadas · {{ ausenciasDia.filter(a => a.estado === 'rechazada').length }} rechazadas. Las justificaciones no alteran las marcaciones.</p>
     <!-- Configuracion de geocerca/horarios -->
@@ -438,17 +444,17 @@ async function handleSaveSettings() {
             <tr v-for="f in filas" :key="f.profile.id" class="border-t border-slate-200 hover:bg-slate-50">
               <td class="px-4 py-3 text-slate-800">{{ f.profile.full_name || f.profile.email }}</td>
               <td class="px-4 py-3">
+                <span v-if="f.horarioHabitual" class="badge mr-1 bg-violet-500/15 text-violet-700">📌 Horario habitual {{ horarioPersonalTexto(f.horarioHabitual) }}</span>
                 <span v-for="n in f.novedadesDelDia" :key="n.tipo + n.hora_inicio" class="badge mr-1" :class="NOVEDAD_BADGE_CLASS[n.tipo]">{{ novedadTexto(n) }}</span>
                 <span v-if="f.ausencia" class="badge">{{ AUSENCIA_LABEL[f.ausencia.estado] }}{{ f.registro?.hora_ingreso ? ' - Con ingreso: revisar coincidencia' : '' }}</span>
-                <span v-if="f.registro" class="badge" :class="ESTADO_BADGE_CLASS[f.registro.estado]">{{ f.tardanzaSuprimida ? 'Puntual' : f.registro.estado }}</span>
+                <span v-if="f.registro" class="badge" :class="ESTADO_BADGE_CLASS[f.registro.estado]">{{ f.registro.estado }}</span>
                 <span v-else-if="f.falta" class="badge" :class="ESTADO_BADGE_CLASS.Falta">Falta</span>
                 <span v-else-if="!f.ausencia && !f.novedadesDelDia.length" class="text-xs text-slate-400">Sin marcar</span>
               </td>
               <td class="px-4 py-3 text-xs">
                 <template v-if="f.registro?.hora_ingreso">
                   {{ formatHora(f.registro.hora_ingreso) }}
-                  <span v-if="f.registro.minutos_tardanza > 0 && !f.tardanzaSuprimida" class="text-amber-600"> (+{{ f.registro.minutos_tardanza }} min)</span>
-                  <span v-else-if="f.tardanzaSuprimida" class="text-teal-700"> (permiso autorizado)</span>
+                  <span v-if="f.registro.minutos_tardanza > 0" class="text-amber-600"> (+{{ f.registro.minutos_tardanza }} min)</span>
                   <span v-if="f.registro.fuera_oficina_ingreso" class="block text-red-600">⚠️ Fuera de oficina</span>
                 </template>
                 <span v-else class="text-slate-400">—</span>

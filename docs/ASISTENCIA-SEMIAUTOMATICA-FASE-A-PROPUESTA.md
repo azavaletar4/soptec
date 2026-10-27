@@ -11,10 +11,21 @@ parciales y descansos programados" más abajo (SUPERADMIN programa y aprueba
 en un solo paso, sin "pendiente"; ADMIN/TECNICO_RED solo consultan). Sin
 migrar a Supabase ni desplegar — pendiente autorización explícita separada.
 Detalle completo (modelo de datos, RPC, integración con Control de
-Asistencia/App de Campo, límite conocido de "media jornada" con la
-arquitectura actual de una sola marca por día, y las 13 SQL + 5 navegador +
-unitarias que pasan) en `ESTADO_DESARROLLO.md`, sección "Asistencia A2" —
-no se repite aquí para no duplicar.
+Asistencia/App de Campo, y las 13 SQL + 5 navegador + unitarias que pasan)
+en `ESTADO_DESARROLLO.md`, sección "Asistencia A2" — no se repite aquí
+para no duplicar.
+
+**Actualización — A2.1, requisito operativo real (26/10/2026)**: el
+propietario reportó dos trabajadores que todos los sábados trabajan media
+jornada (uno por la mañana, otro por la tarde) y pidió horarios parciales
+**recurrentes** por trabajador — distintos de los permisos excepcionales
+de un solo día de A2. Implementada LOCALMENTE: tabla
+`asistencia_horarios_personales` (día de semana 1..6 + turno + horas
+reales configurables, SUPERADMIN únicamente), y `mark_attendance_ingreso`
+corregido para calcular tardanza contra el horario REAL de cada persona.
+Esto también **corrigió el límite documentado de A2** (media_jornada ya no
+exime el día completo). Detalle completo en `ESTADO_DESARROLLO.md`,
+sección "Asistencia A2.1".
 
 ## Estado vigente — A0 + A1 implementadas LOCALMENTE (26/10/2026)
 

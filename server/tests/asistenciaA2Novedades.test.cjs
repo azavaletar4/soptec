@@ -57,9 +57,11 @@ test('A2 PostgreSQL aislado: novedades (vacaciones/descanso/permiso/media jornad
   });
 
   await t.test('medias jornadas y permisos por horas exigen un solo día y campos consistentes',()=>{
-   assert.equal(as(1,crear(6,2,'media_jornada',`${today}+1`,`${today}+1`,"'manana'")),'activa');
-   assert.throws(()=>as(1,crear(7,2,'media_jornada',`${today}+2`,`${today}+3`,"'manana'")));
-   assert.throws(()=>as(1,crear(8,7,'media_jornada',`${today}+2`,`${today}+2`)));
+   // media_jornada ahora lleva turno + horas REALES (A2.1) — nunca solo una etiqueta sin horario.
+   assert.equal(as(1,crear(6,2,'media_jornada',`${today}+1`,`${today}+1`,"'manana'","'08:00'","'13:00'")),'activa');
+   assert.throws(()=>as(1,crear(7,2,'media_jornada',`${today}+2`,`${today}+3`,"'manana'","'08:00'","'13:00'"))); // mas de 1 dia
+   assert.throws(()=>as(1,crear(8,7,'media_jornada',`${today}+2`,`${today}+2`,'null',"'14:00'","'18:00'"))); // sin turno
+   assert.throws(()=>as(1,crear(13,7,'media_jornada',`${today}+2`,`${today}+2`,"'tarde'"))); // sin horas
    assert.equal(as(1,crear(9,7,'permiso_horas',`${today}+2`,`${today}+2`,'null',"'09:00'","'11:00'")),'activa');
    assert.throws(()=>as(1,crear(10,7,'permiso_horas',`${today}+3`,`${today}+3`,'null',"'11:00'","'09:00'")));
    assert.throws(()=>as(1,crear(11,7,'permiso_horas',`${today}+3`,`${today}+4`,'null',"'09:00'","'11:00'")));

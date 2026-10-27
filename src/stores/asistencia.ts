@@ -2,13 +2,15 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { fechaLimaISO } from '@/lib/asistenciaReglas';
-import type { AsistenciaRegistro, CompanySettings, Feriado } from '@/types/domain';
+import type { AsistenciaRegistro, CompanySettings, Feriado, HorarioPersonal } from '@/types/domain';
 
 const REGISTRO_SELECT = '*, profile:profiles!asistencia_registros_user_id_fkey(id, full_name, email)';
+const HORARIO_PERSONAL_SELECT = '*, profile:profiles!asistencia_horarios_personales_user_id_fkey(full_name, email)';
 
 export const useAsistenciaStore = defineStore('asistencia', () => {
   const settings = ref<CompanySettings | null>(null);
   const feriados = ref<Feriado[]>([]);
+  const horariosPersonales = ref<HorarioPersonal[]>([]);
   const hoy = ref<AsistenciaRegistro | null>(null);
   const tablero = ref<AsistenciaRegistro[]>([]);
   const loadingHoy = ref(false);
@@ -39,6 +41,34 @@ export const useAsistenciaStore = defineStore('asistencia', () => {
     feriados.value.push(data as Feriado);
     feriados.value.sort((a, b) => a.fecha.localeCompare(b.fecha));
     return data as Feriado;
+  }
+
+  /** Horarios parciales RECURRENTES (Fase A2.1) — RLS ya limita a la fila
+   *  propia o todas para SUPERADMIN, igual que asistencia_novedades. */
+  async function fetchHorariosPersonales() {
+    const { data, error } = await supabase.from('asistencia_horarios_personales').select(HORARIO_PERSONAL_SELECT).order('dia_semana');
+    if (error) throw error;
+    horariosPersonales.value = (data ?? []) as unknown as HorarioPersonal[];
+  }
+
+  /** Upsert por (user_id, dia_semana) — SUPERADMIN reemplaza el horario de ese día sin duplicar. */
+  async function saveHorarioPersonal(payload: { user_id: string; dia_semana: number; turno: 'manana' | 'tarde'; hora_ingreso: string; hora_salida: string }) {
+    const { data, error } = await supabase
+      .from('asistencia_horarios_personales')
+      .upsert(payload, { onConflict: 'user_id,dia_semana' })
+      .select(HORARIO_PERSONAL_SELECT)
+      .single();
+    if (error) throw error;
+    horariosPersonales.value = horariosPersonales.value.filter((h) => !(h.user_id === payload.user_id && h.dia_semana === payload.dia_semana));
+    horariosPersonales.value.push(data as unknown as HorarioPersonal);
+    horariosPersonales.value.sort((a, b) => a.dia_semana - b.dia_semana);
+    return data as unknown as HorarioPersonal;
+  }
+
+  async function deleteHorarioPersonal(userId: string, diaSemana: number) {
+    const { error } = await supabase.from('asistencia_horarios_personales').delete().eq('user_id', userId).eq('dia_semana', diaSemana);
+    if (error) throw error;
+    horariosPersonales.value = horariosPersonales.value.filter((h) => !(h.user_id === userId && h.dia_semana === diaSemana));
   }
 
   async function deleteFeriado(fecha: string) {
@@ -159,6 +189,7 @@ export const useAsistenciaStore = defineStore('asistencia', () => {
   return {
     settings,
     feriados,
+    horariosPersonales,
     hoy,
     tablero,
     loadingHoy,
@@ -168,6 +199,9 @@ export const useAsistenciaStore = defineStore('asistencia', () => {
     fetchFeriados,
     createFeriado,
     deleteFeriado,
+    fetchHorariosPersonales,
+    saveHorarioPersonal,
+    deleteHorarioPersonal,
     fetchHoy,
     markIngreso,
     markInicioAlmuerzo,

@@ -54,9 +54,31 @@ intactas. ADMIN marca/reporta desde el panel web y técnico desde Campo
   ADMIN/TECNICO_RED solo consultan sus propias novedades. Migración
   `20261028000000_asistencia_a2_novedades.sql`, componente `NovedadesPanel.vue`
   (montado en Control de Asistencia y en el widget compartido Campo/panel).
-  13/13 SQL + 5/5 navegador + unitarias PASS, `vue-tsc`/build limpios. Detalle
-  completo en `ESTADO_DESARROLLO.md` ("Asistencia A2"). Pendiente autorización
-  explícita separada para aplicar la migración y desplegar.
+  13/13 SQL + 5/5 navegador + unitarias PASS, `vue-tsc`/build limpios.
+- **A2.1 implementada LOCALMENTE** (requisito operativo real: dos técnicos
+  que todos los sábados trabajan media jornada, uno por la mañana y otro
+  por la tarde): horarios parciales RECURRENTES por trabajador (tabla
+  `asistencia_horarios_personales`, día de la semana 1..6 + turno + horas
+  REALES configuradas por SUPERADMIN, nunca inventadas), distintos del
+  permiso EXCEPCIONAL de un solo día (`asistencia_novedades` tipo
+  `media_jornada`). `mark_attendance_ingreso` ahora calcula la tardanza
+  contra el horario REAL de cada persona (precedencia: permiso excepcional
+  de hoy > horario habitual recurrente de ese día > horario general de la
+  compañía) — nunca se marca ausente "la otra mitad" del día, porque falta
+  sigue siendo por día completo sin ninguna marcación, nunca por segmento.
+  **Corrige la limitación documentada de A2**: `media_jornada` ya NO exime
+  el día completo (ahora exige turno + horas reales, igual forma que
+  `permiso_horas`, y requiere una marcación real como cualquier otro día).
+  Migración `20261028010000_asistencia_a2_horarios_personales.sql`,
+  componente `HorariosPersonalesPanel.vue`. 14/14 SQL + 5/5 navegador + 2
+  unitarias nuevas PASS, `vue-tsc`/build limpios. **Ejecutar las suites de
+  Asistencia de una por una** (`node --test server/tests/<archivo>`) — en
+  paralelo los contenedores Docker aislados interfieren entre sí y dan
+  fallos falsos (confirmado: cada suite 100% verde por separado, no es una
+  regresión real).
+  Detalle completo de A2/A2.1 en `ESTADO_DESARROLLO.md` ("Asistencia A2" /
+  "Asistencia A2.1"). Pendiente autorización explícita separada para
+  aplicar ambas migraciones y desplegar.
 
 ## Antes de empezar
 
