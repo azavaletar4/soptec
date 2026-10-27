@@ -1,14 +1,38 @@
 # Registro de versiones productivas — SmartRayco
 
-## Estado compartido vigente
+## Cierre de sesión y continuidad — 27/10/2026
 
-El propietario confirma que **A3 funciona correctamente y está validada**.
-Esto supera las notas anteriores de aceptación funcional pendiente de A3.
-La nueva reorganización visual está implementada y validada **solo localmente**,
-en `feature/asistencia-a3-local`, sobre `4156e84`. Sin push ni despliegue.
-Las imágenes productivas documentadas se mantienen; no se consultó producción.
+- **A0/A1 y A2/A2.1 cerradas administrativamente.** A0/A1 también validadas;
+  el seguimiento operativo de sábado/vacaciones/permisos A2/A2.1 se conserva.
+- **A3 implementada, migrada y desplegada; intercambio de descanso confirmado
+  funcional por el propietario.** No volver a registrarlo como validación pendiente.
+- **Mejora visual de cuatro pestañas implementada y probada LOCALMENTE,
+  pendiente de despliegue.** Commit visual `233f230f06e0946dca31109cf68299e4356cb2b5`
+  (`233f230`), rama `feature/asistencia-a3-local`; cinco escenarios de navegador
+  aprobados, tipado/compilación aprobados y siete capturas guardadas. Evidencia
+  existente conservada, sin repetir pruebas para este cierre.
+- Frontend productivo documentado conservado:
+  `smartrayco-asistencia-a3:71944f5-20261027T041727Z`. La mejora visual no está
+  publicada. Backend `16831c6`, contenedor `cd577bcaa95cab290bfa2baa7d754a97a516dab94a0aa79af5db6cb34bccf154`,
+  StartedAt `2026-10-26T20:44:49.856235867Z`, conservado.
 
-Detalle: `docs/ASISTENCIA-PESTANAS-VISUAL-LOCAL.md`.
+**Siguiente paso, previa autorización: desplegar únicamente el frontend visual
+del commit `233f230`, conservando exactamente backend `16831c6` y sus overrides
+activos.** Mantener la cadena completa de Compose: base
+`/opt/smartrayco/docker-compose.onprem.yml`, override backend
+`/opt/smartrayco-staging/fase175-counters-16831c6-20261026T162650Z/backend.override.json`,
+override frontend A2-full y override frontend A3 ya documentados; agregar solo
+un override nuevo del frontend visual. No recrear backend ni reaplicar A3.
+
+Cierre exclusivamente documental para Claude Code y Codex. El push normal a
+`origin/feature/asistencia-a3-local` respalda código/documentación; no constituye
+despliegue. Sin merge a main ni force push. No se ejecutaron migraciones, builds,
+pruebas ni despliegues durante este cierre; directorio principal y cambios ajenos
+intactos. Esta sección prevalece sobre las notas históricas de «sin push» y de
+aceptación funcional A3 pendiente.
+
+Detalle visual/capturas: `docs/ASISTENCIA-PESTANAS-VISUAL-LOCAL.md`.
+Cadena exacta y estado productivo: `docs/ASISTENCIA-A3-FRONTEND-DESPLEGADO.md`.
 
 ## Estado vigente: A3 migrada, desplegada y verificada técnicamente
 
