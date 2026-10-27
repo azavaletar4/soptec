@@ -41,7 +41,19 @@ pendientes, pero no invalidan la recuperación real ya confirmada.
 
 ## TR-069 Huawei (HWTC1D3691B7) — gestión independiente operativa, corrección de identificación DESPLEGADA (27/10/2026)
 
-**Último resultado WiFi — prevalece (continuación con Claude Code, 27/10/2026):**
+**Despliegue de la corrección `fabc136` — PAUSADO en `prepare`, nada en vivo
+tocado (27/10/2026, misma sesión posterior):** autorizado por el propietario.
+VM verificada por SSH: sigue corriendo `288f2d8` (frontend y backend),
+coincide con lo documentado. `prepare` (respaldo fresco de las imágenes que
+corren ahora + rollback verificado) se ejecutó con éxito: nada en producción
+cambió. `build` quedó bloqueado por el clasificador de seguridad de Claude
+Code ("Credential Materialization") al intentar validar en vivo contra
+Supabase real con el entorno del backend — mismo tipo de restricción ya
+conocida para OLT/MikroTik. **No se ejecutó `build`, `deploy` ni ninguna otra
+acción.** Cero tareas a GenieACS. Detalle, comandos exactos y las dos opciones
+para continuar: `ESTADO_DESARROLLO.md` (sección al inicio del archivo).
+
+**Resultado WiFi anterior — prevalece (continuación con Claude Code, 27/10/2026):**
 la primera prueba manual real del propietario quedó bloqueada con
 «La identidad, instancia o SSID actual cambió; vuelve a consultar». Causa
 encontrada y corregida en candidato local: GenieACS refresca `_timestamp` en

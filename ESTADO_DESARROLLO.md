@@ -1,5 +1,73 @@
 # SmartRayco — Estado de desarrollo
 
+## Despliegue selectivo de la corrección WiFi (commit `fabc136`) — PAUSADO en `prepare`, nada en vivo tocado (27/10/2026, misma sesión posterior)
+
+El propietario autorizó desplegar selectivamente la corrección de arriba. Se
+verificó primero el estado real de la VM por SSH (no solo la documentación):
+`docker ps` confirmó frontend `smartrayco-frontend-consolidado:288f2d8ac3c4` y
+backend `smartrayco-backend-wifitrial:288f2d8ac3c4` corriendo, y el
+`release-manifest.json` leído directamente del contenedor confirmó el commit
+`288f2d8...` — coincide exactamente con lo documentado, sin discrepancias.
+
+**Export local verificado:** `npm run build:release -- --export-snapshot`
+exportó `release-source.json` para el commit `fabc13672cd3340ad39420de33992c08f3fceb36`
+(main, el commit de la corrección), 300 fuentes, ancestro de
+`ead801a...` (política de release) satisfecho, árbol de `src` sin cambios sin
+confirmar (`git status` limpio para las rutas de release).
+
+**Herramienta de promoción reutilizada con una adaptación puntual:** el
+orquestador real (`scripts/frontend-consolidation-release.py` +
+`scripts/frontend-consolidation-release.cjs`) estaba fijado al respaldo de la
+PRIMERA promoción (`tr069-wifi-manual-20261027`) para decidir el respaldo de
+`prepare` — ya no coincide con lo que corre ahora (`288f2d8`), así que un
+reintento directo del script original habría fallado por diseño con
+`BACKUP_BASE_DRIFT` (la propia protección del script, funcionando como debía).
+Se preparó una copia adaptada **solo en el equipo local de esta sesión**
+(nunca en el repo) que, en `prepare`, toma el respaldo de **las imágenes que
+están corriendo ahora mismo** (las mismas comprobaciones: contenedor aislado,
+sin red, rootfs verificado) en vez de reusar el respaldo antiguo. `build`,
+`deploy`, `verify` y `rollback` quedaron exactamente iguales al original.
+
+**`prepare` ejecutado y verificado — nada en vivo cambió:**
+`{"prepared": true, "rollbackTested": true, "stage":
+"/opt/smartrayco-staging/frontend-consolidado-tr069-fabc136-20261027",
+"sourceCommit": "fabc13672cd3340ad39420de33992c08f3fceb36", "servicesChanged":
+false}`. Respaldo fresco de frontend y backend actualmente en ejecución,
+guardado y verificado (rootfs idéntico) en esa misma carpeta de staging;
+`unchanged()`/`health()` confirmaron que nada se tocó.
+
+**`build` BLOQUEADO por el clasificador de seguridad de Claude Code —
+"Credential Materialization"**: ese paso del script original valida en vivo
+`validateWifiTrialContract()` (solo lectura real contra Supabase) ejecutando
+un contenedor aislado con el entorno real del backend (incluye credenciales)
+escrito a un archivo temporal en el propio servidor. El clasificador bloqueó
+la operación antes de tocar la VM — mismo patrón ya documentado para
+OLT/MikroTik (nunca materializar credenciales en texto plano, ni local ni
+remoto, fuera de un `docker exec` puntual). Un intento posterior de solo
+listar la carpeta de staging (sin crear nada) también fue bloqueado por el
+clasificador ("Blind Apply"), señal de detenerse y consultar al propietario
+en vez de seguir intentando variantes. **No se ejecutó `build`, `deploy` ni
+ninguna otra acción después de `prepare`.**
+
+**Nada en producción cambió.** `smartrayco-frontend-consolidado:288f2d8ac3c4`
+y `smartrayco-backend-wifitrial:288f2d8ac3c4` siguen siendo las imágenes
+activas reales. El único efecto en la VM es el respaldo nuevo (archivado,
+nunca iniciado) en
+`/opt/smartrayco-staging/frontend-consolidado-tr069-fabc136-20261027/`. Cero
+tareas enviadas a GenieACS en todo este intento (ninguna acción de este
+script llama `change`/`verify`/`restore`; solo GET/health/hashes).
+
+**Pendiente, a decidir con el propietario:** (a) que el propietario ejecute
+el `build`/`deploy` restante desde su propia terminal (fuera del clasificador
+de este agente), con los mismos archivos ya preparados, o (b) quitar del
+`build` adaptado únicamente la comprobación en vivo contra Supabase real
+(redundante para este cambio puntual: `validateWifiTrialContract` no se tocó,
+ya tiene 100% de pruebas automatizadas con datos ficticios, y el `probe()`
+posterior al despliegue ya comprueba salud real del backend por HTTP) y
+continuar solo con las comprobaciones que no requieren materializar
+credenciales. Comentario completo y comandos exactos en el resumen entregado
+al propietario en esta misma sesión.
+
 ## WiFi TR-069: corregido el falso bloqueo + formulario simplificado — CANDIDATO LOCAL, NO desplegado (27/10/2026, continuación con Claude Code)
 
 Retomado desde el estado de Codex (sin tokens). La primera prueba manual real
