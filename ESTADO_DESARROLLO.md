@@ -38,9 +38,22 @@ verificable para este firmware — ver punto 5. La corrección del
 conectados ya están desplegadas pero todavía no tienen su primera prueba
 real** — las hace el propietario desde el panel.
 
-**3. Cambios locales pendientes (no desplegados, no publicados):** ninguno
-de TR-069/WiFi/Hosts — todo lo preparado hasta ahora ya está en producción
-(commit `5d48a10`).
+**3. Cambios locales pendientes (no desplegados, no publicados):** corrección
+puntual de identificación Hosts sobre `234e303` (commit documental posterior
+al despliegue). La proyección NBI omitía `_deviceId._SerialNumber`, por lo que
+`matchTr069Device` recibía null aunque la consulta encontrara la Huawei.
+Se conservan `_id`, serial y timestamp Hosts en la proyección; se reutilizan
+`normalizeGponSerial`/`matchTr069Device`, sin cambiar WiFi ni otros módulos.
+Comprobación real GET a las 20:43 UTC: una única coincidencia, serial
+`485754431D3691B7`; proyección anterior sin serial, corregida con serial.
+Caché: cinco Hosts con nombre/IP/MAC; conexión/banda/Active sin valor,
+se muestran desconocidos. Evidencia: `docs/TR069-HOSTS-CACHE-20261028.json`;
+repetición opcional: `node scripts/tr069-hosts-readonly.cjs` (solo GET).
+48/48 pruebas Hosts/WiFi trial/GPON PASS y `tsc -p tsconfig.server.json
+--noEmit` PASS. El mock ahora aplica la proyección NBI y prueba también
+la caché real, serial hexadecimal/canónico, inexistentes y ambiguos.
+Sin tareas, migraciones, push, merge ni despliegue. Prueba visual real del
+arreglo pendiente de un despliegue autorizado por separado.
 - Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
   antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
   `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
@@ -51,7 +64,7 @@ de TR-069/WiFi/Hosts — todo lo preparado hasta ahora ya está en producción
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `d323d0e` | 38 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Corrección Hosts posterior a `234e303`; ver `git log -1` | **Solo local, sin publicar ni desplegar** |
 | WiFi + Hosts, todo junto | incluido en `main` | `5d48a10` | **En producción** (desplegado 28/10/2026 20:33 UTC) |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
@@ -77,7 +90,10 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución. Pendiente del
+**5. Próxima tarea autorizada:** corrección de identificación Hosts completada
+localmente y detenida antes de desplegar. Un despliegue futuro requiere
+autorización expresa; después comprobar visualmente los cinco registros
+cacheados (pueden variar con nuevos Informs). Pendiente del
 **propietario**: (a) probar manualmente desde el panel que el botón WiFi ya
 no queda indefinidamente en "Guardando cambios", que el nombre sigue
 funcionando, y que la nueva pantalla "Dispositivos conectados" carga bien

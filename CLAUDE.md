@@ -16,6 +16,13 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+La corrección posterior de identificación Hosts está preparada **solo local**:
+la proyección NBI descartaba el serial antes de `matchTr069Device`; corregida
+sin cambiar WiFi. Evidencia real: una Huawei, cinco Hosts cacheados, sin datos
+verificables de conexión/banda/Active. 48 pruebas focalizadas y tsc backend PASS.
+Leer el punto 3 del ESTADO DE CONTINUIDAD para archivos/evidencia y continuación;
+producción sigue en `5d48a10ea497`, pendiente de autorización para desplegar.
+
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
 **Nota de cierre (despliegue de Hosts, sesión posterior):** Hosts

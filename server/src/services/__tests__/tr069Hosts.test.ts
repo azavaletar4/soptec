@@ -1,6 +1,7 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readHostsInventory } from '../tr069Hosts';
+import fs from 'node:fs';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -36,7 +37,25 @@ function nbi(rows: object[]) {
     assert.equal(init?.method, 'GET', 'Nunca un POST/tarea para leer Hosts');
     assert.ok(!String(url).includes('/tasks'));
     calls.push(String(url));
-    return Response.json(rows);
+    // Simula la proyección inclusiva real de NBI: el mock anterior devolvía
+    // siempre el serial aunque la consulta lo omitiera, ocultando la regresión.
+    const projection = new URL(String(url)).searchParams.get('projection')?.split(',') ?? [];
+    return Response.json(rows.map(row => {
+      const projected: Record<string, unknown> = {};
+      for (const field of projection) {
+        const keys = field.split('.');
+        let source: unknown = row;
+        for (const key of keys) source = (source as Record<string, unknown> | undefined)?.[key];
+        if (source === undefined) continue;
+        let target = projected;
+        for (const key of keys.slice(0, -1)) {
+          target[key] ??= {};
+          target = target[key] as Record<string, unknown>;
+        }
+        target[keys[keys.length - 1]!] = source;
+      }
+      return projected;
+    }));
   }) as typeof fetch;
   return calls;
 }
@@ -112,4 +131,42 @@ test('serial ASCII y hexadecimal identifican la misma ONT; lastInform y hostsRep
   assert.equal(inv.serial, TEST_SERIAL);
   assert.equal(inv.lastInform, '2026-10-28T20:08:39.031Z');
   assert.equal(inv.hostsReportedAt, timestamp);
+});
+
+test('la consulta conserva identidad y busca ambas representaciones completas, sin coincidencias parciales', async () => {
+  const calls = nbi([device()]);
+  for (const serial of [TEST_SERIAL, '485754431D3691B7']) {
+    assert.equal((await readHostsInventory(nbiUrl, serial)).deviceId, TEST_DEVICE);
+  }
+  for (const call of calls) {
+    const url = new URL(call);
+    assert.deepEqual(JSON.parse(url.searchParams.get('query')!), {
+      '_deviceId._SerialNumber': { $in: [TEST_SERIAL, '485754431D3691B7'] },
+    });
+    assert.ok(url.searchParams.get('projection')!.split(',').includes('_deviceId._SerialNumber'));
+  }
+});
+
+test('equipo identificado sin Hosts devuelve lista vacía; no confunde ausencia de datos con identidad ausente', async () => {
+  nbi([device()]);
+  const inv = await readHostsInventory(nbiUrl, TEST_SERIAL);
+  assert.equal(inv.found, true);
+  assert.deepEqual(inv.hosts, []);
+});
+
+test('caché real Huawei: cinco Hosts registrados; conexión, banda y Active sin valor quedan desconocidos', async () => {
+  const cache = JSON.parse(fs.readFileSync(new URL('../../../../docs/TR069-HOSTS-CACHE-20261028.json', import.meta.url), 'utf8'));
+  assert.equal(cache.before.length, 1);
+  assert.equal(cache.before[0].serialPresent, false, 'La proyección desplegada omitía el serial');
+  assert.equal(cache.after.length, 1);
+  nbi(cache.after);
+  const inv = await readHostsInventory(nbiUrl, TEST_SERIAL);
+  assert.equal(inv.deviceId, TEST_DEVICE);
+  assert.equal(inv.hosts.length, 5);
+  for (const host of inv.hosts) {
+    assert.ok(host.hostName && host.ipAddress && host.macAddress);
+    assert.equal(host.connection, null);
+    assert.equal(host.band, null);
+    assert.equal(host.active, null);
+  }
 });

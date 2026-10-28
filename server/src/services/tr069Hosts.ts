@@ -29,7 +29,11 @@ export async function readHostsInventory(nbiUrl: string, serial: string): Promis
   const hex = [...canonical.slice(0, 4)].map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('').toUpperCase() + canonical.slice(4);
   const query = encodeURIComponent(JSON.stringify({ '_deviceId._SerialNumber': { $in: [canonical, hex] } }));
   const projection = encodeURIComponent([
+    // NBI excluye los campos no proyectados: conservar la identidad que valida
+    // matchTr069Device, igual que readWifiInventory (que lee el documento completo).
+    '_id', '_deviceId._SerialNumber',
     '_lastInform',
+    'InternetGatewayDevice.LANDevice.1.Hosts._timestamp',
     'InternetGatewayDevice.LANDevice.1.Hosts.Host',
     'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice',
     'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.OperatingFrequencyBand',

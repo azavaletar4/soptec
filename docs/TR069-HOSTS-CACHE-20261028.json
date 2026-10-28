@@ -1,0 +1,400 @@
+{
+  "checkedAt": "2026-10-28T20:43:24.209Z",
+  "readOnly": true,
+  "methods": [
+    "GET"
+  ],
+  "tasksSent": 0,
+  "before": [
+    {
+      "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+      "serialPresent": false
+    }
+  ],
+  "after": [
+    {
+      "_id": "00259E-HG8145X6%2D13-485754431D3691B7",
+      "InternetGatewayDevice": {
+        "LANDevice": {
+          "1": {
+            "Hosts": {
+              "Host": {
+                "1": {
+                  "Active": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "AddressSource": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "ClientID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "HostName": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "REDMI-Note-15-5G",
+                    "_writable": false
+                  },
+                  "IPAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "192.168.100.37",
+                    "_writable": false
+                  },
+                  "InterfaceType": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "Layer2Interface": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "LeaseTimeRemaining": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "MACAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "d2:d3:3a:8d:85:1c",
+                    "_writable": false
+                  },
+                  "UserClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "VendorClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_NegotiatedRate": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_RSSI": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_Stats": {
+                    "_object": true,
+                    "_writable": false
+                  },
+                  "_object": true,
+                  "_timestamp": "2026-10-28T01:38:37.590Z",
+                  "_writable": true
+                },
+                "2": {
+                  "Active": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "AddressSource": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "ClientID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "HostName": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "S26-Ultra-de-Warner",
+                    "_writable": false
+                  },
+                  "IPAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "192.168.100.35",
+                    "_writable": false
+                  },
+                  "InterfaceType": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "Layer2Interface": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "LeaseTimeRemaining": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "MACAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "56:b9:d2:f2:e7:c1",
+                    "_writable": false
+                  },
+                  "UserClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "VendorClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_NegotiatedRate": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_RSSI": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_Stats": {
+                    "_object": true,
+                    "_writable": false
+                  },
+                  "_object": true,
+                  "_timestamp": "2026-10-28T04:38:37.814Z",
+                  "_writable": true
+                },
+                "3": {
+                  "Active": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "AddressSource": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "ClientID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "HostName": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "iPhone",
+                    "_writable": false
+                  },
+                  "IPAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "192.168.100.38",
+                    "_writable": false
+                  },
+                  "InterfaceType": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "Layer2Interface": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "LeaseTimeRemaining": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "MACAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "be:9e:54:93:df:8c",
+                    "_writable": false
+                  },
+                  "UserClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "VendorClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_NegotiatedRate": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_RSSI": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_Stats": {
+                    "_object": true,
+                    "_writable": false
+                  },
+                  "_object": true,
+                  "_timestamp": "2026-10-28T13:38:38.537Z",
+                  "_writable": true
+                },
+                "4": {
+                  "Active": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "AddressSource": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "ClientID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "HostName": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "Z2359",
+                    "_writable": false
+                  },
+                  "IPAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "192.168.100.34",
+                    "_writable": false
+                  },
+                  "InterfaceType": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "Layer2Interface": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "LeaseTimeRemaining": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "MACAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "7e:75:b3:0a:86:76",
+                    "_writable": false
+                  },
+                  "UserClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "VendorClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_NegotiatedRate": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_RSSI": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_Stats": {
+                    "_object": true,
+                    "_writable": false
+                  },
+                  "_object": true,
+                  "_timestamp": "2026-10-28T13:38:38.537Z",
+                  "_writable": true
+                },
+                "5": {
+                  "Active": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "AddressSource": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "ClientID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "HostName": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "LAPTOP-996NPL7I",
+                    "_writable": false
+                  },
+                  "IPAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "192.168.100.32",
+                    "_writable": false
+                  },
+                  "InterfaceType": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "Layer2Interface": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "LeaseTimeRemaining": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "MACAddress": {
+                    "_object": false,
+                    "_timestamp": "2026-10-28T20:38:05.091Z",
+                    "_type": "xsd:string",
+                    "_value": "00:07:29:55:35:57",
+                    "_writable": false
+                  },
+                  "UserClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "VendorClassID": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_NegotiatedRate": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_RSSI": {
+                    "_object": false,
+                    "_writable": false
+                  },
+                  "X_HW_Stats": {
+                    "_object": true,
+                    "_writable": false
+                  },
+                  "_object": true,
+                  "_timestamp": "2026-10-28T17:38:38.861Z",
+                  "_writable": true
+                },
+                "_object": true,
+                "_timestamp": "2026-10-28T20:38:05.025Z",
+                "_writable": true
+              }
+            },
+            "WLANConfiguration": {
+              "1": {
+                "AssociatedDevice": {
+                  "_object": true,
+                  "_writable": true
+                }
+              },
+              "5": {
+                "AssociatedDevice": {
+                  "_object": true,
+                  "_writable": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "_deviceId": {
+        "_SerialNumber": "485754431D3691B7"
+      },
+      "_lastInform": "2026-10-28T20:38:39.071Z"
+    }
+  ]
+}
