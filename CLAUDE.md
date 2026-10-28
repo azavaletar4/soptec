@@ -41,20 +41,22 @@ en punto como GPV en vez del refreshObject acotado del plan. Tarea fallida
 retirada, cero pendientes, retries:0, sin más lecturas ni reintentos.
 Banda/asociaciones aún sin confirmar. Inform final 22:08:39.189 UTC.
 Detalle y evidencia: `docs/TR069-HOSTS-ACTIVE-READ-20261028.md` y JSON.
-**Preparación local posterior a `4f50068`, sin desplegar:** Hosts cerrado por
-defecto dentro del detalle; solo abrir Hosts/Actualizar por ADMIN/SUPERADMIN
-inicia una lectura acotada. Sin polling, cron, timers de refresco ni reintentos;
-consulta pendiente se comprueba manualmente y se reutiliza, con journal/lock,
-timeout y expiración. Ruta activa exige auth/rol y está **deshabilitada por
-defecto** (`TR069_HOSTS_ON_DEMAND_ENABLED`), pendiente de autorización real.
-Tipo/estado caducan a 10 min; tabla de seis columnas y señal en dBm solo con
-unidad explícita, MAC/WLAN/fechas vigentes. Sin unidad: No disponible; Ethernet
-vigente: No aplica. No porcentajes ni banda inventada. GET de caché 22:51 UTC:
-cinco X_HW_RSSI sin valor/fecha y cero asociaciones; ninguna tarea enviada.
-66 pruebas y tsc backend/frontend PASS, incluido render real de tabla.
-Detalle, límites del firmware y habilitación pendiente:
-`docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`.
-No ejecutar nuevas lecturas activas reales ni publicar sin autorización específica.
+**Prueba real Hosts bajo demanda PASS; despliegue DETENIDO (28/10):** código
+exacto `e2c7bf7` ejecutado aislado en /tmp, una sola tarea GPV de 35 hojas,
+HTTP 200, Inform 23:07:06.891 UTC, cinco Hosts con fechas propias renovadas.
+S26-Ultra y Z2359 conectados; los demás desconectados en esa muestra.
+X_HW_RSSI devuelve 0/-43/0/-57/0, sin unidad verificada: no inventar dBm/%.
+Cola/faults vacíos al terminar; gate productivo seguía apagado.
+Guard local `ac511d7` limita la habilitación a serial permitido (solo Huawei
+planeada), sin cambiar el GPV probado; contrato solo permite dos ajustes de
+entorno Hosts y compara el resto completo. 67 pruebas + 14 de release PASS.
+`prepare` PASS con imágenes activas/rollback; `build` FAIL
+`NORMALIZED_ASSET_NAME_COLLISION`. No forzar ni omitir ese control.
+No hubo deploy/verify. Cierre SSH también falló, sin reintento; última salud
+e imágenes comprobadas 23:07 UTC (backend d6ce2c2, frontend 5d48a10).
+Detalle, staging, respaldos y siguiente paso:
+`docs/TR069-HOSTS-DEMAND-DESPLIEGUE-DETENIDO-20261028.md`.
+No repetir la prueba activa ni continuar operaciones sin nueva indicación.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 

@@ -1,8 +1,11 @@
 # Hosts bajo demanda y señal WiFi — preparado localmente
 
-Sin desplegar. Esta sesión no envió tareas activas ni comandos sobre equipos.
-Se reutilizaron los valores confirmados y se hizo un único GET de caché NBI
-para señal de la Huawei `HWTC1D3691B7`, con identidad única comprobada.
+Sin desplegar. La preparación original no envió tareas activas. Posteriormente
+el propietario autorizó una sola prueba real: e2c7bf7 funcionó con un GPV de
+35 hojas (23:07 UTC), pero el build del candidato protegido ac511d7 se detuvo
+con NORMALIZED_ASSET_NAME_COLLISION; no hubo deploy/verify. Cierre SSH fallido,
+sin reintento. Resultado completo:
+`TR069-HOSTS-DEMAND-DESPLIEGUE-DETENIDO-20261028.md`.
 
 ## Apertura y actualización
 
@@ -49,12 +52,15 @@ ID de tarea y rutas de lectura; no credenciales. No borrar registros o locks
 para forzar un reenvío incierto. Un lock abandonado por caída de proceso requiere
 revisión manual de la tarea antes de retirarlo, sin recuperación automática ciega.
 
-**Habilitación pendiente:** `TR069_HOSTS_ON_DEMAND_ENABLED` es `false` por
-defecto. Hasta una autorización específica y una prueba real controlada no se
-debe habilitar ni desplegar. Las pruebas activas de esta implementación son
-simuladas; no se probó contra la ONT el comportamiento de connection_request,
-expiry ni la lectura opcional de X_HW_RSSI. La autorización pasada de las dos
-tareas del experimento no se reutiliza para esto.
+**Habilitación productiva pendiente:** `TR069_HOSTS_ON_DEMAND_ENABLED` es false
+por defecto. ac511d7 exige además un serial en `TR069_HOSTS_ON_DEMAND_SERIALS`;
+el contrato planea solo HWTC1D3691B7. La prueba autorizada de e2c7bf7, aislada
+en /tmp, confirmó un único POST con connection_request, HTTP 200, valores y
+fechas nuevas y cola/faults vacíos. No habilitó producción. No se repitió para
+probar el guard más restrictivo (cubierto localmente). El rollout se detuvo
+en build; la autorización no se reutiliza para repetir la lectura o forzar
+la publicación. El vencimiento no llegó a ejercitarse en el ensayo real
+porque la tarea terminó en menos de un segundo; mantiene pruebas simuladas.
 
 El alcance refresca instancias conocidas en caché. No descubre automáticamente
 Hosts/asociaciones nuevas ni tablas no conocidas, y no amplía a WLAN completa.
@@ -80,8 +86,10 @@ de señal declarada. Active/InterfaceType/Layer2Interface siguen fechados a las
 22:03:39.213 UTC aunque MAC se leyó a las 22:38:39 y el Inform fue a las
 22:48:39.251 UTC. Son datos históricos, no cinco conexiones actuales.
 
-No hay todavía señal por cliente verificable ni prueba de que el firmware sea
-incapaz de proporcionarla. El lote anterior de subárboles falló en GenieACS por
+La consulta activa posterior sí obtuvo X_HW_RSSI 0/-43/0/-57/0 y fecha propia
+23:07:06.893 UTC, sin unidad/escala verificada: no interpretarlos como dBm/%.
+No hay todavía calidad calibrada verificable ni prueba de incapacidad del
+firmware. El lote anterior de subárboles falló en GenieACS por
 `Invalid parameter path`; no demuestra una limitación de la ONT y no se repitió.
 
 La implementación prepara señal desde el propio Host o una única asociación
@@ -103,7 +111,9 @@ Débil acompaña al color. La banda 2.4/5 GHz no se deduce ni se añade a la tab
 
 ## Validación y archivos
 
-66/66 pruebas focalizadas PASS y TypeScript backend/frontend PASS. Incluyen
+Preparación inicial: 66/66 pruebas y TypeScript backend/frontend PASS.
+Ensayo/despliegue posterior: 67/67 con guard de serial, 14/14 del contrato y
+tsc backend PASS. Build detenido por colisión de assets, sin publicar. Incluyen
 apertura/cierre, renders sin peticiones, Actualizar, roles/401/403, concurrencia
 ASCII/hex y entre procesos, persistencia, timeout incierto, expiración, faults,
 cola ajena, identidad ausente/ambigua/cambiada, datos antiguos, señal/unidades/
@@ -122,7 +132,8 @@ MAC/WLAN y render real de las seis columnas sin advertencias ni rutas técnicas.
 
 No se cambiaron WiFi/PPPoE/WAN/VLAN/OLT/MikroTik, credenciales, migraciones,
 cron ni otros módulos. Sin push ni despliegue. Producción sigue en la última
-versión documentada, backend d6ce2c2f578f y frontend 5d48a10ea497.
+versión documentada, backend d6ce2c2f578f y frontend 5d48a10ea497, comprobados
+a las 23:07 UTC. La comprobación de cierre no se completó; no se reintentó.
 Una publicación futura requiere declarar alcance frontend+backend, incluyendo
 las nuevas dependencias del servicio y la librería compartida, validar de nuevo
 el release contra imágenes activas y autorizar por separado su habilitación real.

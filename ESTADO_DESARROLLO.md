@@ -28,8 +28,13 @@ VM de producción (`192.168.55.201`), corrección Hosts desplegada el
 Verificados código Hosts contra SHA-256 del commit, imagen real, fuentes
 backend completas, frontend completo, 125 assets HTTP, 11 rutas y HTTP 401
 sin autenticación en Hosts y WiFi. Sin migraciones ni tareas GenieACS.
-Rollback de ESTA release: backend vuelve a `5d48a10ea497`, conserva WiFi,
-frontend y resto de configuración; no vuelve a `16e2bd2`.
+Última comprobación completa de imágenes/salud: 28/10 **23:07 UTC**, durante
+el ensayo autorizado de Hosts bajo demanda. El intento posterior de build
+falló sin desplegar: no se cambió ninguna imagen activa. La comprobación de
+cierre por SSH no pudo completarse y no se reintentó; no afirmar una salud
+actual más reciente que esa lectura satisfactoria. Los nuevos respaldos del
+intento ac511d7 restauran backend d6ce2c2 y frontend 5d48a10, no versiones
+anteriores; detalle en punto 5.
 
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
@@ -47,9 +52,31 @@ datos verificables en esa fase. **Lectura activa posterior autorizada:** Inform
 Active=true; LAPTOP Cable/Ethernet, referencia al puerto LAN 2 y Active=false.
 No se cambió WiFi para probarlo. Estos estados corresponden a esa muestra,
 no son una prueba en vivo ni se renuevan por un Inform posterior.
+**Ensayo posterior de e2c7bf7 (aislado, no desplegado):** tarea única
+`6ae2801a220eb9ba9f4c3581`, HTTP 200, Inform 23:07:06.891 UTC; nombre/IP/MAC,
+tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
+y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
+muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
-**3. Cambios locales pendientes (no publicados):** actualización Hosts bajo
-demanda y calidad WiFi sobre `4f50068`; **sin desplegar ni habilitar**.
+**3. Cambios locales pendientes (no publicados):** Hosts bajo demanda
+`e2c7bf7` + guard por serial `ac511d7`; **sin desplegar ni habilitar**.
+La única prueba real autorizada pasó con el código e2c7bf7 exacto aislado en
+/tmp, sin sustituir /app ni habilitar el gate del servicio publicado. Se añadió
+después un guard más restrictivo para cumplir «solo Huawei»: habilitación
+requiere ENABLED=true y serial en TR069_HOSTS_ON_DEMAND_SERIALS; se planeó
+solo HWTC1D3691B7. Otras ONT se bloquean antes de GET/tareas. No se repitió
+la lectura para probar el guard; pruebas locales 67/67 PASS y tsc backend PASS.
+Contrato de release: solo los dos ajustes de entorno Hosts, jamás WiFi o
+credenciales; hashes del entorno efectivo completo y de rollback. 14/14
+pruebas del contrato PASS (tres escenarios, alcance y entorno restringido).
+Fuente candidata ac511d7c70c8a11700d3553f331af5bb2930926a; snapshot 305 fuentes.
+`prepare` PASS, respaldos/rollback aislado contra imágenes activas; `build`
+FAIL `NORMALIZED_ASSET_NAME_COLLISION` en comparación del grafo de assets.
+Se detuvo sin alterar el verificador, sin deploy/verify ni nuevos intentos.
+Cierre por SSH no completado (`CONTROLLED_TEST_FAILED_NO_RETRY`), sin reintento.
+Resultado/evidencia/respaldos:
+`docs/TR069-HOSTS-DEMAND-DESPLIEGUE-DETENIDO-20261028.md` y
+`docs/TR069-HOSTS-DEMAND-CONTROLLED-20261028.json`.
 Nuevo panel Hosts inicialmente cerrado, independiente del detalle general.
 Abrirlo explícitamente o pulsar Actualizar llama POST de lectura, solo
 ADMIN/SUPERADMIN; GET de caché conserva permisos de lectura existentes.
@@ -64,8 +91,8 @@ a 45 s. Un 202/timeout se comprueba solo en una acción explícita posterior.
 Fault/vencimiento retira únicamente tarea propia comprobada, sin reenviar.
 Identidad se verifica al principio/final; si no se confirman fechas propias
 de MAC/tipo/estado/referencia/nombre-IP, se conserva el snapshot anterior.
-Feature gate **apagado por defecto** `TR069_HOSTS_ON_DEMAND_ENABLED`; preparar
-código no autoriza habilitarlo ni realizar pruebas activas reales.
+Feature gate **apagado por defecto** `TR069_HOSTS_ON_DEMAND_ENABLED` y lista de
+seriales vacía por defecto; la prueba autorizada aislada no habilitó producción.
 Detalle, archivos, límites de unidades/discovery y prueba real pendiente:
 `docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`.
 
@@ -90,11 +117,11 @@ antiguos como una clasificación actual. Fecha de estado visible debajo de cada
 estado (Lima), conservada al caducar; fechas inválidas/futuras no se presentan
 como lecturas. La cabecera incluye las fechas propias de tipo/estado/datos,
 nunca se rejuvenece con Inform o timestamp del objeto padre.
-Tabla actual: Dispositivo, IP, MAC, Conexión, Estado, Señal WiFi. No se presenta
-banda por inferencia de WLAN 1/5. 66/66 pruebas Hosts/GPON/panel/señal/roles y
-render real PASS, tsc backend/vue-tsc PASS. Todas las operaciones activas de
-esta implementación se probaron con NBI simulado; el único acceso real fue
-el GET de caché de señal anterior. Sin cambios de otros módulos ni release.
+Tabla preparada: Dispositivo, IP, MAC, Conexión, Estado, Señal WiFi. No se
+presenta banda por inferencia de WLAN 1/5. Tras la prueba real nueva X_HW_RSSI
+sí tiene valores 0/-43/0/-57/0 (xsd:int) y fecha 23:07:06.893 UTC, pero no unidad
+verificada; wifiSignal sigue null. La señal no se convierte a dBm/% por el
+solo signo/nombre del parámetro. Sin cambios de otros módulos.
 
 Investigación puntual GET inicial
 a las 21:50:05 UTC:
@@ -168,7 +195,7 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Hosts bajo demanda/señal después de `4f50068`; ver `git log -1` | **Local, gate apagado, sin desplegar ni publicar** |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Función e2c7bf7 + guard ac511d7 + continuidad; ver `git log -1` | **Local; prueba real PASS, build bloqueado, sin desplegar/publicar** |
 | Identificación Hosts | incluido en `main` | `d6ce2c2` | **Backend en producción** (28/10 21:30 UTC) |
 | WiFi + Hosts base | incluido en `main` | `5d48a10` | Frontend activo; backend anterior disponible como rollback |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
@@ -195,41 +222,37 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución; Hosts bajo demanda/señal
-preparado y probado localmente, gate apagado. Detenerse antes de consultas
-activas reales, habilitación o despliegue; requieren autorización específica.
-No asumir que una autorización anterior del experimento cubre el nuevo POST,
-connection_request, expiry o X_HW_RSSI. Sin autorización de push/despliegue.
-El experimento activo anterior quedó cerrado al fallo del segundo lote.
-No reintentar ni enviar más tareas
-bajo la autorización consumida. Tipo y Active sí leídos; banda/asociaciones
-siguen sin confirmar. Cero tareas pendientes al cierre. Si el propietario
-autoriza otra sesión, usar refreshObject acotado por objeto (plan original)
-y GPV de hojas concretas, nunca repetir GPV de subárboles terminado en punto.
-No refrescar el árbol completo ni WLANConfiguration completa, no recoger
-claves y no clasificar por exclusión. Resultado y límites en
-`docs/TR069-HOSTS-ACTIVE-READ-20261028.md`.
-Un descubrimiento futuro debe verificar nombres reales de hojas (por ejemplo
-AssociatedDeviceMACAddress de TR-098 frente al MACAddress del mapeador genérico).
-Esta sesión envió exactamente dos tareas de lectura, cero tareas de configuración,
-cero reinicios/connection_request; retiró la segunda tras el fault para impedir
-su reprogramación. Sin comprobación de tráfico/uptime PPPoE: no afirmar una
-prueba de navegación no realizada. Sin cambios de configuración ni despliegue.
-Staging vigente y respaldos (`backend-before.image.tar`, `frontend-before.image.tar`):
-`/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-68c2358762/`.
-Rollback disponible: `node scripts/frontend-consolidation-release.cjs rollback`,
-con el contrato/snapshot actuales de `d6ce2c2` y tooling `d844ac6` intactos:
-restaura solo backend a la imagen previa `5d48a10ea497`, frontend sin reinicio.
-No se ejecutó rollback en producción. No regenerar `release-source.json` desde
-HEAD documental para operar esta release: identifica el commit funcional
-`d6ce2c2`. Resultados locales por fase en
-`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-d6ce2c2-68c2358762/`.
+**5. Próxima tarea autorizada:** ninguna en ejecución. Prueba real única PASS;
+despliegue condicional detenido ante `NORMALIZED_ASSET_NAME_COLLISION`, como
+pidió el propietario. No forzar, ampliar el alcance para silenciar diferencias,
+omitir controles ni reintentar build/deploy sin nueva indicación. Pendiente de
+diagnóstico puntual de los assets en colisión (nombres aún no identificados) y
+comprobación de SSH/health/cola: el cierre SSH falló, sin reintento. No afirmar
+salud actual o tareas actuales verificadas después de las 23:07 UTC.
+No repetir la prueba activa consumida. Esta sesión envió **una** tarea GPV de
+35 hojas con connection_request, expiración y HTTP 200, cero tareas de
+configuración y cero reinicios; cola/faults vacíos a las 23:07:07 UTC.
+Sin medición de tráfico/uptime PPPoE; no afirmar una prueba de navegación.
+No hubo despliegue ni cambios a configuración de equipos.
+Fuente/snapshot vigente: **ac511d7c70c8a11700d3553f331af5bb2930926a**.
+Staging y respaldos actuales (`backend-before.image.tar`, `frontend-before.image.tar`):
+`/opt/smartrayco-staging/frontend-consolidado-tr069-ac511d7-23790cba4f/`.
+Restauración aislada verificada contra backend d6ce2c2 y frontend 5d48a10.
+No se necesitó ni ejecutó rollback en producción; deploy/verify no se iniciaron.
+No regenerar release-source.json desde HEAD documental para operar este intento.
+Resultados locales:
+`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-ac511d7-23790cba4f/`.
+El staging previo de d6ce2c2 queda como antecedente; no confundir su rollback
+con los respaldos de este intento, que restauran las dos imágenes activas.
+Bandas/unidades RSSI siguen pendientes de verificación; no explorar credenciales
+o árboles completos. Los experimentos anteriores están documentados, no repetirlos.
 Para una release NUEVA declarar su commit y alcance, exportar su snapshot
 correspondiente y ejecutar las fases por separado. Nunca ampliar el alcance
 para silenciar una diferencia inesperada ni asumir backend desde el manifiesto
 frontend. Pendiente del
-**propietario**: decidir si autoriza una lectura adicional acotada para banda/
-asociaciones después del fallo documentado y,
+**propietario**: indicar si se retoma el bloqueo de build y la comprobación
+de cierre pendiente. Cualquier lectura activa adicional de banda/asociaciones
+requiere su autorización aparte y,
 por separado, una prueba de
 **descubrimiento de solo lectura** (una tarea nueva a GenieACS, requiere su
 propia autorización aparte) contra `WLANConfiguration.5.PreSharedKey` para

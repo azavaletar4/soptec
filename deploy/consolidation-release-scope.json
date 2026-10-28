@@ -1,7 +1,26 @@
 {
   "version": 1,
-  "sourceCommit": "d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201",
-  "backendSources": ["server/src/services/tr069Hosts.ts"],
-  "frontendSources": [],
-  "frontendAssets": []
+  "sourceCommit": "ac511d7c70c8a11700d3553f331af5bb2930926a",
+  "backendSources": [
+    "server/src/routes/genieacsSync.ts",
+    "server/src/routes/tr069HostsOnDemand.ts",
+    "server/src/services/tr069Hosts.ts",
+    "server/src/services/tr069HostsOnDemand.ts",
+    "server/src/services/tr069HostsSignal.ts",
+    "src/lib/tr069Hosts.ts"
+  ],
+  "frontendSources": [
+    "src/lib/__tests__/tr069Hosts.test.ts",
+    "src/lib/__tests__/tr069HostsPanel.test.ts",
+    "src/lib/__tests__/tr069HostsView.test.ts",
+    "src/lib/tr069Hosts.ts",
+    "src/lib/tr069HostsPanel.ts",
+    "src/stores/tr069.ts",
+    "src/views/tr069/Tr069View.vue"
+  ],
+  "frontendAssets": ["assets/Tr069View.js", "assets/tr069.js"],
+  "backendEnvironment": {
+    "TR069_HOSTS_ON_DEMAND_ENABLED": "true",
+    "TR069_HOSTS_ON_DEMAND_SERIALS": "HWTC1D3691B7"
+  }
 }
