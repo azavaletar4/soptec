@@ -1,5 +1,50 @@
 # SmartRayco — Estado de desarrollo
 
+## `verify` con `AssertionError` y `reason` vacío — NO era un bloqueo, corregido (28/10/2026, retomando el cierre de anoche)
+
+El propietario ejecutó `node scripts/frontend-consolidation-release.cjs verify`
+(punto 5 del cierre de anoche) y obtuvo `{"ok":false,"type":"AssertionError","reason":""}`.
+**Causa real identificada y confirmada, no un problema nuevo del candidato:**
+`verify` llama directo a `probe(m)` (misma función que usa `deploy` para
+validar DESPUÉS de desplegar), y su primer chequeo compara la imagen del
+contenedor **actualmente en ejecución** contra la imagen candidata construida
+ayer (`built.json`). Como `deploy` nunca se ejecutó, esa comparación
+**siempre** falla — no es un defecto del release, es que `verify` no está
+pensado para correr antes de `deploy`, solo después. El `assert` que lo
+detecta no tenía mensaje (`assert a==b` sin texto), de ahí el `reason:""`
+que no decía nada.
+
+**Confirmado en solo lectura contra la VM** (`docker inspect` de los
+contenedores vivos vs. `built.json` del stage, sin tocar nada): imagen
+candidata frontend `sha256:9436712b…` / backend `sha256:bf680f24…`
+(construidas ayer) ≠ imagen corriendo ahora mismo
+`sha256:fca857f7…` / `sha256:7959f08b…` (la actual en producción). Carpeta
+de stage (`/opt/smartrayco-staging/frontend-consolidado-tr069-fabc136-20261027/`)
+intacta: `prepared.json`, `built.json`, `*-candidate.image.tar` presentes y
+sin `attempt.json`/`deploy-result.json` — confirma que `deploy` sigue sin
+ejecutarse, igual que lo documentado anoche. **El despliegue WiFi sigue
+preparado correctamente, nada se perdió ni se dañó.**
+
+**Corrección aplicada (solo el verificador, sin relajar ningún control):**
+se agregaron mensajes a los 4 `assert` de `probe()` que no tenían
+(`CANDIDATE_NOT_DEPLOYED_<servicio>`, `CANDIDATE_ASSETS_NOT_DEPLOYED`,
+`MANIFEST_COMMIT_MISMATCH_running_<commit>`, `UNAUTHENTICATED_CHECK_GOT_<code>`)
+— mismo criterio exacto que antes, ahora con causa legible. Re-ejecutado
+`verify` (solo lectura, sin cambios en la VM): ahora devuelve
+`{"ok":false,"type":"AssertionError","reason":"CANDIDATE_NOT_DEPLOYED_frontend"}`,
+confirmando que el único "fallo" es que todavía no se desplegó — exactamente
+lo esperado. No se tocó build/deploy/rollback ni ninguna lógica de
+seguridad, solo texto de mensajes en `probe()`.
+
+**Siguiente paso correcto: el mismo de anoche, sin cambios.** `deploy` sigue
+siendo la decisión pendiente del propietario desde su propia PowerShell
+(comando en el punto 3 de la sección de abajo). `verify` como chequeo de
+solo lectura **antes** de desplegar seguirá reportando `CANDIDATE_NOT_DEPLOYED_*`
+siempre — eso ya no es una señal de error, es la lectura correcta de "aún
+no desplegado". El verificador útil **después** de `deploy` es ese mismo
+comando, que entonces sí validará rutas/artefactos/manifest contra lo que
+quede corriendo.
+
 ## CIERRE DE JORNADA — retomar aquí mañana, sin repetir investigación (28/10/2026, noche Perú)
 
 **1. Último build exitoso (hoy, confirmado real, no solo preparado):**

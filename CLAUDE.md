@@ -52,6 +52,15 @@ los errores y rollbacks anteriores son antecedentes, no incidentes activos.
 Seguimiento de ciclos y certificación integral de 3.000 clientes siguen
 pendientes, pero no invalidan la recuperación real ya confirmada.
 
+**`verify` antes de `deploy` SIEMPRE falla con `CANDIDATE_NOT_DEPLOYED_*` — no
+es un bloqueo (28/10/2026):** `verify` reutiliza `probe()`, la misma función
+que valida DESPUÉS de desplegar; compara la imagen corriendo contra la
+candidata construida, así que correrlo antes de `deploy` fallará siempre por
+diseño. Antes daba `reason:""` (assert sin mensaje); corregido para que
+diga la causa real (`scripts/frontend-consolidation-release.py`, función
+`probe()`). No reabrir este diagnóstico — ver sección al inicio de
+`ESTADO_DESARROLLO.md`.
+
 ## TR-069 Huawei (HWTC1D3691B7) — gestión independiente operativa, corrección de identificación DESPLEGADA (27/10/2026)
 
 **`build` de `fabc136` terminó `"built":true` — segundo bloqueo diagnosticado

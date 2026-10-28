@@ -76,15 +76,15 @@ def write_sources(folder,files):
   p=folder/name;assert p.resolve().is_relative_to(folder.resolve());p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text)
 def probe(m):
  health();unchanged(m,['frontend','backend'])
- for s in ['frontend','backend']:assert current(s)['Image']==m[s+'Image']
- assert tree(current('frontend')['Id'],'/usr/share/nginx/html')==m['assets']
- manifest=json.loads(http('/release-manifest.json'));assert manifest['commit']==I['commit']
+ for s in ['frontend','backend']:assert current(s)['Image']==m[s+'Image'],'CANDIDATE_NOT_DEPLOYED_'+s
+ assert tree(current('frontend')['Id'],'/usr/share/nginx/html')==m['assets'],'CANDIDATE_ASSETS_NOT_DEPLOYED'
+ manifest=json.loads(http('/release-manifest.json'));assert manifest['commit']==I['commit'],'MANIFEST_COMMIT_MISMATCH_running_'+str(manifest.get('commit'))
  checked=[]
  for route in ['/','/tr069','/asistencia','/campo','/campo/mi-custodia','/puntos','/soporte','/mikrotik','/analitica']:
   assert hashlib.sha256(http(route)).hexdigest()==m['assets']['index.html'],'HTML_ROUTE_MISMATCH_'+route;checked.append(route)
  for p,h in manifest['artifacts'].items():assert hashlib.sha256(http('/'+p)).hexdigest()==h,'HTTP_ARTIFACT_MISMATCH_'+p
  # Solo GET al backend, sin auth: debe rechazar antes de cualquier acceso/tarea.
- code=run(['curl','--silent','--output','/dev/null','--write-out','%{http_code}','--resolve','panel.rayconetworks.com:443:127.0.0.1','https://panel.rayconetworks.com/api/genieacs-sync/wifi/HWTC1D3691B7/trial/status']);assert code=='401'
+ code=run(['curl','--silent','--output','/dev/null','--write-out','%{http_code}','--resolve','panel.rayconetworks.com:443:127.0.0.1','https://panel.rayconetworks.com/api/genieacs-sync/wifi/HWTC1D3691B7/trial/status']);assert code=='401','UNAUTHENTICATED_CHECK_GOT_'+code
  return {'routes':checked,'artifactsVerified':len(manifest['artifacts']),'sourceCommit':I['commit'],'unauthenticatedStatus':401,'ssidTasksSent':0}
 if ACTION=='prepare':
  assert not (stage/'prepared.json').exists();before=states();b=current('backend');f=current('frontend')
