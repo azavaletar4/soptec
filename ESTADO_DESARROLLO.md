@@ -1,5 +1,98 @@
 # SmartRayco — Estado de desarrollo
 
+## TR-069 WiFi contraseña: `prepare`/`build` reales contra la VM, hallazgo y corrección en el propio script de release (28/10/2026, misma sesión posterior)
+
+Autorizado por el propietario: preparar el despliegue del commit `de683e4`
+(cambio de contraseña WiFi). **Sin desplegar — se detuvo antes, tal como se
+pidió.**
+
+**1. Commit verificado antes de tocar nada:** `git diff --stat 1735093 de683e4`
+confirma exactamente los 11 archivos esperados (servicio, tipos, vista,
+pruebas y documentación de la función de contraseña), ningún archivo ajeno.
+Al revisar el propio diff se encontró un defecto real en la sesión anterior:
+el sentinela de la prueba de no-filtración de contraseña
+(`server/src/services/__tests__/tr069WifiTrial.test.ts`) se había escrito
+como **bytes nulos reales** en vez de texto (un escape de tipo unicode
+literal en el parámetro de una herramienta se decodificó a un carácter real
+antes de llegar al archivo) — `git`/`file` lo veían como binario. Las 12
+pruebas seguían pasando igual (Node tolera nulos en un string), pero quedaba
+fragil. Corregido en un commit aparte (`f87aeef`), 12/12 en verde.
+
+**2. Hallazgo real al intentar `prepare` contra la VM (commit `f87aeef`,
+que ya incluye `de683e4` + la corrección anterior):** falló con
+`BACKUP_BASE_DRIFT`. Causa confirmada en solo lectura antes de tocar nada:
+`prepare` estaba escrito para reutilizar el tar de respaldo y el "antes" de
+la primerísima release de esta cadena
+(`/opt/smartrayco-staging/tr069-wifi-manual-20261027/`, de antes de
+`288f2d8`) como si fuera el estado en vivo de **cualquier** release futura —
+correcto solo mientras nada se hubiera desplegado todavía. Como `fabc136` ya
+se desplegó de verdad (confirmado la sesión pasada), ese "antes" fijo
+(imágenes de `288f2d8`) ya no coincide con lo que corre ahora (imágenes de
+`fabc136`), así que **cualquier `prepare` posterior a partir de ahora
+fallaría siempre** con el mismo error — no era un problema del candidato de
+contraseña, era un defecto estructural del script de release que solo se
+manifestaba al intentar una segunda release real en la misma cadena.
+
+**Corregido** (`scripts/frontend-consolidation-release.py`, función
+`prepare`, commit `4eabebe`): cada `prepare` ahora respalda (`docker save`)
+la imagen que está corriendo **en ese momento**, directamente en su propio
+directorio de stage — sin leer ni depender de ninguna release anterior. El
+rollback de cada release vuelve así a lo que estaba en vivo justo antes de
+ELLA (para esta release: `fabc136` con el SSID ya funcionando), nunca a un
+punto más viejo — exactamente lo que pidió el propietario ("conservando el
+cambio de SSID que ya funciona"). Mismo chequeo de integridad de siempre
+(`ROLLBACK_RESTORE_MISMATCH`, comparar el rootfs de un contenedor recreado
+contra el que corre de verdad) sigue intacto, ahora validado contra un
+respaldo propio en vez de uno ajeno — **no se relajó ningún control**.
+
+**3. `prepare` y `build` reales, ejecutados y verificados (sin desplegar):**
+```json
+{"prepared":true,"rollbackTested":true,"stage":".../frontend-consolidado-tr069-f87aeef-20261027","servicesChanged":false}
+{"built":true,"sourceCommit":"f87aeef...","reproducible":true,"contractGuardValidatedReadOnly":true,"artifactCount":125,"servicesChanged":false}
+```
+Confirmado en solo lectura, después: las etiquetas de rollback
+(`smartrayco-consolidado-{backend,frontend}-rollback:f87aeef`) coinciden
+exactamente con las imágenes que corren ahora mismo (`fabc136`); los
+contenedores en vivo no cambiaron en ningún momento. `build` pasó a la
+primera (sin el bloqueo `HISTORICAL_ASSETS_CHANGED` de la sesión pasada):
+único archivo con contenido distinto = `assets/Tr069View.js` (el alcance
+declarado), Asistencia/Puntos/Campo/OLT/Rutinas equivalentes byte a byte.
+Imágenes candidatas nuevas: frontend `929b5018...`, backend `5317585c...`.
+
+**4. Revisión de credenciales (sin exponer nada aquí):** el volcado completo
+de variables de entorno del backend que se leyó la sesión pasada
+(`docker inspect ... {{.Config.Env}}`) nunca se mostró al propietario ni se
+escribió a ningún archivo de este repo — quedó solo en el contexto efímero
+de esa conversación; se registró en memoria para no repetir ese patrón sin
+filtrar. Aparte, el propio script de release (sin cambios de esta sesión,
+mismo comportamiento que para `fabc136` ayer) escribe un volcado de ese
+mismo entorno en `$STAGE/backend-env-private` para validar el contrato en
+vivo — confirmado real: permisos `600`, propietario `root`, mismo host que
+ya tiene esas credenciales en el contenedor corriendo (no es una exposición
+nueva). No es necesario rotar nada por esto; si el propietario quiere cerrar
+el riesgo residual a cero, puede borrar ese archivo tras cada build (no se
+reutiliza) o pedir que el script lo borre automáticamente al final.
+
+**5. Permisos y alcance de la función confirmados** (sin tocar código esta
+vez, solo repaso + pruebas): `requireRole('ADMIN','SUPERADMIN')` sigue
+envolviendo todas las rutas `/trial/*`; `scope()`/`validateWifiTrialContract`
+siguen limitando todo a `HWTC1D3691B7`/`CTR-2026-00214` exacto; el propio
+`build` de hoy volvió a ejecutar el contract guard contra Supabase real
+(`contractGuardValidatedReadOnly:true`). 278/278 y 481/481 de las suites
+completas sin regresión.
+
+**Pendiente: autorización expresa del propietario para `deploy`.** Comando
+(desde su propia PowerShell, igual que siempre):
+```powershell
+cd D:\SmartRayco
+node scripts/frontend-consolidation-release.cjs deploy
+```
+Rollback disponible con o sin desplegar: `node scripts/frontend-consolidation-release.cjs rollback`
+(vuelve a las imágenes `fabc136` exactas, ya verificadas). Después de
+desplegar, la prueba real de cambio de contraseña queda pendiente del
+propietario desde el panel — procedimiento en
+`docs/TR069-WIFI-CONTRASENA-PREPARADA-20261028.md`.
+
 ## TR-069 WiFi: deploy de `fabc136` CONFIRMADO en producción; cambio de contraseña preparado (candidato local, 28/10/2026)
 
 **El propietario confirma que el cambio de SSID real sobre `HWTC1D3691B7`

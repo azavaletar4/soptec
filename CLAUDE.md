@@ -2,18 +2,27 @@
 
 ## Antes de empezar
 
-**ACTUALIZACIÓN 28/10/2026 (continuación del cierre de anoche) — leer
-primero la sección "TR-069 WiFi: deploy de `fabc136` CONFIRMADO..." al
-inicio de `ESTADO_DESARROLLO.md`.** Esto reemplaza el estado del bloque
-"CIERRE DE JORNADA" justo debajo (conservado como antecedente): el `deploy`
-que ahí figuraba como pendiente **ya se ejecutó** (confirmado en vivo,
+**ACTUALIZACIÓN 28/10/2026 (tarde, misma sesión) — leer primero la sección
+"TR-069 WiFi contraseña: `prepare`/`build` reales contra la VM..." al
+inicio de `ESTADO_DESARROLLO.md`.** `prepare` y `build` del commit `f87aeef`
+(contraseña WiFi, sobre `de683e4`) ya se ejecutaron REALES contra la VM —
+`rollbackTested:true`, `reproducible:true`, nada desplegado todavía. En el
+camino se encontró y corrigió un defecto estructural real en
+`scripts/frontend-consolidation-release.py`: `prepare` dependía de una
+release vieja fija para el respaldo/rollback, lo que haría fallar con
+`BACKUP_BASE_DRIFT` cualquier `prepare` posterior al primer `deploy` real de
+esta cadena (ya ocurrido con `fabc136`) — corregido para que cada `prepare`
+respalde la imagen EN VIVO en ese momento, sin esa dependencia. No repetir
+ese diagnóstico. **Pendiente: autorización expresa del propietario para
+`deploy`** (comando exacto en `ESTADO_DESARROLLO.md`).
+
+**ACTUALIZACIÓN 28/10/2026 (continuación del cierre de anoche) — antecedente,
+ver arriba.** El `deploy` de `fabc136` **ya se ejecutó** (confirmado en vivo,
 backend/frontend `fabc13672cd3` corriendo) y **el propietario confirmó que
 la prueba real de cambio de SSID en `HWTC1D3691B7` funcionó** sin afectar su
-navegación. A partir de esto se preparó (candidato local, sin desplegar) la
-capacidad de cambiar también la contraseña WiFi desde el mismo formulario —
-confirmada técnicamente viable (mismo mecanismo que el SSID), pero sin
-probarse en vivo todavía. Detalle, archivos y procedimiento de prueba
-controlada: `docs/TR069-WIFI-CONTRASENA-PREPARADA-20261028.md`.
+navegación. A partir de esto se preparó la capacidad de cambiar también la
+contraseña WiFi desde el mismo formulario — confirmada técnicamente viable
+(mismo mecanismo que el SSID). Detalle: `docs/TR069-WIFI-CONTRASENA-PREPARADA-20261028.md`.
 
 **CIERRE DE JORNADA 28/10/2026 (noche Perú) — antecedente, ver actualización
 arriba.** Resumen (ya superado: el `deploy` que aquí figuraba pendiente se
