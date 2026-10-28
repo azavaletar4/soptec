@@ -22,6 +22,128 @@ def frontend(version=1):
 
 
 class ReleaseContractTests(unittest.TestCase):
+    def metadata_fixture(self, files):
+        files = dict(files)
+        reach = reachable(files)
+        keys = {p: 'index.html' if p.startswith('assets/index-') and p.endswith('.js') else '_' + p.split('/')[-1] for p in reach}
+        manifest = {}
+        for p in reach:
+            entry = {'file': p, 'name': stripname(p).split('/')[-1].rsplit('.', 1)[0]}
+            if keys[p] == 'index.html':
+                entry.update({'src': 'index.html', 'isEntry': True})
+            if p.endswith('.js'):
+                for field, pattern in [('imports', STATIC_IMPORT_RE), ('dynamicImports', DYNAMIC_IMPORT_RE)]:
+                    refs = sorted({posixpath.normpath(posixpath.join(posixpath.dirname(p), m[1])) for m in pattern.findall(files[p].decode())})
+                    if refs:
+                        entry[field] = [keys[ref] for ref in refs]
+            manifest[keys[p]] = entry
+        files[VITE_MANIFEST] = json.dumps(manifest).encode()
+        return self.rehash_metadata(files)
+
+    def rehash_metadata(self, files):
+        files = dict(files)
+        try:
+            release = json.loads(files['release-manifest.json'])
+        except ValueError:
+            release = {}
+        if not isinstance(release, dict):
+            release = {}
+        release['artifacts'] = {p: hashlib.sha256(b).hexdigest() for p, b in files.items() if p != 'release-manifest.json'}
+        files['release-manifest.json'] = json.dumps(release).encode()
+        return files
+
+    def metadata_pair(self):
+        return self.metadata_fixture(frontend()), self.metadata_fixture({**frontend(), **frontend(2)})
+
+    def test_vite_manifest_legitimate_update_and_formatting(self):
+        before, after = self.metadata_pair()
+        manifest = json.loads(after[VITE_MANIFEST])
+        after[VITE_MANIFEST] = json.dumps(dict(reversed(list(manifest.items()))), indent=4).encode()
+        after = self.rehash_metadata(after)
+        self.assertNotEqual(before[VITE_MANIFEST], after[VITE_MANIFEST])
+        self.assertEqual(validate_frontend(before, after, sample_scope(frontend=True)), ['assets/Tr069View.js'])
+
+    def test_vite_manifest_rejects_missing_asset_and_import_key(self):
+        before, after = self.metadata_pair()
+        for field in ['file', 'imports']:
+            manifest = json.loads(after[VITE_MANIFEST])
+            manifest['index.html'][field] = 'assets/missing-CCCCCCCC.js' if field == 'file' else ['missing-key']
+            bad = self.rehash_metadata({**after, VITE_MANIFEST: json.dumps(manifest).encode()})
+            with self.subTest(field=field), self.assertRaisesRegex(AssertionError, 'VITE_(ASSET|IMPORT)_MISSING'):
+                validate_frontend(before, bad, sample_scope(frontend=True))
+
+    def test_vite_manifest_rejects_inconsistent_compiled_imports_and_entry_flags(self):
+        before, after = self.metadata_pair()
+        for edit in ['imports', 'isEntry', 'assets']:
+            manifest = json.loads(after[VITE_MANIFEST])
+            manifest['index.html'][edit] = [] if edit == 'imports' else False if edit == 'isEntry' else ['assets/Asistencia-AAAAAAAA.js']
+            bad = self.rehash_metadata({**after, VITE_MANIFEST: json.dumps(manifest).encode()})
+            with self.subTest(edit=edit), self.assertRaises(AssertionError):
+                validate_frontend(before, bad, sample_scope(frontend=True))
+
+    def test_vite_metadata_cannot_hide_unrelated_functional_changes(self):
+        before, after = self.metadata_pair()
+        after['assets/Asistencia-AAAAAAAA.js'] = b'export const asistencia=false'
+        after = self.metadata_fixture(after)
+        with self.assertRaisesRegex(AssertionError, 'HISTORICAL_ASSETS_CHANGED:assets/Asistencia.js'):
+            validate_frontend(before, after, sample_scope(frontend=True))
+
+    def test_vite_manifest_rejects_physical_collision_and_duplicate_json_keys(self):
+        before, after = self.metadata_pair()
+        manifest = json.loads(after[VITE_MANIFEST])
+        manifest['_duplicate.js'] = {'file': manifest['index.html']['file']}
+        bad = self.rehash_metadata({**after, VITE_MANIFEST: json.dumps(manifest).encode()})
+        with self.assertRaisesRegex(AssertionError, 'VITE_ASSET_COLLISION'):
+            validate_frontend(before, bad, sample_scope(frontend=True))
+        bad[VITE_MANIFEST] = b'{"same":{},"same":{}}'
+        with self.assertRaisesRegex(AssertionError, 'METADATA_DUPLICATE_KEY'):
+            validate_frontend(before, bad, sample_scope(frontend=True))
+
+    def test_vite_manifest_and_shared_extraction_are_validated_together(self):
+        before, after, scope, proof = self.extraction_fixture()
+        before, after = self.metadata_fixture(before), self.metadata_fixture(after)
+        self.assertEqual(self.with_extraction(before, after, scope, proof), ['assets/Tr069View.js'])
+
+    def test_vite_metadata_preserves_qr_collision_protection(self):
+        before, workers, importer = self.qr_assets()
+        before = self.metadata_fixture(before)
+        after = self.metadata_fixture({**before, 'assets/Tr069View-AAAAAAAA.js': b'export const hosts=2'})
+        self.assertEqual(validate_frontend(before, after, sample_scope(frontend=True)), ['assets/Tr069View.js'])
+        after[workers[1]] += b'changed'
+        with self.assertRaisesRegex(AssertionError, 'AMBIGUOUS_ASSET_CONTENT_CHANGED'):
+            validate_frontend(before, self.rehash_metadata(after), sample_scope(frontend=True))
+
+    def test_vite_metadata_requires_artifact_hashes_presence_and_explicit_classification(self):
+        before, after = self.metadata_pair()
+        bad = dict(after)
+        release = json.loads(bad['release-manifest.json'])
+        release['artifacts'][VITE_MANIFEST] = '0'*64
+        bad['release-manifest.json'] = json.dumps(release).encode()
+        with self.assertRaisesRegex(AssertionError, 'RELEASE_ARTIFACT_HASH_MISMATCH'):
+            validate_frontend(before, bad, sample_scope(frontend=True))
+        bad = dict(after)
+        del bad[VITE_MANIFEST]
+        with self.assertRaisesRegex(AssertionError, 'VITE_MANIFEST_PRESENCE_CHANGED'):
+            validate_frontend(before, bad, sample_scope(frontend=True))
+        with self.assertRaisesRegex(AssertionError, 'UNRELATED_STATIC_ASSETS_CHANGED'):
+            validate_frontend(before, self.rehash_metadata({**after, '.vite/other.json': b'{}'}), sample_scope(frontend=True))
+        with self.assertRaisesRegex(AssertionError, 'FRONTEND_MUST_BE_IDENTICAL'):
+            validate_frontend(before, after, sample_scope(backend=True))
+
+    def test_vite_css_placeholder_is_metadata_not_functional_identity(self):
+        before, after = self.metadata_pair()
+        for files, placeholder in [(before, '01n'), (after, '01o')]:
+            p = 'assets/leaflet-AAAAAAAA.css'
+            files[p] = b'.map{color:green}'
+            files['index.html'] += ('<link href="/' + p + '">').encode()
+            manifest = json.loads(files[VITE_MANIFEST])
+            key = '_leaflet-!~{' + placeholder + '}~.js'
+            manifest[key] = {'file': p, 'src': key}
+            manifest['index.html']['css'] = [p]
+            files[VITE_MANIFEST] = json.dumps(manifest).encode()
+            files.update(self.rehash_metadata(files))
+        self.assertEqual(validate_frontend(before, after, sample_scope(frontend=True)), ['assets/Tr069View.js'])
+
     def extraction_fixture(self):
         before = frontend()
         before['assets/index-AAAAAAAA.js'] += b';import "./OltDetailView-AAAAAAAA.js"'

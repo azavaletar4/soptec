@@ -131,6 +131,7 @@ elif ACTION=='build':
    (folder/'Dockerfile').write_text(docker);tag=m['frontendTag']if name=='canonical'else m['frontendTag']+'-repro';iid=build(folder,tag,name=='repro');cid=run(['docker','create','--network','none',tag])
    try:
     raw=tree(cid,'/usr/share/nginx/html',raw=True);manifest=json.loads(raw['release-manifest.json']);assert manifest['commit']==I['commit'],'MANIFEST_COMMIT_MISMATCH';assert manifest['configurationHashes']==expectedConfig,'EFFECTIVE_CONFIGURATION_CHANGED'
+    assert VITE_MANIFEST in oldRaw and VITE_MANIFEST in raw,'REQUIRED_VITE_MANIFEST_MISSING'
     changed=validate_frontend(oldRaw,raw,scope);assert tree(cid,'/etc/nginx')==m['oldNginx'],'NGINX_CONFIG_CHANGED';manifests.append(manifest);front_trees.append(tree(cid,'/usr/share/nginx/html'))
     if name=='canonical':m['frontendImage']=iid;m['assets']=front_trees[-1];m['frontendChangedAssets']=changed
    finally:run(['docker','rm',cid])

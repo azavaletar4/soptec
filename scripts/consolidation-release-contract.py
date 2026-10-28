@@ -1,6 +1,8 @@
 """Contrato puro de integridad, compartido por build, deploy y pruebas aisladas."""
 import hashlib
+import json
 import pathlib
+import posixpath
 import re
 
 
@@ -91,6 +93,125 @@ def reachable(files):
     return seen
 
 
+VITE_MANIFEST = '.vite/manifest.json'
+STATIC_IMPORT_RE = re.compile(r'''\b(?:import|export)\s*(?:[^;()"']*?\bfrom\s*)?(["'])(\./[^"']+)\1''')
+DYNAMIC_IMPORT_RE = re.compile(r'''\bimport\s*\(\s*(["'])(\./[^"']+)\1\s*\)''')
+
+
+def metadata_json(raw, label):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            assert key not in result, 'METADATA_DUPLICATE_KEY:' + label + ':' + key
+            result[key] = value
+        return result
+    try:
+        return json.loads(raw, object_pairs_hook=unique)
+    except (ValueError, UnicodeDecodeError):
+        raise AssertionError('INVALID_METADATA_JSON:' + label)
+
+
+def validate_vite_manifest(files, pinned_paths):
+    manifest = metadata_json(files[VITE_MANIFEST], VITE_MANIFEST)
+    assert isinstance(manifest, dict) and manifest, 'INVALID_VITE_MANIFEST'
+    fields = {'file', 'src', 'name', 'isEntry', 'isDynamicEntry', 'imports', 'dynamicImports', 'css', 'assets'}
+    def asset(p):
+        assert isinstance(p, str) and p.startswith('assets/') and '\\' not in p and not any(c in p for c in '?#') and all(s not in ['', '.', '..'] for s in p.split('/')), 'UNSAFE_VITE_ASSET_PATH'
+        assert p in files, 'VITE_ASSET_MISSING:' + p
+        return p
+    physical = set()
+    for key, entry in manifest.items():
+        assert isinstance(key, str) and key and isinstance(entry, dict) and set(entry) <= fields and 'file' in entry, 'INVALID_VITE_ENTRY:' + key
+        p = asset(entry['file'])
+        assert p not in physical, 'VITE_ASSET_COLLISION:' + p
+        physical.add(p)
+        for flag in ['isEntry', 'isDynamicEntry']:
+            assert flag not in entry or type(entry[flag]) is bool, 'INVALID_VITE_FLAG:' + key
+        for text in ['src', 'name']:
+            assert text not in entry or isinstance(entry[text], str) and entry[text], 'INVALID_VITE_TEXT:' + key
+        if 'src' in entry:
+            assert key == entry['src'], 'VITE_SOURCE_KEY_MISMATCH:' + key
+        else:
+            assert key == '_' + p.split('/')[-1], 'VITE_GENERATED_KEY_MISMATCH:' + key
+        for field in ['imports', 'dynamicImports', 'css', 'assets']:
+            values = entry.get(field, [])
+            assert isinstance(values, list) and all(isinstance(v, str) for v in values) and len(values) == len(set(values)), 'INVALID_VITE_LIST:' + key + ':' + field
+            for ref in values:
+                if field in ['imports', 'dynamicImports']:
+                    assert ref in manifest, 'VITE_IMPORT_MISSING:' + key + ':' + ref
+                else:
+                    asset(ref)
+                    assert field != 'css' or ref.endswith('.css'), 'VITE_CSS_TYPE_MISMATCH:' + key
+    reached = reachable(files)
+    covered = physical | {p for e in manifest.values() for field in ['css', 'assets'] for p in e.get(field, [])}
+    assert reached <= covered, 'VITE_GRAPH_ASSETS_UNDECLARED:' + ','.join(sorted(reached - covered))
+    assert {p for p in physical if p.endswith(('.js', '.css'))} <= reached, 'VITE_UNREACHABLE_CHUNK'
+    html_refs = set(re.findall(r'assets/[\w.\-]+\.(?:js|css)', files['index.html'].decode()))
+    roots = {e['file'] for e in manifest.values() if e.get('isEntry')}
+    assert roots == {p for p in html_refs if p.endswith('.js')}, 'VITE_ENTRY_HTML_MISMATCH'
+    assert {p for p in html_refs if p.endswith('.css')} <= {p for e in manifest.values() if e.get('isEntry') for p in e.get('css', [])}, 'VITE_ENTRY_CSS_MISMATCH'
+    def resolved_imports(p, pattern):
+        return {asset(posixpath.normpath(posixpath.join(posixpath.dirname(p), m[1]))) for m in pattern.findall(files[p].decode())}
+    normalized = {}
+    def identity(p):
+        return p if p in pinned_paths else stripname(p)
+    for key, entry in manifest.items():
+        p = entry['file']
+        if p.endswith('.js'):
+            for field, pattern in [('imports', STATIC_IMPORT_RE), ('dynamicImports', DYNAMIC_IMPORT_RE)]:
+                declared = {manifest[k]['file'] for k in entry.get(field, []) if manifest[k]['file'].endswith('.js')}
+                actual = resolved_imports(p, pattern)
+                assert actual == declared, 'VITE_COMPILED_IMPORT_MISMATCH:' + p + ':' + field + ':undeclared=' + ','.join(sorted(actual - declared)) + ';unobserved=' + ','.join(sorted(declared - actual))
+        name = identity(p)
+        assert name not in normalized, 'VITE_NORMALIZED_ENTRY_COLLISION:' + name
+        record = {k: entry[k] for k in ['src', 'name', 'isEntry', 'isDynamicEntry'] if k in entry}
+        # Vite asigna IDs de orden a las entradas CSS puras. Solo este formato
+        # sintético cambia de identidad; la hoja CSS real sigue comparada.
+        if 'src' in record and re.fullmatch(r'_[\w.\-]+-!~\{[A-Za-z0-9]+\}~\.js', record['src']):
+            assert p.endswith('.css') and set(entry) == {'file', 'src'} and record['src'].split('-!~{')[0] == '_' + stripname(p).split('/')[-1][:-4], 'INVALID_VITE_CSS_PLACEHOLDER'
+            record['src'] = '@vite-css:' + name
+        for field in ['imports', 'dynamicImports']:
+            record[field] = sorted(identity(manifest[k]['file']) for k in entry.get(field, []))
+        for field in ['css', 'assets']:
+            record[field] = sorted(identity(ref) for ref in entry.get(field, []))
+        normalized[name] = record
+    # El manifiesto de release ya valida commit/configuración/fuentes en build.
+    # Aquí se comprueba además que sus hashes realmente cubren el manifiesto
+    # Vite y el grafo actual (sin exigir que incluya huérfanos de imágenes previas).
+    release = metadata_json(files['release-manifest.json'], 'release-manifest.json')
+    assert isinstance(release, dict) and isinstance(release.get('artifacts'), dict), 'INVALID_RELEASE_ARTIFACTS'
+    artifacts = release['artifacts']
+    assert reached | covered | {VITE_MANIFEST, 'index.html'} <= set(artifacts), 'RELEASE_ARTIFACTS_INCOMPLETE'
+    for p, digest in artifacts.items():
+        assert p in files and isinstance(digest, str) and re.fullmatch('[a-f0-9]{64}', digest) and hashlib.sha256(files[p]).hexdigest() == digest, 'RELEASE_ARTIFACT_HASH_MISMATCH:' + p
+    return normalized
+
+
+def validate_generated_metadata(before, after, scope, pinned_paths, extraction):
+    if VITE_MANIFEST not in before and VITE_MANIFEST not in after:
+        return set()  # No exime ningún archivo si no existe metadata Vite.
+    assert VITE_MANIFEST in before and VITE_MANIFEST in after, 'VITE_MANIFEST_PRESENCE_CHANGED'
+    old, new = [validate_vite_manifest(files, pinned_paths) for files in [before, after]]
+    if extraction:
+        proof = VERIFIED_CHUNK_EXTRACTION
+        leaf = proof['leaf']
+        assert leaf in new and leaf not in old, 'VITE_EXTRACTION_ENTRY_MISMATCH'
+        assert new[leaf] == {'name': 'gponSerial', 'imports': [], 'dynamicImports': [], 'css': [], 'assets': []}, 'VITE_EXTRACTION_METADATA_MISMATCH'
+        del new[leaf]
+        for importer in ['assets/OltDetailView.js', 'assets/Tr069View.js']:
+            assert leaf in new[importer]['imports'], 'VITE_EXTRACTION_IMPORT_MISSING:' + importer
+            new[importer]['imports'].remove(leaf)
+    assert set(old) == set(new), 'VITE_METADATA_STRUCTURE_CHANGED'
+    for p in old:
+        # Las fuentes, flags, CSS y assets no son imports JS; no pueden cambiar
+        # amparándose en un permiso de edición de código de otro chunk.
+        invariant = lambda r: {k: v for k, v in r.items() if k not in ['imports', 'dynamicImports']}
+        assert invariant(old[p]) == invariant(new[p]), 'VITE_METADATA_IDENTITY_CHANGED:' + p
+        if p not in scope['frontendAssets']:
+            assert old[p] == new[p], 'VITE_PROTECTED_DEPENDENCIES_CHANGED:' + p
+    return {VITE_MANIFEST}
+
+
 # Transición revisada mediante AST con bindings y remapeo exacto de precargas.
 # NO es un permiso de edición para OLT/index: ambos lados y el nuevo helper
 # quedan fijados. Evidencia: TR069-HOSTS-CHUNK-PROOF-20261028.json.
@@ -135,6 +256,7 @@ def verified_chunk_extraction(before, after, old_norm, new_norm, scope):
     for name in proof['pairs']:
         new_norm[('logical', name)] = old_norm[('logical', name)]
     del new_norm[leaf]
+    return True
 
 
 def validate_frontend(before, after, scope):
@@ -166,7 +288,7 @@ def validate_frontend(before, after, scope):
         assert len(result) == len(paths), 'NORMALIZED_ASSET_NAME_COLLISION'
         return result
     old_norm, new_norm = normalized(before, old_reach), normalized(after, new_reach)
-    verified_chunk_extraction(before, after, old_norm, new_norm, scope)
+    extraction = verified_chunk_extraction(before, after, old_norm, new_norm, scope)
     assert set(old_norm) == set(new_norm), 'HISTORICAL_ASSETS_STRUCTURE_CHANGED:removed=' + ','.join(sorted(k[1] for k in set(old_norm) - set(new_norm))) + ';added=' + ','.join(sorted(k[1] for k in set(new_norm) - set(old_norm)))
     changed = {key[1] for key in differences(old_norm, new_norm)}
     if normcontent(before['index.html'], pinned_names) != normcontent(after['index.html'], pinned_names):
@@ -175,7 +297,8 @@ def validate_frontend(before, after, scope):
     assert changed, 'HISTORICAL_ASSETS_NO_EXPECTED_CHANGE'
     assert changed <= allowed, 'HISTORICAL_ASSETS_CHANGED:' + ','.join(sorted(changed - allowed))
     # También protege estáticos y huérfanos fuera del grafo de Vite.
-    outside = (set(before) | set(after)) - old_reach - new_reach - {'index.html', 'release-manifest.json'}
+    metadata = validate_generated_metadata(before, after, scope, pinned_paths, extraction)
+    outside = (set(before) | set(after)) - old_reach - new_reach - {'index.html', 'release-manifest.json'} - metadata
     unexpected = {p for p in outside if before.get(p) != after.get(p)}
     assert not unexpected, 'UNRELATED_STATIC_ASSETS_CHANGED:' + ','.join(sorted(unexpected))
     return sorted(changed)

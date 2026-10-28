@@ -1,6 +1,6 @@
 // Solo diagnóstico de imágenes/assets y salud; nunca tareas GenieACS ni comandos de red.
 const fs=require('node:fs'),cp=require('node:child_process'),path=require('node:path');
-const action=process.argv[2];if(!['health','inspect','graph'].includes(action))throw Error('INVALID_ACTION');
+const action=process.argv[2];if(!['health','inspect','graph','metadata'].includes(action))throw Error('INVALID_ACTION');
 const contract=fs.readFileSync('scripts/consolidation-release-contract.py','utf8');
 const common=String.raw`
 import subprocess,json,datetime,tarfile,io,hashlib
@@ -34,6 +34,10 @@ for name,data in [('active',old),('candidate',new)]:
    'referencedBy':sorted(q for q in reach|{'index.html'}if p.split('/')[-1].encode()in data[q])}for p in paths]
  out['graphs'][name]={'reachableCount':len(reach),'collisions':details,'manifestArtifacts':[p for p in json.loads(data['release-manifest.json'])['artifacts']if stripname(p)in collisions]}
 out['manifestFileOverlap']=sorted(set(json.loads(old['release-manifest.json'])['artifacts'])&set(json.loads(new['release-manifest.json'])['artifacts']))
+if ACTION=='metadata':
+ out['metadata']={label:{'generatedFiles':sorted(p for p in data if p.startswith('.vite/') or p.endswith('.map') or 'manifest' in p.lower()),'vite':json.loads(data['.vite/manifest.json']),
+  'fileHashes':{p:hashlib.sha256(b).hexdigest() for p,b in data.items()},
+  'compiledImports':{p:re.findall(r'(?:import|export)(?:[^;]*?from)?["\'](\./[^"\']+)["\']',data[p].decode()) for p in reachable(data) if p.endswith('.js')}} for label,data in [('active',old),('candidate',new)]}
 if ACTION=='graph':
  import difflib
  out['graphDetails']={}
@@ -52,6 +56,6 @@ const r=cp.spawnSync('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=10','-i',p
 try{
  if(r.status!==0)throw Error('SSH_OR_CHECK_FAILED_'+(r.error?.code||r.status));
  const data={action,...JSON.parse(r.stdout)};
- const file=action==='graph'?'scripts/inventory-auth-lab/runtime/hosts-chunk-capture.json':'docs/TR069-HOSTS-ASSET-COLLISION-20261028.json';const history=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):[];
- history.push(data);fs.writeFileSync(file,JSON.stringify(history,null,2)+'\n');console.log(JSON.stringify(action==='graph'?{file,changedChunks:Object.keys(data.chunkDiffs),health:data.health}:data));
+ const file=action==='graph'?'scripts/inventory-auth-lab/runtime/hosts-chunk-capture.json':action==='metadata'?'docs/TR069-HOSTS-VITE-METADATA-20261028.json':'docs/TR069-HOSTS-ASSET-COLLISION-20261028.json';const history=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):[];
+ history.push(data);fs.writeFileSync(file,JSON.stringify(history,null,2)+'\n');console.log(JSON.stringify(action==='graph'?{file,changedChunks:Object.keys(data.chunkDiffs),health:data.health}:action==='metadata'?{file,health:data.health,generatedFiles:data.metadata.candidate.generatedFiles,entryCount:Object.keys(data.metadata.candidate.vite).length}:data));
 }catch(e){console.error(e.message);process.exitCode=1;}
