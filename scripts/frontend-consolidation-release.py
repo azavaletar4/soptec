@@ -88,15 +88,17 @@ def probe(m):
  return {'routes':checked,'artifactsVerified':len(manifest['artifacts']),'sourceCommit':I['commit'],'unauthenticatedStatus':401,'ssidTasksSent':0}
 if ACTION=='prepare':
  assert not (stage/'prepared.json').exists();before=states();b=current('backend');f=current('frontend')
- oldstage=pathlib.Path('/opt/smartrayco-staging/tr069-wifi-manual-20261027');old=json.loads((oldstage/'prepared.json').read_text())
- for s in ['backend','frontend']:assert before[s]['image']==old['before'][s]['image'],'BACKUP_BASE_DRIFT'
  m={'before':before,'at':now(),'composeFiles':b['Config']['Labels']['com.docker.compose.project.config_files'].split(','),'backupFiles':{},'backupHashes':{}}
  for s in ['backend','frontend']:
-  file=oldstage/(s+'-before.image.tar');assert hashfile(file)==old['backupHashes'][s]
-  m['backupFiles'][s]=str(file);m['backupHashes'][s]=hashfile(file);m[s+'RollbackTag']='smartrayco-consolidado-'+s+'-rollback:'+I['commit'][:7]
+  # Respaldo propio de ESTA release: la imagen EN VIVO ahora mismo, guardada recien aqui mismo.
+  # Nunca se reutiliza el tar de una release anterior — eso solo era valido mientras nada se
+  # hubiera desplegado todavia; tras el primer deploy real de esta cadena (fabc136), el "antes"
+  # fijo de una release vieja ya no es lo que corre en produccion. El rollback de cada release
+  # vuelve siempre a lo que estaba en vivo justo antes de ELLA, nunca a un punto mas viejo.
+  file=stage/(s+'-before.image.tar')
+  m['backupFiles'][s]=str(file);m['backupHashes'][s]=save_image_archive(before[s]['image'],file)
+  m[s+'RollbackTag']='smartrayco-consolidado-'+s+'-rollback:'+I['commit'][:7]
   run(['docker','tag',before[s]['image'],m[s+'RollbackTag']])
-  # Cargar archivo respaldado y acreditar rootfs en un contenedor aislado, sin iniciar servicios.
-  run(['docker','load','--input',str(file)])
   cid=run(['docker','create','--network','none',m[s+'RollbackTag']])
   try:
    location='/usr/share/nginx/html' if s=='frontend' else '/app/server/src';assert tree(cid,location)==tree(before[s]['id'],location),'ROLLBACK_RESTORE_MISMATCH_'+s
