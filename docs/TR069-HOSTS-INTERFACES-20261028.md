@@ -45,12 +45,21 @@ No se ha demostrado una limitación definitiva del firmware: falta lectura/
 descubrimiento de parámetros anunciados. La ausencia en caché no prueba que
 el equipo sea incapaz de proporcionarlos.
 
-## Consulta activa propuesta, NO ejecutada
+## Consulta activa propuesta (antecedente; ejecución posterior parcial)
+
+**Actualización:** el propietario autorizó la lectura después de este sondeo.
+Resultado real: `TR069-HOSTS-ACTIVE-READ-20261028.md` y su JSON. El GPV de las
+15 hojas Hosts funcionó (InterfaceType/Layer2Interface/Active ya tienen valores).
+El segundo lote, agrupado como GPV de radio y subárboles, falló en GenieACS con
+`Invalid parameter path`; se retiró la tarea, sin reintentos ni pendientes.
+Tipo/estado sí son viables con fecha y caducidad; banda sigue sin confirmar.
+No repetir el sondeo ni dar por ejecutado íntegramente el plan original.
 
 El NBI permite tareas `getParameterValues` con nombres concretos y
 `refreshObject` para un objeto. Aunque sean lecturas TR-069, se crean por
 POST a `/devices/<ID-URL-encoded>/tasks` y necesitan autorización aparte.
-No se preparó ningún ejecutor POST ni se encoló una tarea.
+En la fase inicial de caché no se preparó ningún POST ni se encoló tarea;
+la autorización y ejecución posterior están registradas en el documento citado.
 
 Al autorizar una prueba puntual, contra este único ID y esperando el próximo
 Inform (sin `connection_request` inicialmente):

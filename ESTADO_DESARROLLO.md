@@ -41,11 +41,17 @@ identifican una única Huawei y devuelven los mismos cinco registros de su
 caché (nombre/IP/MAC). Conexión/banda/Active quedan desconocidos, sin valores
 inventados. Serial inexistente devuelve lista vacía. El propietario confirmó
 visualmente los cinco nombres/IP/MAC; conexión, banda y estado siguen sin
-datos verificables. No se cambió WiFi para probarlo.
+datos verificables en esa fase. **Lectura activa posterior autorizada:** Inform
+22:03:39.211 UTC, hojas Active/InterfaceType/Layer2Interface con fecha propia
+22:03:39.213 UTC: REDMI/iPhone/Z2359 WiFi y Active=false; S26-Ultra WiFi y
+Active=true; LAPTOP Cable/Ethernet, referencia al puerto LAN 2 y Active=false.
+No se cambió WiFi para probarlo. Estos estados corresponden a esa muestra,
+no son una prueba en vivo ni se renuevan por un Inform posterior.
 
 **3. Cambios locales pendientes (no publicados):** presentación Hosts
 «Sin confirmar», fecha basada en datos de las filas y guard de vigencia de
-Active; **sin desplegar**. Investigación puntual GET a las 21:50:05 UTC:
+Active, commit `8fec55d`; **sin desplegar**. Investigación puntual GET inicial
+a las 21:50:05 UTC:
 Active/InterfaceType/Layer2Interface de los cinco Hosts sin valor ni fecha;
 WLAN 1/5 AssociatedDevice sin instancias/fecha; LANEthernetInterfaceConfig
 anunciado sin puertos; Channel/Standard/X_HW_RFBand sin valores;
@@ -53,8 +59,23 @@ OperatingFrequencyBand ausente. Sin correlación MAC disponible, no se infiere
 WiFi/cable ni desconexión por ausencia de asociaciones. Últimos valores
 nombre/IP/MAC 21:38:39.146 UTC; Inform 21:48:39.158 UTC no los rejuvenece;
 UpTime 71687 s pertenece al CPE y es de 20:38:05 UTC, no de los Hosts.
-No se probó una limitación definitiva del firmware: faltan valores cacheados.
-Detalle y plan de lectura activa **NO ejecutado**:
+Esa ausencia inicial quedó resuelta parcialmente por la consulta activa:
+GPV de 15 hojas Hosts completado, cuatro WiFi/un Cable y Active con valor.
+Segundo/último GPV de radio + tres subárboles terminado en punto falló en
+GenieACS con `script.Error / Error: Invalid parameter path` (retries:0), en
+Inform 22:08:39.189 UTC. Error de preparación del lote frente al refreshObject
+del plan, no prueba una limitación del firmware. No produjo banda ni
+asociaciones/puertos; no hubo tercer lote ni rutas alternativas.
+Se retiró solo nuestra tarea fallida para impedir reprogramación, HTTP 200,
+22:09:30.092 UTC, cola final vacía; fault conservado en evidencia previa al
+DELETE, sin verificar su persistencia posterior en ACS; sin retries/reenvíos.
+Registro completo: `docs/TR069-HOSTS-ACTIVE-READ-20261028.md` y JSON.
+El ejecutor `scripts/tr069-hosts-active-read.cjs` tiene listas cerradas y guardas
+por lote para impedir duplicados; no volver a ejecutar send ni borrar journals.
+Nombre/IP/MAC no se releyeron desde la ONT: la relación está en la misma
+instancia Host; no hay correlación independiente con asociaciones por MAC.
+No se probó una limitación definitiva del firmware para banda/asociaciones.
+Detalle y plan inicial (antecedente, ejecutado parcialmente):
 `docs/TR069-HOSTS-INTERFACES-20261028.md`; evidencia sanitizada:
 `docs/TR069-HOSTS-INTERFACES-CACHE-20261028.json`.
 Implementación local conserva fecha propia Active (opcional para backend
@@ -104,7 +125,7 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Hosts presentación/estado posterior a `34236e0`; ver `git log -1` | **Local, sin desplegar ni publicar** |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Presentación `8fec55d` + evidencia activa posterior; ver `git log -1` | **Local, sin desplegar ni publicar** |
 | Identificación Hosts | incluido en `main` | `d6ce2c2` | **Backend en producción** (28/10 21:30 UTC) |
 | WiFi + Hosts base | incluido en `main` | `5d48a10` | Frontend activo; backend anterior disponible como rollback |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
@@ -131,16 +152,21 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** investigación y mejora local Hosts completadas;
-detenerse antes de consultas activas o despliegue. Falta autorización expresa
-para leer desde la ONT los valores anunciados (getParameterValues de Host
-Active/InterfaceType/Layer2Interface, banda/canal declarados y refreshObject
-solo AssociatedDevice de WLAN 1/5 y LANEthernetInterfaceConfig). Plan exacto en
-`docs/TR069-HOSTS-INTERFACES-20261028.md`. No refrescar el árbol completo ni
-WLANConfiguration completa, no recoger claves y no clasificar por exclusión.
+**5. Próxima tarea autorizada:** ninguna en ejecución; experimento activo Hosts
+cerrado al primer fallo del segundo lote. No reintentar ni enviar más tareas
+bajo la autorización consumida. Tipo y Active sí leídos; banda/asociaciones
+siguen sin confirmar. Cero tareas pendientes al cierre. Si el propietario
+autoriza otra sesión, usar refreshObject acotado por objeto (plan original)
+y GPV de hojas concretas, nunca repetir GPV de subárboles terminado en punto.
+No refrescar el árbol completo ni WLANConfiguration completa, no recoger
+claves y no clasificar por exclusión. Resultado y límites en
+`docs/TR069-HOSTS-ACTIVE-READ-20261028.md`.
 Un descubrimiento futuro debe verificar nombres reales de hojas (por ejemplo
 AssociatedDeviceMACAddress de TR-098 frente al MACAddress del mapeador genérico).
-No se autorizó ni ejecutó ninguna tarea en esta sesión.
+Esta sesión envió exactamente dos tareas de lectura, cero tareas de configuración,
+cero reinicios/connection_request; retiró la segunda tras el fault para impedir
+su reprogramación. Sin comprobación de tráfico/uptime PPPoE: no afirmar una
+prueba de navegación no realizada. Sin cambios de configuración ni despliegue.
 Staging vigente y respaldos (`backend-before.image.tar`, `frontend-before.image.tar`):
 `/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-68c2358762/`.
 Rollback disponible: `node scripts/frontend-consolidation-release.cjs rollback`,
@@ -154,7 +180,8 @@ Para una release NUEVA declarar su commit y alcance, exportar su snapshot
 correspondiente y ejecutar las fases por separado. Nunca ampliar el alcance
 para silenciar una diferencia inesperada ni asumir backend desde el manifiesto
 frontend. Pendiente del
-**propietario**: decidir si autoriza el plan activo de Hosts anterior y,
+**propietario**: decidir si autoriza una lectura adicional acotada para banda/
+asociaciones después del fallo documentado y,
 por separado, una prueba de
 **descubrimiento de solo lectura** (una tarea nueva a GenieACS, requiere su
 propia autorización aparte) contra `WLANConfiguration.5.PreSharedKey` para

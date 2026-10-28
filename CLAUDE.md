@@ -31,14 +31,19 @@ No repetir el diagnóstico de `HISTORICAL_ASSETS_NO_EXPECTED_CHANGE`: solo
 se exige cambio de assets cuando el alcance declara frontend. El manifiesto
 frontend NO identifica por sí solo una release backend-only.
 Leer ESTADO DE CONTINUIDAD para evidencia, staging y rollback exactos.
-Investigación posterior de conexión/estado Hosts (solo GET, 28/10 21:50 UTC):
-cinco Hosts, pero Active/InterfaceType/Layer2Interface sin valores; asociaciones
-WiFi y puertos Ethernet sin instancias, banda sin valor. No concluir que el
-firmware no los soporte: falta lectura/descubrimiento. Presentación local
-«Sin confirmar», fecha de filas y guard de vigencia Active (10 min), aún sin
-desplegar. 34 pruebas y tsc backend/frontend PASS. Próxima lectura activa
-requiere autorización aparte; rutas exactas y límites en
-`docs/TR069-HOSTS-INTERFACES-20261028.md`. No repetir el sondeo de caché.
+Lectura activa Hosts autorizada y cerrada (28/10): GPV de 15 hojas completado
+en Inform 22:03:39 UTC: cuatro WiFi, portátil Cable; Active=true solo S26-Ultra,
+false en los otros cuatro, muestra con fecha propia. Segundo/último lote de
+radio + subárboles falló en GenieACS: `script.Error / Invalid parameter path`
+(no prueba limitación del firmware). Fue error agrupar subárboles terminados
+en punto como GPV en vez del refreshObject acotado del plan. Tarea fallida
+retirada, cero pendientes, retries:0, sin más lecturas ni reintentos.
+Banda/asociaciones aún sin confirmar. Inform final 22:08:39.189 UTC.
+Detalle y evidencia: `docs/TR069-HOSTS-ACTIVE-READ-20261028.md` y JSON.
+Presentación local `8fec55d` («Sin confirmar» + guard Active 10 min) sigue
+sin desplegar; 34 pruebas y tsc backend/frontend PASS de esa implementación.
+No repetir la consulta ni iniciar otras operaciones: nueva autorización para
+lecturas adicionales; no asumir que el Inform actualiza Active automáticamente.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
