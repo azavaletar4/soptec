@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "sourceCommit": "d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201",
+  "backendSources": ["server/src/services/tr069Hosts.ts"],
+  "frontendSources": [],
+  "frontendAssets": []
+}
