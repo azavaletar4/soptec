@@ -1,0 +1,21 @@
+{
+  "helperAstEqual": true,
+  "protectedOltAstEqual": true,
+  "oldHelper": "sn",
+  "newHelper": "ml",
+  "entryEqualAfterPreloadRemap": true,
+  "preloadOwners": [
+    "./OltDetailView.js",
+    "./Tr069View.js"
+  ],
+  "source": "src/lib/gponSerial.ts",
+  "sourceHash": "60ef16fbdd7026ccf2e9a24236124de72113dd975673d69fc6dce6fd29f6a947",
+  "unchangedSource": true,
+  "hashes": {
+    "oldOlt": "6bdaf6376d4bc63d894fe2bf91017fb81f687e9ebac3512ddff80800264f0350",
+    "newOlt": "aab2f3b598b4469f32fda5492587e19b40408e7621452491758c96b40de3c385",
+    "leaf": "4605143d9324945dca8ddcfcffc2c57727c501fa85c6db163b7a5258b32e3777",
+    "oldIndex": "fc82eb1f1dd4a384420d7534219374250a4b30bf3211f035f45df416e12d8dfd",
+    "newIndex": "e4eb9b7e1c37e3f3b5fbf4e59fc45305d7cd385f0e474182747c48a8c943409a"
+  }
+}

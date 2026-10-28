@@ -91,6 +91,52 @@ def reachable(files):
     return seen
 
 
+# Transición revisada mediante AST con bindings y remapeo exacto de precargas.
+# NO es un permiso de edición para OLT/index: ambos lados y el nuevo helper
+# quedan fijados. Evidencia: TR069-HOSTS-CHUNK-PROOF-20261028.json.
+VERIFIED_CHUNK_EXTRACTION = {
+    'commit': 'ac511d7c70c8a11700d3553f331af5bb2930926a',
+    'source': 'src/lib/gponSerial.ts',
+    'sourceHash': '60ef16fbdd7026ccf2e9a24236124de72113dd975673d69fc6dce6fd29f6a947',
+    'leaf': 'assets/gponSerial.js',
+    'leafHash': '4605143d9324945dca8ddcfcffc2c57727c501fa85c6db163b7a5258b32e3777',
+    'pairs': {
+        'assets/OltDetailView.js': ['6bdaf6376d4bc63d894fe2bf91017fb81f687e9ebac3512ddff80800264f0350', 'aab2f3b598b4469f32fda5492587e19b40408e7621452491758c96b40de3c385'],
+        'assets/index.js': ['fc82eb1f1dd4a384420d7534219374250a4b30bf3211f035f45df416e12d8dfd', 'e4eb9b7e1c37e3f3b5fbf4e59fc45305d7cd385f0e474182747c48a8c943409a'],
+    },
+    'allowedAssets': ['assets/Tr069View.js', 'assets/tr069.js'],
+    'importers': ['assets/OltDetailView.js', 'assets/Tr069View.js', 'assets/index.js'],
+}
+
+
+def verified_chunk_extraction(before, after, old_norm, new_norm, scope):
+    proof = VERIFIED_CHUNK_EXTRACTION
+    if set(old_norm) == set(new_norm):
+        return
+    leaf = ('logical', proof['leaf'])
+    if scope['sourceCommit'] != proof['commit'] or set(old_norm) - set(new_norm) or set(new_norm) - set(old_norm) != {leaf}:
+        return  # El control estructural existente informa cualquier otra forma.
+    assert sorted(scope['frontendAssets']) == sorted(proof['allowedAssets']), 'EXTRACTION_SCOPE_MISMATCH'
+    import json
+    old_sources, new_sources = [json.loads(files['release-manifest.json'])['sourceFiles'] for files in [before, after]]
+    assert old_sources.get(proof['source']) == new_sources.get(proof['source']) == proof['sourceHash'], 'EXTRACTED_SOURCE_CHANGED'
+    validate_frontend_sources(old_sources, new_sources, scope)
+    assert new_norm[leaf] == proof['leafHash'], 'EXTRACTED_CHUNK_CONTENT_CHANGED'
+    for name, pair in proof['pairs'].items():
+        key = ('logical', name)
+        assert [old_norm.get(key), new_norm.get(key)] == pair, 'EXTRACTION_PROTECTED_CONTENT_CHANGED:' + name
+    new_paths = reachable(after)
+    target = next(p for p in new_paths if stripname(p) == proof['leaf'])
+    importers = sorted(stripname(p) for p in new_paths if target.split('/')[-1].encode() in after[p])
+    assert importers == proof['importers'], 'EXTRACTION_DEPENDENCIES_CHANGED'
+    assert not REF_HASH_TXT_RE.findall(after[target].decode()), 'EXTRACTION_LEAF_HAS_DEPENDENCIES'
+    # Sustituye solo la representación física probada por su identidad anterior.
+    # El resto del grafo, contenido protegido, estáticos y huérfanos sigue igual.
+    for name in proof['pairs']:
+        new_norm[('logical', name)] = old_norm[('logical', name)]
+    del new_norm[leaf]
+
+
 def validate_frontend(before, after, scope):
     if not scope['frontendSources']:
         changed = differences(before, after)
@@ -120,6 +166,7 @@ def validate_frontend(before, after, scope):
         assert len(result) == len(paths), 'NORMALIZED_ASSET_NAME_COLLISION'
         return result
     old_norm, new_norm = normalized(before, old_reach), normalized(after, new_reach)
+    verified_chunk_extraction(before, after, old_norm, new_norm, scope)
     assert set(old_norm) == set(new_norm), 'HISTORICAL_ASSETS_STRUCTURE_CHANGED:removed=' + ','.join(sorted(k[1] for k in set(old_norm) - set(new_norm))) + ';added=' + ','.join(sorted(k[1] for k in set(new_norm) - set(old_norm)))
     changed = {key[1] for key in differences(old_norm, new_norm)}
     if normcontent(before['index.html'], pinned_names) != normcontent(after['index.html'], pinned_names):

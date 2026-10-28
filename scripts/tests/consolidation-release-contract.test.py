@@ -22,6 +22,67 @@ def frontend(version=1):
 
 
 class ReleaseContractTests(unittest.TestCase):
+    def extraction_fixture(self):
+        before = frontend()
+        before['assets/index-AAAAAAAA.js'] += b';import "./OltDetailView-AAAAAAAA.js"'
+        before['assets/OltDetailView-AAAAAAAA.js'] = b'function serial(x){return x};export const olt=1'
+        after = dict(before)
+        after['assets/index-AAAAAAAA.js'] += b';const preload="./gponSerial-AAAAAAAA.js"'
+        after['assets/OltDetailView-AAAAAAAA.js'] = b'import {n} from "./gponSerial-AAAAAAAA.js";export const olt=1'
+        after['assets/Tr069View-AAAAAAAA.js'] = b'import {n} from "./gponSerial-AAAAAAAA.js";export const hosts=2'
+        after['assets/gponSerial-AAAAAAAA.js'] = b'function serial(x){return x};export{serial as n}'
+        scope = sample_scope(frontend=True)
+        sources = {'src/lib/gponSerial.ts': 'source-hash', scope['frontendSources'][0]: 'old'}
+        before['release-manifest.json'] = json.dumps({'sourceFiles': sources}).encode()
+        after['release-manifest.json'] = json.dumps({'sourceFiles': {**sources, scope['frontendSources'][0]: 'new'}}).encode()
+        digest = lambda b: hashlib.sha256(normcontent(b)).hexdigest()
+        proof = {'commit': scope['sourceCommit'], 'source': 'src/lib/gponSerial.ts', 'sourceHash': 'source-hash',
+                 'leaf': 'assets/gponSerial.js', 'leafHash': digest(after['assets/gponSerial-AAAAAAAA.js']),
+                 'pairs': {stripname(p): [digest(before[p]), digest(after[p])] for p in ['assets/index-AAAAAAAA.js', 'assets/OltDetailView-AAAAAAAA.js']},
+                 'allowedAssets': scope['frontendAssets'],
+                 'importers': ['assets/OltDetailView.js', 'assets/Tr069View.js', 'assets/index.js']}
+        return before, after, scope, proof
+
+    def with_extraction(self, before, after, scope, proof):
+        global VERIFIED_CHUNK_EXTRACTION
+        original = VERIFIED_CHUNK_EXTRACTION
+        try:
+            VERIFIED_CHUNK_EXTRACTION = proof
+            return validate_frontend(before, after, scope)
+        finally:
+            VERIFIED_CHUNK_EXTRACTION = original
+
+    def test_verified_shared_extraction_preserves_protected_chunk(self):
+        before, after, scope, proof = self.extraction_fixture()
+        self.assertEqual(self.with_extraction(before, after, scope, proof), ['assets/Tr069View.js'])
+
+    def test_extraction_rejects_any_helper_or_protected_functional_change(self):
+        before, after, scope, proof = self.extraction_fixture()
+        for p in ['assets/gponSerial-AAAAAAAA.js', 'assets/OltDetailView-AAAAAAAA.js', 'assets/index-AAAAAAAA.js', 'assets/Asistencia-AAAAAAAA.js']:
+            with self.subTest(p=p), self.assertRaises(AssertionError):
+                self.with_extraction(before, {**after, p: after[p] + b';unexpected()'}, scope, proof)
+
+    def test_extraction_rejects_source_scope_or_dependency_drift(self):
+        before, after, scope, proof = self.extraction_fixture()
+        for source in ['src/lib/gponSerial.ts', 'src/views/olt/OltDetailView.vue']:
+            altered = dict(after)
+            sources = json.loads(after['release-manifest.json'])['sourceFiles']
+            sources[source] = 'unexpected'
+            altered['release-manifest.json'] = json.dumps({'sourceFiles': sources}).encode()
+            with self.subTest(source=source), self.assertRaises(AssertionError):
+                self.with_extraction(before, altered, scope, proof)
+        altered = {**after, 'assets/Asistencia-AAAAAAAA.js': after['assets/Asistencia-AAAAAAAA.js'] + b';import "./gponSerial-AAAAAAAA.js"'}
+        with self.assertRaisesRegex(AssertionError, 'EXTRACTION_DEPENDENCIES_CHANGED'):
+            self.with_extraction(before, altered, scope, proof)
+
+    def test_extraction_requires_exact_structure_commit_and_declared_scope(self):
+        before, after, scope, proof = self.extraction_fixture()
+        altered = {**after, 'assets/other-AAAAAAAA.js': b'export const x=1'}
+        altered['assets/Tr069View-AAAAAAAA.js'] += b';import "./other-AAAAAAAA.js"'
+        for candidate, declared in [(altered, scope), (after, {**scope, 'sourceCommit': 'a'*40}), (after, {**scope, 'frontendAssets': scope['frontendAssets'] + ['assets/OltDetailView.js']})]:
+            with self.assertRaises(AssertionError):
+                self.with_extraction(before, candidate, declared, proof)
+
     def qr_assets(self):
         files = frontend()
         workers = ['assets/qr-scanner-worker.min-D85Z9gVD.js', 'assets/qr-scanner-worker.min-PJMWJc5V.js']

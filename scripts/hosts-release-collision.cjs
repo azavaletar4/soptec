@@ -1,6 +1,6 @@
 // Solo diagnóstico de imágenes/assets y salud; nunca tareas GenieACS ni comandos de red.
 const fs=require('node:fs'),cp=require('node:child_process'),path=require('node:path');
-const action=process.argv[2];if(!['health','inspect'].includes(action))throw Error('INVALID_ACTION');
+const action=process.argv[2];if(!['health','inspect','graph'].includes(action))throw Error('INVALID_ACTION');
 const contract=fs.readFileSync('scripts/consolidation-release-contract.py','utf8');
 const common=String.raw`
 import subprocess,json,datetime,tarfile,io,hashlib
@@ -34,12 +34,24 @@ for name,data in [('active',old),('candidate',new)]:
    'referencedBy':sorted(q for q in reach|{'index.html'}if p.split('/')[-1].encode()in data[q])}for p in paths]
  out['graphs'][name]={'reachableCount':len(reach),'collisions':details,'manifestArtifacts':[p for p in json.loads(data['release-manifest.json'])['artifacts']if stripname(p)in collisions]}
 out['manifestFileOverlap']=sorted(set(json.loads(old['release-manifest.json'])['artifacts'])&set(json.loads(new['release-manifest.json'])['artifacts']))
+if ACTION=='graph':
+ import difflib
+ out['graphDetails']={}
+ for label,data in [('active',old),('candidate',new)]:
+  reach=reachable(data)
+  out['graphDetails'][label]={'edges':{p:sorted(set('assets/'+r.split('/')[-1] for r in REF_HASH_TXT_RE.findall(data[p].decode()) if 'assets/'+r.split('/')[-1] in reach)) for p in sorted(reach)},'sources':json.loads(data['release-manifest.json'])['sourceFiles']}
+ out['chunkDiffs']={}
+ oldlogical={stripname(p):p for p in reachable(old)}
+ for p in sorted(reachable(new)):
+  q=oldlogical.get(stripname(p));a=normcontent(old[q]).decode()if q else '';b=normcontent(new[p]).decode()
+  if a!=b:
+   out['chunkDiffs'][stripname(p)]={'before':a,'after':b}
 `;
-const py=contract+'\n'+common+'\n'+(action==='inspect'?inspect:'')+'\nprint(json.dumps(out))\n';
+const py='ACTION='+JSON.stringify(action)+'\n'+contract+'\n'+common+'\n'+(action!=='health'?inspect:'')+'\nprint(json.dumps(out))\n';
 const r=cp.spawnSync('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=10','-i',path.join(process.env.USERPROFILE,'.ssh','smartrayco-deploy'),'root@192.168.55.201','python3 -'],{input:py,encoding:'utf8',timeout:55000,windowsHide:true,maxBuffer:2*1024*1024});
 try{
  if(r.status!==0)throw Error('SSH_OR_CHECK_FAILED_'+(r.error?.code||r.status));
  const data={action,...JSON.parse(r.stdout)};
- const file='docs/TR069-HOSTS-ASSET-COLLISION-20261028.json';const history=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):[];
- history.push(data);fs.writeFileSync(file,JSON.stringify(history,null,2)+'\n');console.log(JSON.stringify(data));
+ const file=action==='graph'?'scripts/inventory-auth-lab/runtime/hosts-chunk-capture.json':'docs/TR069-HOSTS-ASSET-COLLISION-20261028.json';const history=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):[];
+ history.push(data);fs.writeFileSync(file,JSON.stringify(history,null,2)+'\n');console.log(JSON.stringify(action==='graph'?{file,changedChunks:Object.keys(data.chunkDiffs),health:data.health}:data));
 }catch(e){console.error(e.message);process.exitCode=1;}
