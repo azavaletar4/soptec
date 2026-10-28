@@ -18,6 +18,17 @@ sin merge/push/despliegue automático.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
+**Nota de cierre, 28/10/2026 (misma noche, sesión posterior):** el
+propietario reportó el botón «Aplicar cambios» del formulario WiFi
+deshabilitado para siempre en producción. Causa raíz: NO era una
+validación de seguridad — el frontend y el backend bloqueaban cualquier
+cambio nuevo por la sola existencia de un registro anterior (diseño de
+"prueba piloto de un solo uso" que ya no aplica, la función es permanente).
+Corregido en frontend y backend sin quitar ninguna protección real (commit
+`33658df`, candidato local, sin desplegar). No repetir este diagnóstico —
+detalle completo: sección "TR-069 WiFi — botón «Aplicar cambios»
+deshabilitado..." al inicio de `ESTADO_DESARROLLO.md`.
+
 **Nota de cierre, 28/10/2026 18:25 UTC:** el `deploy` que las notas de abajo
 daban como "pendiente de autorización" **ya se ejecutó** (autorizado
 expresamente por el propietario) — commit `f87aeef` (SSID + contraseña

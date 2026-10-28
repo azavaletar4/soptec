@@ -26,19 +26,28 @@ ejecutado aparte después del `deploy`. Imágenes:
 (Mongo/Caddy/GenieACS) sin cambios — mismos `started` que antes del deploy.
 Rollback verificado y disponible: vuelve a `fabc13672cd3` (SSID, sin
 contraseña), nunca más atrás. Detalle completo del despliegue: sección
-"TR-069 WiFi contraseña — DESPLEGADO" más abajo.
+"TR-069 WiFi contraseña — DESPLEGADO" más abajo. **Conocido:** esta versión
+en vivo (`f87aeef`) tiene el botón «Aplicar cambios» deshabilitado para
+siempre tras el primer cambio (reportado por el propietario) — corrección
+lista en candidato local (`33658df`, punto 3), **sin desplegar todavía**.
 
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
 `HWTC1D3691B7` (contrato `CTR-2026-00214`): el propietario confirmó que
 funcionó y que el equipo siguió navegando normalmente (28/10/2026). El
-cambio de **contraseña** ya está desplegado pero **todavía no tiene su
-primera prueba real** — la hace el propietario manualmente desde el panel;
-no declarar esta función "probada en producción" hasta esa confirmación.
+cambio de **contraseña** está desplegado pero **todavía no tiene su primera
+prueba real** — además, el propietario reportó el formulario en producción
+con el botón «Aplicar cambios» permanentemente deshabilitado (causa raíz y
+corrección ya en candidato local, ver sección "Formulario WiFi — botón
+deshabilitado" más abajo); no declarar esta función "probada en producción"
+hasta desplegar esa corrección y que el propietario confirme la prueba real.
 
 **3. Cambios locales pendientes (no desplegados, no publicados):**
-- Ninguno de la función WiFi: SSID y contraseña ya están ambos en
-  producción (commit `f87aeef`).
+- Commit `33658df` (sobre `f87aeef`/`6adfd58`): corrección del botón
+  deshabilitado + simplificación del formulario WiFi — causa raíz
+  identificada y corregida (frontend Y backend, ver sección detallada),
+  **19/19 + 285/285 + 481/481 pruebas en verde, `vue-tsc` limpio, sin
+  desplegar**. Pendiente: autorización expresa de `deploy`.
 - Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
   antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
   `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
@@ -49,8 +58,9 @@ no declarar esta función "probada en producción" hasta esa confirmación.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `6873dc7` | 28 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
-| WiFi SSID + contraseña | incluido en `main` | `f87aeef` | **En producción** (desplegado 28/10/2026 18:25 UTC) |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `33658df` | 30 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
+| WiFi SSID + contraseña | incluido en `main` | `f87aeef` | **En producción** (desplegado 28/10/2026 18:25 UTC) — con el bug del botón |
+| Corrección botón deshabilitado + formulario simple | incluido en `main` | `33658df` | Candidato local, probado, **sin desplegar** |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
 | Rama remota activa en GitHub | `origin/main` | `88dec40` | Muy desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
 
@@ -75,9 +85,10 @@ es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
 **5. Próxima tarea autorizada:** ninguna en ejecución. Pendiente del
-**propietario**: probar manualmente el cambio de contraseña WiFi desde el
-panel (`HWTC1D3691B7`/`CTR-2026-00214`) y confirmar que PPPoE/internet del
-cliente no se interrumpe. No iniciar ningún `deploy`, migración, ni tarea
+**propietario**: autorizar el `deploy` de la corrección del botón (`33658df`)
+y, después, probar manualmente el cambio de contraseña WiFi desde el panel
+(`HWTC1D3691B7`/`CTR-2026-00214`) confirmando que PPPoE/internet del cliente
+no se interrumpe. No iniciar ningún `deploy`, migración, ni tarea
 GenieACS/OLT/MikroTik sin que el propietario lo pida en ese mismo turno
 (regla 16 de `CLAUDE.md`). Rollback disponible en cualquier momento:
 `node scripts/frontend-consolidation-release.cjs rollback` (vuelve a
@@ -126,6 +137,86 @@ invocación, nunca combinadas:
   inesperados), **se detiene y lo reporta** en vez de asumir o corregirlo
   por su cuenta — la causa casi siempre es que el otro agente avanzó en
   medio tiempo.
+
+## TR-069 WiFi — botón «Aplicar cambios» deshabilitado para siempre: causa raíz y corrección (candidato local, 28/10/2026)
+
+El propietario reportó, ya con la función en producción (`f87aeef`): el
+formulario sigue complicado y el botón queda deshabilitado aunque se
+escriba una contraseña nueva.
+
+**Causa raíz, en dos capas (frontend y backend, ninguna es "seguridad"):**
+
+1. **Frontend:** el botón usaba `:disabled="... || !!configTrial?.record"`
+   — es decir, se deshabilitaba en cuanto existiera CUALQUIER operación ya
+   registrada, sin importar su estado. Como el propietario ya hizo (y
+   verificó) el cambio de SSID, `configTrial.record` nunca vuelve a ser
+   `null`: el botón quedó deshabilitado **para siempre** desde ese momento.
+2. **Backend** (`server/src/services/tr069WifiTrial.ts`, función `change`):
+   incluso si el frontend no lo hubiera bloqueado, el servicio en sí
+   rechazaba cualquier `'change'` nuevo con `if (!restore && record) throw
+   ...` — otra vez, por la sola existencia de un registro, no por si había
+   algo realmente pendiente. Este diseño era correcto para la prueba
+   piloto original (un solo cambio, verificar o restaurar) pero incorrecto
+   ahora que es una función de administración permanente.
+
+**No era una validación de seguridad ni una restricción deliberada del
+firmware** — identidad exacta de ONT/instancia, permisos ADMIN/SUPERADMIN,
+`_writable` confirmado en vivo, protección contra tareas duplicadas (vía
+`pending()`/`faults()`) y el manejo de la contraseña como huella SHA-256
+siguen exactamente igual; no se quitó ninguna protección para "destrabar"
+el botón.
+
+**Corrección aplicada (commit `33658df`, candidato local, sin desplegar):**
+
+- **Backend:** un cambio nuevo se permite siempre que el anterior ya haya
+  llegado a un estado terminal (`verified` o `failed`) — solo se bloquea
+  mientras hay una tarea **realmente en curso** (`sending`/`queued`/
+  `uncertain`), que es la protección real contra duplicados. Límite de
+  operaciones del archivo de respaldo persistente subido de 2 a 1000 (ya
+  no es una prueba de un solo cambio; se conserva como límite de cordura
+  contra un archivo corrupto, no como tope de uso).
+- **Backend:** el mensaje de éxito ahora describe exactamente lo que se
+  confirmó — "Nuevo nombre", "Nueva contraseña", "Nuevo nombre y nueva
+  contraseña" o "Nombre anterior" (restauración) — nunca "SSID" fijo. Antes,
+  una contraseña confirmada se anunciaba igual que un nombre confirmado.
+- **Frontend** (`src/views/tr069/Tr069View.vue`): botón deshabilitado solo
+  mientras hay una operación pendiente real (misma regla que el backend);
+  formulario reducido a Red WiFi / Nombre de la red / Nueva contraseña
+  (con botón mostrar/ocultar) / «Guardar cambios»; mensaje principal
+  reducido a exactamente uno de «Guardando cambios…», «Cambio realizado» o
+  «No se pudo completar el cambio», según el estado real confirmado por el
+  backend (nunca una adivinanza del frontend). Respaldos, serial completo,
+  identificador GenieACS, instancia TR-069, huella de contraseña, estado
+  interno y el botón «Restaurar nombre anterior» se movieron a «Detalles
+  técnicos y recuperación» (colapsado, no en la pantalla principal, pero
+  siguen accesibles ahí).
+
+**Restricción conocida y documentada, sin cambiar (fuera de alcance de este
+fix):** "Restaurar" siempre revierte al nombre ORIGINAL (el primero que se
+registró, hace días), no al nombre justo-antes-del-último-cambio, si hubo
+más de un cambio en el camino. La contraseña nunca se restaura
+automáticamente (no se guarda, por diseño). El panel lo advierte cuando
+corresponde.
+
+**Pruebas (todas con GenieACS simulado/mock; cero tareas reales enviadas):**
+19/19 en `tr069WifiTrial.test.ts` (servidor) — incluye las 8 nuevas de
+contraseña más 7 nuevas de esta corrección (segundo cambio tras uno
+verificado, bloqueo real mientras hay uno pendiente, los 4 mensajes de
+éxito distintos, identidad no verificable). 285/285 y 481/481 de las
+suites completas de servicios/`lib` sin regresión. `vue-tsc -p
+tsconfig.app.json --noEmit` limpio. **No se verificó visualmente en
+navegador** (habría requerido autenticarse contra el panel real o desplegar
+un candidato; ninguna de las dos estaba autorizada en esta tarea) — la
+corrección se validó por pruebas automatizadas, tipos y revisión de lógica
+del componente, no por una sesión de navegador real.
+
+**Archivos modificados:** `server/src/services/tr069WifiTrial.ts`,
+`server/src/services/__tests__/tr069WifiTrial.test.ts`,
+`src/lib/tr069WifiTrial.ts` (diccionario de mensajes en lenguaje sencillo),
+`src/views/tr069/Tr069View.vue`. Ningún otro módulo tocado.
+
+**Estado: candidato local probado, sin desplegar.** Pendiente autorización
+expresa del propietario para `deploy`.
 
 ## TR-069 WiFi contraseña — DESPLEGADO en producción (28/10/2026 18:25 UTC)
 
