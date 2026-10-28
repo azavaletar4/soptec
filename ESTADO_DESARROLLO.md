@@ -77,19 +77,42 @@ Corrección local de metadatos `8b9f89d`: estructura Vite, archivos reales,
 imports estáticos/dinámicos compilados, entradas HTML, cobertura y hashes.
 Solo `.vite/manifest.json` validado deja de compararse binariamente; mantiene
 identidad/dependencias protegidas y los otros estáticos/huérfanos estrictos.
-**NO LISTO PARA PUBLICAR**: `prepare` PASS con respaldos/rollback aislado;
-build real FAIL por regla de unicidad nueva demasiado estricta:
-`INVALID_VITE_LIST:...AsistenciaPanel...:dynamicImports`. Ambos manifiestos
-nativos repiten index.html 4 veces en AsistenciaPanel y SSR ApexCharts 2 veces.
-No se siguió parcheando: instrucción de detenerse y consolidar. Se añadió
-regresión que falla (30 PASS + 1 FAIL), sin marcarla expectedFailure.
-Diagnóstico conjunto: cero referencias faltantes/imports inconsistentes/hashes
-incorrectos; 1.119 archivos estáticos/históricos sin cambios. Metadata semántica
-solo difiere en las tres entradas GPON/OLT/TR-069 justificadas previamente.
-Doble build, backend, guard, configuración candidata y deploy/verify pendientes,
-no afirmar que pasaron. Sin tareas TR-069 nuevas ni cambios en producción.
-SSH/salud final PASS 23:42:35 UTC. Resultado/evidencia/respaldos:
-`docs/TR069-HOSTS-VITE-VERIFICADOR-20261028.md` y JSON referenciados allí.
+**Regla de unicidad corregida, `91e9ff1` (continuación, sesión posterior a
+`cb5ba7f`) — build real ya PASA, SIGUE SIN DESPLEGAR:** la regla
+`len(values) == len(set(values))` para las 4 listas del manifiesto Vite
+(`imports`/`dynamicImports`/`css`/`assets`) causaba
+`INVALID_VITE_LIST:...AsistenciaPanel...:dynamicImports` porque Vite repite
+nativamente una clave en `imports`/`dynamicImports` cuando el código fuente
+tiene varias llamadas `import()`/import estático al mismo módulo
+(AsistenciaPanel→index.html ×4, ApexCharts SSR ×2, idéntico en activo y
+candidato) — no era colisión física ni corrupción, ya que el resto de
+controles (tipo, existencia de la clave, grafo, hashes) pasaban antes de
+llegar a esa regla. Corregido para exigir unicidad solo en `css`/`assets`
+(rutas físicas); `imports`/`dynamicImports` mantienen sus demás controles.
+Las listas normalizadas (`record[field] = sorted(...)`) siguen conservando
+repeticiones, así que la comparación `before`/`after` de módulos protegidos
+(`VITE_METADATA_IDENTITY_CHANGED`/`VITE_PROTECTED_DEPENDENCIES_CHANGED`) no
+perdió margen: un cambio real seguiría detectándose igual. Suite de contrato:
+**31 PASS** (antes 30 PASS + 1 FAIL), vía `node
+scripts/tests/consolidation-release-contract.test.cjs` (Python real de la VM)
+y localmente sin red, mismo resultado. `prepare`+`build` reales sobre el
+candidato `ac511d7` (mismo alcance ya declarado, Hosts backend+frontend,
+serial único `HWTC1D3691B7`):
+`{"built":true,"reproducible":true,"contractGuardValidatedReadOnly":true,
+"artifactCount":126,"frontendChangedAssets":["assets/Tr069View.js",
+"assets/tr069.js"],"servicesChanged":false}` — pasó exactamente el punto
+donde antes fallaba. Único archivo de código tocado:
+`scripts/consolidation-release-contract.py`; ningún módulo funcional (Hosts,
+OLT, MikroTik, WiFi, PPPoE, WAN, VLAN) tocado. **Pendiente, no ejecutado en
+esta sesión:** `deploy`/`verify`, doble build backend/frontend completo,
+nginx del candidato, archivos de imágenes candidatas, controles de drift
+predeploy y HTTP de todas las rutas/assets — no afirmar que pasarían sin
+ejecutarlos. Sin tareas GenieACS, sin cambios en producción.
+**Despliegue de Hosts sigue sin autorización expresa del propietario** — no
+ejecutar `deploy` sin ese pedido explícito en el turno correspondiente.
+Resultado/evidencia: `docs/TR069-HOSTS-VITE-VERIFICADOR-CORREGIDO-20261028.md`
+(antecedente del bloqueo, conservado tal cual:
+`docs/TR069-HOSTS-VITE-VERIFICADOR-20261028.md` y JSON referenciados allí).
 Nuevo panel Hosts inicialmente cerrado, independiente del detalle general.
 Abrirlo explícitamente o pulsar Actualizar llama POST de lectura, solo
 ADMIN/SUPERADMIN; GET de caché conserva permisos de lectura existentes.
