@@ -230,5 +230,52 @@
       "timestamp": "2026-10-28T23:25:59.061Z"
     },
     "frontendCommit": "5d48a10ea497c7c46251c1b784c25537c81f1275"
+  },
+  {
+    "action": "health",
+    "checkedAt": "2026-10-28T23:32:37.670252+00:00",
+    "services": {
+      "frontend": {
+        "id": "c611205998a174102c15ed9696cdbbfb400b0a2e773329dd099a585efd499ac7",
+        "image": "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+        "tag": "smartrayco-frontend-consolidado:5d48a10ea497",
+        "started": "2026-10-28T20:33:14.498037989Z",
+        "running": true
+      },
+      "backend": {
+        "id": "5331222b163214cec99254ef591400c9d3f5d41c754d24c9b964fcf8bfa56fc8",
+        "image": "sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001",
+        "tag": "smartrayco-backend-wifitrial:d6ce2c2f578f",
+        "started": "2026-10-28T21:30:20.121595954Z",
+        "running": true
+      },
+      "caddy": {
+        "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+        "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+        "tag": "caddy:2",
+        "started": "2026-10-27T17:59:52.601749213Z",
+        "running": true
+      },
+      "mongo": {
+        "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+        "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+        "tag": "mongo:8.0",
+        "started": "2026-10-27T17:59:52.61111918Z",
+        "running": true
+      },
+      "genieacs": {
+        "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+        "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+        "tag": "drumsergio/genieacs:1.2.16.0",
+        "started": "2026-10-27T17:59:52.552085739Z",
+        "running": true
+      }
+    },
+    "health": {
+      "status": "ok",
+      "service": "smartrayco-api",
+      "timestamp": "2026-10-28T23:32:37.892Z"
+    },
+    "frontendCommit": "5d48a10ea497c7c46251c1b784c25537c81f1275"
   }
 ]

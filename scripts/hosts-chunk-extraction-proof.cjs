@@ -47,7 +47,10 @@ function canonical(text, { remove = [], external = {} } = {}) {
     if (ts.isIdentifier(n)) {
       // Property names and public keys are semantic, never alpha-renamed.
       const p = n.parent;
+      if (ts.isShorthandPropertyAssignment(p) || (ts.isBindingElement(p) && !p.propertyName && ts.isObjectBindingPattern(p.parent)))
+        return ['shorthand-key-and-binding', n.text, ids.get(symbol(n)) || ['global', n.text]];
       const key = (ts.isPropertyAccessExpression(p) && p.name === n) ||
+        (ts.isExportSpecifier(p) && p.name === n) ||
         ((ts.isPropertyAssignment(p) || ts.isMethodDeclaration(p) || ts.isPropertyDeclaration(p)) && p.name === n && !ts.isComputedPropertyName(n));
       return ['identifier', key ? n.text : ids.get(symbol(n)) || ['global', n.text]];
     }

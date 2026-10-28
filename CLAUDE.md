@@ -52,15 +52,19 @@ planeada), sin cambiar el GPV probado; contrato solo permite dos ajustes de
 entorno Hosts y compara el resto completo. 67 pruebas + 14 de release PASS.
 Colisión de assets resuelta en `32e64ee`: dos workers QR legítimos, distintos
 y sin cambios; se conservan por nombre físico, bytes y referencias exactas.
-17/17 pruebas del contrato PASS. Nuevo `prepare` PASS, rollback probado.
-Nuevo `build` detenido por **otro bloqueo**:
-`HISTORICAL_ASSETS_STRUCTURE_CHANGED:removed=;added=assets/gponSerial.js`.
-No ampliar alcance ni encadenar correcciones: el propietario pidió detenerse.
-No hubo deploy/verify ni tareas TR-069 en este intento. SSH/salud al cierre
-23:25:59 UTC PASS; mismas imágenes, contenedores y arranques (backend d6ce2c2,
-frontend 5d48a10). Detalle y respaldos vigentes:
-`docs/TR069-HOSTS-ASSET-COLLISION-20261028.md` y JSON.
-No repetir la prueba activa; esperar indicación sobre el nuevo bloqueo.
+Extracción GPON comprobada y aceptada en `dce97e7`: AST del helper y OLT
+equivalentes con bindings; index idéntico al deshacer únicamente las precargas
+de OLT/TR-069. Fuente gponSerial intacta. Transición específica fijada por
+hashes, commit, fuentes e importadores; ningún permiso general para otros chunks.
+21/21 pruebas del contrato PASS. Nuevo `prepare` PASS, rollback probado.
+El nuevo `build` supera GPON y se detiene por **otro bloqueo**:
+`UNRELATED_STATIC_ASSETS_CHANGED:.vite/manifest.json` (archivo fuera del grafo
+JS/CSS comparado como estático). No corregido ni omitido: el propietario pidió
+detenerse ante otro bloqueo. No deploy/verify ni tareas TR-069 en este intento.
+SSH/salud al cierre 23:32:37 UTC PASS; mismas imágenes, contenedores y arranques
+(backend d6ce2c2, frontend 5d48a10). Detalle/grafos/prueba/respaldos vigentes:
+`docs/TR069-HOSTS-CHUNK-EXTRACTION-20261028.md` y JSON referenciados allí.
+No repetir la prueba activa; esperar indicación sobre el manifiesto Vite.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
