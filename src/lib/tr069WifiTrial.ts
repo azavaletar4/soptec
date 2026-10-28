@@ -47,9 +47,13 @@ const WIFI_TRIAL_PLAIN_MESSAGES: Record<string, string> = {
     'Pendiente de confirmación del equipo. Vuelve a comprobar en unos minutos.',
   'Tarea de cambio ya no pendiente. Pulsa Verificar resultado para leer este SSID.':
     'El envío ya terminó. Pulsa «Comprobar estado» para ver si se aplicó.',
-  'Nuevo SSID verificado en GenieACS. Comprueba también la red y navegación.':
+  'Nuevo nombre verificado en GenieACS. Comprueba también la red y navegación.':
     'Nombre WiFi nuevo confirmado por el equipo. Revisa también que la red y la navegación sigan funcionando.',
-  'SSID anterior verificado en GenieACS. Comprueba también la red y navegación.':
+  'Nueva contraseña verificada en GenieACS. Comprueba también la red y navegación.':
+    'Contraseña nueva confirmada por el equipo. Revisa también que la red y la navegación sigan funcionando.',
+  'Nuevo nombre y nueva contraseña verificados en GenieACS. Comprueba también la red y navegación.':
+    'Nombre y contraseña nuevos confirmados por el equipo. Revisa también que la red y la navegación sigan funcionando.',
+  'Nombre anterior verificado en GenieACS. Comprueba también la red y navegación.':
     'Nombre WiFi anterior restaurado y confirmado por el equipo. Revisa también que la red y la navegación sigan funcionando.',
   'Pendiente: falta un Inform nuevo o una lectura posterior con el SSID esperado.':
     'Pendiente: todavía no llega la confirmación del equipo con el nombre esperado.',
@@ -61,8 +65,8 @@ const WIFI_TRIAL_PLAIN_MESSAGES: Record<string, string> = {
     'No se pudo confirmar la comprobación. No la repitas por ahora.',
   'Lectura puntual encolada. Espera un nuevo Inform y consulta el estado.':
     'Comprobación enviada. Espera unos minutos y vuelve a revisar el estado.',
-  'La prueba ya tiene un cambio. Verifica o restaura el respaldo antes de otra operación.':
-    'Ya hay un cambio en curso para esta red. Compruébalo o restaura el nombre anterior antes de enviar otro.',
+  'Hay un cambio anterior sin confirmar todavía. Comprueba el estado antes de enviar uno nuevo.':
+    'Todavía hay un cambio anterior sin confirmar. Comprueba el estado antes de enviar uno nuevo.',
   'Primero verifica el cambio; no restaurar sobre una tarea pendiente':
     'Primero comprueba el cambio anterior; no se puede restaurar mientras está pendiente.',
   'La identidad, instancia o SSID actual cambió; vuelve a consultar':

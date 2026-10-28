@@ -197,3 +197,88 @@ test('restaurar nunca acepta contraseña: solo repite el SSID anterior', async (
     await assert.rejects(f.service.restore(nbi, WIFI_TEST_SERIAL, { requestId: '00000000-0000-4000-8000-000000000002', confirmed: true, password: SYNTHETIC_PW }, 'admin'));
   } finally { f.cleanup(); }
 });
+
+// ---- Un cambio ya confirmado no bloquea el siguiente para siempre (corrección del boton
+// deshabilitado reportado en produccion): solo una tarea EN CURSO bloquea un envio nuevo. ----
+test('tras un cambio verificado, un segundo cambio (solo nombre, solo contraseña o ambos) SI se permite', async () => {
+  const f = fixture(); try {
+    await f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin');
+    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
+    const fresh = new Date(Date.now() + 2000).toISOString();
+    f.inv.networks[0].ssid = 'Nuevo'; f.inv.networks[0].timestamp = fresh; f.inv.lastInform = fresh;
+    let status = await f.service.status(nbi, WIFI_TEST_SERIAL);
+    assert.equal(status.record!.operations[0].state, 'verified', 'primer cambio ya confirmado');
+    const second = await f.service.change(nbi, WIFI_TEST_SERIAL,
+      { requestId: '00000000-0000-4000-8000-0000000000a2', confirmed: true, deviceId: WIFI_TEST_DEVICE, path: WIFI_TRIAL_PATH,
+        ssid: 'Nuevo', expectedSsid: 'Nuevo', expectedTimestamp: fresh, password: SYNTHETIC_PW }, 'admin');
+    assert.equal(second.record!.operations.length, 2, 'se agrega una segunda operacion, no se reemplaza la primera');
+    assert.equal(second.record!.operations[1].state, 'queued');
+    assert.equal(second.record!.operations[1].passwordChanged, true);
+  } finally { f.cleanup(); }
+});
+test('mientras el cambio anterior sigue sin confirmar (queued/uncertain), un cambio nuevo SI bloquea', async () => {
+  const f = fixture(); try {
+    const queued = await f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin');
+    assert.equal(queued.record!.operations[0].state, 'queued');
+    await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL,
+      { ...f.body, requestId: '00000000-0000-4000-8000-0000000000a3', expectedSsid: 'Original' }, 'admin'), /sin confirmar/);
+    assert.equal(f.state.posts.length, 1, 'no se envio una segunda tarea');
+  } finally { f.cleanup(); }
+});
+test('mensaje de exito describe exactamente lo confirmado: nombre, contraseña, ambos o restauracion — nunca "SSID" para una contraseña', async () => {
+  const f = fixture(); try {
+    // Solo contraseña.
+    await f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, ssid: 'Original', password: SYNTHETIC_PW }, 'admin');
+    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
+    const fresh1 = new Date(Date.now() + 2000).toISOString();
+    f.state.password = { value: SYNTHETIC_PW, timestamp: fresh1 };
+    let status = await f.service.status(nbi, WIFI_TEST_SERIAL);
+    assert.equal(status.message, 'Nueva contraseña verificada en GenieACS. Comprueba también la red y navegación.');
+    assert.ok(!status.message.includes('SSID'), 'una contraseña confirmada nunca se anuncia como SSID');
+  } finally { f.cleanup(); }
+});
+test('mensaje de exito: solo nombre y nombre+contraseña juntos', async () => {
+  const f = fixture(); try {
+    // Solo nombre.
+    await f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin');
+    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
+    const fresh = new Date(Date.now() + 2000).toISOString();
+    f.inv.networks[0].ssid = 'Nuevo'; f.inv.networks[0].timestamp = fresh; f.inv.lastInform = fresh;
+    const onlyName = await f.service.status(nbi, WIFI_TEST_SERIAL);
+    assert.equal(onlyName.message, 'Nuevo nombre verificado en GenieACS. Comprueba también la red y navegación.');
+  } finally { f.cleanup(); }
+});
+test('mensaje de exito: nombre y contraseña juntos', async () => {
+  const f = fixture(); try {
+    await f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, password: SYNTHETIC_PW }, 'admin');
+    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
+    const fresh = new Date(Date.now() + 2000).toISOString();
+    f.inv.networks[0].ssid = 'Nuevo'; f.inv.networks[0].timestamp = fresh; f.inv.lastInform = fresh;
+    f.state.password = { value: SYNTHETIC_PW, timestamp: fresh };
+    const both = await f.service.status(nbi, WIFI_TEST_SERIAL);
+    assert.equal(both.message, 'Nuevo nombre y nueva contraseña verificados en GenieACS. Comprueba también la red y navegación.');
+  } finally { f.cleanup(); }
+});
+test('mensaje de exito de una restauracion sigue hablando de nombre, nunca de contraseña', async () => {
+  const f = fixture(); try {
+    await f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin');
+    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
+    const fresh = new Date(Date.now() + 2000).toISOString();
+    f.inv.networks[0].ssid = 'Nuevo'; f.inv.networks[0].timestamp = fresh; f.inv.lastInform = fresh;
+    await f.service.status(nbi, WIFI_TEST_SERIAL);
+    const restored = await f.service.restore(nbi, WIFI_TEST_SERIAL, { requestId: '00000000-0000-4000-8000-0000000000a4', confirmed: true }, 'admin');
+    assert.equal(restored.record!.operations[1].state, 'queued');
+    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
+    const fresh2 = new Date(Date.now() + 4000).toISOString();
+    f.inv.networks[0].ssid = 'Original'; f.inv.networks[0].timestamp = fresh2; f.inv.lastInform = fresh2;
+    const status = await f.service.status(nbi, WIFI_TEST_SERIAL);
+    assert.equal(status.message, 'Nombre anterior verificado en GenieACS. Comprueba también la red y navegación.');
+  } finally { f.cleanup(); }
+});
+test('dispositivo no verificable (identidad GenieACS distinta) rechaza sin enviar nada', async () => {
+  const f = fixture(); try {
+    f.inv.deviceId = 'otro-dispositivo';
+    await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin'), /[Ii]dentidad/);
+    assert.equal(f.state.posts.length, 0);
+  } finally { f.cleanup(); }
+});

@@ -58,8 +58,10 @@ export function createWifiTrial(deps: Dependencies = {}) {
   function read(): WifiTrialRecord | null {
     if (!fs.existsSync(file)) return null;
     const r = JSON.parse(fs.readFileSync(file, 'utf8')) as WifiTrialRecord;
+    // El límite alto es solo para detectar un archivo corrupto/ajeno, no para limitar el uso real:
+    // esto ya es una función de administración permanente, no una prueba piloto de un solo cambio.
     if (r.version !== 1 || r.serial !== WIFI_TEST_SERIAL || r.deviceId !== WIFI_TEST_DEVICE || r.path !== WIFI_TRIAL_PATH ||
-      r.contractNumber !== WIFI_TRIAL_CONTRACT || !Array.isArray(r.operations) || r.operations.length > 2) throw new Error('Respaldo persistente no válido; detener');
+      r.contractNumber !== WIFI_TRIAL_CONTRACT || !Array.isArray(r.operations) || r.operations.length > 1000) throw new Error('Respaldo persistente no válido; detener');
     return r;
   }
   function save(record: WifiTrialRecord) {
@@ -144,9 +146,16 @@ export function createWifiTrial(deps: Dependencies = {}) {
     }
     if (ssidOk && passwordOk) {
       op.state = 'verified'; op.verifiedAt = new Date().toISOString(); save(record);
-      return { enabled: enabled(), record, message: op.kind === 'restore'
-        ? 'SSID anterior verificado en GenieACS. Comprueba también la red y navegación.'
-        : 'Nuevo SSID verificado en GenieACS. Comprueba también la red y navegación.' };
+      // El mensaje de éxito describe EXACTAMENTE lo que se confirmó en esta operación — nunca
+      // "SSID" fijo: una contraseña confirmada no debe leerse como si fuera un nombre confirmado.
+      const message = op.kind === 'restore'
+        ? 'Nombre anterior verificado en GenieACS. Comprueba también la red y navegación.'
+        : ssidChanged && op.passwordChanged
+          ? 'Nuevo nombre y nueva contraseña verificados en GenieACS. Comprueba también la red y navegación.'
+          : op.passwordChanged
+            ? 'Nueva contraseña verificada en GenieACS. Comprueba también la red y navegación.'
+            : 'Nuevo nombre verificado en GenieACS. Comprueba también la red y navegación.';
+      return { enabled: enabled(), record, message };
     }
     return { enabled: enabled(), record, message: 'Pendiente: falta un Inform nuevo o una lectura posterior con el SSID esperado.' };
   }
@@ -165,7 +174,14 @@ export function createWifiTrial(deps: Dependencies = {}) {
       let record = read();
       if (record?.operations.some(o => o.requestId === b.requestId)) return inspect(nbi); // Nunca reenvía por timeout del navegador.
       const last = record?.operations.at(-1);
-      if (!restore && record) throw new Error('La prueba ya tiene un cambio. Verifica o restaura el respaldo antes de otra operación.');
+      // Un cambio nuevo se permite siempre que el anterior ya haya terminado (confirmado o con
+      // error) — lo único que se bloquea de verdad es tener una tarea sin confirmar en curso
+      // (protección real contra tareas duplicadas). Antes se bloqueaba para siempre tras el
+      // primer cambio: correcto para una prueba piloto de un solo uso, incorrecto ahora que es
+      // una función de administración permanente (el botón quedaba deshabilitado para siempre).
+      if (!restore && last && (last.state === 'sending' || last.state === 'queued' || last.state === 'uncertain')) {
+        throw new Error('Hay un cambio anterior sin confirmar todavía. Comprueba el estado antes de enviar uno nuevo.');
+      }
       if (restore && (!record || !last || last.kind !== 'change' || last.state !== 'verified')) throw new Error('Primero verifica el cambio; no restaurar sobre una tarea pendiente');
       const { net } = await current(nbi);
       if ((await pending(nbi)).length) throw new Error('Hay tareas pendientes en este equipo; no se envió otro cambio');

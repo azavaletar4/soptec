@@ -94,6 +94,24 @@ const configOperationStateLabel = computed(() => {
   const state = configTrial.value?.record?.operations.at(-1)?.state;
   return state ? (WIFI_OPERATION_STATE_LABELS[state] ?? state) : null;
 });
+const showPassword = ref(false);
+// Solo una tarea sin confirmar bloquea un envío nuevo (protección real contra duplicados);
+// un cambio ya confirmado (verificado o con error) no debe dejar el botón deshabilitado para
+// siempre — ese fue el bloqueo reportado en producción tras el primer cambio de SSID.
+const configHasPendingOperation = computed(() => {
+  const state = configTrial.value?.record?.operations.at(-1)?.state;
+  return state === 'sending' || state === 'queued' || state === 'uncertain';
+});
+// Mensaje principal simplificado (regla de usabilidad): solo uno de estos tres, según el
+// resultado REALMENTE confirmado por el backend — nunca jerga ni el detalle técnico aquí.
+const configStatusLabel = computed(() => {
+  if (configSaving.value) return 'Guardando cambios…';
+  const state = configTrial.value?.record?.operations.at(-1)?.state;
+  if (state === 'sending' || state === 'queued') return 'Guardando cambios…';
+  if (state === 'verified') return 'Cambio realizado';
+  if (state === 'failed' || state === 'uncertain') return 'No se pudo completar el cambio';
+  return null;
+});
 
 async function openConfigModal(device: Tr069Device) {
   configModalDevice.value = device;
@@ -589,8 +607,7 @@ async function handleUnlink() {
         <form class="w-full max-w-sm modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleSaveConfig">
           <h2 class="text-lg font-semibold mb-1">Configurar WiFi</h2>
           <p class="text-xs text-slate-500 mb-3">
-            {{ configTrial?.enabled ? 'Cambio real, solo para esta Huawei de prueba y el contrato CTR-2026-00214.' : 'Preparación sin aplicar, solo para esta Huawei de prueba.' }}
-            {{ configTrial?.enabled ? 'Puedes cambiar el nombre y, si quieres, también la contraseña de esta red.' : 'Por ahora solo se puede preparar el nombre de la red.' }}
+            {{ configTrial?.enabled ? 'Puedes cambiar el nombre y, si quieres, también la contraseña de esta red.' : 'Preparación sin aplicar; solo guarda un plan descargable.' }}
             PPPoE y otras redes no se tocan desde aquí.
           </p>
 
@@ -604,72 +621,75 @@ async function handleUnlink() {
               <label class="block text-xs text-slate-600 mb-1">Red WiFi</label>
               <select v-model="configWifiPath" class="field-input">
                 <option value="">Selecciona una red</option>
-                <option v-for="n in configWifiNetworks" :key="n.path" :value="n.path" :disabled="configTrial?.enabled && n.path !== 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5'">{{ n.ssid ?? 'SSID no disponible' }} — {{ n.band }} ({{ n.enabled === null ? 'estado sin verificar' : n.enabled ? 'habilitada' : 'desactivada' }})</option>
+                <option v-for="n in configWifiNetworks" :key="n.path" :value="n.path" :disabled="configTrial?.enabled && n.path !== 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5'">{{ n.ssid ?? 'Nombre no disponible' }} — {{ n.band }}</option>
               </select>
             </div>
             <div class="mb-2">
-              <label class="block text-xs text-slate-600 mb-1">Nuevo nombre (SSID)</label>
-              <input v-model="configForm.wifiSsid" class="field-input" placeholder="Nuevo nombre de esta red" />
+              <label class="block text-xs text-slate-600 mb-1">Nombre de la red</label>
+              <input v-model="configForm.wifiSsid" class="field-input" placeholder="Nombre de esta red" />
             </div>
             <div class="mb-2">
               <label class="block text-xs text-slate-600 mb-1">Nueva contraseña (opcional)</label>
-              <input
-                v-model="configForm.wifiPassword"
-                type="password"
-                autocomplete="new-password"
-                class="field-input"
-                :disabled="!configTrial?.enabled || configSelectedNetwork?.passwordWritable !== true"
-                placeholder="Déjala en blanco para no cambiarla"
-              />
-              <p v-if="!configTrial?.enabled" class="text-xs text-amber-700 mt-1">Cambio de contraseña: solo disponible en el cambio real de esta Huawei de prueba.</p>
+              <div class="flex gap-2">
+                <input
+                  v-model="configForm.wifiPassword"
+                  :type="showPassword ? 'text' : 'password'"
+                  autocomplete="new-password"
+                  class="field-input"
+                  :disabled="!configTrial?.enabled || configSelectedNetwork?.passwordWritable !== true"
+                  placeholder="Déjala en blanco para no cambiarla"
+                />
+                <button type="button" class="btn-ghost text-xs whitespace-nowrap" @click="showPassword = !showPassword">{{ showPassword ? 'Ocultar' : 'Mostrar' }}</button>
+              </div>
+              <p v-if="!configTrial?.enabled" class="text-xs text-amber-700 mt-1">Cambio de contraseña: solo disponible en el cambio real de esta red.</p>
               <p v-else-if="configSelectedNetwork && configSelectedNetwork.passwordWritable !== true" class="text-xs text-amber-700 mt-1">Este equipo no confirma que se pueda escribir la contraseña de esta red.</p>
-              <p v-else class="text-xs text-slate-500 mt-1">SmartRayco no guarda la contraseña anterior: para deshacer un cambio de contraseña, vuelve a escribir la anterior aquí.</p>
+              <p v-else class="text-xs text-slate-500 mt-1">Para deshacer un cambio de contraseña, vuelve a escribir la anterior aquí (no queda guardada).</p>
             </div>
           </div>
 
           <p v-if="configDisplayError" class="text-sm text-red-600 mb-3">{{ configDisplayError }}</p>
-          <p v-if="configDisplayResult" role="status" class="text-sm text-slate-700 mb-3">{{ configDisplayResult }}</p>
-
-          <div v-if="configTrial?.enabled && configTrial.record" class="text-xs mb-3 space-y-1 border border-slate-200 rounded p-2">
-            <p>Nombre anterior: <strong>{{ configTrial.record.operations.at(-1)?.before }}</strong></p>
-            <p>Nombre nuevo enviado: <strong>{{ configTrial.record.operations.at(-1)?.after }}</strong></p>
-            <p v-if="configTrial.record.operations.at(-1)?.passwordChanged">También se envió una contraseña nueva.</p>
-            <p>Estado: {{ configOperationStateLabel }}</p>
-            <p v-if="configTrial.record.operations.at(-1)?.passwordChanged" class="text-amber-700">
-              Restaurar solo recupera el nombre anterior; la contraseña no se revierte automáticamente (SmartRayco no la guarda).
-            </p>
-            <div class="flex flex-wrap gap-2 pt-1">
-              <button type="button" class="btn-secondary" :disabled="configSaving" @click="checkWifiTrialStatus">Comprobar estado</button>
-              <button type="button" class="btn-secondary" :disabled="configSaving || configTrial.record.operations.at(-1)?.state !== 'verified' || configTrial.record.operations.at(-1)?.kind !== 'change'" @click="runWifiTrial('restore')">Restaurar nombre anterior</button>
-              <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo</button>
-            </div>
-          </div>
-          <div v-else-if="configTrial?.enabled" class="text-xs mb-3">
-            <button type="button" class="btn-secondary" :disabled="configSaving" @click="checkWifiTrialStatus">Comprobar estado</button>
-          </div>
-          <div v-if="configPlan" class="text-xs mb-3">
-            <p>Plan preparado: {{ configPlan.before }} → {{ configPlan.after }}. No se envió al equipo.</p>
-            <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo</button>
-            <button type="button" class="btn-secondary" @click="verifyWifiCache">Comparar con la caché actual</button>
+          <p v-if="!configTrial?.enabled && configDisplayResult" role="status" class="text-sm text-slate-700 mb-3">{{ configDisplayResult }}</p>
+          <div v-if="configTrial?.enabled && configStatusLabel" class="flex items-center gap-2 mb-3">
+            <p role="status" class="text-sm" :class="configStatusLabel === 'No se pudo completar el cambio' ? 'text-red-600' : 'text-slate-700'">{{ configStatusLabel }}</p>
+            <button v-if="configTrial.record" type="button" class="text-xs text-sky-600 hover:underline" :disabled="configSaving" @click="checkWifiTrialStatus">Actualizar estado</button>
           </div>
 
           <details class="text-xs text-slate-500 mb-3">
-            <summary class="cursor-pointer select-none">Detalles técnicos</summary>
+            <summary class="cursor-pointer select-none">Detalles técnicos y recuperación</summary>
             <div class="mt-2 space-y-1">
               <p class="font-mono">Serial TR-069: {{ configModalDevice.cpe_serial }}</p>
               <p v-if="configCanonicalSerial">Serial GPON completo: {{ configCanonicalSerial }}</p>
               <p v-if="configDeviceId" class="break-all">Dispositivo GenieACS: {{ configDeviceId }}</p>
               <p v-if="configWifiPath" class="break-all">Instancia TR-069: {{ configWifiPath }}</p>
-              <p v-if="configWifiPath">Fecha del SSID en caché (Perú): {{ configSelectedNetwork?.timestamp ? new Date(configSelectedNetwork.timestamp).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'Sin fecha verificable' }}.</p>
-              <p v-if="configTrial?.record">Respaldo persistente: {{ configTrial.record.originalSsid }}. Instancia: {{ configTrial.record.path }}. Estado interno: {{ configTrial.record.operations.at(-1)?.state }}.</p>
-              <p v-if="configTrial?.record?.operations.at(-1)?.afterPasswordHash" class="break-all">Huella de la contraseña enviada (SHA-256, nunca el valor real): {{ configTrial.record.operations.at(-1)?.afterPasswordHash }}</p>
+              <p v-if="configWifiPath">Fecha del nombre en caché (Perú): {{ configSelectedNetwork?.timestamp ? new Date(configSelectedNetwork.timestamp).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'Sin fecha verificable' }}.</p>
+              <p v-if="configTrial?.enabled && configDisplayResult">{{ configDisplayResult }}</p>
+              <template v-if="configTrial?.record">
+                <p>Nombre anterior: {{ configTrial.record.operations.at(-1)?.before }}. Nombre enviado: {{ configTrial.record.operations.at(-1)?.after }}.</p>
+                <p v-if="configTrial.record.operations.at(-1)?.passwordChanged">También se incluyó una contraseña nueva en esta operación.</p>
+                <p>Respaldo persistente: {{ configTrial.record.originalSsid }}. Instancia: {{ configTrial.record.path }}. Estado interno: {{ configOperationStateLabel }}.</p>
+                <p v-if="configTrial.record.operations.at(-1)?.afterPasswordHash" class="break-all">Huella de la contraseña enviada (SHA-256, nunca el valor real): {{ configTrial.record.operations.at(-1)?.afterPasswordHash }}</p>
+                <p v-if="configTrial.record.operations.at(-1)?.passwordChanged" class="text-amber-700">
+                  Restaurar solo recupera el nombre anterior; la contraseña no se revierte automáticamente.
+                </p>
+                <div class="flex flex-wrap gap-2 pt-1">
+                  <button type="button" class="btn-secondary" :disabled="configSaving || configTrial.record.operations.at(-1)?.state !== 'verified' || configTrial.record.operations.at(-1)?.kind !== 'change'" @click="runWifiTrial('restore')">Restaurar nombre anterior</button>
+                  <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo</button>
+                </div>
+              </template>
+              <template v-if="configPlan">
+                <p>Plan preparado: {{ configPlan.before }} → {{ configPlan.after }}. No se envió al equipo.</p>
+                <div class="flex flex-wrap gap-2 pt-1">
+                  <button type="button" class="btn-secondary" @click="downloadWifiPlan">Descargar respaldo</button>
+                  <button type="button" class="btn-secondary" @click="verifyWifiCache">Comparar con la caché actual</button>
+                </div>
+              </template>
             </div>
           </details>
 
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="configModalDevice = null">Cerrar</button>
-            <button v-if="canPrepareWifi" type="submit" :disabled="configSaving || configLoadingCurrent || !!configTrial?.record" class="btn-primary">
-              {{ configSaving ? 'Procesando...' : configTrial?.enabled ? 'Aplicar cambios' : 'Preparar sin aplicar' }}
+            <button v-if="canPrepareWifi" type="submit" :disabled="configSaving || configLoadingCurrent || configHasPendingOperation" class="btn-primary">
+              {{ configSaving ? 'Guardando…' : configTrial?.enabled ? 'Guardar cambios' : 'Preparar sin aplicar' }}
             </button>
           </div>
         </form>
