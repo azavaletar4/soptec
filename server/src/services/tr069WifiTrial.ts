@@ -14,8 +14,16 @@ export const WIFI_TRIAL_PASSWORD_PARAMETER = WIFI_TRIAL_PATH + '.KeyPassphrase';
 // Nunca persistir, registrar ni devolver la contraseña real (regla 7, CLAUDE.md):
 // solo su huella SHA-256, para evidencia/auditoría sin poder reconstruir el valor.
 function sha256Hex(value: string) { return 'sha256:' + crypto.createHash('sha256').update(value, 'utf8').digest('hex'); }
-// WPA-PSK estándar: 8 a 63 caracteres imprimibles en inglés. Firmware no confirmado para otros
-// alfabetos; se restringe al subconjunto conocido en vez de asumir soporte UTF-8 como el SSID.
+// Confirmado real el 28/10/2026 con la Huawei de prueba: KeyPassphrase se reporta como cadena
+// vacía al leerlo de vuelta (parámetro de solo escritura en este firmware) — nunca coincide con
+// la huella real, así que nunca sirve como prueba de fallo; sirve para detectar justo este caso.
+const EMPTY_PASSWORD_HASH = sha256Hex('');
+// Si una tarea sigue pendiente más de esto sin respuesta, se lo decimos al administrador en vez
+// de seguir mostrando "Guardando cambios" sin explicación — nunca se reenvía sola.
+const STALE_PENDING_MS = 20 * 60 * 1000;
+// WPA-PSK estándar: 8 a 63 caracteres imprimibles en inglés. Sin uso mientras el cambio de
+// contraseña esté bloqueado (ver change()) — se conserva lista para cuando se reactive, en vez
+// de borrarla y tener que rehacerla.
 function isValidWifiPassword(pw: string) { return pw.length >= 8 && pw.length <= 63 && /^[\x20-\x7e]+$/.test(pw); }
 const CONTRACT_ID = 'bf6b0f88-3c55-4c9b-aca2-5dfa739e738c';
 export const WIFI_TRIAL_CONTRACT = 'CTR-2026-00214';
@@ -133,16 +141,37 @@ export function createWifiTrial(deps: Dependencies = {}) {
       op.state = 'failed'; save(record);
       return { enabled: enabled(), record, message: 'GenieACS informa un fallo. No hay cambio confirmado; no acumular tareas.' };
     }
-    if (tasks.some(t => t._id === op.taskId || t._id === op.readTaskId)) return { enabled: enabled(), record, message: 'Pendiente del próximo Inform o de completar la tarea; todavía no confirmado.' };
+    if (tasks.some(t => t._id === op.taskId || t._id === op.readTaskId)) {
+      const sentRef = op.readTaskId ? op.readSentAt! : op.sentAt;
+      if (Date.now() - Date.parse(sentRef) > STALE_PENDING_MS) {
+        if (op.state !== 'stuck') { op.state = 'stuck'; save(record); }
+        return { enabled: enabled(), record, message: 'El equipo no respondió a tiempo. No se reenvía automáticamente; vuelve a comprobar más tarde o revisa el equipo.' };
+      }
+      return { enabled: enabled(), record, message: 'Pendiente del próximo Inform o de completar la tarea; todavía no confirmado.' };
+    }
     if (!op.readTaskId) return { enabled: enabled(), record, message: 'Tarea de cambio ya no pendiente. Pulsa Verificar resultado para leer este SSID.' };
     const { inv, net } = await current(nbi);
     const after = Date.parse(op.readSentAt!);
     const ssidChanged = op.before !== op.after;
     const ssidOk = !ssidChanged || (Date.parse(inv.lastInform ?? '') > Date.parse(op.sentAt) && Date.parse(net.timestamp!) >= after && net.ssid === op.after);
     let passwordOk = true;
+    let passwordUnreadable = false;
     if (op.passwordChanged) {
       const pw = await passwordState(nbi);
-      passwordOk = !!pw.timestamp && Date.parse(pw.timestamp) >= after && pw.hash === op.afterPasswordHash;
+      // Una lectura fresca con huella vacía no es "sin cambio" ni "falló": es que este firmware
+      // nunca devuelve la contraseña real al leerla. Nunca confundir esto con una verificación
+      // real — ver hallazgo del 28/10/2026 en ESTADO_DESARROLLO.md.
+      if (pw.timestamp && Date.parse(pw.timestamp) >= after && pw.hash === EMPTY_PASSWORD_HASH) passwordUnreadable = true;
+      else passwordOk = !!pw.timestamp && Date.parse(pw.timestamp) >= after && pw.hash === op.afterPasswordHash;
+    }
+    if (passwordUnreadable) {
+      op.state = 'unconfirmed'; save(record);
+      // Nunca se declara éxito aquí, aunque el nombre sí se haya confirmado: la contraseña queda
+      // genuinamente sin poder verificarse por esta vía, nunca se silencia esa diferencia.
+      const message = ssidChanged
+        ? 'Nuevo nombre verificado en GenieACS. La contraseña no se puede confirmar por esta vía: el equipo la reporta vacía al leerla. Compruébala conectándote con la red.'
+        : 'La contraseña no se puede confirmar por esta vía: el equipo la reporta vacía al leerla. Compruébala conectándote con la red.';
+      return { enabled: enabled(), record, message };
     }
     if (ssidOk && passwordOk) {
       op.state = 'verified'; op.verifiedAt = new Date().toISOString(); save(record);
@@ -179,7 +208,7 @@ export function createWifiTrial(deps: Dependencies = {}) {
       // (protección real contra tareas duplicadas). Antes se bloqueaba para siempre tras el
       // primer cambio: correcto para una prueba piloto de un solo uso, incorrecto ahora que es
       // una función de administración permanente (el botón quedaba deshabilitado para siempre).
-      if (!restore && last && (last.state === 'sending' || last.state === 'queued' || last.state === 'uncertain')) {
+      if (!restore && last && (last.state === 'sending' || last.state === 'queued' || last.state === 'uncertain' || last.state === 'stuck')) {
         throw new Error('Hay un cambio anterior sin confirmar todavía. Comprueba el estado antes de enviar uno nuevo.');
       }
       if (restore && (!record || !last || last.kind !== 'change' || last.state !== 'verified')) throw new Error('Primero verifica el cambio; no restaurar sobre una tarea pendiente');
@@ -188,14 +217,17 @@ export function createWifiTrial(deps: Dependencies = {}) {
       if ((await faults(nbi)).length) throw new Error('Hay fallos GenieACS de este equipo pendientes de revisión; no se envió cambio');
       const target = restore ? record!.originalSsid : b.ssid;
       if (typeof target !== 'string' || !target.trim() || Buffer.byteLength(target, 'utf8') > 32 || /[\x00-\x1f\x7f]/.test(target)) throw new Error('SSID inválido: 1 a 32 bytes, sin controles');
-      // La contraseña nunca se compara contra un "antes" ni se guarda en texto plano (regla 7,
-      // CLAUDE.md): solo se valida formato y se usa transitoriamente para el envío y su huella.
-      let passwordTarget: string | undefined;
+      // BLOQUEADO (28/10/2026, hallazgo real): este firmware reporta KeyPassphrase como cadena
+      // vacía al leerlo de vuelta, así que SmartRayco no puede confirmar si una contraseña nueva
+      // realmente se aplicó (el envío previo cambió el SSID real pero la contraseña nueva no
+      // funcionó al conectarse). Mantener bloqueado hasta resolver cómo verificarlo con este
+      // firmware — no es una limitación de SmartRayco, es lo que reporta el equipo real. Ver
+      // ESTADO_DESARROLLO.md. La contraseña nunca se compara contra un "antes" ni se guarda en
+      // texto plano (regla 7, CLAUDE.md) — pero aquí ni siquiera llega a intentarse el envío.
       if (!restore && typeof b.password === 'string' && b.password.length > 0) {
-        if (!isValidWifiPassword(b.password)) throw new Error('Contraseña inválida: 8 a 63 caracteres imprimibles en inglés, sin tildes ni emoji');
-        if (net.passwordWritable !== true) throw new Error('La contraseña de esta red no tiene capacidad de escritura confirmada; no se envió nada');
-        passwordTarget = b.password;
+        throw new Error('Cambio de contraseña bloqueado temporalmente: este equipo no confirma de forma confiable que la contraseña se aplicó. Por ahora solo se puede cambiar el nombre.');
       }
+      const passwordTarget: string | undefined = undefined;
       // GenieACS refresca _timestamp en cada Inform que reporta el parámetro (periódico cada
       // 300s), aunque el valor no cambie — exigir esa igualdad exacta bloqueaba casi cualquier
       // envío real con solo el paso del tiempo entre consultar y confirmar. Lo que realmente

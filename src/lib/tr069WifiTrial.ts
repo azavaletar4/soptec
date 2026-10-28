@@ -5,7 +5,10 @@ export interface WifiTrialOperation {
   before: string;
   after: string;
   sentAt: string;
-  state: 'sending' | 'queued' | 'uncertain' | 'failed' | 'verified';
+  // unconfirmed: se recibió una lectura concluyente pero el equipo no permite verificar la
+  // contraseña por esta vía (nunca un éxito ni un fallo real). stuck: una tarea sigue pendiente
+  // mucho más de lo normal, sin respuesta del equipo — nunca se reenvía sola.
+  state: 'sending' | 'queued' | 'uncertain' | 'failed' | 'verified' | 'unconfirmed' | 'stuck';
   taskId?: string;
   readTaskId?: string;
   readSentAt?: string;
@@ -91,8 +94,14 @@ const WIFI_TRIAL_PLAIN_MESSAGES: Record<string, string> = {
     'La contraseña debe tener entre 8 y 63 caracteres: solo letras, números y símbolos del teclado en inglés (sin tildes, eñes ni emoji).',
   'El SSID ya tiene ese nombre y no se indicó una contraseña nueva; no se envió nada':
     'No hay ningún cambio que aplicar: el nombre ya es ese y no escribiste una contraseña nueva.',
-  'La contraseña de esta red no tiene capacidad de escritura confirmada; no se envió nada':
-    'Este equipo no confirma que se pueda cambiar la contraseña de esta red. No se envió ningún cambio.',
+  'Cambio de contraseña bloqueado temporalmente: este equipo no confirma de forma confiable que la contraseña se aplicó. Por ahora solo se puede cambiar el nombre.':
+    'Cambio de contraseña no disponible por ahora: este equipo no confirma de forma confiable que la contraseña nueva se aplique. Por ahora solo se puede cambiar el nombre.',
+  'El equipo no respondió a tiempo. No se reenvía automáticamente; vuelve a comprobar más tarde o revisa el equipo.':
+    'El equipo tardó más de lo normal en responder. No se reenvía solo; vuelve a comprobar más tarde.',
+  'Nuevo nombre verificado en GenieACS. La contraseña no se puede confirmar por esta vía: el equipo la reporta vacía al leerla. Compruébala conectándote con la red.':
+    'Nombre nuevo confirmado por el equipo. La contraseña no se puede confirmar desde aquí: compruébala conectándote directamente a la red.',
+  'La contraseña no se puede confirmar por esta vía: el equipo la reporta vacía al leerla. Compruébala conectándote con la red.':
+    'La contraseña no se puede confirmar desde aquí: compruébala conectándote directamente a la red.',
 };
 
 /** Traduce únicamente para mostrar en pantalla; nunca cambia lo que el backend decide o registra. */

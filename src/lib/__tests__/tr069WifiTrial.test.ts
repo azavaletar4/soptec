@@ -16,6 +16,13 @@ test('traduce el mensaje de contraseña inválida sin nunca mostrar la contrase�
   );
 });
 
+test('traduce el bloqueo temporal de cambio de contraseña (incidente real 28/10/2026)', () => {
+  assert.equal(
+    plainWifiTrialMessage('Cambio de contraseña bloqueado temporalmente: este equipo no confirma de forma confiable que la contraseña se aplicó. Por ahora solo se puede cambiar el nombre.'),
+    'Cambio de contraseña no disponible por ahora: este equipo no confirma de forma confiable que la contraseña nueva se aplique. Por ahora solo se puede cambiar el nombre.',
+  );
+});
+
 test('un mensaje desconocido se muestra sin cambios (nunca se oculta información)', () => {
   assert.equal(plainWifiTrialMessage('Mensaje no mapeado aún'), 'Mensaje no mapeado aún');
 });

@@ -89,6 +89,7 @@ const configDisplayResult = computed(() => plainWifiTrialMessage(configResult.va
 const WIFI_OPERATION_STATE_LABELS: Record<string, string> = {
   sending: 'Enviando…', queued: 'Enviado, esperando confirmación del equipo',
   uncertain: 'Resultado incierto, no repetir', failed: 'Con error, revisar antes de repetir', verified: 'Confirmado',
+  unconfirmed: 'No se puede confirmar por esta vía', stuck: 'Sin respuesta del equipo, sigue pendiente',
 };
 const configOperationStateLabel = computed(() => {
   const state = configTrial.value?.record?.operations.at(-1)?.state;
@@ -96,20 +97,32 @@ const configOperationStateLabel = computed(() => {
 });
 const showPassword = ref(false);
 // Solo una tarea sin confirmar bloquea un envío nuevo (protección real contra duplicados);
-// un cambio ya confirmado (verificado o con error) no debe dejar el botón deshabilitado para
-// siempre — ese fue el bloqueo reportado en producción tras el primer cambio de SSID.
+// un cambio ya confirmado (verificado, con error o sin poder confirmarse) no debe dejar el
+// botón deshabilitado para siempre — ese fue el bloqueo reportado en producción tras el primer
+// cambio de SSID. "stuck" sigue bloqueando: la tarea anterior técnicamente sigue sin resolver.
 const configHasPendingOperation = computed(() => {
   const state = configTrial.value?.record?.operations.at(-1)?.state;
-  return state === 'sending' || state === 'queued' || state === 'uncertain';
+  return state === 'sending' || state === 'queued' || state === 'uncertain' || state === 'stuck';
 });
-// Mensaje principal simplificado (regla de usabilidad): solo uno de estos tres, según el
-// resultado REALMENTE confirmado por el backend — nunca jerga ni el detalle técnico aquí.
+// Mensaje principal simplificado (regla de usabilidad): según el resultado REALMENTE confirmado
+// por el backend — nunca jerga ni el detalle técnico aquí. "No se pudo confirmar" es un
+// resultado real y distinto de un fallo: no hay que mentir diciendo que falló algo que en
+// realidad el equipo nunca permite verificar (ver hallazgo del 28/10/2026 en ESTADO_DESARROLLO.md).
 const configStatusLabel = computed(() => {
   if (configSaving.value) return 'Guardando cambios…';
   const state = configTrial.value?.record?.operations.at(-1)?.state;
   if (state === 'sending' || state === 'queued') return 'Guardando cambios…';
+  if (state === 'stuck') return 'Sigue pendiente: el equipo no respondió todavía';
   if (state === 'verified') return 'Cambio realizado';
+  if (state === 'unconfirmed') return 'No se pudo confirmar';
   if (state === 'failed' || state === 'uncertain') return 'No se pudo completar el cambio';
+  return null;
+});
+const configStatusTone = computed<'success' | 'warning' | 'error' | null>(() => {
+  const label = configStatusLabel.value;
+  if (label === 'Cambio realizado') return 'success';
+  if (label === 'No se pudo completar el cambio') return 'error';
+  if (label === 'Sigue pendiente: el equipo no respondió todavía' || label === 'No se pudo confirmar') return 'warning';
   return null;
 });
 
@@ -636,21 +649,19 @@ async function handleUnlink() {
                   :type="showPassword ? 'text' : 'password'"
                   autocomplete="new-password"
                   class="field-input"
-                  :disabled="!configTrial?.enabled || configSelectedNetwork?.passwordWritable !== true"
-                  placeholder="Déjala en blanco para no cambiarla"
+                  disabled
+                  placeholder="No disponible por ahora"
                 />
                 <button type="button" class="btn-ghost text-xs whitespace-nowrap" @click="showPassword = !showPassword">{{ showPassword ? 'Ocultar' : 'Mostrar' }}</button>
               </div>
-              <p v-if="!configTrial?.enabled" class="text-xs text-amber-700 mt-1">Cambio de contraseña: solo disponible en el cambio real de esta red.</p>
-              <p v-else-if="configSelectedNetwork && configSelectedNetwork.passwordWritable !== true" class="text-xs text-amber-700 mt-1">Este equipo no confirma que se pueda escribir la contraseña de esta red.</p>
-              <p v-else class="text-xs text-slate-500 mt-1">Para deshacer un cambio de contraseña, vuelve a escribir la anterior aquí (no queda guardada).</p>
+              <p class="text-xs text-amber-700 mt-1">Cambio de contraseña: no disponible por ahora. Este equipo no confirma de forma confiable que una contraseña nueva se aplique.</p>
             </div>
           </div>
 
           <p v-if="configDisplayError" class="text-sm text-red-600 mb-3">{{ configDisplayError }}</p>
           <p v-if="!configTrial?.enabled && configDisplayResult" role="status" class="text-sm text-slate-700 mb-3">{{ configDisplayResult }}</p>
           <div v-if="configTrial?.enabled && configStatusLabel" class="flex items-center gap-2 mb-3">
-            <p role="status" class="text-sm" :class="configStatusLabel === 'No se pudo completar el cambio' ? 'text-red-600' : 'text-slate-700'">{{ configStatusLabel }}</p>
+            <p role="status" class="text-sm" :class="configStatusTone === 'error' ? 'text-red-600' : configStatusTone === 'warning' ? 'text-amber-700' : configStatusTone === 'success' ? 'text-emerald-700' : 'text-slate-700'">{{ configStatusLabel }}</p>
             <button v-if="configTrial.record" type="button" class="text-xs text-sky-600 hover:underline" :disabled="configSaving" @click="checkWifiTrialStatus">Actualizar estado</button>
           </div>
 

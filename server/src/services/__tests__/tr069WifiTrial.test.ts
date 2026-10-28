@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { createWifiTrial, WIFI_TRIAL_PATH, WIFI_TRIAL_PARAMETER, WIFI_TRIAL_PASSWORD_PARAMETER } from '../tr069WifiTrial';
+import { createWifiTrial, WIFI_TRIAL_PATH, WIFI_TRIAL_PARAMETER, WIFI_TRIAL_PASSWORD_PARAMETER, WIFI_TRIAL_CONTRACT } from '../tr069WifiTrial';
 import { WIFI_TEST_DEVICE, WIFI_TEST_SERIAL } from '../tr069WifiPreparation';
 import type { WifiInventory } from '../../../../src/lib/tr069WifiPlan';
 
@@ -32,8 +32,9 @@ function fixture() {
       assert.equal(init?.method, 'GET');
       if (String(url).includes('/devices/')) {
         // Nunca debe aparecer el valor real en una query/URL ni en ningún campo salvo _value
-        // dentro del cuerpo simulado de GenieACS (equivalente al NBI real).
-        assert.ok(!String(url).includes(state.password.value ?? 'SMARTRAYCO_NO_LEAK_SENTINEL'));
+        // dentro del cuerpo simulado de GenieACS (equivalente al NBI real). Cadena vacía no es
+        // un secreto que buscar (toda cadena la "incluye"); solo se revisa un valor real.
+        if (state.password.value) assert.ok(!String(url).includes(state.password.value));
         const row = { _id: WIFI_TEST_DEVICE, InternetGatewayDevice: { LANDevice: { 1: { WLANConfiguration: { 5: {
           KeyPassphrase: state.password.value === null ? {} : { _value: state.password.value, _timestamp: state.password.timestamp },
         } } } } } };
@@ -129,66 +130,24 @@ test('GET de estado no envía tareas; faults no se convierten en éxito y no fil
   } finally { f.cleanup(); }
 });
 
-// ---- Contraseña WiFi (opcional, mismo formulario que el SSID) ----
+// ---- Contraseña WiFi: BLOQUEADA (28/10/2026) tras el incidente real ----
+// Hallazgo real con la Huawei de prueba: KeyPassphrase se reporta vacío al leerlo de vuelta,
+// así que nunca se puede confirmar si una contraseña nueva se aplicó. Mientras no se resuelva
+// cómo verificarlo con este firmware, change() rechaza cualquier intento de envío.
 const SYNTHETIC_PW = 'Synthetic#Pass1';
-test('contraseña inválida (corta, larga, controles o multibyte) rechaza antes de enviar; nunca aparece en el error', async () => {
+test('cambio de contraseña bloqueado: cualquier valor (válido o no) se rechaza sin enviar nada', async () => {
   const f = fixture(); try {
-    for (const password of ['short1', 'a'.repeat(64), 'with\tcontrol1', '😀'.repeat(10), 'ñññññññ1']) {
+    for (const password of [SYNTHETIC_PW, 'short1', 'a'.repeat(64), 'with\tcontrol1', '😀'.repeat(10)]) {
       await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, password }, 'admin'), (e: Error) => {
-        assert.ok(!e.message.includes(password)); return true;
+        assert.match(e.message, /bloqueado temporalmente/); assert.ok(!e.message.includes(password)); return true;
       });
     }
-    assert.equal(f.state.posts.length, 0);
+    assert.equal(f.state.posts.length, 0, 'ningun intento de contraseña llega a encolar una tarea');
   } finally { f.cleanup(); }
 });
-test('mismo SSID sin contraseña nueva no envía nada; mismo SSID con contraseña nueva sí', async () => {
+test('mismo SSID sin contraseña nueva no envía nada (sin cambiar nada, no hay nada que bloquear)', async () => {
   const f = fixture(); try {
     await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, ssid: 'Original' }, 'admin'), /no se indicó una contraseña/);
-    assert.equal(f.state.posts.length, 0);
-    const result = await f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, ssid: 'Original', password: SYNTHETIC_PW }, 'admin');
-    assert.equal(result.record!.operations[0].after, 'Original', 'SSID no cambia si no se pidió');
-    assert.equal(result.record!.operations[0].passwordChanged, true);
-    assert.deepEqual(f.state.posts[0], { name: 'setParameterValues', parameterValues: [[WIFI_TRIAL_PASSWORD_PARAMETER, SYNTHETIC_PW, 'xsd:string']] });
-    assert.ok(!JSON.stringify(result).includes(SYNTHETIC_PW), 'Nunca la contraseña real en la respuesta');
-    assert.ok(!fs.readFileSync(f.file, 'utf8').includes(SYNTHETIC_PW), 'Nunca la contraseña real en el respaldo persistente');
-  } finally { f.cleanup(); }
-});
-test('SSID + contraseña en una sola tarea atómica; se verifica solo cuando ambas huellas/timestamps confirman', async () => {
-  const f = fixture(); try {
-    const queued = await f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, password: SYNTHETIC_PW }, 'admin');
-    assert.deepEqual(f.state.posts[0], { name: 'setParameterValues',
-      parameterValues: [[WIFI_TRIAL_PARAMETER, 'Nuevo', 'xsd:string'], [WIFI_TRIAL_PASSWORD_PARAMETER, SYNTHETIC_PW, 'xsd:string']] });
-    assert.equal(queued.record!.operations[0].afterPasswordHash, sha256Hex(SYNTHETIC_PW));
-    f.state.pending = [];
-    await f.service.verify(nbi, WIFI_TEST_SERIAL);
-    assert.deepEqual(f.state.posts[1], { name: 'getParameterValues', parameterNames: [WIFI_TRIAL_PARAMETER, WIFI_TRIAL_PASSWORD_PARAMETER] });
-    f.state.pending = [];
-    const fresh = new Date(Date.now() + 2000).toISOString();
-    f.inv.networks[0].ssid = 'Nuevo'; f.inv.networks[0].timestamp = fresh; f.inv.lastInform = fresh;
-    let status = await f.service.status(nbi, WIFI_TEST_SERIAL);
-    assert.equal(status.record!.operations[0].state, 'queued', 'SSID confirmado pero contraseña sin leerse aún no verifica');
-    f.state.password = { value: SYNTHETIC_PW, timestamp: fresh };
-    status = await f.service.status(nbi, WIFI_TEST_SERIAL);
-    assert.equal(status.record!.operations[0].state, 'verified');
-  } finally { f.cleanup(); }
-});
-test('contraseña leída no coincide (huella distinta): no verifica aunque el SSID sí confirmó', async () => {
-  const f = fixture(); try {
-    await f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, password: SYNTHETIC_PW }, 'admin');
-    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
-    const fresh = new Date(Date.now() + 2000).toISOString();
-    f.inv.networks[0].ssid = 'Nuevo'; f.inv.networks[0].timestamp = fresh; f.inv.lastInform = fresh;
-    f.state.password = { value: 'otra-cosa-distinta', timestamp: fresh };
-    const status = await f.service.status(nbi, WIFI_TEST_SERIAL);
-    assert.equal(status.record!.operations[0].state, 'queued');
-  } finally { f.cleanup(); }
-});
-test('sin capacidad de escritura confirmada para la contraseña, no se envía nada', async () => {
-  const f = fixture(); try {
-    f.inv.networks[0].passwordWritable = false;
-    await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, password: SYNTHETIC_PW }, 'admin'), /capacidad de escritura/);
-    f.inv.networks[0].passwordWritable = null;
-    await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, password: SYNTHETIC_PW }, 'admin'), /capacidad de escritura/);
     assert.equal(f.state.posts.length, 0);
   } finally { f.cleanup(); }
 });
@@ -200,7 +159,7 @@ test('restaurar nunca acepta contraseña: solo repite el SSID anterior', async (
 
 // ---- Un cambio ya confirmado no bloquea el siguiente para siempre (corrección del boton
 // deshabilitado reportado en produccion): solo una tarea EN CURSO bloquea un envio nuevo. ----
-test('tras un cambio verificado, un segundo cambio (solo nombre, solo contraseña o ambos) SI se permite', async () => {
+test('tras un cambio verificado, un segundo cambio de solo nombre SI se permite', async () => {
   const f = fixture(); try {
     await f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin');
     f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
@@ -210,10 +169,9 @@ test('tras un cambio verificado, un segundo cambio (solo nombre, solo contraseñ
     assert.equal(status.record!.operations[0].state, 'verified', 'primer cambio ya confirmado');
     const second = await f.service.change(nbi, WIFI_TEST_SERIAL,
       { requestId: '00000000-0000-4000-8000-0000000000a2', confirmed: true, deviceId: WIFI_TEST_DEVICE, path: WIFI_TRIAL_PATH,
-        ssid: 'Nuevo', expectedSsid: 'Nuevo', expectedTimestamp: fresh, password: SYNTHETIC_PW }, 'admin');
+        ssid: 'wifi 5 rayco', expectedSsid: 'Nuevo', expectedTimestamp: fresh }, 'admin');
     assert.equal(second.record!.operations.length, 2, 'se agrega una segunda operacion, no se reemplaza la primera');
     assert.equal(second.record!.operations[1].state, 'queued');
-    assert.equal(second.record!.operations[1].passwordChanged, true);
   } finally { f.cleanup(); }
 });
 test('mientras el cambio anterior sigue sin confirmar (queued/uncertain), un cambio nuevo SI bloquea', async () => {
@@ -225,21 +183,8 @@ test('mientras el cambio anterior sigue sin confirmar (queued/uncertain), un cam
     assert.equal(f.state.posts.length, 1, 'no se envio una segunda tarea');
   } finally { f.cleanup(); }
 });
-test('mensaje de exito describe exactamente lo confirmado: nombre, contraseña, ambos o restauracion — nunca "SSID" para una contraseña', async () => {
+test('mensaje de exito: solo nombre', async () => {
   const f = fixture(); try {
-    // Solo contraseña.
-    await f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, ssid: 'Original', password: SYNTHETIC_PW }, 'admin');
-    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
-    const fresh1 = new Date(Date.now() + 2000).toISOString();
-    f.state.password = { value: SYNTHETIC_PW, timestamp: fresh1 };
-    let status = await f.service.status(nbi, WIFI_TEST_SERIAL);
-    assert.equal(status.message, 'Nueva contraseña verificada en GenieACS. Comprueba también la red y navegación.');
-    assert.ok(!status.message.includes('SSID'), 'una contraseña confirmada nunca se anuncia como SSID');
-  } finally { f.cleanup(); }
-});
-test('mensaje de exito: solo nombre y nombre+contraseña juntos', async () => {
-  const f = fixture(); try {
-    // Solo nombre.
     await f.service.change(nbi, WIFI_TEST_SERIAL, f.body, 'admin');
     f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
     const fresh = new Date(Date.now() + 2000).toISOString();
@@ -248,15 +193,78 @@ test('mensaje de exito: solo nombre y nombre+contraseña juntos', async () => {
     assert.equal(onlyName.message, 'Nuevo nombre verificado en GenieACS. Comprueba también la red y navegación.');
   } finally { f.cleanup(); }
 });
-test('mensaje de exito: nombre y contraseña juntos', async () => {
+
+// ---- Incidente real del 28/10/2026: SSID cambia, contraseña "falla" y el panel queda
+// "Guardando cambios" para siempre. Los registros con passwordChanged:true son anteriores al
+// bloqueo de arriba (ya existían antes de esta corrección) — se fabrican directo en el archivo,
+// igual que la operación real encontrada en producción, para probar cómo se resuelven ahora. ----
+function recordWithOperation(op: object) {
+  return { version: 1, serial: WIFI_TEST_SERIAL, deviceId: WIFI_TEST_DEVICE, contractNumber: WIFI_TRIAL_CONTRACT,
+    path: WIFI_TRIAL_PATH, originalSsid: 'wifi 5 ray', originalTimestamp: '2026-10-27T22:37:31.591Z', operations: [op] };
+}
+test('contraseña reportada vacía al leerla: pasa a "unconfirmed", nunca a "verified" ni "failed"', async () => {
   const f = fixture(); try {
-    await f.service.change(nbi, WIFI_TEST_SERIAL, { ...f.body, password: SYNTHETIC_PW }, 'admin');
-    f.state.pending = []; await f.service.verify(nbi, WIFI_TEST_SERIAL); f.state.pending = [];
-    const fresh = new Date(Date.now() + 2000).toISOString();
-    f.inv.networks[0].ssid = 'Nuevo'; f.inv.networks[0].timestamp = fresh; f.inv.lastInform = fresh;
-    f.state.password = { value: SYNTHETIC_PW, timestamp: fresh };
-    const both = await f.service.status(nbi, WIFI_TEST_SERIAL);
-    assert.equal(both.message, 'Nuevo nombre y nueva contraseña verificados en GenieACS. Comprueba también la red y navegación.');
+    const sentAt = new Date(Date.now() - 60_000).toISOString();
+    const readSentAt = new Date(Date.now() - 30_000).toISOString();
+    fs.writeFileSync(f.file, JSON.stringify(recordWithOperation({
+      requestId: '00000000-0000-4000-8000-0000000000b1', kind: 'change', actorId: 'admin',
+      before: 'wifi 5 ray', after: 'wifi 5 rayco', sentAt, state: 'queued',
+      passwordChanged: true, afterPasswordHash: sha256Hex(SYNTHETIC_PW),
+      taskId: 'task-write', readSentAt, readTaskId: 'task-read',
+    })));
+    const fresh = new Date().toISOString();
+    f.inv.networks[0].ssid = 'wifi 5 rayco'; f.inv.networks[0].timestamp = fresh; f.inv.lastInform = fresh;
+    f.state.password = { value: '', timestamp: fresh }; // Exactamente lo que reportó el equipo real.
+    const status = await f.service.status(nbi, WIFI_TEST_SERIAL);
+    assert.equal(status.record!.operations[0].state, 'unconfirmed');
+    assert.match(status.message, /no se puede confirmar por esta vía/);
+    assert.match(status.message, /Nuevo nombre verificado/, 'el nombre sí se confirma de forma independiente');
+    assert.ok(!status.message.includes(SYNTHETIC_PW));
+  } finally { f.cleanup(); }
+});
+test('"unconfirmed" es terminal: un cambio nuevo (solo nombre) SI se permite después', async () => {
+  const f = fixture(); try {
+    const sentAt = new Date(Date.now() - 60_000).toISOString();
+    fs.writeFileSync(f.file, JSON.stringify(recordWithOperation({
+      requestId: '00000000-0000-4000-8000-0000000000b2', kind: 'change', actorId: 'admin',
+      before: 'wifi 5 ray', after: 'wifi 5 rayco', sentAt, state: 'unconfirmed',
+      passwordChanged: true, afterPasswordHash: sha256Hex(SYNTHETIC_PW),
+      taskId: 'task-write', readSentAt: sentAt, readTaskId: 'task-read',
+    })));
+    f.inv.networks[0].ssid = 'wifi 5 rayco';
+    const result = await f.service.change(nbi, WIFI_TEST_SERIAL,
+      { requestId: '00000000-0000-4000-8000-0000000000b3', confirmed: true, deviceId: WIFI_TEST_DEVICE, path: WIFI_TRIAL_PATH,
+        ssid: 'wifi 5 final', expectedSsid: 'wifi 5 rayco', expectedTimestamp: f.inv.networks[0].timestamp! }, 'admin');
+    assert.equal(result.record!.operations.length, 2);
+  } finally { f.cleanup(); }
+});
+test('tarea sin respuesta por mucho tiempo pasa a "stuck" en vez de seguir "Guardando cambios" sin explicación', async () => {
+  const f = fixture(); try {
+    const old = new Date(Date.now() - 25 * 60 * 1000).toISOString();
+    fs.writeFileSync(f.file, JSON.stringify(recordWithOperation({
+      requestId: '00000000-0000-4000-8000-0000000000b4', kind: 'change', actorId: 'admin',
+      before: 'wifi 5 ray', after: 'wifi 5 rayco', sentAt: old, state: 'queued',
+      passwordChanged: true, afterPasswordHash: sha256Hex(SYNTHETIC_PW),
+      taskId: 'task-write', readSentAt: old, readTaskId: 'task-read-stuck',
+    })));
+    f.state.pending = [{ _id: 'task-read-stuck' }]; // Sigue sin completarse en GenieACS.
+    const status = await f.service.status(nbi, WIFI_TEST_SERIAL);
+    assert.equal(status.record!.operations[0].state, 'stuck');
+    assert.match(status.message, /no respondió a tiempo/);
+    assert.equal(f.state.posts.length, 0, 'nunca se reenvía sola');
+  } finally { f.cleanup(); }
+});
+test('"stuck" sigue bloqueando un cambio nuevo (la tarea anterior técnicamente sigue sin resolver)', async () => {
+  const f = fixture(); try {
+    const old = new Date(Date.now() - 25 * 60 * 1000).toISOString();
+    fs.writeFileSync(f.file, JSON.stringify(recordWithOperation({
+      requestId: '00000000-0000-4000-8000-0000000000b5', kind: 'change', actorId: 'admin',
+      before: 'wifi 5 ray', after: 'wifi 5 rayco', sentAt: old, state: 'stuck',
+      taskId: 'task-write', readSentAt: old, readTaskId: 'task-read-stuck',
+    })));
+    await assert.rejects(f.service.change(nbi, WIFI_TEST_SERIAL,
+      { ...f.body, requestId: '00000000-0000-4000-8000-0000000000b6' }, 'admin'), /sin confirmar/);
+    assert.equal(f.state.posts.length, 0);
   } finally { f.cleanup(); }
 });
 test('mensaje de exito de una restauracion sigue hablando de nombre, nunca de contraseña', async () => {
