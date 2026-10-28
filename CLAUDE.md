@@ -56,15 +56,23 @@ Extracción GPON comprobada y aceptada en `dce97e7`: AST del helper y OLT
 equivalentes con bindings; index idéntico al deshacer únicamente las precargas
 de OLT/TR-069. Fuente gponSerial intacta. Transición específica fijada por
 hashes, commit, fuentes e importadores; ningún permiso general para otros chunks.
-21/21 pruebas del contrato PASS. Nuevo `prepare` PASS, rollback probado.
-El nuevo `build` supera GPON y se detiene por **otro bloqueo**:
-`UNRELATED_STATIC_ASSETS_CHANGED:.vite/manifest.json` (archivo fuera del grafo
-JS/CSS comparado como estático). No corregido ni omitido: el propietario pidió
-detenerse ante otro bloqueo. No deploy/verify ni tareas TR-069 en este intento.
-SSH/salud al cierre 23:32:37 UTC PASS; mismas imágenes, contenedores y arranques
-(backend d6ce2c2, frontend 5d48a10). Detalle/grafos/prueba/respaldos vigentes:
-`docs/TR069-HOSTS-CHUNK-EXTRACTION-20261028.md` y JSON referenciados allí.
-No repetir la prueba activa; esperar indicación sobre el manifiesto Vite.
+Metadatos Vite: corrección local `8b9f89d` valida estructura, referencias,
+imports compilados, grafo, entradas HTML y hashes de artefactos; solo exime
+`.vite/manifest.json` de igualdad binaria después de validarlo. CSS sintético
+normalizado; los demás archivos siguen estrictos. **NO LISTO PARA PUBLICAR**:
+`prepare` PASS, rollback probado; build real aislado FAIL por regla nueva
+demasiado estricta: `INVALID_VITE_LIST:...AsistenciaPanel...:dynamicImports`.
+Vite nativo repite index.html 4 veces y ApexCharts SSR 2 veces, tanto en activo
+como candidato. No se corrigió tras el fallo: instrucción de parar y consolidar.
+Regresión real añadida: **30 PASS + 1 FAIL**, sin ocultarlo con expectedFailure.
+Diagnóstico conjunto: cero referencias/imports/hashes inválidos, 1.119 archivos
+estáticos/históricos sin cambios; únicas diferencias semánticas de metadata
+son las tres entradas GPON/OLT/TR-069 ya justificadas. Resto de fases no ejecutado.
+Sin deploy/verify ni tareas TR-069. SSH/salud final **23:42:35 UTC PASS**;
+mismas imágenes/contenedores/arranques (backend d6ce2c2, frontend 5d48a10).
+Detalle, controles pendientes y respaldos vigentes:
+`docs/TR069-HOSTS-VITE-VERIFICADOR-20261028.md` y JSON referenciados allí.
+No repetir prueba activa ni reintentar release sin nueva indicación.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 

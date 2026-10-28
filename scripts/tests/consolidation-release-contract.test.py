@@ -63,6 +63,20 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertNotEqual(before[VITE_MANIFEST], after[VITE_MANIFEST])
         self.assertEqual(validate_frontend(before, after, sample_scope(frontend=True)), ['assets/Tr069View.js'])
 
+    def test_vite_native_repeated_dynamic_imports_are_valid(self):
+        # Reproduce el bloqueo real de ambos manifiestos (AsistenciaPanel: 4
+        # referencias a index.html). Pendiente: no parchear tras detener release.
+        before = frontend()
+        before['assets/Asistencia-AAAAAAAA.js'] += b';async function read(){await import("./index-AAAAAAAA.js");await import("./index-AAAAAAAA.js")}'
+        after = {**before, 'assets/Tr069View-AAAAAAAA.js': b'export const hosts=2'}
+        before, after = self.metadata_fixture(before), self.metadata_fixture(after)
+        for files in [before, after]:
+            manifest = json.loads(files[VITE_MANIFEST])
+            manifest['_Asistencia-AAAAAAAA.js']['dynamicImports'] = ['index.html'] * 4
+            files[VITE_MANIFEST] = json.dumps(manifest).encode()
+            files.update(self.rehash_metadata(files))
+        self.assertEqual(validate_frontend(before, after, sample_scope(frontend=True)), ['assets/Tr069View.js'])
+
     def test_vite_manifest_rejects_missing_asset_and_import_key(self):
         before, after = self.metadata_pair()
         for field in ['file', 'imports']:

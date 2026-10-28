@@ -28,7 +28,7 @@ VM de producción (`192.168.55.201`), corrección Hosts desplegada el
 Verificados código Hosts contra SHA-256 del commit, imagen real, fuentes
 backend completas, frontend completo, 125 assets HTTP, 11 rutas y HTTP 401
 sin autenticación en Hosts y WiFi. Sin migraciones ni tareas GenieACS.
-Última comprobación SSH de imágenes/salud: 28/10 **23:32:37 UTC**, PASS.
+Última comprobación SSH de imágenes/salud: 28/10 **23:42:35 UTC**, PASS.
 Mismos contenedores, imágenes y arranques de los cinco servicios; ningún
 despliegue posterior. Respaldos renovados y restauración aislada probada
 contra backend d6ce2c2 y frontend 5d48a10; detalle en punto 5.
@@ -64,8 +64,8 @@ requiere ENABLED=true y serial en TR069_HOSTS_ON_DEMAND_SERIALS; se planeó
 solo HWTC1D3691B7. Otras ONT se bloquean antes de GET/tareas. No se repitió
 la lectura para probar el guard; pruebas locales 67/67 PASS y tsc backend PASS.
 Contrato de release: solo los dos ajustes de entorno Hosts, jamás WiFi o
-credenciales; hashes del entorno efectivo completo y de rollback. 21/21
-pruebas del contrato PASS (tres escenarios, alcance y entorno restringido).
+credenciales; hashes del entorno efectivo completo y de rollback. Suite actual:
+**30 PASS + 1 FAIL** (regresión nativa del bloqueo Vite, ver debajo).
 Fuente candidata ac511d7c70c8a11700d3553f331af5bb2930926a; snapshot 305 fuentes.
 Colisión corregida en `32e64ee`: dos workers QR legítimos sin cambios,
 conservados por identidad física y bytes exactos, incluidas sus referencias.
@@ -73,13 +73,23 @@ Extracción GPON resuelta en `dce97e7`: fuente sin cambios; AST del helper y OLT
 equivalentes con bindings; index idéntico tras remapear solo las precargas
 OLT/TR-069. Transición específica fijada por hashes, commit, fuentes y grafo;
 sin ampliar frontendAssets ni permitir cambios funcionales de módulos protegidos.
-Nuevo `prepare` PASS, respaldos/rollback aislado contra imágenes activas;
-`build` supera GPON y FAIL por bloqueo distinto:
-**UNRELATED_STATIC_ASSETS_CHANGED:.vite/manifest.json**. El contrato compara
-ese archivo fuera del grafo JS/CSS como estático. No se corrigió ni omitió:
-se detuvo conforme a instrucción. No deploy/verify ni nuevas tareas TR-069.
-SSH/salud final PASS 23:32:37 UTC. Resultado/evidencia/respaldos:
-`docs/TR069-HOSTS-CHUNK-EXTRACTION-20261028.md` y JSON referenciados allí.
+Corrección local de metadatos `8b9f89d`: estructura Vite, archivos reales,
+imports estáticos/dinámicos compilados, entradas HTML, cobertura y hashes.
+Solo `.vite/manifest.json` validado deja de compararse binariamente; mantiene
+identidad/dependencias protegidas y los otros estáticos/huérfanos estrictos.
+**NO LISTO PARA PUBLICAR**: `prepare` PASS con respaldos/rollback aislado;
+build real FAIL por regla de unicidad nueva demasiado estricta:
+`INVALID_VITE_LIST:...AsistenciaPanel...:dynamicImports`. Ambos manifiestos
+nativos repiten index.html 4 veces en AsistenciaPanel y SSR ApexCharts 2 veces.
+No se siguió parcheando: instrucción de detenerse y consolidar. Se añadió
+regresión que falla (30 PASS + 1 FAIL), sin marcarla expectedFailure.
+Diagnóstico conjunto: cero referencias faltantes/imports inconsistentes/hashes
+incorrectos; 1.119 archivos estáticos/históricos sin cambios. Metadata semántica
+solo difiere en las tres entradas GPON/OLT/TR-069 justificadas previamente.
+Doble build, backend, guard, configuración candidata y deploy/verify pendientes,
+no afirmar que pasaron. Sin tareas TR-069 nuevas ni cambios en producción.
+SSH/salud final PASS 23:42:35 UTC. Resultado/evidencia/respaldos:
+`docs/TR069-HOSTS-VITE-VERIFICADOR-20261028.md` y JSON referenciados allí.
 Nuevo panel Hosts inicialmente cerrado, independiente del detalle general.
 Abrirlo explícitamente o pulsar Actualizar llama POST de lectura, solo
 ADMIN/SUPERADMIN; GET de caché conserva permisos de lectura existentes.
@@ -226,10 +236,11 @@ es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
 **5. Próxima tarea autorizada:** ninguna en ejecución. Colisión y extracción
-GPON resueltas y probadas; despliegue detenido por diferencia estática en
-`.vite/manifest.json`, conforme a instrucción de parar ante otro bloqueo. No forzar,
+GPON resueltas. Nuevo validador semántico de metadata local, aún no publicable:
+rechaza repeticiones nativas de dynamicImports. Diagnóstico consolidado completo
+entregado; instrucción explícita de parar sin parches sucesivos. No forzar,
 ampliar alcance ni reintentar build/deploy sin nueva indicación. SSH/health
-final PASS 23:32:37 UTC; cola no reconsultada en este intento, cero tareas nuevas.
+final PASS 23:42:35 UTC; cola no reconsultada en este intento, cero tareas nuevas.
 No repetir la prueba activa consumida. El ensayo anterior envió **una** tarea GPV de
 35 hojas con connection_request, expiración y HTTP 200, cero tareas de
 configuración y cero reinicios; cola/faults vacíos a las 23:07:07 UTC.
@@ -237,12 +248,12 @@ Sin medición de tráfico/uptime PPPoE; no afirmar una prueba de navegación.
 No hubo despliegue ni cambios a configuración de equipos.
 Fuente/snapshot vigente: **ac511d7c70c8a11700d3553f331af5bb2930926a**.
 Staging y respaldos actuales (`backend-before.image.tar`, `frontend-before.image.tar`):
-`/opt/smartrayco-staging/frontend-consolidado-tr069-ac511d7-86075e28a2/`.
+`/opt/smartrayco-staging/frontend-consolidado-tr069-ac511d7-6e89052be8/`.
 Restauración aislada verificada contra backend d6ce2c2 y frontend 5d48a10.
 No se necesitó ni ejecutó rollback en producción; deploy/verify no se iniciaron.
 No regenerar release-source.json desde HEAD documental para operar este intento.
 Resultados locales:
-`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-ac511d7-86075e28a2/`.
+`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-ac511d7-6e89052be8/`.
 El staging previo de d6ce2c2 queda como antecedente; no confundir su rollback
 con los respaldos de este intento, que restauran las dos imágenes activas.
 Bandas/unidades RSSI siguen pendientes de verificación; no explorar credenciales
@@ -251,7 +262,7 @@ Para una release NUEVA declarar su commit y alcance, exportar su snapshot
 correspondiente y ejecutar las fases por separado. Nunca ampliar el alcance
 para silenciar una diferencia inesperada ni asumir backend desde el manifiesto
 frontend. Pendiente del
-**propietario**: indicar cómo continuar con la diferencia de `.vite/manifest.json`;
+**propietario**: indicar cómo continuar desde el diagnóstico consolidado Vite;
 la comprobación SSH de cierre ya pasó. Cualquier lectura activa adicional de banda/asociaciones
 requiere su autorización aparte y,
 por separado, una prueba de

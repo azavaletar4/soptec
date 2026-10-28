@@ -1,0 +1,275 @@
+{
+  "diagnosticOnly": true,
+  "releaseAllowed": false,
+  "at": "2026-10-28T23:42:35.672926+00:00",
+  "services": {
+    "frontend": {
+      "id": "c611205998a174102c15ed9696cdbbfb400b0a2e773329dd099a585efd499ac7",
+      "image": "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+      "tag": "smartrayco-frontend-consolidado:5d48a10ea497",
+      "started": "2026-10-28T20:33:14.498037989Z",
+      "running": true
+    },
+    "backend": {
+      "id": "5331222b163214cec99254ef591400c9d3f5d41c754d24c9b964fcf8bfa56fc8",
+      "image": "sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001",
+      "tag": "smartrayco-backend-wifitrial:d6ce2c2f578f",
+      "started": "2026-10-28T21:30:20.121595954Z",
+      "running": true
+    },
+    "caddy": {
+      "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+      "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+      "tag": "caddy:2",
+      "started": "2026-10-27T17:59:52.601749213Z",
+      "running": true
+    },
+    "mongo": {
+      "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+      "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+      "tag": "mongo:8.0",
+      "started": "2026-10-27T17:59:52.61111918Z",
+      "running": true
+    },
+    "genieacs": {
+      "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+      "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+      "tag": "drumsergio/genieacs:1.2.16.0",
+      "started": "2026-10-27T17:59:52.552085739Z",
+      "running": true
+    }
+  },
+  "health": {
+    "status": "ok",
+    "service": "smartrayco-api",
+    "timestamp": "2026-10-28T23:42:35.913Z"
+  },
+  "metadataChecks": {
+    "active": {
+      "manifestEntries": 119,
+      "reachableAssets": 122,
+      "duplicateLists": [
+        {
+          "entry": "_AsistenciaPanel.vue_vue_type_script_setup_true_lang-DZTZIfka.js",
+          "field": "dynamicImports",
+          "duplicates": {
+            "index.html": 4
+          }
+        },
+        {
+          "entry": "_vue3-apexcharts-DmVXyjZB.js",
+          "field": "dynamicImports",
+          "duplicates": {
+            "../../app/node_modules/vue3-apexcharts/dist/apexcharts.ssr.esm-fe46cd2d.js": 2
+          }
+        }
+      ],
+      "missingReferences": [],
+      "compiledImportMismatches": [],
+      "invalidKeys": [],
+      "duplicatePhysicalFiles": [],
+      "artifactHashMismatches": [],
+      "uncoveredGraphAssets": [],
+      "unreachableChunks": [],
+      "unhashedGraphAssets": [],
+      "htmlEntryFiles": [
+        "assets/index-B3vMHElu.js"
+      ],
+      "manifestEntryFiles": [
+        "assets/index-B3vMHElu.js"
+      ],
+      "manifestSHA256": "a542473a0d45dbe9762fd861a9832a689f4e1863316f88f97dcb23fee274a73a",
+      "actualValidator": "INVALID_VITE_LIST:_AsistenciaPanel.vue_vue_type_script_setup_true_lang-DZTZIfka.js:dynamicImports"
+    },
+    "candidate": {
+      "manifestEntries": 120,
+      "reachableAssets": 123,
+      "duplicateLists": [
+        {
+          "entry": "_AsistenciaPanel.vue_vue_type_script_setup_true_lang-DDefuQq7.js",
+          "field": "dynamicImports",
+          "duplicates": {
+            "index.html": 4
+          }
+        },
+        {
+          "entry": "_vue3-apexcharts-DbMEqryg.js",
+          "field": "dynamicImports",
+          "duplicates": {
+            "../../app/node_modules/vue3-apexcharts/dist/apexcharts.ssr.esm-fe46cd2d.js": 2
+          }
+        }
+      ],
+      "missingReferences": [],
+      "compiledImportMismatches": [],
+      "invalidKeys": [],
+      "duplicatePhysicalFiles": [],
+      "artifactHashMismatches": [],
+      "uncoveredGraphAssets": [],
+      "unreachableChunks": [],
+      "unhashedGraphAssets": [],
+      "htmlEntryFiles": [
+        "assets/index-BSKitqj0.js"
+      ],
+      "manifestEntryFiles": [
+        "assets/index-BSKitqj0.js"
+      ],
+      "manifestSHA256": "b25f941ea61a20b54393a2093855b02109b3a11835bf805ae258787c10f3a8b1",
+      "actualValidator": "INVALID_VITE_LIST:_AsistenciaPanel.vue_vue_type_script_setup_true_lang-DDefuQq7.js:dynamicImports"
+    }
+  },
+  "normalizedMetadataDifferences": {
+    "assets/OltDetailView.js": {
+      "active": {
+        "src": "src/views/olt/OltDetailView.vue",
+        "name": "OltDetailView",
+        "isDynamicEntry": true,
+        "imports": [
+          "assets/AppLayout.vue_vue_type_script_setup_true_lang.js",
+          "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang.js",
+          "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang.js",
+          "assets/catalogs.js",
+          "assets/clientLifecycle.js",
+          "assets/clients.js",
+          "assets/contracts.js",
+          "assets/domain.js",
+          "assets/foFibra.js",
+          "assets/imageCompression.js",
+          "assets/index.js",
+          "assets/infraElementos.js",
+          "assets/logo-icon.js",
+          "assets/mikrotik.js",
+          "assets/napOccupancy.js",
+          "assets/nativeApp.js",
+          "assets/olt.js",
+          "assets/oltAlertPresentation.js",
+          "assets/tr069.js",
+          "assets/useToast.js"
+        ],
+        "dynamicImports": [],
+        "css": [],
+        "assets": []
+      },
+      "candidate": {
+        "src": "src/views/olt/OltDetailView.vue",
+        "name": "OltDetailView",
+        "isDynamicEntry": true,
+        "imports": [
+          "assets/AppLayout.vue_vue_type_script_setup_true_lang.js",
+          "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang.js",
+          "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang.js",
+          "assets/catalogs.js",
+          "assets/clientLifecycle.js",
+          "assets/clients.js",
+          "assets/contracts.js",
+          "assets/domain.js",
+          "assets/foFibra.js",
+          "assets/gponSerial.js",
+          "assets/imageCompression.js",
+          "assets/index.js",
+          "assets/infraElementos.js",
+          "assets/logo-icon.js",
+          "assets/mikrotik.js",
+          "assets/napOccupancy.js",
+          "assets/nativeApp.js",
+          "assets/olt.js",
+          "assets/oltAlertPresentation.js",
+          "assets/tr069.js",
+          "assets/useToast.js"
+        ],
+        "dynamicImports": [],
+        "css": [],
+        "assets": []
+      }
+    },
+    "assets/Tr069View.js": {
+      "active": {
+        "src": "src/views/tr069/Tr069View.vue",
+        "name": "Tr069View",
+        "isDynamicEntry": true,
+        "imports": [
+          "assets/AppLayout.vue_vue_type_script_setup_true_lang.js",
+          "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang.js",
+          "assets/catalogs.js",
+          "assets/clientLifecycle.js",
+          "assets/clients.js",
+          "assets/contracts.js",
+          "assets/index.js",
+          "assets/logo-icon.js",
+          "assets/nativeApp.js",
+          "assets/olt.js",
+          "assets/tr069.js",
+          "assets/useOntEvidenceClock.js",
+          "assets/useToast.js"
+        ],
+        "dynamicImports": [],
+        "css": [],
+        "assets": []
+      },
+      "candidate": {
+        "src": "src/views/tr069/Tr069View.vue",
+        "name": "Tr069View",
+        "isDynamicEntry": true,
+        "imports": [
+          "assets/AppLayout.vue_vue_type_script_setup_true_lang.js",
+          "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang.js",
+          "assets/catalogs.js",
+          "assets/clientLifecycle.js",
+          "assets/clients.js",
+          "assets/contracts.js",
+          "assets/gponSerial.js",
+          "assets/index.js",
+          "assets/logo-icon.js",
+          "assets/nativeApp.js",
+          "assets/olt.js",
+          "assets/tr069.js",
+          "assets/useOntEvidenceClock.js",
+          "assets/useToast.js"
+        ],
+        "dynamicImports": [],
+        "css": [],
+        "assets": []
+      }
+    },
+    "assets/gponSerial.js": {
+      "active": null,
+      "candidate": {
+        "name": "gponSerial",
+        "imports": [],
+        "dynamicImports": [],
+        "css": [],
+        "assets": []
+      }
+    }
+  },
+  "stage": "/opt/smartrayco-staging/frontend-consolidado-tr069-ac511d7-6e89052be8",
+  "phaseEvidence": {
+    "prepared.json": true,
+    "canonical-private.log": true,
+    "repro-private.log": false,
+    "backend-private.log": false,
+    "backend-repro-private.log": false,
+    "built.json": false,
+    "attempt.json": false,
+    "deploy-result.json": false,
+    "auto-rollback.json": false
+  },
+  "tasksSent": 0,
+  "staticFileComparison": {
+    "evidence": "Captured full image hashes and previously verified unchanged candidate graph",
+    "outsideFiles": 1119,
+    "unexpectedChanges": []
+  },
+  "remainingControlsNotExecuted": [
+    "nginx candidate comparison",
+    "second frontend build and reproducibility",
+    "both backend builds and source comparisons",
+    "backend route import in network-none container",
+    "read-only WiFi contract guard",
+    "effective candidate Compose configuration",
+    "candidate image archives",
+    "predeploy drift checks",
+    "deploy",
+    "HTTP routes/assets/authentication verify"
+  ]
+}
