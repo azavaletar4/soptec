@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { normalizeGponSerial } from '../../../src/lib/gponSerial';
 import type { WifiInventory } from '../../../src/lib/tr069WifiPlan';
 import type { WifiTrialOperation, WifiTrialRecord, WifiTrialStatus } from '../../../src/lib/tr069WifiTrial';
@@ -8,6 +9,14 @@ import { readWifiInventory, WIFI_TEST_DEVICE, WIFI_TEST_SERIAL } from './tr069Wi
 
 export const WIFI_TRIAL_PATH = 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5';
 export const WIFI_TRIAL_PARAMETER = WIFI_TRIAL_PATH + '.SSID';
+export const WIFI_TRIAL_PASSWORD_PARAMETER = WIFI_TRIAL_PATH + '.KeyPassphrase';
+
+// Nunca persistir, registrar ni devolver la contraseña real (regla 7, CLAUDE.md):
+// solo su huella SHA-256, para evidencia/auditoría sin poder reconstruir el valor.
+function sha256Hex(value: string) { return 'sha256:' + crypto.createHash('sha256').update(value, 'utf8').digest('hex'); }
+// WPA-PSK estándar: 8 a 63 caracteres imprimibles en inglés. Firmware no confirmado para otros
+// alfabetos; se restringe al subconjunto conocido en vez de asumir soporte UTF-8 como el SSID.
+function isValidWifiPassword(pw: string) { return pw.length >= 8 && pw.length <= 63 && /^[\x20-\x7e]+$/.test(pw); }
 const CONTRACT_ID = 'bf6b0f88-3c55-4c9b-aca2-5dfa739e738c';
 export const WIFI_TRIAL_CONTRACT = 'CTR-2026-00214';
 const ONT_ID = '8d3eb272-b90b-48b9-b834-2176e6003b6b';
@@ -83,6 +92,19 @@ export function createWifiTrial(deps: Dependencies = {}) {
     return await r.json() as Record<string, unknown>[];
   }
   async function pending(nbi: string) { return collection(nbi, 'tasks', { device: WIFI_TEST_DEVICE }); }
+  /** Solo huella + fecha de la contraseña vigente; nunca el valor (proyección NBI exacta). */
+  async function passwordState(nbi: string): Promise<{ hash: string | null; timestamp: string | null }> {
+    const query = encodeURIComponent(JSON.stringify({ _id: WIFI_TEST_DEVICE }));
+    const projection = encodeURIComponent(WIFI_TRIAL_PASSWORD_PARAMETER);
+    const r = await request(`${nbi}/devices/?query=${query}&projection=${projection}`, { method: 'GET', signal: AbortSignal.timeout(20_000) });
+    if (!r.ok) throw new Error('No se pudo consultar la contraseña vigente');
+    const rows = await r.json() as Array<Record<string, unknown>>;
+    const leaf = WIFI_TRIAL_PASSWORD_PARAMETER.split('.').reduce<unknown>(
+      (node, key) => (node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined), rows[0]) as
+      { _value?: unknown; _timestamp?: unknown } | undefined;
+    const value = typeof leaf?._value === 'string' ? leaf._value : null;
+    return { hash: value !== null ? sha256Hex(value) : null, timestamp: typeof leaf?._timestamp === 'string' ? leaf._timestamp : null };
+  }
   async function faults(nbi: string) {
     // Prefijo de dispositivo completo escapado: cualquier fault de esta ONT exige revisión.
     // No depender de un formato de canal/task específico del firmware o versión del ACS.
@@ -113,7 +135,14 @@ export function createWifiTrial(deps: Dependencies = {}) {
     if (!op.readTaskId) return { enabled: enabled(), record, message: 'Tarea de cambio ya no pendiente. Pulsa Verificar resultado para leer este SSID.' };
     const { inv, net } = await current(nbi);
     const after = Date.parse(op.readSentAt!);
-    if (Date.parse(inv.lastInform ?? '') > Date.parse(op.sentAt) && Date.parse(net.timestamp!) >= after && net.ssid === op.after) {
+    const ssidChanged = op.before !== op.after;
+    const ssidOk = !ssidChanged || (Date.parse(inv.lastInform ?? '') > Date.parse(op.sentAt) && Date.parse(net.timestamp!) >= after && net.ssid === op.after);
+    let passwordOk = true;
+    if (op.passwordChanged) {
+      const pw = await passwordState(nbi);
+      passwordOk = !!pw.timestamp && Date.parse(pw.timestamp) >= after && pw.hash === op.afterPasswordHash;
+    }
+    if (ssidOk && passwordOk) {
       op.state = 'verified'; op.verifiedAt = new Date().toISOString(); save(record);
       return { enabled: enabled(), record, message: op.kind === 'restore'
         ? 'SSID anterior verificado en GenieACS. Comprueba también la red y navegación.'
@@ -130,7 +159,7 @@ export function createWifiTrial(deps: Dependencies = {}) {
   }
   async function change(nbi: string, serial: string, raw: unknown, actorId: string, restore = false) {
     scope(serial);
-    const b = input(raw, restore ? ['requestId', 'confirmed'] : ['requestId', 'confirmed', 'deviceId', 'path', 'ssid', 'expectedSsid', 'expectedTimestamp']);
+    const b = input(raw, restore ? ['requestId', 'confirmed'] : ['requestId', 'confirmed', 'deviceId', 'path', 'ssid', 'expectedSsid', 'expectedTimestamp', 'password']);
     return lock(async () => {
       await contract();
       let record = read();
@@ -143,19 +172,33 @@ export function createWifiTrial(deps: Dependencies = {}) {
       if ((await faults(nbi)).length) throw new Error('Hay fallos GenieACS de este equipo pendientes de revisión; no se envió cambio');
       const target = restore ? record!.originalSsid : b.ssid;
       if (typeof target !== 'string' || !target.trim() || Buffer.byteLength(target, 'utf8') > 32 || /[\x00-\x1f\x7f]/.test(target)) throw new Error('SSID inválido: 1 a 32 bytes, sin controles');
+      // La contraseña nunca se compara contra un "antes" ni se guarda en texto plano (regla 7,
+      // CLAUDE.md): solo se valida formato y se usa transitoriamente para el envío y su huella.
+      let passwordTarget: string | undefined;
+      if (!restore && typeof b.password === 'string' && b.password.length > 0) {
+        if (!isValidWifiPassword(b.password)) throw new Error('Contraseña inválida: 8 a 63 caracteres imprimibles en inglés, sin tildes ni emoji');
+        if (net.passwordWritable !== true) throw new Error('La contraseña de esta red no tiene capacidad de escritura confirmada; no se envió nada');
+        passwordTarget = b.password;
+      }
       // GenieACS refresca _timestamp en cada Inform que reporta el parámetro (periódico cada
       // 300s), aunque el valor no cambie — exigir esa igualdad exacta bloqueaba casi cualquier
       // envío real con solo el paso del tiempo entre consultar y confirmar. Lo que realmente
       // importa ya se revalidó arriba con una lectura en vivo: el SSID vigente (net.ssid).
       if (!restore && (b.deviceId !== WIFI_TEST_DEVICE || b.path !== WIFI_TRIAL_PATH || b.expectedSsid !== net.ssid)) throw new Error('La identidad, instancia o SSID actual cambió; vuelve a consultar');
       if (restore && net.ssid !== last!.after) throw new Error('El SSID cambió fuera de esta prueba; no restaurar automáticamente');
-      if (target === net.ssid) throw new Error('El SSID ya tiene ese nombre; no se envió tarea');
+      const ssidChanges = target !== net.ssid;
+      if (restore) { if (!ssidChanges) throw new Error('El SSID ya tiene ese nombre; no se envió tarea'); }
+      else if (!ssidChanges && !passwordTarget) throw new Error('El SSID ya tiene ese nombre y no se indicó una contraseña nueva; no se envió nada');
       if (!record) record = { version: 1, serial: WIFI_TEST_SERIAL, deviceId: WIFI_TEST_DEVICE, contractNumber: WIFI_TRIAL_CONTRACT,
         path: WIFI_TRIAL_PATH, originalSsid: net.ssid!, originalTimestamp: net.timestamp!, operations: [] };
       const op: WifiTrialOperation = { requestId: b.requestId as string, kind: restore ? 'restore' : 'change', actorId,
-        before: net.ssid!, after: target, sentAt: new Date().toISOString(), state: 'sending' };
+        before: net.ssid!, after: ssidChanges ? target : net.ssid!, sentAt: new Date().toISOString(), state: 'sending',
+        ...(passwordTarget ? { passwordChanged: true, afterPasswordHash: sha256Hex(passwordTarget) } : {}) };
       record.operations.push(op); save(record); // Si no se puede respaldar, nunca se llega al POST.
-      try { op.taskId = await enqueue(nbi, { name: 'setParameterValues', parameterValues: [[WIFI_TRIAL_PARAMETER, target, 'xsd:string']] }); op.state = 'queued'; }
+      const parameterValues: [string, string, string][] = [];
+      if (ssidChanges) parameterValues.push([WIFI_TRIAL_PARAMETER, target, 'xsd:string']);
+      if (passwordTarget) parameterValues.push([WIFI_TRIAL_PASSWORD_PARAMETER, passwordTarget, 'xsd:string']);
+      try { op.taskId = await enqueue(nbi, { name: 'setParameterValues', parameterValues }); op.state = 'queued'; }
       catch { op.state = 'uncertain'; }
       save(record);
       return { enabled: enabled(), record, message: op.state === 'queued' ? 'Cambio encolado, no confirmado. Espera el próximo Inform y pulsa Verificar resultado.' : 'Envío incierto. No repitas el cambio; revisa el estado.' };
@@ -171,7 +214,9 @@ export function createWifiTrial(deps: Dependencies = {}) {
         await contract(); const status = await inspect(nbi); const op = status.record?.operations.at(-1);
         if (!op || op.state !== 'queued' || op.readTaskId || (await pending(nbi)).length || (await faults(nbi)).length) return status;
         op.readSentAt = new Date().toISOString(); save(status.record!);
-        try { op.readTaskId = await enqueue(nbi, { name: 'getParameterValues', parameterNames: [WIFI_TRIAL_PARAMETER] }); }
+        const ssidChanged = op.before !== op.after;
+        const parameterNames = [...(ssidChanged ? [WIFI_TRIAL_PARAMETER] : []), ...(op.passwordChanged ? [WIFI_TRIAL_PASSWORD_PARAMETER] : [])];
+        try { op.readTaskId = await enqueue(nbi, { name: 'getParameterValues', parameterNames }); }
         catch { op.state = 'uncertain'; }
         save(status.record!);
         return { ...status, message: op.state === 'uncertain' ? 'Lectura con resultado incierto; no repetir tareas.' : 'Lectura puntual encolada. Espera un nuevo Inform y consulta el estado.' };

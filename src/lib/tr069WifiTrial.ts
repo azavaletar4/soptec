@@ -10,6 +10,11 @@ export interface WifiTrialOperation {
   readTaskId?: string;
   readSentAt?: string;
   verifiedAt?: string;
+  // Nunca la contraseña real: solo si se incluyó y su huella SHA-256, para evidencia sin poder
+  // reconstruir el valor (regla 7, CLAUDE.md). Sin restauración automática de contraseña: ver
+  // mensaje en pantalla.
+  passwordChanged?: boolean;
+  afterPasswordHash?: string;
 }
 export interface WifiTrialRecord {
   version: 1;
@@ -78,6 +83,12 @@ const WIFI_TRIAL_PLAIN_MESSAGES: Record<string, string> = {
     'Nombre de red inválido: usa hasta 32 caracteres, sin símbolos especiales de control.',
   'Identidad GenieACS distinta; detener':
     'No se pudo confirmar la identidad de este equipo. Vuelve a intentarlo.',
+  'Contraseña inválida: 8 a 63 caracteres imprimibles en inglés, sin tildes ni emoji':
+    'La contraseña debe tener entre 8 y 63 caracteres: solo letras, números y símbolos del teclado en inglés (sin tildes, eñes ni emoji).',
+  'El SSID ya tiene ese nombre y no se indicó una contraseña nueva; no se envió nada':
+    'No hay ningún cambio que aplicar: el nombre ya es ese y no escribiste una contraseña nueva.',
+  'La contraseña de esta red no tiene capacidad de escritura confirmada; no se envió nada':
+    'Este equipo no confirma que se pueda cambiar la contraseña de esta red. No se envió ningún cambio.',
 };
 
 /** Traduce únicamente para mostrar en pantalla; nunca cambia lo que el backend decide o registra. */

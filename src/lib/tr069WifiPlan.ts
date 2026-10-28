@@ -5,6 +5,9 @@ export interface WifiNetwork {
   writable: boolean | null;
   timestamp: string | null;
   band: '2.4 GHz' | '5 GHz' | 'Banda desconocida';
+  // Solo metadatos (capacidad anunciada y fecha de la última lectura puntual); nunca el valor.
+  passwordWritable: boolean | null;
+  passwordTimestamp: string | null;
 }
 
 export interface WifiInventory {

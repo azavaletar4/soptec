@@ -9,6 +9,13 @@ test('traduce un mensaje técnico conocido a lenguaje sencillo', () => {
   );
 });
 
+test('traduce el mensaje de contraseña inválida sin nunca mostrar la contraseña enviada', () => {
+  assert.equal(
+    plainWifiTrialMessage('Contraseña inválida: 8 a 63 caracteres imprimibles en inglés, sin tildes ni emoji'),
+    'La contraseña debe tener entre 8 y 63 caracteres: solo letras, números y símbolos del teclado en inglés (sin tildes, eñes ni emoji).',
+  );
+});
+
 test('un mensaje desconocido se muestra sin cambios (nunca se oculta información)', () => {
   assert.equal(plainWifiTrialMessage('Mensaje no mapeado aún'), 'Mensaje no mapeado aún');
 });

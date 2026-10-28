@@ -2,17 +2,27 @@
 
 ## Antes de empezar
 
-**CIERRE DE JORNADA 28/10/2026 (noche Perú) — leer primero la sección
-"CIERRE DE JORNADA" al inicio de `ESTADO_DESARROLLO.md` antes de cualquier
-otra cosa.** Resumen: `build` de `fabc136` terminó `"built":true` hoy tras
-corregir el verificador dos veces (ambas correcciones documentadas con
-evidencia real, no repetir ese diagnóstico). `deploy` sigue sin ejecutarse —
-es la decisión pendiente del propietario desde su propia PowerShell. La
-prueba manual real de cambio de WiFi en `HWTC1D3691B7` sigue sin hacerse.
-Comando exacto para retomar y procedimiento completo (respaldo/rollback):
-sección "CIERRE DE JORNADA" de `ESTADO_DESARROLLO.md`. Esto prevalece sobre
-la "Base vigente" de abajo para lo relativo a TR-069/WiFi; el resto de esa
-base (frontend consolidado 288f2d8, Asistencia, Puntos, Campo, inventario)
+**ACTUALIZACIÓN 28/10/2026 (continuación del cierre de anoche) — leer
+primero la sección "TR-069 WiFi: deploy de `fabc136` CONFIRMADO..." al
+inicio de `ESTADO_DESARROLLO.md`.** Esto reemplaza el estado del bloque
+"CIERRE DE JORNADA" justo debajo (conservado como antecedente): el `deploy`
+que ahí figuraba como pendiente **ya se ejecutó** (confirmado en vivo,
+backend/frontend `fabc13672cd3` corriendo) y **el propietario confirmó que
+la prueba real de cambio de SSID en `HWTC1D3691B7` funcionó** sin afectar su
+navegación. A partir de esto se preparó (candidato local, sin desplegar) la
+capacidad de cambiar también la contraseña WiFi desde el mismo formulario —
+confirmada técnicamente viable (mismo mecanismo que el SSID), pero sin
+probarse en vivo todavía. Detalle, archivos y procedimiento de prueba
+controlada: `docs/TR069-WIFI-CONTRASENA-PREPARADA-20261028.md`.
+
+**CIERRE DE JORNADA 28/10/2026 (noche Perú) — antecedente, ver actualización
+arriba.** Resumen (ya superado: el `deploy` que aquí figuraba pendiente se
+ejecutó después, fuera de esta conversación): `build` de `fabc136` terminó
+`"built":true` tras corregir el verificador dos veces (ambas correcciones
+documentadas con evidencia real, no repetir ese diagnóstico). Comando
+exacto usado y procedimiento completo (respaldo/rollback): sección "CIERRE
+DE JORNADA" de `ESTADO_DESARROLLO.md`. El resto de la "Base vigente" de
+abajo (frontend consolidado 288f2d8, Asistencia, Puntos, Campo, inventario)
 sigue intacto y no cambia con este cierre.
 
 **Base vigente — frontend consolidado y WiFi desplegados (27/10, 17:08 Perú).**

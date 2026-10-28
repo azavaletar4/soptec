@@ -1,5 +1,45 @@
 # SmartRayco — Estado de desarrollo
 
+## TR-069 WiFi: deploy de `fabc136` CONFIRMADO en producción; cambio de contraseña preparado (candidato local, 28/10/2026)
+
+**El propietario confirma que el cambio de SSID real sobre `HWTC1D3691B7`
+(contrato `CTR-2026-00214`) funcionó**: el Huawei sigue navegando normalmente y
+la conexión TR-069/GenieACS está operativa. Verificado en producción, solo
+lectura: el backend `smartrayco-backend-wifitrial:fabc13672cd3` y el frontend
+`smartrayco-frontend-consolidado:fabc13672cd3` ya están corriendo (`deploy` se
+ejecutó entre sesiones, fuera de esta conversación) con
+`TR069_WIFI_TRIAL_ENABLED=HWTC1D3691B7:CTR-2026-00214` activo. Esto cierra el
+punto 4 de la sección "CIERRE DE JORNADA" de abajo (prueba WiFi real) para el
+caso de cambio de nombre; se conserva esa sección como antecedente.
+
+**Hallazgo nuevo:** consulta real a GenieACS (solo lectura, proyección exacta,
+nunca se leyó/mostró el valor real — filtrado a `[REDACTED]` en el propio
+`docker exec` antes de que la evidencia llegara a esta conversación) confirma
+que `KeyPassphrase` (contraseña) en `WLANConfiguration.5` es un escalar directo
+`_writable:true`, `xsd:string`, igual forma que el SSID ya probado en vivo. La
+tabla alternativa `PreSharedKey` existe pero no tiene ninguna instancia
+poblada (no se usa). No hay evidencia de que se necesite tocar ningún otro
+parámetro (modo de seguridad, beacon) para este firmware.
+
+**Implementado en candidato local (sin desplegar):** el mismo formulario ya
+usado para el SSID ahora acepta una contraseña nueva opcional
+(`server/src/services/tr069WifiTrial.ts`, `src/views/tr069/Tr069View.vue`).
+Un solo envío atómico (`setParameterValues` con ambos parámetros cuando se
+piden los dos); nunca se guarda/registra/devuelve la contraseña real, solo su
+huella SHA-256 para verificación; exige `_writable=true` confirmado en vivo
+antes de enviar; reutiliza intacto el candado de una sola operación
+pendiente, el reintento idempotente, los chequeos de tareas/`faults` previos
+y la restricción ADMIN/SUPERADMIN. **Sin restauración automática de
+contraseña** (a diferencia del SSID): no se guarda la anterior en ningún
+lado, por diseño (regla 7 de CLAUDE.md); el procedimiento de recuperación es
+volver a escribir la contraseña anterior conocida como un cambio nuevo.
+30+8 pruebas focalizadas nuevas/ajustadas PASS (`tr069WifiTrial.test.ts`
+servidor y frontend, `tr069WifiPreparation.test.ts`), 278/278 y 481/481 de
+las suites completas de servicios/`lib` sin regresión, `vue-tsc`/`tsc`
+limpios. **Nada desplegado; ningún cambio real de contraseña enviado a
+GenieACS.** Procedimiento de prueba controlada y recuperación ante fallo:
+`docs/TR069-WIFI-CONTRASENA-PREPARADA-20261028.md`.
+
 ## `verify` con `AssertionError` y `reason` vacío — NO era un bloqueo, corregido (28/10/2026, retomando el cierre de anoche)
 
 El propietario ejecutó `node scripts/frontend-consolidation-release.cjs verify`

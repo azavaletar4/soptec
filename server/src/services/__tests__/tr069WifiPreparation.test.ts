@@ -15,7 +15,7 @@ const path = 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5';
 const timestamp = '2026-10-27T19:45:10.554Z';
 function device(serial = '485754431D3691B7', id = WIFI_TEST_DEVICE) {
   return { _id: id, _lastInform: '2026-10-27T20:32:31.480Z', _deviceId: { _SerialNumber: serial }, InternetGatewayDevice: { LANDevice: { 1: { WLANConfiguration: {
-    1: { SSID: { _value: 'Red uno', _timestamp: timestamp, _writable: true }, KeyPassphrase: { _value: 'SYNTHETIC_SECRET' } },
+    1: { SSID: { _value: 'Red uno', _timestamp: timestamp, _writable: true }, KeyPassphrase: { _value: 'SYNTHETIC_SECRET', _writable: true, _timestamp: timestamp } },
     5: { SSID: { _value: 'Red cinco', _timestamp: timestamp, _writable: true } },
   } } } } };
 }
@@ -45,6 +45,7 @@ test('serial ASCII y hexadecimal identifican la misma ONT completa; Enable ausen
   assert.deepEqual(inventory.networks.map(n => [n.ssid, n.enabled]), [['Red uno', null], ['Red cinco', null]]);
   assert.ok(inventory.networks.every(n => n.band === 'Banda desconocida'));
   assert.ok(!JSON.stringify(inventory).includes('SYNTHETIC_SECRET'));
+  assert.deepEqual(inventory.networks.map(n => [n.passwordWritable, n.passwordTimestamp]), [[true, timestamp], [null, null]]);
   const query = JSON.parse(new URL(calls[0]).searchParams.get('query')!);
   assert.deepEqual(query['_deviceId._SerialNumber'].$in, [WIFI_TEST_SERIAL, '485754431D3691B7']);
   assert.equal((await readWifiInventory('http://nbi.invalid', '485754431D3691B7')).serial, WIFI_TEST_SERIAL);

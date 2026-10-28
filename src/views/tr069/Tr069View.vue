@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useOntEvidenceClock } from '@/composables/useOntEvidenceClock';
 import { enforceOntEvidence } from '@/lib/ontTelemetryEvidence';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -74,9 +74,11 @@ const configTrial = ref<WifiTrialStatus | null>(null);
 const configWifiNetworks = ref<WifiNetwork[]>([]);
 const configWifiPath = ref('');
 const configSelectedNetwork = computed(() => configWifiNetworks.value.find(n => n.path === configWifiPath.value));
-// La contraseña se pide como en SmartOLT, pero su envío sigue bloqueado: todavía no se probó que
-// el firmware de esta Huawei acepte ese parámetro de forma segura (ver docs/TR069-WIFI-*-20261027*.md).
-const configPasswordBlockedReason = 'Cambio de contraseña: todavía no disponible. Pendiente de validar que el equipo lo admite de forma segura. Por ahora solo se puede cambiar el nombre (SSID).';
+// Al elegir una red se precarga su nombre actual: si el administrador no lo toca, el envío no
+// cambia el SSID (puede escribir solo la contraseña nueva), igual que en SmartOLT.
+watch(configWifiPath, (path) => {
+  configForm.value.wifiSsid = configWifiNetworks.value.find(n => n.path === path)?.ssid ?? '';
+});
 const configLoadingCurrent = ref(false);
 const configSaving = ref(false);
 const configError = ref<string | null>(null);
@@ -170,15 +172,19 @@ async function runWifiTrial(action: 'change' | 'restore') {
     network.ssid === null || !network.timestamp || !configForm.value.wifiSsid.trim())) {
     configError.value = 'Selecciona la red WiFi de prueba y escribe un nuevo nombre.'; return;
   }
+  const wantsPassword = !restore && configForm.value.wifiPassword.trim().length > 0;
   const payload = restore ? { requestId: crypto.randomUUID(), confirmed: true } : {
     requestId: crypto.randomUUID(), confirmed: true, deviceId: configDeviceId.value, path: network!.path,
     ssid: configForm.value.wifiSsid, expectedSsid: network!.ssid, expectedTimestamp: network!.timestamp,
+    ...(wantsPassword ? { password: configForm.value.wifiPassword } : {}),
   };
+  configForm.value.wifiPassword = ''; // Nunca se conserva en el formulario una vez armado el envío.
   const target = restore ? configTrial.value.record?.originalSsid : configForm.value.wifiSsid;
-  const message = `Actual: ${restore ? configTrial.value.record?.operations.at(-1)?.after : network!.ssid}\nNuevo: ${target}\n` +
+  const message = `Actual: ${restore ? configTrial.value.record?.operations.at(-1)?.after : network!.ssid}\nNuevo nombre: ${target}\n` +
     (restore ? 'Se restaurará el nombre anterior guardado.' : 'Se guardará el nombre actual como respaldo antes de enviar el cambio.') +
-    '\nNo se cambiarán contraseñas, PPPoE, WAN ni VLAN. El equipo lo aplicará en los próximos minutos.';
-  if (!await confirmDialog({ title: restore ? 'Restaurar nombre WiFi anterior' : 'Aplicar cambio de nombre WiFi',
+    (wantsPassword ? '\nTambién se cambiará la contraseña WiFi. Los dispositivos ya conectados a esta red perderán la conexión hasta que se les escriba la contraseña nueva manualmente. SmartRayco no guarda la contraseña anterior: si necesitas deshacer este cambio, deberás volver a escribirla aquí.' : '') +
+    '\nNo se cambiarán PPPoE, WAN ni VLAN. El equipo lo aplicará en los próximos minutos.';
+  if (!await confirmDialog({ title: restore ? 'Restaurar nombre WiFi anterior' : wantsPassword ? 'Aplicar cambio de WiFi' : 'Aplicar cambio de nombre WiFi',
     confirmLabel: restore ? 'Restaurar nombre' : 'Aplicar cambios', message, wrapMessage: true })) return;
   if (configModalDevice.value?.id !== device.id) return;
   configSaving.value = true; configError.value = null;
@@ -584,7 +590,8 @@ async function handleUnlink() {
           <h2 class="text-lg font-semibold mb-1">Configurar WiFi</h2>
           <p class="text-xs text-slate-500 mb-3">
             {{ configTrial?.enabled ? 'Cambio real, solo para esta Huawei de prueba y el contrato CTR-2026-00214.' : 'Preparación sin aplicar, solo para esta Huawei de prueba.' }}
-            Por ahora solo se puede cambiar el nombre de la red. PPPoE y otras redes no se tocan desde aquí.
+            {{ configTrial?.enabled ? 'Puedes cambiar el nombre y, si quieres, también la contraseña de esta red.' : 'Por ahora solo se puede preparar el nombre de la red.' }}
+            PPPoE y otras redes no se tocan desde aquí.
           </p>
 
           <p v-if="configLoadingCurrent" class="text-xs text-slate-500 mb-3">Consultando el equipo...</p>
@@ -606,8 +613,17 @@ async function handleUnlink() {
             </div>
             <div class="mb-2">
               <label class="block text-xs text-slate-600 mb-1">Nueva contraseña (opcional)</label>
-              <input v-model="configForm.wifiPassword" type="password" class="field-input" placeholder="Todavía no disponible" disabled />
-              <p class="text-xs text-amber-700 mt-1">{{ configPasswordBlockedReason }}</p>
+              <input
+                v-model="configForm.wifiPassword"
+                type="password"
+                autocomplete="new-password"
+                class="field-input"
+                :disabled="!configTrial?.enabled || configSelectedNetwork?.passwordWritable !== true"
+                placeholder="Déjala en blanco para no cambiarla"
+              />
+              <p v-if="!configTrial?.enabled" class="text-xs text-amber-700 mt-1">Cambio de contraseña: solo disponible en el cambio real de esta Huawei de prueba.</p>
+              <p v-else-if="configSelectedNetwork && configSelectedNetwork.passwordWritable !== true" class="text-xs text-amber-700 mt-1">Este equipo no confirma que se pueda escribir la contraseña de esta red.</p>
+              <p v-else class="text-xs text-slate-500 mt-1">SmartRayco no guarda la contraseña anterior: para deshacer un cambio de contraseña, vuelve a escribir la anterior aquí.</p>
             </div>
           </div>
 
@@ -617,7 +633,11 @@ async function handleUnlink() {
           <div v-if="configTrial?.enabled && configTrial.record" class="text-xs mb-3 space-y-1 border border-slate-200 rounded p-2">
             <p>Nombre anterior: <strong>{{ configTrial.record.operations.at(-1)?.before }}</strong></p>
             <p>Nombre nuevo enviado: <strong>{{ configTrial.record.operations.at(-1)?.after }}</strong></p>
+            <p v-if="configTrial.record.operations.at(-1)?.passwordChanged">También se envió una contraseña nueva.</p>
             <p>Estado: {{ configOperationStateLabel }}</p>
+            <p v-if="configTrial.record.operations.at(-1)?.passwordChanged" class="text-amber-700">
+              Restaurar solo recupera el nombre anterior; la contraseña no se revierte automáticamente (SmartRayco no la guarda).
+            </p>
             <div class="flex flex-wrap gap-2 pt-1">
               <button type="button" class="btn-secondary" :disabled="configSaving" @click="checkWifiTrialStatus">Comprobar estado</button>
               <button type="button" class="btn-secondary" :disabled="configSaving || configTrial.record.operations.at(-1)?.state !== 'verified' || configTrial.record.operations.at(-1)?.kind !== 'change'" @click="runWifiTrial('restore')">Restaurar nombre anterior</button>
@@ -642,6 +662,7 @@ async function handleUnlink() {
               <p v-if="configWifiPath" class="break-all">Instancia TR-069: {{ configWifiPath }}</p>
               <p v-if="configWifiPath">Fecha del SSID en caché (Perú): {{ configSelectedNetwork?.timestamp ? new Date(configSelectedNetwork.timestamp).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'Sin fecha verificable' }}.</p>
               <p v-if="configTrial?.record">Respaldo persistente: {{ configTrial.record.originalSsid }}. Instancia: {{ configTrial.record.path }}. Estado interno: {{ configTrial.record.operations.at(-1)?.state }}.</p>
+              <p v-if="configTrial?.record?.operations.at(-1)?.afterPasswordHash" class="break-all">Huella de la contraseña enviada (SHA-256, nunca el valor real): {{ configTrial.record.operations.at(-1)?.afterPasswordHash }}</p>
             </div>
           </details>
 

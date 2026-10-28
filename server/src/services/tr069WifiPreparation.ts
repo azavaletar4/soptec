@@ -33,6 +33,8 @@ export async function readWifiInventory(nbiUrl: string, serial: string): Promise
       const enabled = (node.Enable as Node | undefined)?._value;
       // Solo evidencia explícita, nunca índice, canal o texto del SSID.
       const band = (node.OperatingFrequencyBand as Node | undefined)?._value;
+      // Capacidad/fecha de KeyPassphrase, nunca su _value: ver regla 7 de CLAUDE.md (TR-069 WiFi).
+      const keyPassphrase = node.KeyPassphrase as Node | undefined;
       networks.push({
         path: `InternetGatewayDevice.LANDevice.${lanIndex}.WLANConfiguration.${index}`,
         ssid: typeof ssid?._value === 'string' ? ssid._value : null,
@@ -40,6 +42,8 @@ export async function readWifiInventory(nbiUrl: string, serial: string): Promise
         writable: typeof ssid?._writable === 'boolean' ? ssid._writable : null,
         timestamp: typeof ssid?._timestamp === 'string' ? ssid._timestamp : null,
         band: band === '2.4GHz' ? '2.4 GHz' : band === '5GHz' ? '5 GHz' : 'Banda desconocida',
+        passwordWritable: typeof keyPassphrase?._writable === 'boolean' ? keyPassphrase._writable : null,
+        passwordTimestamp: typeof keyPassphrase?._timestamp === 'string' ? keyPassphrase._timestamp : null,
       });
     }
   }
