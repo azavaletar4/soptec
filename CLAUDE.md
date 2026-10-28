@@ -18,6 +18,22 @@ sin merge/push/despliegue automático.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
+**Nota de cierre (investigación solo lectura, sesión posterior al
+incidente):** búsqueda pública (foro oficial de GenieACS) confirma que
+`KeyPassphrase` directo es un problema ya conocido en Huawei (error 9007
+reportado por otros); el parámetro que sí funcionó para varios, incluido
+explícitamente en un Huawei HG8145V5, es
+`WLANConfiguration.{i}.PreSharedKey.{j}.KeyPassphrase` — pero localmente no
+hay ninguna instancia `PreSharedKey.1` descubierta todavía en
+`HWTC1D3691B7` (confirmarlo requeriría una tarea nueva a GenieACS, no
+autorizada en esa sesión). Nadie en esa comunidad reportó tampoco un método
+de verificación por lectura — la validación siempre fue manual, igual que
+nuestra propia conclusión. Sin evidencia local de que SmartOLT use un
+método distinto para este modelo exacto. El bloqueo de contraseña
+(`b51c161`) sigue siendo correcto y sin desplegar. No repetir este
+diagnóstico — detalle completo: sección "Huawei: método correcto de
+contraseña WiFi" al inicio de `ESTADO_DESARROLLO.md`.
+
 **Nota de cierre (incidente real, misma noche, sesión posterior):** con
 `508b75e` ya en producción, el propietario probó el cambio de contraseña
 real: el SSID cambió pero la contraseña no funcionó al conectarse y el

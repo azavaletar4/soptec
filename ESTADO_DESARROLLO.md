@@ -87,14 +87,20 @@ es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
 **5. Próxima tarea autorizada:** ninguna en ejecución. Pendiente del
-**propietario**: autorizar el `deploy` de `b51c161` (bloquea el envío de
-contraseña y corrige el seguimiento de estado) y, por separado y fuera de
-código, decidir cómo intentar confirmar/corregir la escritura de contraseña
-con este firmware (p.ej. probar `PreSharedKey.{i}.KeyPassphrase`, consultar
-documentación/soporte Huawei, o aceptar que esta función quede limitada a
-SSID para esta ONT). No iniciar ningún `deploy`, migración, ni tarea
-GenieACS/OLT/MikroTik sin que el propietario lo pida en ese mismo turno
-(regla 16 de `CLAUDE.md`). Rollback disponible en cualquier momento:
+**propietario**: (a) autorizar el `deploy` de `b51c161` (bloquea el envío
+de contraseña y corrige el seguimiento de estado) — **sigue sin desplegar,
+la versión en vivo sigue siendo `508b75e`, que SÍ deja enviar contraseñas
+sin bloqueo**; (b) decidir si autoriza una prueba de **descubrimiento de
+solo lectura** (una tarea nueva a GenieACS, por eso requiere su propia
+autorización aparte, distinta de simplemente leer la caché) contra
+`WLANConfiguration.5.PreSharedKey` para confirmar si existe la instancia
+`.1` — hay evidencia pública (no local, no de SmartOLT) de que
+`PreSharedKey.{i}.KeyPassphrase` es el parámetro que sí funciona en otros
+Huawei, pero localmente no hay ninguna instancia descubierta todavía (ver
+sección "Huawei: método correcto de contraseña WiFi" más abajo). No
+iniciar ningún `deploy`, migración, ni tarea GenieACS/OLT/MikroTik sin que
+el propietario lo pida en ese mismo turno (regla 16 de `CLAUDE.md`).
+Rollback disponible en cualquier momento:
 `node scripts/frontend-consolidation-release.cjs rollback` (vuelve a
 `f87aeefc5190` — con el bug de contraseña bloqueada-para-siempre, no más
 atrás).
@@ -142,6 +148,110 @@ invocación, nunca combinadas:
   inesperados), **se detiene y lo reporta** en vez de asumir o corregirlo
   por su cuenta — la causa casi siempre es que el otro agente avanzó en
   medio tiempo.
+
+## Huawei: método correcto de contraseña WiFi — investigación solo lectura, nada escrito (28/10/2026, sesión posterior al incidente)
+
+Continuación directa del incidente anterior. **Solo lectura: ninguna tarea
+nueva a GenieACS, ningún cambio real, sin desplegar.**
+
+**1. Metadatos reales de `WLANConfiguration.5` (releídos hoy, sin cambios
+de fondo desde el incidente — confirma que nada se tocó entre sesiones):**
+
+| Parámetro | `_object` | `_writable` | ¿Algún valor reportado alguna vez? |
+|---|---|---|---|
+| `SSID` | no | sí | Sí — `"wifi 5 rayco"`, refrescado por Inform periódico normal |
+| `KeyPassphrase` (escalar directo) | no | sí | Sí, pero **siempre cadena vacía** (confirmado otra vez, mismo resultado que el incidente) |
+| `PreSharedKey` (tabla) | **sí** | sí | **Ninguno — cero instancias descubiertas** (`children: {}`); no se sabe si `.1` existe en este equipo |
+| `WPAEncryptionModes`, `WPAAuthenticationMode`, `IEEE11iAuthenticationMode`, `IEEE11iEncryptionModes`, `BeaconType`, `Basic*Mode`, `Enable`, `RadioEnabled`, etc. | — | sí (todos) | **Ninguno jamás** (ya documentado antes, sigue igual) |
+| `DeviceInfo.HardwareVersion` / `SoftwareVersion` | — | — | `46AD.D` / `V5R023C00S342` (dato nuevo, no sensible, útil como referencia exacta de firmware) |
+| `DeviceInfo.Manufacturer`/`ProductClass`/`ModelName` | — | — | Nunca reportados |
+
+No se intentó ninguna tarea `GetParameterNames` para forzar el
+descubrimiento de `PreSharedKey.{i}` — eso ya sería una tarea nueva a
+GenieACS, fuera del alcance "solo lectura" de este turno.
+
+**2. Diferenciar escribible de confirmado (pedido explícito):** `_writable:
+true` en `KeyPassphrase` **nunca demostró que el cambio se aplicara** — ya
+sabemos que no se puede saber por esta vía (cadena vacía siempre).
+`PreSharedKey` también anuncia `_writable: true`, pero eso tampoco prueba
+que la instancia `.1` exista ni que escribir ahí vaya a funcionar —
+"escribible" es una capacidad declarada por el equipo, nunca una
+confirmación de resultado real.
+
+**3. Evidencia pública externa (búsqueda web, nada propietario ni de
+SmartOLT) — [foro oficial de GenieACS](https://forum.genieacs.com/t/setting-up-wifi-password-on-huawei-cpe/1478):**
+- `WLANConfiguration.{i}.KeyPassphrase` (el parámetro que usamos) es un
+  problema **ya conocido en la comunidad para Huawei**: varios reportan
+  error `9007` ("invalid argument value"); en nuestro caso no hubo fault
+  explícito, pero es la misma familia de problema (no se puede escribir o
+  confirmar de forma fiable).
+- El parámetro que sí funcionó para varios usuarios, **confirmado
+  explícitamente en un Huawei HG8145V5** (mismo linaje de modelo que
+  nuestro HG8145X6-13): **`WLANConfiguration.{i}.PreSharedKey.{j}.KeyPassphrase`**,
+  como texto plano, sin codificación especial.
+- **Nadie en esa comunidad reportó un método de lectura de vuelta para
+  confirmar un cambio** — la validación siempre fue manual (conectarse con
+  la contraseña nueva), exactamente la misma conclusión a la que llegamos
+  de forma independiente con el incidente real de ayer.
+- Nota aparte, sin verificar para nuestro firmware exacto: reportes de 2024
+  mencionan restricciones de longitud en algunos Huawei (10 dígitos en
+  2.4GHz, 10–13 en 5GHz) — posible, no confirmado para `V5R023C00S342`.
+
+**4. Evidencia local sobre el método de SmartOLT (sin tocar SmartOLT ni sus
+equipos):** revisado el repositorio completo — **no existe ninguna
+integración de código ni documento local** que describa el método que usa
+SmartOLT para cambiar contraseñas WiFi en Huawei. Lo único documentado
+localmente sobre SmartOLT + Huawei es el patrón de canal de gestión
+OMCI/VLAN (`docs/TR069-GESTION-INDEPENDIENTE-HUAWEI.md`) para 6 unidades
+reales **GPT-2741GNAC** — un **modelo distinto** al nuestro
+(`HG8145X6-13`). Ese patrón de red ya se reutilizó con éxito para lograr
+conectividad TR-069 en `HWTC1D3691B7`, pero no es evidencia de que el
+comportamiento de WiFi/contraseña sea igual entre modelos distintos.
+
+**5. Método de verificación propuesto (sin leer el valor en texto
+plano) — conclusión honesta:** **no existe** un método de verificación por
+TR-069 que confirme de forma fiable un cambio de contraseña WiFi en este
+firmware sin leer el valor — ni en nuestra propia investigación ni en la
+experiencia pública documentada. La huella SHA-256 ya implementada seguiría
+siendo inútil si el parámetro nuevo también resulta de solo escritura (muy
+probable: es una convención de seguridad del firmware, no algo específico
+del nombre del parámetro). La única verificación real disponible sigue
+siendo la prueba manual de conexión — la misma que reveló el incidente —,
+no automatizable de forma confiable desde el panel. Una señal indirecta
+débil (que `AssociatedDevice` pierda todos sus clientes tras el cambio)
+indicaría que *algo* de seguridad cambió, pero no cuál ni si el valor nuevo
+es el correcto — no se propone implementarla, se documenta solo para
+descartarla como insuficiente.
+
+**6. Conclusión sobre viabilidad de una nueva prueba controlada:** hay una
+hipótesis nueva, concreta y con respaldo externo —
+`WLANConfiguration.5.PreSharedKey.1.KeyPassphrase` en vez del escalar
+superior — pero **todavía no es viable pasar directo a una escritura**:
+(a) no hay evidencia local de que la instancia `.1` exista en este
+dispositivo exacto; confirmarlo requiere una tarea de descubrimiento
+(`GetParameterNames`/lectura dirigida), que es una tarea NUEVA a GenieACS y
+por tanto necesita su propia autorización, distinta de "solo lectura de
+caché"; (b) el éxito en otros modelos Huawei (incluido un HG8145V5) no
+garantiza éxito en `HG8145X6-13`/`V5R023C00S342` exactos; (c) aun si
+funciona, la verificación seguirá siendo manual, nunca automática. Camino
+recomendado, en dos pasos con autorización separada cada uno: paso 1
+(descubrimiento, de solo lectura hacia el equipo pero SÍ una tarea nueva a
+GenieACS) para confirmar si `PreSharedKey.1` existe; paso 2 (escritura),
+solo si el paso 1 lo confirma, probar el parámetro nuevo reutilizando el
+mismo respaldo/candado/huella ya implementados, sabiendo de antemano que el
+éxito se confirmará por conexión manual, no por lectura.
+
+**El bloqueo de contraseña sigue siendo correcto y no se tocó.** Candidato
+local `b51c161` (sin desplegar) ya implementa el bloqueo pedido; la versión
+EN VIVO (`508b75e`) todavía no lo tiene — mientras no se despliegue
+`b51c161`, el panel en producción sigue permitiendo intentar un cambio de
+contraseña que no se puede verificar.
+
+**Nada se escribió ni se envió durante esta investigación:** toda la
+consulta a GenieACS fue `GET` sobre la caché ya existente (cero tareas
+nuevas); la búsqueda externa fue pública, de solo lectura, sin tocar
+SmartOLT ni sus equipos; sin cambios de SSID/contraseña/PPPoE/WAN/VLAN/OLT/
+MikroTik; sin desplegar.
 
 ## TR-069: SSID cambia, contraseña falla y panel queda "Guardando cambios" — causa raíz real y bloqueo del cambio de contraseña (candidato local, 28/10/2026)
 
