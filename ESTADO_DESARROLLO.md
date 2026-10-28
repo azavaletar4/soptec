@@ -16,29 +16,29 @@ la sección histórica correspondiente, no hace falta repetirlo.
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
 Frontend y backend en la VM de producción (`192.168.55.201`) corren el
-commit **`fabc13672cd3340ad39420de33992c08f3fceb36`** (`fabc136`) —
-confirmado vía `/release-manifest.json` del contenedor y el `Image` real de
-`smartrayco-frontend-1`/`smartrayco-backend-1`, no solo por el tag. Imágenes:
-`smartrayco-frontend-consolidado:fabc13672cd3`,
-`smartrayco-backend-wifitrial:fabc13672cd3`. Resto de servicios
-(Mongo/Caddy/GenieACS) sin cambios.
+commit **`f87aeefc519031fcc677fde88ec853ec0159980b`** (`f87aeef` — SSID +
+contraseña WiFi) — desplegado el 28/10/2026 18:25 UTC, confirmado vía
+`/release-manifest.json` del contenedor, el `Image` real de
+`smartrayco-frontend-1`/`smartrayco-backend-1` (no solo el tag) y `verify`
+ejecutado aparte después del `deploy`. Imágenes:
+`smartrayco-frontend-consolidado:f87aeefc5190`,
+`smartrayco-backend-wifitrial:f87aeefc5190`. Resto de servicios
+(Mongo/Caddy/GenieACS) sin cambios — mismos `started` que antes del deploy.
+Rollback verificado y disponible: vuelve a `fabc13672cd3` (SSID, sin
+contraseña), nunca más atrás. Detalle completo del despliegue: sección
+"TR-069 WiFi contraseña — DESPLEGADO" más abajo.
 
 **2. Último cambio funcional probado en producción real:**
-Cambio de nombre (SSID) WiFi vía TR-069 sobre la Huawei de prueba
+Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
 `HWTC1D3691B7` (contrato `CTR-2026-00214`): el propietario confirmó que
-funcionó y que el equipo siguió navegando normalmente (28/10/2026).
+funcionó y que el equipo siguió navegando normalmente (28/10/2026). El
+cambio de **contraseña** ya está desplegado pero **todavía no tiene su
+primera prueba real** — la hace el propietario manualmente desde el panel;
+no declarar esta función "probada en producción" hasta esa confirmación.
 
 **3. Cambios locales pendientes (no desplegados, no publicados):**
-- Commit `f87aeef` (sobre `fabc136`, en `main` local): cambio de
-  **contraseña** WiFi para la misma Huawei/instancia — **preparado y
-  validado** (`prepare`/`build` reales contra la VM,
-  `rollbackTested:true`, `reproducible:true`), **sin desplegar**. Imágenes
-  candidatas ya construidas en la VM:
-  `smartrayco-frontend-consolidado:f87aeefc5190`,
-  `smartrayco-backend-wifitrial:f87aeefc5190`. Pendiente: autorización
-  expresa de `deploy` y, después, la prueba real desde el panel. **No
-  repetir su investigación ni modificarla** —
-  `docs/TR069-WIFI-CONTRASENA-PREPARADA-20261028.md`.
+- Ninguno de la función WiFi: SSID y contraseña ya están ambos en
+  producción (commit `f87aeef`).
 - Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
   antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
   `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
@@ -49,11 +49,10 @@ funcionó y que el equipo siguió navegando normalmente (28/10/2026).
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `2544526` | 27 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
-| WiFi SSID | incluido en `main` | `fabc136` | **En producción** |
-| WiFi contraseña | incluido en `main` | `f87aeef` | Preparado/compilado en la VM, sin desplegar |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `6873dc7` | 28 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
+| WiFi SSID + contraseña | incluido en `main` | `f87aeef` | **En producción** (desplegado 28/10/2026 18:25 UTC) |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
-| Rama remota activa en GitHub | `origin/main` | `88dec40` | Desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
+| Rama remota activa en GitHub | `origin/main` | `88dec40` | Muy desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
 
 El repositorio tiene además **36 ramas locales (incluida `main`) y 24
 worktrees (incluido éste)** — contado el 28/10/2026, en su mayoría de fases
@@ -75,11 +74,14 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución. La única acción
-pendiente de autorización explícita es el `deploy` del commit `f87aeef`
-(contraseña WiFi) — comando exacto en la sección "TR-069 WiFi contraseña"
-más abajo. No iniciar `deploy`, migraciones, ni tareas GenieACS/OLT/MikroTik
-sin que el propietario lo pida en ese mismo turno (regla 16 de `CLAUDE.md`).
+**5. Próxima tarea autorizada:** ninguna en ejecución. Pendiente del
+**propietario**: probar manualmente el cambio de contraseña WiFi desde el
+panel (`HWTC1D3691B7`/`CTR-2026-00214`) y confirmar que PPPoE/internet del
+cliente no se interrumpe. No iniciar ningún `deploy`, migración, ni tarea
+GenieACS/OLT/MikroTik sin que el propietario lo pida en ese mismo turno
+(regla 16 de `CLAUDE.md`). Rollback disponible en cualquier momento:
+`node scripts/frontend-consolidation-release.cjs rollback` (vuelve a
+`fabc13672cd3`, SSID sin contraseña).
 
 ### Procedimiento de despliegue (5 fases separadas, siempre en este orden)
 
@@ -124,6 +126,93 @@ invocación, nunca combinadas:
   inesperados), **se detiene y lo reporta** en vez de asumir o corregirlo
   por su cuenta — la causa casi siempre es que el otro agente avanzó en
   medio tiempo.
+
+## TR-069 WiFi contraseña — DESPLEGADO en producción (28/10/2026 18:25 UTC)
+
+Autorizado expresamente por el propietario: desplegar el candidato ya
+preparado/compilado (commit `f87aeef`, sección siguiente). **Publicado
+exclusivamente la función WiFi pendiente — ningún otro módulo tocado.**
+
+**1. Verificación previa (sin tocar nada):** `git log`/`git status`
+confirmaron `main` en `6873dc7`, 28 commits adelante de `origin/main`, sin
+cambios pendientes relevantes. En la VM: imágenes candidatas `f87aeef`
+seguían presentes y sin tocar desde la sesión de `prepare`/`build`;
+`prepared.json`/`built.json` intactos; `attempt.json`/`deploy-result.json`
+ausentes (confirmaba que el deploy real seguía sin ejecutarse). Entorno
+vivo: `TR069_WIFI_TRIAL_ENABLED=HWTC1D3691B7:CTR-2026-00214` ya presente en
+el backend corriendo (heredado de `fabc136`). Baseline GenieACS leída antes
+de tocar nada: 0 tareas y 0 faults pendientes para este dispositivo.
+
+**2. Imágenes:**
+
+| Servicio | Anterior (en vivo) | Nueva (desplegada) |
+|---|---|---|
+| Frontend | `smartrayco-frontend-consolidado:fabc13672cd3` | `smartrayco-frontend-consolidado:f87aeefc5190` |
+| Backend | `smartrayco-backend-wifitrial:fabc13672cd3` | `smartrayco-backend-wifitrial:f87aeefc5190` |
+
+Caddy/Mongo/GenieACS: mismos `Id`/`started` que antes del deploy — no se
+reiniciaron ni tocaron.
+
+**3. Archivos incluidos (alcance verificado, nada ajeno):** los 12 commits
+de la cadena `fabc136`→`f87aeef` ya documentados — servicio/tipos de
+`tr069WifiTrial`, metadatos de `tr069WifiPreparation`, vista `Tr069View.vue`
+y sus pruebas. `build` validó que el único archivo de frontend con
+contenido distinto al que ya corría fue `assets/Tr069View.js`; Asistencia,
+Puntos, Campo, OLT y Rutinas quedaron equivalentes byte a byte (mismo
+`build` de la sesión de `prepare`/`build`, re-confirmado por `deploy` antes
+de aplicar: `unchanged(m)` sobre backend/frontend justo antes de escribir).
+
+**4. Respaldo y reversión comprobados antes de desplegar:** `prepare`
+(sesión anterior) dejó `rollbackTested:true` — las imágenes de rollback
+(`smartrayco-consolidado-{backend,frontend}-rollback:f87aeef`) ya estaban
+verificadas igual, byte a byte, a lo que corría antes de este deploy
+(`fabc13672cd3`). Comprobado de nuevo ahora mismo, en vivo, antes de
+desplegar: las etiquetas de rollback seguían apuntando exactamente a las
+imágenes `fabc13672cd3` todavía en ejecución. Rollback disponible:
+`node scripts/frontend-consolidation-release.cjs rollback` (vuelve a SSID
+sin contraseña, nunca más atrás).
+
+**5. Despliegue ejecutado:**
+```json
+{"action":"deploy","validation":{"routes":["/","/tr069","/asistencia","/campo","/campo/mi-custodia","/puntos","/soporte","/mikrotik","/analitica"],
+"artifactsVerified":125,"unauthenticatedStatus":401,"ssidTasksSent":0},"sourceCommit":"f87aeefc519..."}
+```
+`deploy` validó solo (sin un paso aparte): salud `/api/health`, hash de
+`index.html` en las 9 rutas principales (incluida `/tr069`), hash de los
+125 artefactos contra el manifiesto, y que la ruta de estado WiFi
+(`/api/genieacs-sync/wifi/.../trial/status`) rechaza sin autenticar
+(`401`) — la misma puerta `requireRole('ADMIN','SUPERADMIN')` que ya
+cubren 278 pruebas automatizadas, sin cambios en esta release.
+
+**6. Verificación posterior independiente:** se ejecutó `verify` aparte
+(no solo la validación interna de `deploy`) — resultado idéntico:
+`artifactsVerified:125`, `unauthenticatedStatus:401`, `ssidTasksSent:0`.
+
+**7. GenieACS — cero tareas enviadas, confirmado antes y después:**
+lectura real de `/tasks/` y `/faults/` para este dispositivo: **0 antes y 0
+después** del deploy (el propio `deploy`/`verify` ya lo reportan como
+`ssidTasksSent:0`, confirmado además por fuera con una consulta directa).
+El despliegue solo reemplaza contenedores (`docker compose up --no-build
+--pull never`); no hay ninguna llamada al NBI de GenieACS en ese camino.
+
+**8. Pruebas ejecutadas antes de este deploy (sesión de `prepare`/`build`,
+sin repetir hoy por no haber cambiado código):** 12/12 en
+`tr069WifiTrial.test.ts` (servidor, con las de contraseña), 278/278 y
+481/481 de las suites completas de servicios/`lib`, `vue-tsc`/`tsc`
+limpios.
+
+**9. Riesgos pendientes:**
+- La función de contraseña **no tiene todavía su primera prueba real**
+  contra `HWTC1D3691B7` — la hace el propietario manualmente.
+- Sin restauración automática de contraseña (por diseño, regla 7 de
+  `CLAUDE.md`): si la prueba cambia la contraseña, recuperarla exige
+  volver a escribir la anterior conocida desde el mismo formulario.
+- `origin/main` sigue en `88dec40`, muy por detrás de lo desplegado — sin
+  decisión tomada sobre cuándo/cómo publicar (fuera del alcance de esta
+  tarea, ver "ESTADO DE CONTINUIDAD").
+
+**Nada más se tocó:** ningún merge, push, rebase, migración, ni tarea
+GenieACS/OLT/MikroTik. Ningún cambio real de SSID o contraseña enviado.
 
 ## TR-069 WiFi contraseña: `prepare`/`build` reales contra la VM, hallazgo y corrección en el propio script de release (28/10/2026, misma sesión posterior)
 

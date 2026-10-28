@@ -18,6 +18,16 @@ sin merge/push/despliegue automático.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
+**Nota de cierre, 28/10/2026 18:25 UTC:** el `deploy` que las notas de abajo
+daban como "pendiente de autorización" **ya se ejecutó** (autorizado
+expresamente por el propietario) — commit `f87aeef` (SSID + contraseña
+WiFi) está en producción, `verify` posterior en verde, cero tareas enviadas
+a GenieACS. Detalle completo: sección "TR-069 WiFi contraseña —
+DESPLEGADO" al inicio de `ESTADO_DESARROLLO.md`. Las menciones de "sin
+desplegar"/"pendiente autorización" en los párrafos siguientes quedan
+desactualizadas; se conservan tal cual por ser antecedente, no se
+reescriben.
+
 **ACTUALIZACIÓN 28/10/2026 (tarde, misma sesión) — leer primero la sección
 "TR-069 WiFi contraseña: `prepare`/`build` reales contra la VM..." al
 inicio de `ESTADO_DESARROLLO.md`.** `prepare` y `build` del commit `f87aeef`
