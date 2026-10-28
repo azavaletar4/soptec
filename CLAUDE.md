@@ -18,6 +18,23 @@ sin merge/push/despliegue automático.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
+**Nota de cierre (incidente real, misma noche, sesión posterior):** con
+`508b75e` ya en producción, el propietario probó el cambio de contraseña
+real: el SSID cambió pero la contraseña no funcionó al conectarse y el
+panel quedó indefinidamente en "Guardando cambios". Causa raíz real,
+confirmada solo con huellas SHA-256 (nunca el valor): este firmware Huawei
+reporta `KeyPassphrase` como cadena vacía al leerlo de vuelta — un
+parámetro de solo escritura para el ACS — así que SmartRayco no puede
+verificar por esta vía si la contraseña se aplicó. El cambio de contraseña
+queda **bloqueado en el código** hasta resolver esto (commit `b51c161`,
+candidato local, sin desplegar); se agregaron los estados `unconfirmed`
+(lectura concluyente pero vacía — nunca se declara éxito ni fallo falso) y
+`stuck` (tarea sin respuesta por más de 20 min — nunca se reenvía sola) para
+que el panel deje de quedarse en "Guardando cambios" sin explicación. No
+repetir este diagnóstico — detalle completo: sección "TR-069: SSID cambia,
+contraseña falla y panel queda 'Guardando cambios'..." al inicio de
+`ESTADO_DESARROLLO.md`.
+
 **Nota de cierre, 28/10/2026 19:09 UTC:** la corrección del botón
 deshabilitado (nota siguiente) **ya se desplegó**, autorizado expresamente
 por el propietario — commit `508b75e` en producción, `deploy` y `verify`

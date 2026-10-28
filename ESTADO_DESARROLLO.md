@@ -31,15 +31,25 @@ botón «Aplicar cambios» — DESPLEGADO" más abajo.
 
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
-`HWTC1D3691B7` (contrato `CTR-2026-00214`): el propietario confirmó que
-funcionó (27/10/2026). La corrección del botón deshabilitado y el cambio de
-**contraseña** ya están desplegados pero **todavía no tienen su primera
-prueba real** — la hace el propietario manualmente desde el panel; no
-declarar ninguna de las dos "probada en producción" hasta esa confirmación.
+`HWTC1D3691B7` (contrato `CTR-2026-00214`): confirmado real dos veces
+(27/10 y de nuevo el 28/10 con el nombre `wifi 5 rayco`). **El cambio de
+contraseña NO funcionó** en su primera prueba real (28/10): el propietario
+confirmó que la contraseña nueva "aparece como incorrecta al conectarse" y
+el panel quedó indefinidamente en "Guardando cambios". Causa raíz
+encontrada (ver sección "TR-069: SSID cambia, contraseña falla..." más
+abajo): este firmware reporta `KeyPassphrase` como cadena vacía al leerlo
+de vuelta — SmartRayco no puede confirmar por TR-069 si la contraseña
+realmente se aplicó. **El cambio de contraseña queda bloqueado en el
+código** (candidato local `b51c161`, sin desplegar) hasta resolver cómo
+verificarlo con este firmware. No declarar el cambio de contraseña
+"funcional" — sigue sin confirmarse que la escritura en sí haya funcionado.
 
-**3. Cambios locales pendientes (no desplegados, no publicados):** ninguno
-de la función WiFi — todo lo preparado hasta ahora (SSID, contraseña,
-corrección del botón) ya está en producción (commit `508b75e`).
+**3. Cambios locales pendientes (no desplegados, no publicados):**
+- Commit `b51c161` (sobre `508b75e`): bloquea el envío de contraseña nueva
+  y corrige el seguimiento de estado (nuevos estados `unconfirmed`/`stuck`
+  para que el panel no quede indefinidamente en "Guardando cambios") —
+  **18/18 + 284/284 + 482/482 pruebas en verde, `vue-tsc`/`tsc` limpios,
+  sin desplegar**. Pendiente: autorización expresa de `deploy`.
 - Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
   antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
   `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
@@ -50,8 +60,9 @@ corrección del botón) ya está en producción (commit `508b75e`).
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `508b75e` | 30 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
-| WiFi SSID + contraseña + botón corregido | incluido en `main` | `508b75e` | **En producción** (desplegado 28/10/2026 19:09 UTC) |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `b51c161` | 33 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
+| WiFi SSID + contraseña + botón corregido | incluido en `main` | `508b75e` | **En producción** (desplegado 28/10/2026 19:09 UTC) — con el bug de contraseña bloqueada-para-siempre |
+| Corrección del incidente (contraseña bloqueada + estados unconfirmed/stuck) | incluido en `main` | `b51c161` | Candidato local, probado, **sin desplegar** |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
 | Rama remota activa en GitHub | `origin/main` | `88dec40` | Muy desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
 
@@ -76,15 +87,17 @@ es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
 **5. Próxima tarea autorizada:** ninguna en ejecución. Pendiente del
-**propietario**: probar manualmente desde el panel
-(`HWTC1D3691B7`/`CTR-2026-00214`) que ahora sí se puede iniciar una
-operación nueva tras una anterior ya finalizada, y el cambio de contraseña
-en sí, confirmando que PPPoE/internet del cliente no se interrumpe. No
-iniciar ningún `deploy`, migración, ni tarea GenieACS/OLT/MikroTik sin que
-el propietario lo pida en ese mismo turno (regla 16 de `CLAUDE.md`).
-Rollback disponible en cualquier momento:
+**propietario**: autorizar el `deploy` de `b51c161` (bloquea el envío de
+contraseña y corrige el seguimiento de estado) y, por separado y fuera de
+código, decidir cómo intentar confirmar/corregir la escritura de contraseña
+con este firmware (p.ej. probar `PreSharedKey.{i}.KeyPassphrase`, consultar
+documentación/soporte Huawei, o aceptar que esta función quede limitada a
+SSID para esta ONT). No iniciar ningún `deploy`, migración, ni tarea
+GenieACS/OLT/MikroTik sin que el propietario lo pida en ese mismo turno
+(regla 16 de `CLAUDE.md`). Rollback disponible en cualquier momento:
 `node scripts/frontend-consolidation-release.cjs rollback` (vuelve a
-`f87aeefc5190` — SSID+contraseña con el bug del botón, no más atrás).
+`f87aeefc5190` — con el bug de contraseña bloqueada-para-siempre, no más
+atrás).
 
 ### Procedimiento de despliegue (5 fases separadas, siempre en este orden)
 
@@ -129,6 +142,87 @@ invocación, nunca combinadas:
   inesperados), **se detiene y lo reporta** en vez de asumir o corregirlo
   por su cuenta — la causa casi siempre es que el otro agente avanzó en
   medio tiempo.
+
+## TR-069: SSID cambia, contraseña falla y panel queda "Guardando cambios" — causa raíz real y bloqueo del cambio de contraseña (candidato local, 28/10/2026)
+
+Incidente real reportado por el propietario sobre `HWTC1D3691B7`
+(`CTR-2026-00214`), con la versión `508b75e` ya desplegada: el nombre WiFi
+sí cambió, la contraseña nueva aparece como incorrecta al conectarse, y el
+panel sigue mostrando «Guardando cambios…» indefinidamente.
+
+**Diagnóstico, solo lectura contra GenieACS real (nunca el valor de la
+contraseña, solo metadatos/huellas):**
+
+1. **Registro real de la operación** (journal del backend, sin secretos):
+   una operación con `kind:"change"`, `before:"wifi 5 ray"`,
+   `after:"wifi 5 rayco"`, `passwordChanged:true`, `state:"queued"` — nunca
+   llegó a `"verified"` ni a `"failed"`.
+2. **GenieACS confirma la tarea de escritura ya procesada** (no aparece en
+   `/tasks/`), **sin faults registrados** — el protocolo TR-069 no reportó
+   ningún rechazo. La tarea de LECTURA posterior (`getParameterValues`)
+   seguía pendiente en `/tasks/` sin completarse pese a que el equipo
+   volvió a informar después de encolarla.
+3. **Hallazgo real, confirmado con una huella SHA-256, nunca con el valor:**
+   `KeyPassphrase` se reporta como **cadena vacía** al leerlo de vuelta en
+   este firmware (`_value` de longitud 0, con un `_timestamp` fresco justo
+   después del cambio) — es decir, el equipo trata este parámetro como de
+   **solo escritura** para el ACS. La huella de una cadena vacía nunca
+   puede coincidir con la huella real de la contraseña enviada, así que
+   **la verificación por lectura es estructuralmente imposible con este
+   firmware** — no es un error del código, es lo que reporta el equipo.
+   Esto también explica por qué, en teoría, no se puede saber con certeza
+   si la escritura de `KeyPassphrase` en sí se aplicó o no: el SSID sí lo
+   confirma su propio Inform, la contraseña nunca lo confirma por esta vía.
+4. **No se investigó aquí** (fuera del alcance de "solo lectura, no
+   escribir") si `PreSharedKey.{i}.KeyPassphrase` (la tabla multi-instancia
+   alternativa, vista vacía la primera vez que se investigó este equipo)
+   seria el parámetro efectivo en su lugar, ni si el firmware exige algún
+   parámetro de seguridad adicional (modo de encriptación, beacon, etc.) —
+   ninguno de esos parámetros tiene valor cacheado todavía (ya documentado
+   antes, no es nuevo). Queda como pregunta abierta para quien retome esto.
+5. **Causa real de "Guardando cambios" para siempre:** dos factores
+   independientes se combinaban: (a) la huella vacía nunca iba a coincidir,
+   así que `passwordOk` nunca se volvía verdadero; (b) el código no tenía
+   ningún límite de tiempo para una tarea de lectura que GenieACS nunca
+   termina de procesar — ambos se combinaban para dejar el panel esperando
+   una confirmación que nunca iba a llegar por ninguna de las dos vías.
+
+**Corrección aplicada (commit `b51c161`, candidato local, sin desplegar):**
+
+- **Cambio de contraseña bloqueado en `change()`** hasta resolver cómo
+  verificarlo con este firmware — cualquier intento (válido o no) se
+  rechaza con un mensaje claro. El resto de protecciones (identidad exacta,
+  permisos ADMIN/SUPERADMIN, candado de una sola operación pendiente,
+  contraseña nunca en texto plano) quedan intactas, no se relajó nada.
+- **Nuevo estado `unconfirmed`**: cuando la lectura es concluyente pero
+  vacía, la operación pasa a este estado — nunca `"verified"` (no se
+  declara éxito de algo que no se pudo confirmar) ni `"failed"` (GenieACS
+  no reportó ningún error real). Si el nombre sí se confirmó de forma
+  independiente, el mensaje lo dice explícitamente sin mezclarlo con la
+  contraseña.
+- **Nuevo estado `stuck`**: si una tarea sigue sin respuesta más de 20
+  minutos, se lo decimos al administrador en vez de seguir mostrando
+  "Guardando cambios" sin explicación — nunca se reenvía sola.
+- **Formulario**: el campo de contraseña queda deshabilitado con una
+  explicación clara de por qué; el mensaje principal distingue ahora
+  "Cambio realizado", "No se pudo confirmar", "Sigue pendiente" y "No se
+  pudo completar el cambio" (4 resultados reales, no 3 forzados).
+
+**Pruebas:** 18/18 en `tr069WifiTrial.test.ts` (servidor) — incluyen 4
+nuevas que reproducen el incidente real fabricando el mismo tipo de
+registro que se encontró en producción (contraseña vacía → `unconfirmed`;
+tarea vieja sin respuesta → `stuck`; ambos estados correctamente
+terminales/bloqueantes según corresponda). 284/284 y 482/482 de las suites
+completas sin regresión. `vue-tsc`/`tsc` limpios.
+
+**Nada se escribió ni se envió durante este diagnóstico:** todo el análisis
+de GenieACS fue `GET`, cero tareas nuevas, cero cambios de SSID/contraseña/
+PPPoE/WAN/VLAN, sin reinicios de ONT/OLT/MikroTik, sin desplegar.
+
+**Pendiente, fuera de alcance de código:** confirmar con el propietario (o
+soporte Huawei) si existe otra forma de verificar/aplicar la contraseña en
+este firmware; hasta entonces, la función queda limitada a cambiar
+únicamente el nombre de la red para esta ONT.
 
 ## TR-069 WiFi — corrección del botón deshabilitado — DESPLEGADA en producción (28/10/2026 19:09 UTC)
 
