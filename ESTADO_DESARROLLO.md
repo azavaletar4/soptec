@@ -1,5 +1,130 @@
 # SmartRayco — Estado de desarrollo
 
+## ESTADO DE CONTINUIDAD — única fuente, leer antes de trabajar (Claude Code y Codex)
+
+**Regla de continuidad:** este bloque es el punto de partida obligatorio
+para cualquier agente (Claude Code o Codex) antes de tocar código, y se
+**edita in-place** al terminar una sesión con cambios relevantes — nunca se
+apila una nota nueva encima ni se duplica en otro archivo. Si este bloque
+contradice una narración más abajo (CIERRE DE JORNADA, Fase 175, notas de
+TR-069, etc.), **manda este bloque**; esas secciones quedan como
+antecedente/detalle histórico, no como fuente de verdad. Mantenerlo breve:
+cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
+se resume en una línea o se retira de aquí — el detalle completo ya vive en
+la sección histórica correspondiente, no hace falta repetirlo.
+
+**1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
+nunca asumido desde un commit o checkout local):
+Frontend y backend en la VM de producción (`192.168.55.201`) corren el
+commit **`fabc13672cd3340ad39420de33992c08f3fceb36`** (`fabc136`) —
+confirmado vía `/release-manifest.json` del contenedor y el `Image` real de
+`smartrayco-frontend-1`/`smartrayco-backend-1`, no solo por el tag. Imágenes:
+`smartrayco-frontend-consolidado:fabc13672cd3`,
+`smartrayco-backend-wifitrial:fabc13672cd3`. Resto de servicios
+(Mongo/Caddy/GenieACS) sin cambios.
+
+**2. Último cambio funcional probado en producción real:**
+Cambio de nombre (SSID) WiFi vía TR-069 sobre la Huawei de prueba
+`HWTC1D3691B7` (contrato `CTR-2026-00214`): el propietario confirmó que
+funcionó y que el equipo siguió navegando normalmente (28/10/2026).
+
+**3. Cambios locales pendientes (no desplegados, no publicados):**
+- Commit `f87aeef` (sobre `fabc136`, en `main` local): cambio de
+  **contraseña** WiFi para la misma Huawei/instancia — **preparado y
+  validado** (`prepare`/`build` reales contra la VM,
+  `rollbackTested:true`, `reproducible:true`), **sin desplegar**. Imágenes
+  candidatas ya construidas en la VM:
+  `smartrayco-frontend-consolidado:f87aeefc5190`,
+  `smartrayco-backend-wifitrial:f87aeefc5190`. Pendiente: autorización
+  expresa de `deploy` y, después, la prueba real desde el panel. **No
+  repetir su investigación ni modificarla** —
+  `docs/TR069-WIFI-CONTRASENA-PREPARADA-20261028.md`.
+- Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
+  antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
+  `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
+  `docs/ASISTENCIA-*` / `docs/FASE175-*` / `docs/PUNTOS-*` nuevos sin
+  seguimiento, `server/src/services/__tests__/trafficAnalyticsCounterStates.test.ts`.
+
+**4. Rama y commit de cada trabajo activo:**
+
+| Trabajo | Rama/worktree | Commit | Estado |
+|---|---|---|---|
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `2544526` | 27 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
+| WiFi SSID | incluido en `main` | `fabc136` | **En producción** |
+| WiFi contraseña | incluido en `main` | `f87aeef` | Preparado/compilado en la VM, sin desplegar |
+| Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
+| Rama remota activa en GitHub | `origin/main` | `88dec40` | Desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
+
+El repositorio tiene además **36 ramas locales (incluida `main`) y 24
+worktrees (incluido éste)** — contado el 28/10/2026, en su mayoría de fases
+anteriores. `git branch -a` y `git worktree list` son la fuente real y
+vigente (no copiar ese listado aquí: envejece de inmediato). Son en su
+mayoría fases ya cerradas: **no se tocan, no se fusionan ni se borran sin
+pedido explícito del propietario**, y el hecho de que `main` vaya adelante
+de `origin/main` **no implica que esos commits deban publicarse juntos** —
+cada conjunto se evalúa y autoriza por separado.
+
+**Hallazgo de esta revisión, sin corregir (requiere decisión del
+propietario, no una acción de código):** la rama por defecto configurada en
+GitHub (`origin/HEAD`) sigue siendo **`master`**, no `main` — y `master`
+son solo los 2 commits originales del scaffolding (`aadd198`/`6f948ec`),
+completamente desconectados de todo el desarrollo real (que vive en `main`
+y en adelante). Un agente o herramienta que confíe en "la rama por
+defecto" de GitHub tomaría ese código casi vacío. No se tocó la
+configuración del repositorio en esta sesión (cambiar la rama por defecto
+es una acción administrativa de GitHub, no un commit); queda como decisión
+pendiente del propietario.
+
+**5. Próxima tarea autorizada:** ninguna en ejecución. La única acción
+pendiente de autorización explícita es el `deploy` del commit `f87aeef`
+(contraseña WiFi) — comando exacto en la sección "TR-069 WiFi contraseña"
+más abajo. No iniciar `deploy`, migraciones, ni tareas GenieACS/OLT/MikroTik
+sin que el propietario lo pida en ese mismo turno (regla 16 de `CLAUDE.md`).
+
+### Procedimiento de despliegue (5 fases separadas, siempre en este orden)
+
+`scripts/frontend-consolidation-release.cjs <acción>` — una sola acción por
+invocación, nunca combinadas:
+
+1. **`prepare`** — respalda (`docker save`) las imágenes **que están
+   corriendo en ese momento** (nunca una release anterior) y verifica que el
+   rollback restaura el mismo árbol de archivos. No construye ni despliega
+   nada. Corregido el 28/10/2026 para que nunca dependa de un respaldo fijo
+   de una release vieja (ver detalle abajo, "hallazgo y corrección").
+2. **`build`** — compila el candidato en un contenedor aislado
+   (`--network none`), compara contra lo que corre en vivo (solo el alcance
+   declarado puede cambiar) y valida reproducibilidad. No despliega nada.
+3. **`deploy`** — el único paso que cambia contenedores en vivo. Requiere
+   autorización explícita del propietario en ese mismo turno (regla 16 de
+   `CLAUDE.md`); nunca se asume de un "implementa esto".
+4. **`verify`** — lectura posterior, no cambia nada. Antes de un `deploy`
+   siempre reporta `CANDIDATE_NOT_DEPLOYED_*` — eso es el diseño correcto
+   (compara contra lo que ya quedó corriendo), no un error.
+5. **`rollback`** — revierte a las imágenes que corrían justo antes de ESTA
+   release (nunca más atrás), con el mismo respaldo verificado en `prepare`.
+   Disponible con o sin haber desplegado.
+
+### Cómo comparten avances Claude Code y Codex (sin merge/push/deploy automático)
+
+- El canal de traspaso entre agentes es el propio repositorio git (commits
+  locales) más este bloque "ESTADO DE CONTINUIDAD" — nunca la memoria o el
+  chat de una sesión: el agente que termina una sesión relevante lo
+  actualiza in-place; el siguiente (mismo u otro agente, en el mismo
+  checkout o en otro) lo lee primero y confirma el commit real antes de
+  asumir nada.
+- Cada commit se queda en rama local (`main` u otra), **nunca se publica
+  (`push`), fusiona (`merge`/`rebase`) ni despliega automáticamente** — eso
+  siempre requiere un pedido explícito del propietario en ese turno.
+- Cada commit incluye **solo los archivos de la fase en la que se trabajó**
+  (`git add <archivos exactos>`, nunca `-A`/`.`) — los archivos sueltos de
+  otras fases (punto 3 de arriba) se dejan intactos, sin comentarlo como
+  pendiente propio.
+- Si un agente encuentra el repositorio en un estado que no coincide con
+  este bloque (otra rama activa, otro commit desplegado, archivos
+  inesperados), **se detiene y lo reporta** en vez de asumir o corregirlo
+  por su cuenta — la causa casi siempre es que el otro agente avanzó en
+  medio tiempo.
+
 ## TR-069 WiFi contraseña: `prepare`/`build` reales contra la VM, hallazgo y corrección en el propio script de release (28/10/2026, misma sesión posterior)
 
 Autorizado por el propietario: preparar el despliegue del commit `de683e4`

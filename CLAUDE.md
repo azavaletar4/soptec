@@ -2,6 +2,22 @@
 
 ## Antes de empezar
 
+**Procedimiento único de continuidad (Claude Code y Codex, 28/10/2026):**
+antes de tocar código, leer la sección **"ESTADO DE CONTINUIDAD"** al
+inicio de `ESTADO_DESARROLLO.md` — es la única fuente de qué está
+desplegado, qué se probó, qué queda pendiente, qué rama/commit usar y qué
+tarea está autorizada. Reemplaza cualquier nota de cierre de sesión
+anterior para ese propósito; esas notas (incluida la bitácora detallada
+justo debajo) quedan como antecedente/detalle, nunca como fuente de verdad
+si contradicen ese bloque. Al terminar una sesión con cambios relevantes:
+**editar ese mismo bloque in-place**, no agregar una nota nueva aquí ni
+allá. Esa misma sección de `ESTADO_DESARROLLO.md` define además el
+procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
+`deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
+sin merge/push/despliegue automático.
+
+### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
+
 **ACTUALIZACIÓN 28/10/2026 (tarde, misma sesión) — leer primero la sección
 "TR-069 WiFi contraseña: `prepare`/`build` reales contra la VM..." al
 inicio de `ESTADO_DESARROLLO.md`.** `prepare` y `build` del commit `f87aeef`
