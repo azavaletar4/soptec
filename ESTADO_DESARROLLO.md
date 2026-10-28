@@ -16,38 +16,30 @@ la sección histórica correspondiente, no hace falta repetirlo.
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
 Frontend y backend en la VM de producción (`192.168.55.201`) corren el
-commit **`f87aeefc519031fcc677fde88ec853ec0159980b`** (`f87aeef` — SSID +
-contraseña WiFi) — desplegado el 28/10/2026 18:25 UTC, confirmado vía
-`/release-manifest.json` del contenedor, el `Image` real de
-`smartrayco-frontend-1`/`smartrayco-backend-1` (no solo el tag) y `verify`
-ejecutado aparte después del `deploy`. Imágenes:
-`smartrayco-frontend-consolidado:f87aeefc5190`,
-`smartrayco-backend-wifitrial:f87aeefc5190`. Resto de servicios
-(Mongo/Caddy/GenieACS) sin cambios — mismos `started` que antes del deploy.
-Rollback verificado y disponible: vuelve a `fabc13672cd3` (SSID, sin
-contraseña), nunca más atrás. Detalle completo del despliegue: sección
-"TR-069 WiFi contraseña — DESPLEGADO" más abajo. **Conocido:** esta versión
-en vivo (`f87aeef`) tiene el botón «Aplicar cambios» deshabilitado para
-siempre tras el primer cambio (reportado por el propietario) — corrección
-lista en candidato local (`33658df`, punto 3), **sin desplegar todavía**.
+commit **`508b75e84cc942a1923cd654dfe26a6f369a9590`** (`508b75e` — SSID +
+contraseña WiFi + corrección del botón deshabilitado) — desplegado el
+28/10/2026 19:09 UTC, confirmado vía `/release-manifest.json` del
+contenedor, el `Image` real de `smartrayco-frontend-1`/`smartrayco-backend-1`
+(no solo el tag) y `verify` ejecutado aparte después del `deploy`. Imágenes:
+`smartrayco-frontend-consolidado:508b75e84cc9`,
+`smartrayco-backend-wifitrial:508b75e84cc9`. Resto de servicios
+(Mongo/Caddy/GenieACS) sin cambios — mismos `started`
+que antes del deploy. Rollback verificado y disponible: vuelve a
+`f87aeefc5190` (la versión con el bug, SSID+contraseña sin la corrección
+del botón), nunca más atrás. Detalle completo: sección "TR-069 WiFi —
+botón «Aplicar cambios» — DESPLEGADO" más abajo.
 
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
 `HWTC1D3691B7` (contrato `CTR-2026-00214`): el propietario confirmó que
-funcionó y que el equipo siguió navegando normalmente (28/10/2026). El
-cambio de **contraseña** está desplegado pero **todavía no tiene su primera
-prueba real** — además, el propietario reportó el formulario en producción
-con el botón «Aplicar cambios» permanentemente deshabilitado (causa raíz y
-corrección ya en candidato local, ver sección "Formulario WiFi — botón
-deshabilitado" más abajo); no declarar esta función "probada en producción"
-hasta desplegar esa corrección y que el propietario confirme la prueba real.
+funcionó (27/10/2026). La corrección del botón deshabilitado y el cambio de
+**contraseña** ya están desplegados pero **todavía no tienen su primera
+prueba real** — la hace el propietario manualmente desde el panel; no
+declarar ninguna de las dos "probada en producción" hasta esa confirmación.
 
-**3. Cambios locales pendientes (no desplegados, no publicados):**
-- Commit `33658df` (sobre `f87aeef`/`6adfd58`): corrección del botón
-  deshabilitado + simplificación del formulario WiFi — causa raíz
-  identificada y corregida (frontend Y backend, ver sección detallada),
-  **19/19 + 285/285 + 481/481 pruebas en verde, `vue-tsc` limpio, sin
-  desplegar**. Pendiente: autorización expresa de `deploy`.
+**3. Cambios locales pendientes (no desplegados, no publicados):** ninguno
+de la función WiFi — todo lo preparado hasta ahora (SSID, contraseña,
+corrección del botón) ya está en producción (commit `508b75e`).
 - Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
   antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
   `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
@@ -58,9 +50,8 @@ hasta desplegar esa corrección y que el propietario confirme la prueba real.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `33658df` | 30 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
-| WiFi SSID + contraseña | incluido en `main` | `f87aeef` | **En producción** (desplegado 28/10/2026 18:25 UTC) — con el bug del botón |
-| Corrección botón deshabilitado + formulario simple | incluido en `main` | `33658df` | Candidato local, probado, **sin desplegar** |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `508b75e` | 30 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
+| WiFi SSID + contraseña + botón corregido | incluido en `main` | `508b75e` | **En producción** (desplegado 28/10/2026 19:09 UTC) |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
 | Rama remota activa en GitHub | `origin/main` | `88dec40` | Muy desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
 
@@ -85,14 +76,15 @@ es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
 **5. Próxima tarea autorizada:** ninguna en ejecución. Pendiente del
-**propietario**: autorizar el `deploy` de la corrección del botón (`33658df`)
-y, después, probar manualmente el cambio de contraseña WiFi desde el panel
-(`HWTC1D3691B7`/`CTR-2026-00214`) confirmando que PPPoE/internet del cliente
-no se interrumpe. No iniciar ningún `deploy`, migración, ni tarea
-GenieACS/OLT/MikroTik sin que el propietario lo pida en ese mismo turno
-(regla 16 de `CLAUDE.md`). Rollback disponible en cualquier momento:
+**propietario**: probar manualmente desde el panel
+(`HWTC1D3691B7`/`CTR-2026-00214`) que ahora sí se puede iniciar una
+operación nueva tras una anterior ya finalizada, y el cambio de contraseña
+en sí, confirmando que PPPoE/internet del cliente no se interrumpe. No
+iniciar ningún `deploy`, migración, ni tarea GenieACS/OLT/MikroTik sin que
+el propietario lo pida en ese mismo turno (regla 16 de `CLAUDE.md`).
+Rollback disponible en cualquier momento:
 `node scripts/frontend-consolidation-release.cjs rollback` (vuelve a
-`fabc13672cd3`, SSID sin contraseña).
+`f87aeefc5190` — SSID+contraseña con el bug del botón, no más atrás).
 
 ### Procedimiento de despliegue (5 fases separadas, siempre en este orden)
 
@@ -137,6 +129,83 @@ invocación, nunca combinadas:
   inesperados), **se detiene y lo reporta** en vez de asumir o corregirlo
   por su cuenta — la causa casi siempre es que el otro agente avanzó en
   medio tiempo.
+
+## TR-069 WiFi — corrección del botón deshabilitado — DESPLEGADA en producción (28/10/2026 19:09 UTC)
+
+Autorizado expresamente por el propietario: desplegar los commits `33658df`
+(corrección) y `508b75e` (documentación). **Publicado exclusivamente el
+formulario WiFi TR-069 y su servicio backend — ningún otro módulo tocado.**
+
+**1. Alcance verificado antes de tocar nada:** `git diff --stat 6adfd58
+33658df` confirmó únicamente `server/src/services/tr069WifiTrial.ts`, su
+prueba, `src/lib/tr069WifiTrial.ts` y `src/views/tr069/Tr069View.vue`;
+`git diff --stat 33658df 508b75e` confirmó únicamente `CLAUDE.md`/
+`ESTADO_DESARROLLO.md`. Nada ajeno. `src/lib/tr069WifiTrial.ts` solo lo
+importa `Tr069View.vue` en tiempo de ejecución (`stores/tr069.ts` únicamente
+lo usa como `import type`, sin impacto en el empaquetado) — confirmaba de
+antemano que el cambio debía seguir cayendo en el mismo único archivo
+compilado ya permitido (`assets/Tr069View.js`), y `build` lo confirmó real:
+pasó a la primera, sin el error `HISTORICAL_ASSETS_CHANGED` — único archivo
+con contenido distinto, Asistencia/Puntos/Campo/OLT/Rutinas intactos.
+
+**2. Imágenes:**
+
+| Servicio | Anterior (en vivo) | Nueva (desplegada) |
+|---|---|---|
+| Frontend | `smartrayco-frontend-consolidado:f87aeefc5190` | `smartrayco-frontend-consolidado:508b75e84cc9` |
+| Backend | `smartrayco-backend-wifitrial:f87aeefc5190` | `smartrayco-backend-wifitrial:508b75e84cc9` |
+
+Caddy/Mongo/GenieACS: mismos `Id`/`started` que antes — no se tocaron.
+
+**3. Respaldo y reversión comprobados antes de desplegar:** `prepare` dejó
+`rollbackTested:true`; confirmado en vivo justo antes del `deploy` que las
+etiquetas de rollback (`smartrayco-consolidado-{backend,frontend}-rollback:508b75e`)
+apuntaban exactamente a las imágenes `f87aeefc5190` todavía en ejecución —
+contra las imágenes ACTIVAS en ese momento, no contra una release vieja.
+Rollback disponible: `node scripts/frontend-consolidation-release.cjs
+rollback` (vuelve a `f87aeefc5190`, la versión con el bug, nunca más atrás).
+
+**4. Despliegue y verificación independiente:** `deploy` y, aparte,
+`verify` — ambos: `artifactsVerified:125`, las 9 rutas principales
+(incluida `/tr069`) con hash correcto, `unauthenticatedStatus:401` (misma
+puerta `requireRole('ADMIN','SUPERADMIN')` de siempre, sin cambios en esta
+release, ejercitada además por las pruebas de roles ya existentes),
+`ssidTasksSent:0`.
+
+**5. GenieACS — cero tareas, confirmado antes y después:** lectura directa
+de `/tasks/`/`/faults/` para este dispositivo: 0 antes y 0 después del
+deploy. El despliegue solo reemplaza contenedores; no hay llamada al NBI en
+ese camino.
+
+**6. Confirmación de que el bug quedó resuelto (sin enviar ningún cambio
+real):** se leyó el archivo de respaldo persistente REAL de este equipo
+(dentro del volumen Docker del backend, nunca credenciales ni contraseñas
+en texto plano — este archivo no las contiene, solo huellas) — tiene
+exactamente **una** operación, `kind:"change"`, `state:"verified"` (el
+cambio de SSID que el propietario ya confirmó). Con el código anterior,
+esto dejaba el botón deshabilitado para siempre; con el código desplegado
+ahora, un estado `verified` ya no bloquea un envío nuevo — confirmado por
+lógica de código y por las 19 pruebas automatizadas, no por un envío real
+(restricción de esta tarea).
+
+**7. Pruebas ejecutadas antes de este deploy (sesión anterior, sin repetir
+por no haber cambiado código):** 19/19 en `tr069WifiTrial.test.ts`
+(servidor), 285/285 y 481/481 de las suites completas de servicios/`lib`,
+`vue-tsc` limpio.
+
+**8. Riesgos pendientes:**
+- La corrección **no tiene todavía su primera prueba real** en el panel —
+  la hace el propietario.
+- "Restaurar" sigue revirtiendo siempre al nombre ORIGINAL (el primero
+  registrado), no al nombre justo-antes-del-último-cambio, si llega a haber
+  más de un cambio en el camino — limitación conocida, documentada en el
+  propio panel, fuera de alcance de este fix.
+- `origin/main` sigue en `88dec40`, muy por detrás de lo desplegado — sin
+  decisión tomada sobre publicación (ver "ESTADO DE CONTINUIDAD").
+
+**Nada más se tocó:** ningún merge, push, rebase, migración, ni tarea
+GenieACS/OLT/MikroTik. Ningún cambio real de SSID o contraseña enviado a la
+Huawei.
 
 ## TR-069 WiFi — botón «Aplicar cambios» deshabilitado para siempre: causa raíz y corrección (candidato local, 28/10/2026)
 

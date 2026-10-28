@@ -18,6 +18,14 @@ sin merge/push/despliegue automático.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
+**Nota de cierre, 28/10/2026 19:09 UTC:** la corrección del botón
+deshabilitado (nota siguiente) **ya se desplegó**, autorizado expresamente
+por el propietario — commit `508b75e` en producción, `deploy` y `verify`
+aparte en verde, cero tareas a GenieACS confirmado antes y después. Detalle:
+sección "TR-069 WiFi — corrección del botón deshabilitado — DESPLEGADA" al
+inicio de `ESTADO_DESARROLLO.md`. La mención de "sin desplegar" en la nota
+siguiente queda desactualizada; se conserva tal cual por ser antecedente.
+
 **Nota de cierre, 28/10/2026 (misma noche, sesión posterior):** el
 propietario reportó el botón «Aplicar cambios» del formulario WiFi
 deshabilitado para siempre en producción. Causa raíz: NO era una
