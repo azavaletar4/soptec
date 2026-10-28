@@ -16,37 +16,31 @@ la sección histórica correspondiente, no hace falta repetirlo.
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
 Frontend y backend en la VM de producción (`192.168.55.201`) corren el
-commit **`16e2bd2b6f6372aba73c402768f852702bd097e2`** (`16e2bd2` — SSID +
-contraseña bloqueada + corrección del "Guardando cambios" indefinido) —
-desplegado el 28/10/2026 20:12 UTC, confirmado vía `/release-manifest.json`
-del contenedor, el `Image` real de
+commit **`5d48a10ea497c7c46251c1b784c25537c81f1275`** (`5d48a10` — SSID +
+contraseña bloqueada + corrección del "Guardando cambios" + **Hosts/
+Dispositivos conectados**) — desplegado el 28/10/2026 20:33 UTC, confirmado
+vía `/release-manifest.json` del contenedor, el `Image` real de
 `smartrayco-frontend-1`/`smartrayco-backend-1` (no solo el tag) y `verify`
 ejecutado aparte después del `deploy`. Imágenes:
-`smartrayco-frontend-consolidado:16e2bd2b6f63`,
-`smartrayco-backend-wifitrial:16e2bd2b6f63`. Resto de servicios
+`smartrayco-frontend-consolidado:5d48a10ea497`,
+`smartrayco-backend-wifitrial:5d48a10ea497`. Resto de servicios
 (Mongo/Caddy/GenieACS) sin cambios — mismos `started` que antes del
-deploy. Rollback verificado y disponible: vuelve a `508b75e84cc9` (la
-versión con el bug de contraseña bloqueada-para-siempre), nunca más atrás.
-Detalle completo: sección "TR-069 WiFi — corrección final DESPLEGADA" más
-abajo. **La función Hosts/Dispositivos conectados (commit `3670edc`) NO
-está incluida en este deploy — sigue solo local, sin desplegar,** tal como
-se pidió explícitamente.
+deploy. Rollback verificado y disponible: vuelve a `16e2bd2b6f63` (SSID +
+contraseña bloqueada, sin Hosts), nunca más atrás. Detalle completo:
+sección "Hosts / Dispositivos conectados — DESPLEGADO" más abajo.
 
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
 `HWTC1D3691B7` (contrato `CTR-2026-00214`): confirmado real más de una vez.
-**El cambio de contraseña sigue bloqueado** (ya desplegado así,
-`16e2bd2`) hasta confirmar un método verificable para este firmware — ver
-punto 5. El botón ya no queda indefinidamente en "Guardando cambios"
-(corregido y desplegado), pero **eso todavía no tiene su primera prueba
-real** — la hace el propietario desde el panel.
+**El cambio de contraseña sigue bloqueado** hasta confirmar un método
+verificable para este firmware — ver punto 5. La corrección del
+"Guardando cambios" indefinido y la nueva sección **Hosts/Dispositivos
+conectados ya están desplegadas pero todavía no tienen su primera prueba
+real** — las hace el propietario desde el panel.
 
-**3. Cambios locales pendientes (no desplegados, no publicados):**
-- Commit `3670edc` (sobre `16e2bd2`): sección "Dispositivos conectados"
-  (Hosts) en el detalle TR-069 — solo lectura, carga perezosa al expandir,
-  **293/293 + 482/482 pruebas en verde, `vue-tsc`/`tsc` limpios, sin
-  desplegar** (pedido explícitamente así). Pendiente: autorización
-  explícita de `deploy` en una sesión futura, aparte de esta.
+**3. Cambios locales pendientes (no desplegados, no publicados):** ninguno
+de TR-069/WiFi/Hosts — todo lo preparado hasta ahora ya está en producción
+(commit `5d48a10`).
 - Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
   antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
   `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
@@ -57,9 +51,9 @@ real** — la hace el propietario desde el panel.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `3670edc` | 36 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
-| WiFi SSID + contraseña bloqueada + botón corregido | incluido en `main` | `16e2bd2` | **En producción** (desplegado 28/10/2026 20:12 UTC) |
-| Hosts / Dispositivos conectados | incluido en `main` | `3670edc` | Candidato local, probado, **sin desplegar** (a propósito) |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `d323d0e` | 38 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
+| WiFi + Hosts, todo junto | incluido en `main` | `5d48a10` | **En producción** (desplegado 28/10/2026 20:33 UTC) |
+| Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
 | Rama remota activa en GitHub | `origin/main` | `88dec40` | Muy desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
 
@@ -84,22 +78,21 @@ es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
 **5. Próxima tarea autorizada:** ninguna en ejecución. Pendiente del
-**propietario**: (a) probar manualmente desde el panel que el botón ya no
-queda indefinidamente en "Guardando cambios" y que el cambio de nombre
-WiFi sigue funcionando; (b) decidir si autoriza una prueba de
+**propietario**: (a) probar manualmente desde el panel que el botón WiFi ya
+no queda indefinidamente en "Guardando cambios", que el nombre sigue
+funcionando, y que la nueva pantalla "Dispositivos conectados" carga bien
+(botón "Detalle" en `/tr069`); (b) decidir si autoriza una prueba de
 **descubrimiento de solo lectura** (una tarea nueva a GenieACS, requiere su
 propia autorización aparte) contra `WLANConfiguration.5.PreSharedKey` para
 confirmar si existe la instancia `.1` — hay evidencia pública (no local, no
 de SmartOLT) de que `PreSharedKey.{i}.KeyPassphrase` es el parámetro que sí
 funciona en otros Huawei, pero localmente no hay ninguna instancia
 descubierta todavía (ver sección "Huawei: método correcto de contraseña
-WiFi"); (c) decidir cuándo desplegar Hosts (`3670edc`, listo y probado,
-sin desplegar a propósito). No iniciar ningún `deploy`, migración, ni
-tarea GenieACS/OLT/MikroTik sin que el propietario lo pida en ese mismo
-turno (regla 16 de `CLAUDE.md`). Rollback disponible en cualquier momento:
+WiFi"). No iniciar ningún `deploy`, migración, ni tarea GenieACS/OLT/
+MikroTik sin que el propietario lo pida en ese mismo turno (regla 16 de
+`CLAUDE.md`). Rollback disponible en cualquier momento:
 `node scripts/frontend-consolidation-release.cjs rollback` (vuelve a
-`508b75e84cc9` — con el bug de contraseña bloqueada-para-siempre, no más
-atrás).
+`16e2bd2b6f63` — SSID + contraseña bloqueada, sin Hosts, nunca más atrás).
 
 ### Procedimiento de despliegue (5 fases separadas, siempre en este orden)
 
@@ -144,6 +137,80 @@ invocación, nunca combinadas:
   inesperados), **se detiene y lo reporta** en vez de asumir o corregirlo
   por su cuenta — la causa casi siempre es que el otro agente avanzó en
   medio tiempo.
+
+## Hosts / Dispositivos conectados — DESPLEGADO en producción (28/10/2026 20:33 UTC)
+
+Autorizado expresamente: desplegar exclusivamente Hosts (`3670edc` +
+`5d48a10`, documentación).
+
+**1. Verificación previa:** `git diff --stat 16e2bd2 3670edc` confirmó
+exactamente los 6 archivos de Hosts (2 nuevos de servicio, 1 de pruebas, 3
+extendidos); `git diff --stat 3670edc 5d48a10` confirmó solo documentación.
+27/27 pruebas (`tr069Hosts.test.ts` + `tr069WifiTrial.test.ts`)
+re-confirmadas antes de tocar nada. Baseline GenieACS: 0 tareas, antes y
+después.
+
+**2. Hallazgo real durante `build` — corregido antes de desplegar nada
+(commit `d323d0e`, release-tooling, no código de la app):**
+`HISTORICAL_ASSETS_CHANGED:assets/tr069.js` — `src/stores/tr069.ts`
+(donde vive `fetchHosts`) compila en un **chunk compartido** con
+`OltDetailView.vue` y `campo.ts`, no solo con `Tr069View.vue`. Confirmado
+con `git diff` que el cambio real es puramente aditivo (un import de tipo
++ una función + su export, nada existente tocado) — se amplió el alcance
+declarado del script (`frontAllow`) para reconocerlo. Por separado,
+`server/src/services/tr069Hosts.ts` (archivo nuevo) no estaba en la lista
+de fuentes de backend que el build empaqueta — sin corregirlo, el
+candidato se habría desplegado con el import roto en
+`genieacsSync.ts`, recién detectable al arrancar el contenedor real.
+Agregado a la lista; confirmado con una importación real y aislada
+(`--network none`) del módulo de rutas completo contra la imagen candidata
+ya construida (`IMPORT_OK`). Ningún control de integridad se relajó — se
+declaró el alcance real, verificado con evidencia.
+
+**3. Imágenes:**
+
+| Servicio | Anterior | Nueva |
+|---|---|---|
+| Frontend | `smartrayco-frontend-consolidado:16e2bd2b6f63` | `smartrayco-frontend-consolidado:5d48a10ea497` |
+| Backend | `smartrayco-backend-wifitrial:16e2bd2b6f63` | `smartrayco-backend-wifitrial:5d48a10ea497` |
+
+Caddy/Mongo/GenieACS: sin tocar (mismos `started`).
+
+**4. `prepare`/`build`/`deploy`/`verify` reales, respaldo contra las
+imágenes activas:** `prepare` → `rollbackTested:true` (contra las imágenes
+`16e2bd2` entonces en vivo, confirmado en vivo justo antes del `deploy`
+que las etiquetas de rollback coincidían exactamente). `build` →
+`reproducible:true`, `contractGuardValidatedReadOnly:true`; único cambio
+real de frontend = los dos chunks declarados — Asistencia, Puntos, Campo,
+OLT y Rutinas equivalentes byte a byte (preservados, confirmado). `deploy`
+y `verify` (aparte): salud OK (el servidor arrancó correctamente con el
+archivo de backend nuevo incluido — confirma en vivo el fix del punto 2),
+9 rutas principales, 125 artefactos contra manifiesto, `401` sin
+autenticar, **`ssidTasksSent:0` las dos veces**.
+
+**5. Permisos e identidad, confirmados en vivo para la ruta nueva
+específicamente:** `curl` sin autenticar contra
+`/api/genieacs-sync/hosts/HWTC1D3691B7` → **`401`** (misma puerta
+`STAFF_READ` ya existente para todo `genieacsSyncRoutes`, sin cambios).
+GenieACS: 0 tareas antes y después del deploy — confirmado por fuera,
+leyendo directamente, además de `ssidTasksSent:0`.
+
+**6. Qué muestra realmente la pantalla (recordatorio, ya implementado y
+ahora en vivo):** nombre/IP/MAC solo si el equipo los reportó; conexión
+WiFi/Cable solo con evidencia real (`InterfaceType` explícito o MAC
+asociada en `AssociatedDevice`); "Estado" (conectado/desconectado) **solo**
+si el equipo reportó `Active` — nunca inferido por estar en la lista.
+Fecha real del último reporte de Hosts, con la aclaración explícita de que
+no es una lectura en vivo.
+
+**Riesgos pendientes:** ninguna de las dos funciones (corrección WiFi,
+Hosts) tiene todavía su primera prueba real del propietario desde el
+panel. El cambio de contraseña WiFi sigue bloqueado a propósito.
+
+**Rollback disponible:** `node scripts/frontend-consolidation-release.cjs
+rollback` (vuelve a `16e2bd2b6f63`, sin Hosts, nunca más atrás). **Ningún
+cambio real de SSID/contraseña/PPPoE/WAN/VLAN enviado; ninguna tarea de
+configuración a GenieACS durante el despliegue.**
 
 ## Hosts / Dispositivos conectados — implementado local, sin desplegar (28/10/2026, Fase 2)
 

@@ -18,6 +18,19 @@ sin merge/push/despliegue automático.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
+**Nota de cierre (despliegue de Hosts, sesión posterior):** Hosts
+(`3670edc`) **ya se desplegó** (commit `5d48a10`), autorizado
+expresamente. En el camino, `build` falló una vez con
+`HISTORICAL_ASSETS_CHANGED:assets/tr069.js` (el store `tr069.ts` compila
+en un chunk compartido con `OltDetailView.vue`/`campo.ts`, no solo con
+`Tr069View.vue`) y se encontró que el script de release no empaquetaba el
+archivo de backend nuevo (`tr069Hosts.ts`) — ambos corregidos en el propio
+script (`d323d0e`, sin tocar código de la app) y verificados con evidencia
+real antes de reintentar. `deploy`/`verify` en verde, `401` confirmado en
+vivo específicamente para la ruta nueva, `ssidTasksSent:0`. No repetir
+este diagnóstico — detalle completo: sección "Hosts / Dispositivos
+conectados — DESPLEGADO" al inicio de `ESTADO_DESARROLLO.md`.
+
 **Nota de cierre (Fase 1 + Fase 2, sesión posterior a la investigación):**
 la corrección del botón WiFi (`16e2bd2`, SSID habilitado + contraseña
 bloqueada a propósito + estados `unconfirmed`/`stuck`) **ya se desplegó**,
