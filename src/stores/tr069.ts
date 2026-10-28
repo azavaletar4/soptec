@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import type { WifiInventory, WifiSsidPlan } from '@/lib/tr069WifiPlan';
 import type { WifiTrialStatus } from '@/lib/tr069WifiTrial';
+import type { HostsInventory } from '@/lib/tr069Hosts';
 export type { WifiNetwork } from '@/lib/tr069WifiPlan';
 import type { OltTr069AcsProfile, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { Tr069InventorySnapshot } from '@/types/tr069Inventory';
@@ -132,6 +133,12 @@ export const useTr069Store = defineStore('tr069', () => {
     return apiFetch<WifiInventory>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}`);
   }
 
+  // Solo lectura: nunca encola una tarea, se llama solo al expandir el detalle de un
+  // equipo (nunca automático para toda la lista) para no sobrecargar GenieACS.
+  function fetchHosts(serial: string) {
+    return apiFetch<HostsInventory>(`/api/genieacs-sync/hosts/${encodeURIComponent(serial)}`);
+  }
+
   function setWifi(serial: string, payload: { path: string; ssid?: string; password?: string }) {
     return apiFetch<DeviceChangeResult>(`/api/genieacs-sync/wifi/${encodeURIComponent(serial)}`, {
       method: 'POST',
@@ -214,6 +221,7 @@ export const useTr069Store = defineStore('tr069', () => {
     setPppoe,
     fetchWifiNetworks,
     setWifi,
+    fetchHosts,
     rebootDevice,
     refreshDevice,
     provisionDevice,

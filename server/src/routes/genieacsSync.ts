@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { collectMetricsForDevice } from '../services/genieacsMetricsService';
 import { getPppoeInfo, queueReboot, queueRefresh } from '../services/tr069DeviceService';
+import { readHostsInventory } from '../services/tr069Hosts';
 
 // Adaptado de REPLICA-TR069-GENIEACS.md secciones 8/9. Sin tenant_id
 // (single-tenant): "todos" simplemente significa todos los tr069_devices.
@@ -68,6 +69,17 @@ genieacsSyncRoutes.get('/pppoe/:serial', async (c) => {
   }
 });
 
+// Dispositivos conectados (Hosts) — solo lectura de la caché ya reportada por el
+// equipo, nunca encola una tarea nueva. Mismo criterio de identidad exacta por
+// serial que PPPoE/WiFi: nunca mezcla datos de otra ONT.
+genieacsSyncRoutes.get('/hosts/:serial', async (c) => {
+  const serial = c.req.param('serial') ?? '';
+  try {
+    return c.json(await readHostsInventory(nbiUrl(), serial));
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Error al consultar GenieACS' }, 502);
+  }
+});
 
 // Reiniciar el equipo
 genieacsSyncRoutes.post('/reboot/:serial', requireRole(...PPP_WRITE), async (c) => {

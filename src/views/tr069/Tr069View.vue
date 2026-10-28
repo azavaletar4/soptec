@@ -12,6 +12,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { useAuthStore } from '@/stores/auth';
 import { compareWifiPlan, type WifiSsidPlan } from '@/lib/tr069WifiPlan';
 import { plainWifiTrialMessage, type WifiTrialStatus } from '@/lib/tr069WifiTrial';
+import type { HostsInventory } from '@/lib/tr069Hosts';
 import type { ServiceContract, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { WifiNetwork } from '@/stores/tr069';
 
@@ -54,6 +55,27 @@ async function handleReadInventory() {
 const expandedId = ref<string | null>(null);
 const metricsById = ref<Record<string, Tr069PerformanceMetric | null>>({});
 const metricsLoadingId = ref<string | null>(null);
+
+// Dispositivos conectados (Hosts): solo lectura de la caché ya reportada por el equipo,
+// nunca una tarea nueva. Se carga únicamente al expandir un equipo (nunca para toda la
+// lista), igual que las métricas, para no sobrecargar GenieACS.
+const hostsById = ref<Record<string, HostsInventory | null>>({});
+const hostsLoadingId = ref<string | null>(null);
+const hostsErrorById = ref<Record<string, string | null>>({});
+const CONNECTION_LABELS: Record<string, string> = { WiFi: 'WiFi', Cable: 'Cable' };
+const ACTIVE_LABELS: Record<string, string> = { true: 'Conectado', false: 'Desconectado' };
+
+async function loadHosts(device: Tr069Device) {
+  hostsLoadingId.value = device.id;
+  hostsErrorById.value[device.id] = null;
+  try {
+    hostsById.value[device.id] = await tr069Store.fetchHosts(device.cpe_serial);
+  } catch (e) {
+    hostsErrorById.value[device.id] = getErrorMessage(e, 'No se pudo consultar los dispositivos conectados');
+  } finally {
+    hostsLoadingId.value = null;
+  }
+}
 
 const linkModalDevice = ref<Tr069Device | null>(null);
 const clientFilter = ref('');
@@ -349,6 +371,7 @@ async function toggleExpand(device: Tr069Device) {
       metricsLoadingId.value = null;
     }
   }
+  if (!(device.id in hostsById.value)) await loadHosts(device);
 }
 
 async function refreshDeviceMetrics(device: Tr069Device) {
@@ -515,7 +538,7 @@ async function handleUnlink() {
                   {{ rebootingId === device.id ? 'Reiniciando...' : 'Reiniciar' }}
                 </button>
                 <button class="text-slate-600 hover:underline" @click="toggleExpand(device)">
-                  {{ expandedId === device.id ? 'Ocultar' : 'Métricas' }}
+                  {{ expandedId === device.id ? 'Ocultar' : 'Detalle' }}
                 </button>
                 </template>
               </td>
@@ -535,6 +558,55 @@ async function handleUnlink() {
                   <div><span class="text-slate-500">Estado:</span> {{ metricsById[device.id]?.connection_status ?? '—' }}</div>
                   <div class="text-slate-500">{{ formatDate(metricsById[device.id]?.collected_at ?? null) }}</div>
                   <button class="text-sky-600 hover:underline ml-auto" @click="refreshDeviceMetrics(device)">Actualizar</button>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                  <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-slate-700">Dispositivos conectados</h3>
+                    <button class="text-sky-600 hover:underline text-xs" :disabled="hostsLoadingId === device.id" @click="loadHosts(device)">
+                      {{ hostsLoadingId === device.id ? 'Consultando...' : 'Actualizar' }}
+                    </button>
+                  </div>
+                  <p v-if="hostsErrorById[device.id]" class="text-xs text-red-600">{{ hostsErrorById[device.id] }}</p>
+                  <template v-else-if="hostsLoadingId === device.id && !hostsById[device.id]">
+                    <p class="text-xs text-slate-500">Consultando...</p>
+                  </template>
+                  <template v-else-if="hostsById[device.id]">
+                    <p v-if="!hostsById[device.id]!.found" class="text-xs text-amber-700">No se pudo identificar este equipo en GenieACS para leer sus dispositivos conectados.</p>
+                    <template v-else>
+                      <p v-if="!hostsById[device.id]!.hosts.length" class="text-xs text-slate-500">Este equipo no reportó ningún dispositivo conectado.</p>
+                      <template v-else>
+                        <p class="text-xs text-slate-500 mb-2">
+                          Datos reportados por el equipo: {{ hostsById[device.id]!.hostsReportedAt ? new Date(hostsById[device.id]!.hostsReportedAt!).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'No disponible' }}.
+                          No es una lectura en vivo — refleja el último reporte del equipo.
+                        </p>
+                        <div class="overflow-x-auto">
+                          <table class="w-full text-xs">
+                            <thead class="text-slate-500">
+                              <tr>
+                                <th class="text-left py-1 pr-3">Nombre</th>
+                                <th class="text-left py-1 pr-3">Dirección IP</th>
+                                <th class="text-left py-1 pr-3">Dirección MAC</th>
+                                <th class="text-left py-1 pr-3">Conexión</th>
+                                <th class="text-left py-1 pr-3">Banda</th>
+                                <th class="text-left py-1 pr-3">Estado</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="(host, i) in hostsById[device.id]!.hosts" :key="i" class="border-t border-slate-100">
+                                <td class="py-1 pr-3">{{ host.hostName ?? 'No disponible' }}</td>
+                                <td class="py-1 pr-3 font-mono">{{ host.ipAddress ?? 'No disponible' }}</td>
+                                <td class="py-1 pr-3 font-mono">{{ host.macAddress ?? 'No disponible' }}</td>
+                                <td class="py-1 pr-3">{{ host.connection ? CONNECTION_LABELS[host.connection] : 'No disponible' }}</td>
+                                <td class="py-1 pr-3">{{ host.band ?? 'No disponible' }}</td>
+                                <td class="py-1 pr-3">{{ host.active !== null ? ACTIVE_LABELS[String(host.active)] : 'No disponible' }}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </template>
+                    </template>
+                  </template>
                 </div>
               </td>
             </tr>
