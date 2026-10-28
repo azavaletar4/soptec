@@ -16,15 +16,21 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
-La corrección de identificación Hosts `d6ce2c2` sigue **sin desplegar**.
-Despliegue autorizado intentado el 28/10: `prepare` PASS con respaldo de las
-imágenes activas y restauración aislada; `build` detenido por
-`HISTORICAL_ASSETS_NO_EXPECTED_CHANGE` (exige cambios de frontend aunque el
-arreglo es solo backend). No se forzó ni modificó el verificador; `deploy` y
-`verify` no ejecutados. Producción sigue en `5d48a10ea497`, salud OK, mismos
-IDs de imagen y fechas de arranque. 48 pruebas PASS; una Huawei y cinco Hosts
-en caché, pero el servicio activo aún no identifica el equipo. Cero tareas.
-Leer puntos 3 y 5 del ESTADO DE CONTINUIDAD antes de continuar.
+La corrección Hosts `d6ce2c2` **ya está desplegada y verificada** (28/10,
+21:30 UTC): backend `smartrayco-backend-wifitrial:d6ce2c2f578f`; frontend
+intacto en `5d48a10ea497` (misma imagen y arranque). Una Huawei única,
+`found:true`, cinco Hosts reales por GET; serial hexadecimal/canónico y
+serial inexistente verificados. Conexión/banda/Active desconocidos.
+El bloqueo backend-only quedó resuelto en `d844ac6`: alcance explícito en
+`deploy/consolidation-release-scope.json`, fuentes inmutables del commit,
+servicios seleccionados y verificaciones de igualdad para el lado intacto.
+12 pruebas del contrato cubren backend-only/frontend-only/ambos y rechazos
+de cambios ajenos. `prepare`/`build`/`deploy`/`verify` PASS, doble build backend,
+125 assets HTTP PASS, rollback a imágenes previas conservando configuración.
+No repetir el diagnóstico de `HISTORICAL_ASSETS_NO_EXPECTED_CHANGE`: solo
+se exige cambio de assets cuando el alcance declara frontend. El manifiesto
+frontend NO identifica por sí solo una release backend-only.
+Leer ESTADO DE CONTINUIDAD para evidencia, staging y rollback exactos.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 

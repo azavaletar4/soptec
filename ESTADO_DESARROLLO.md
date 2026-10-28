@@ -15,61 +15,61 @@ la sección histórica correspondiente, no hace falta repetirlo.
 
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
-Frontend y backend en la VM de producción (`192.168.55.201`) corren el
-commit **`5d48a10ea497c7c46251c1b784c25537c81f1275`** (`5d48a10` — SSID +
-contraseña bloqueada + corrección del "Guardando cambios" + **Hosts/
-Dispositivos conectados**) — desplegado el 28/10/2026 20:33 UTC, confirmado
-vía `/release-manifest.json` del contenedor, el `Image` real de
-`smartrayco-frontend-1`/`smartrayco-backend-1` (no solo el tag) y `verify`
-ejecutado aparte después del `deploy`. Imágenes:
-`smartrayco-frontend-consolidado:5d48a10ea497`,
-`smartrayco-backend-wifitrial:5d48a10ea497`. Resto de servicios
-(Mongo/Caddy/GenieACS) sin cambios — mismos `started` que antes del
-deploy. Rollback verificado y disponible: vuelve a `16e2bd2b6f63` (SSID +
-contraseña bloqueada, sin Hosts), nunca más atrás. Detalle completo:
-sección "Hosts / Dispositivos conectados — DESPLEGADO" más abajo.
+VM de producción (`192.168.55.201`), corrección Hosts desplegada el
+28/10/2026 **21:30 UTC**, `verify` posterior PASS:
+- Backend: **`d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201`**,
+  `smartrayco-backend-wifitrial:d6ce2c2f578f`, imagen
+  `sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001`.
+- Frontend **intacto**: `smartrayco-frontend-consolidado:5d48a10ea497`,
+  imagen `sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b`;
+  mismo contenedor/arranque del 28/10 20:33 UTC. Su `/release-manifest.json`
+  conserva `5d48a10`; eso es correcto para una release solo backend.
+- Caddy/Mongo/GenieACS: mismas imágenes, contenedores y arranques.
+Verificados código Hosts contra SHA-256 del commit, imagen real, fuentes
+backend completas, frontend completo, 125 assets HTTP, 11 rutas y HTTP 401
+sin autenticación en Hosts y WiFi. Sin migraciones ni tareas GenieACS.
+Rollback de ESTA release: backend vuelve a `5d48a10ea497`, conserva WiFi,
+frontend y resto de configuración; no vuelve a `16e2bd2`.
 
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
 `HWTC1D3691B7` (contrato `CTR-2026-00214`): confirmado real más de una vez.
 **El cambio de contraseña sigue bloqueado** hasta confirmar un método
-verificable para este firmware — ver punto 5. La corrección del
-"Guardando cambios" indefinido y la nueva sección **Hosts/Dispositivos
-conectados ya están desplegadas pero todavía no tienen su primera prueba
-real** — las hace el propietario desde el panel.
+verificable para este firmware — ver punto 5. **Hosts comprobado contra el
+código real desplegado por GET:** `HWTC1D3691B7` y `485754431D3691B7`
+identifican una única Huawei y devuelven los mismos cinco registros de su
+caché (nombre/IP/MAC). Conexión/banda/Active quedan desconocidos, sin valores
+inventados. Serial inexistente devuelve lista vacía. Falta validación visual
+del propietario desde el panel; no se cambió WiFi para probarlo.
 
-**3. Cambios locales pendientes (no desplegados, no publicados):** corrección
-puntual de identificación Hosts sobre `234e303` (commit documental posterior
-al despliegue). La proyección NBI omitía `_deviceId._SerialNumber`, por lo que
-`matchTr069Device` recibía null aunque la consulta encontrara la Huawei.
-Se conservan `_id`, serial y timestamp Hosts en la proyección; se reutilizan
-`normalizeGponSerial`/`matchTr069Device`, sin cambiar WiFi ni otros módulos.
-Comprobación real GET a las 20:43 UTC: una única coincidencia, serial
-`485754431D3691B7`; proyección anterior sin serial, corregida con serial.
-Caché: cinco Hosts con nombre/IP/MAC; conexión/banda/Active sin valor,
-se muestran desconocidos. Evidencia: `docs/TR069-HOSTS-CACHE-20261028.json`;
-repetición opcional: `node scripts/tr069-hosts-readonly.cjs` (solo GET).
-48/48 pruebas Hosts/WiFi trial/GPON PASS y `tsc -p tsconfig.server.json
---noEmit` PASS. El mock ahora aplica la proyección NBI y prueba también
-la caché real, serial hexadecimal/canónico, inexistentes y ambiguos.
-**Intento de despliegue autorizado (28/10, 20:55–20:59 UTC):** alcance
-confirmado: solo cuatro líneas aditivas en el servicio Hosts, sus pruebas,
-script GET y documentación/evidencia. 48/48 pruebas reejecutadas PASS.
-`prepare` PASS (`rollbackTested:true`, `servicesChanged:false`), respaldos
-reales de frontend/backend activos en
-`/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-20261027/`,
-archivos `frontend-before.image.tar` y `backend-before.image.tar`.
-`build` FAIL: `HISTORICAL_ASSETS_NO_EXPECTED_CHANGE`; la comparación del grafo
-frontend no encontró diferencias, lo esperable en este arreglo solo backend,
-pero el script exige `assert changed`. Se detuvo por instrucción expresa;
-sin cambios al verificador, sin reintento, sin `deploy` ni `verify`.
-Producción reconfirmada antes/después: `5d48a10ea497`, salud OK, mismas
-imágenes/arranques en los cinco servicios. Una Huawei única con cinco Hosts
-en caché; servicio activo aún devuelve `found:false` por el defecto anterior.
-Evidencia: `docs/TR069-HOSTS-RELEASE-PREFLIGHT-20261028.json` y
-`docs/TR069-HOSTS-RELEASE-AFTER-FAILURE-20261028.json`; resultados de fases
-en `D:\frontend-consolidation-prepare.json` y `D:\frontend-consolidation-build.json`.
-Sin tareas, migraciones, push ni merge. Prueba visual del arreglo pendiente.
+**3. Cambios locales pendientes (no publicados):** `d844ac6` corrige el
+procedimiento de release (tooling local, no código funcional desplegado).
+Hosts `d6ce2c2` ya está desplegado. Causa anterior: `assert changed` obligatorio
+en frontend + listas históricas de archivos y despliegue de ambos servicios.
+Solución: contrato explícito `deploy/consolidation-release-scope.json`:
+`sourceCommit`, `backendSources`, `frontendSources`, `frontendAssets`.
+Solo los servicios declarados se construyen/promueven. Backend-only exige
+frontend completo idéntico, incluida su imagen y manifiesto; frontend-only
+conserva backend exacto; ambos validan cada alcance. Se mantienen el grafo
+Vite y neutralización de hashes ya corregidos, y se protegen además estáticos,
+huérfanos, adiciones/eliminaciones y las fuentes compartidas backend.
+Fuentes backend solo de `git show <sourceCommit>:<ruta>`, sin pendientes del
+checkout; exige diferencias exactas y contenido declarado. Sin overrides de
+entorno: deploy y rollback conservan la configuración efectiva de WiFi.
+Staging identifica commit + hash del contrato/verificador, sin reutilizar el
+intento fallido anterior. Respalda imágenes activas, valida restauración aislada,
+configuración completa, deriva los servicios desde el alcance y detecta drift.
+12/12 pruebas puras (`node scripts/tests/consolidation-release-contract.test.cjs`)
+cubren backend-only/frontend-only/ambos, cascada Vite, ausencia de cambios
+esperados y rechazo de cambios ajenos de Asistencia/Puntos/Campo/OLT/Rutinas/WiFi.
+Hosts conserva sus 48/48 pruebas focalizadas previas y TypeScript backend PASS;
+no se cambió ninguna lógica funcional durante esta corrección de tooling.
+Release real: `prepare` → `build` → `deploy` → `verify` PASS; dos builds backend
+aislados reproducibles, frontend exacto, un solo archivo backend cambiado.
+Evidencia consolidada: `docs/TR069-HOSTS-RELEASE-VERIFICADO-20261028.json`.
+Verificación focalizada repetible, exclusivamente GET:
+`node scripts/tr069-hosts-release-verify.cjs after`.
+Sin push, merge ni migraciones; cero tareas GenieACS.
 - Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
   antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
   `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
@@ -80,8 +80,9 @@ Sin tareas, migraciones, push ni merge. Prueba visual del arreglo pendiente.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `d6ce2c2` + continuidad documental posterior; ver `git log -1` | **Sin publicar; build detenido, no desplegado** |
-| WiFi + Hosts, todo junto | incluido en `main` | `5d48a10` | **En producción** (desplegado 28/10/2026 20:33 UTC) |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Tooling `d844ac6` + continuidad posterior; ver `git log -1` | **Solo local, sin publicar** |
+| Identificación Hosts | incluido en `main` | `d6ce2c2` | **Backend en producción** (28/10 21:30 UTC) |
+| WiFi + Hosts base | incluido en `main` | `5d48a10` | Frontend activo; backend anterior disponible como rollback |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
 | Rama remota activa en GitHub | `origin/main` | `88dec40` | Muy desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
@@ -106,15 +107,21 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución. El intento autorizado
-de desplegar `d6ce2c2` se detuvo en `build`, como pidió el propietario ante
-cualquier validación fallida. No continuar ni quitar el assert por cuenta
-propia. Pendiente de indicación para adaptar el verificador a una release
-solo backend (exigiendo igualdad de frontend) y revalidar el procedimiento.
-Los respaldos de este intento vuelven a `5d48a10ea497`; no se requirió rollback
-porque no hubo deploy. El comando genérico con el snapshot actual NO permite
-rollback todavía: falta `built.json`. No usarlo como rollback de este intento.
-Pendiente del
+**5. Próxima tarea autorizada:** ninguna en ejecución; despliegue completado
+y verificado, detenerse para validación visual del propietario.
+Staging vigente y respaldos (`backend-before.image.tar`, `frontend-before.image.tar`):
+`/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-68c2358762/`.
+Rollback disponible: `node scripts/frontend-consolidation-release.cjs rollback`,
+con el contrato/snapshot actuales de `d6ce2c2` y tooling `d844ac6` intactos:
+restaura solo backend a la imagen previa `5d48a10ea497`, frontend sin reinicio.
+No se ejecutó rollback en producción. No regenerar `release-source.json` desde
+HEAD documental para operar esta release: identifica el commit funcional
+`d6ce2c2`. Resultados locales por fase en
+`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-d6ce2c2-68c2358762/`.
+Para una release NUEVA declarar su commit y alcance, exportar su snapshot
+correspondiente y ejecutar las fases por separado. Nunca ampliar el alcance
+para silenciar una diferencia inesperada ni asumir backend desde el manifiesto
+frontend. Pendiente del
 **propietario**: (a) probar manualmente desde el panel que el botón WiFi ya
 no queda indefinidamente en "Guardando cambios", que el nombre sigue
 funcionando, y que la nueva pantalla "Dispositivos conectados" carga bien
@@ -128,8 +135,7 @@ descubierta todavía (ver sección "Huawei: método correcto de contraseña
 WiFi"). No iniciar ningún `deploy`, migración, ni tarea GenieACS/OLT/
 MikroTik sin que el propietario lo pida en ese mismo turno (regla 16 de
 `CLAUDE.md`).
-La release anterior conserva su rollback a `16e2bd2b6f63` como antecedente;
-no confundirlo con los respaldos recién preparados de `5d48a10ea497`.
+El rollback histórico a `16e2bd2b6f63` es antecedente: no usarlo para esta release.
 
 ### Procedimiento de despliegue (5 fases separadas, siempre en este orden)
 

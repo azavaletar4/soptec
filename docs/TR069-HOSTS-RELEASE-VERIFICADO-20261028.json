@@ -1,0 +1,344 @@
+{
+    "toolingCommit":  "d844ac6",
+    "sourceCommit":  "d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201",
+    "contractTests":  {
+                          "scenarios":  [
+                                            "backend-only",
+                                            "frontend-only",
+                                            "both"
+                                        ],
+                          "execution":  "pure Python in memory via SSH; no Docker or production data",
+                          "passed":  12
+                      },
+    "prepare":  {
+                    "prepared":  true,
+                    "rollbackTested":  true,
+                    "backupFiles":  {
+                                        "backend":  "/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-68c2358762/backend-before.image.tar",
+                                        "frontend":  "/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-68c2358762/frontend-before.image.tar"
+                                    },
+                    "stage":  "/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-68c2358762",
+                    "sourceCommit":  "d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201",
+                    "declaredServices":  [
+                                             "backend"
+                                         ],
+                    "servicesChanged":  false
+                },
+    "build":  {
+                  "built":  true,
+                  "sourceCommit":  "d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201",
+                  "frontendCommit":  "5d48a10ea497c7c46251c1b784c25537c81f1275",
+                  "declaredServices":  [
+                                           "backend"
+                                       ],
+                  "frontendChangedAssets":  [
+
+                                            ],
+                  "reproducible":  true,
+                  "contractGuardValidatedReadOnly":  true,
+                  "artifactCount":  125,
+                  "frontendImage":  "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+                  "backendImage":  "sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001",
+                  "servicesChanged":  false
+              },
+    "deploy":  {
+                   "at":  "2026-10-28T21:30:34.825899+00:00",
+                   "action":  "deploy",
+                   "validation":  {
+                                      "routes":  [
+                                                     "/",
+                                                     "/tr069",
+                                                     "/asistencia",
+                                                     "/campo",
+                                                     "/campo/mi-custodia",
+                                                     "/puntos",
+                                                     "/soporte",
+                                                     "/mikrotik",
+                                                     "/analitica",
+                                                     "/rutinas",
+                                                     "/olt"
+                                                 ],
+                                      "artifactsVerified":  125,
+                                      "sourceCommit":  "d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201",
+                                      "frontendCommit":  "5d48a10ea497c7c46251c1b784c25537c81f1275",
+                                      "servicesChanged":  [
+                                                              "backend"
+                                                          ],
+                                      "unauthenticatedStatus":  401,
+                                      "ssidTasksSent":  0
+                                  },
+                   "services":  {
+                                    "frontend":  {
+                                                     "id":  "c611205998a174102c15ed9696cdbbfb400b0a2e773329dd099a585efd499ac7",
+                                                     "image":  "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+                                                     "started":  "2026-10-28T20:33:14.498037989Z"
+                                                 },
+                                    "backend":  {
+                                                    "id":  "5331222b163214cec99254ef591400c9d3f5d41c754d24c9b964fcf8bfa56fc8",
+                                                    "image":  "sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001",
+                                                    "started":  "2026-10-28T21:30:20.121595954Z"
+                                                },
+                                    "caddy":  {
+                                                  "id":  "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+                                                  "image":  "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+                                                  "started":  "2026-10-27T17:59:52.601749213Z"
+                                              },
+                                    "mongo":  {
+                                                  "id":  "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+                                                  "image":  "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+                                                  "started":  "2026-10-27T17:59:52.61111918Z"
+                                              },
+                                    "genieacs":  {
+                                                     "id":  "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+                                                     "image":  "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+                                                     "started":  "2026-10-27T17:59:52.552085739Z"
+                                                 }
+                                },
+                   "stage":  "/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-68c2358762",
+                   "sourceCommit":  "d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201",
+                   "ssidTasksSent":  0
+               },
+    "verify":  {
+                   "routes":  [
+                                  "/",
+                                  "/tr069",
+                                  "/asistencia",
+                                  "/campo",
+                                  "/campo/mi-custodia",
+                                  "/puntos",
+                                  "/soporte",
+                                  "/mikrotik",
+                                  "/analitica",
+                                  "/rutinas",
+                                  "/olt"
+                              ],
+                   "artifactsVerified":  125,
+                   "sourceCommit":  "d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201",
+                   "frontendCommit":  "5d48a10ea497c7c46251c1b784c25537c81f1275",
+                   "servicesChanged":  [
+                                           "backend"
+                                       ],
+                   "unauthenticatedStatus":  401,
+                   "ssidTasksSent":  0
+               },
+    "before":  {
+                   "services":  {
+                                    "frontend":  {
+                                                     "image":  "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+                                                     "tag":  "smartrayco-frontend-consolidado:5d48a10ea497",
+                                                     "started":  "2026-10-28T20:33:14.498037989Z",
+                                                     "running":  true
+                                                 },
+                                    "backend":  {
+                                                    "image":  "sha256:c29ffd09a5a0f96742c568743f9fc8ea8b37b2139dcdeebad67f4d59fd0ec59d",
+                                                    "tag":  "smartrayco-backend-wifitrial:5d48a10ea497",
+                                                    "started":  "2026-10-28T20:33:14.313852251Z",
+                                                    "running":  true
+                                                },
+                                    "caddy":  {
+                                                  "image":  "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+                                                  "tag":  "caddy:2",
+                                                  "started":  "2026-10-27T17:59:52.601749213Z",
+                                                  "running":  true
+                                              },
+                                    "mongo":  {
+                                                  "image":  "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+                                                  "tag":  "mongo:8.0",
+                                                  "started":  "2026-10-27T17:59:52.61111918Z",
+                                                  "running":  true
+                                              },
+                                    "genieacs":  {
+                                                     "image":  "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+                                                     "tag":  "drumsergio/genieacs:1.2.16.0",
+                                                     "started":  "2026-10-27T17:59:52.552085739Z",
+                                                     "running":  true
+                                                 }
+                                },
+                   "frontendCommit":  "5d48a10ea497c7c46251c1b784c25537c81f1275",
+                   "hosts":  {
+                                 "readOnly":  true,
+                                 "mode":  "before",
+                                 "uniqueCandidates":  1,
+                                 "deviceId":  "00259E-HG8145X6%2D13-485754431D3691B7",
+                                 "rawHosts":  [
+                                                  {
+                                                      "hostName":  "REDMI-Note-15-5G",
+                                                      "ipAddress":  "192.168.100.37",
+                                                      "macAddress":  "d2:d3:3a:8d:85:1c"
+                                                  },
+                                                  {
+                                                      "hostName":  "S26-Ultra-de-Warner",
+                                                      "ipAddress":  "192.168.100.35",
+                                                      "macAddress":  "56:b9:d2:f2:e7:c1"
+                                                  },
+                                                  {
+                                                      "hostName":  "iPhone",
+                                                      "ipAddress":  "192.168.100.38",
+                                                      "macAddress":  "be:9e:54:93:df:8c"
+                                                  },
+                                                  {
+                                                      "hostName":  "Z2359",
+                                                      "ipAddress":  "192.168.100.34",
+                                                      "macAddress":  "7e:75:b3:0a:86:76"
+                                                  },
+                                                  {
+                                                      "hostName":  "LAPTOP-996NPL7I",
+                                                      "ipAddress":  "192.168.100.32",
+                                                      "macAddress":  "00:07:29:55:35:57"
+                                                  }
+                                              ],
+                                 "inventory":  {
+                                                   "found":  false,
+                                                   "deviceId":  null,
+                                                   "serial":  "HWTC1D3691B7",
+                                                   "lastInform":  null,
+                                                   "hostsReportedAt":  null,
+                                                   "hosts":  [
+
+                                                             ]
+                                               },
+                                 "requests":  2,
+                                 "methods":  [
+                                                 "GET"
+                                             ],
+                                 "tasksSent":  0,
+                                 "codeSha256":  "1e2bdeee808f5350fc9c75a2ff7547f46ba7bc410e80d3bddddffd82d9bdef6b"
+                             }
+               },
+    "after":  {
+                  "services":  {
+                                   "frontend":  {
+                                                    "image":  "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+                                                    "tag":  "smartrayco-frontend-consolidado:5d48a10ea497",
+                                                    "started":  "2026-10-28T20:33:14.498037989Z",
+                                                    "running":  true
+                                                },
+                                   "backend":  {
+                                                   "image":  "sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001",
+                                                   "tag":  "smartrayco-backend-wifitrial:d6ce2c2f578f",
+                                                   "started":  "2026-10-28T21:30:20.121595954Z",
+                                                   "running":  true
+                                               },
+                                   "caddy":  {
+                                                 "image":  "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+                                                 "tag":  "caddy:2",
+                                                 "started":  "2026-10-27T17:59:52.601749213Z",
+                                                 "running":  true
+                                             },
+                                   "mongo":  {
+                                                 "image":  "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+                                                 "tag":  "mongo:8.0",
+                                                 "started":  "2026-10-27T17:59:52.61111918Z",
+                                                 "running":  true
+                                             },
+                                   "genieacs":  {
+                                                    "image":  "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+                                                    "tag":  "drumsergio/genieacs:1.2.16.0",
+                                                    "started":  "2026-10-27T17:59:52.552085739Z",
+                                                    "running":  true
+                                                }
+                               },
+                  "frontendCommit":  "5d48a10ea497c7c46251c1b784c25537c81f1275",
+                  "hosts":  {
+                                "readOnly":  true,
+                                "mode":  "after",
+                                "uniqueCandidates":  1,
+                                "deviceId":  "00259E-HG8145X6%2D13-485754431D3691B7",
+                                "rawHosts":  [
+                                                 {
+                                                     "hostName":  "REDMI-Note-15-5G",
+                                                     "ipAddress":  "192.168.100.37",
+                                                     "macAddress":  "d2:d3:3a:8d:85:1c"
+                                                 },
+                                                 {
+                                                     "hostName":  "S26-Ultra-de-Warner",
+                                                     "ipAddress":  "192.168.100.35",
+                                                     "macAddress":  "56:b9:d2:f2:e7:c1"
+                                                 },
+                                                 {
+                                                     "hostName":  "iPhone",
+                                                     "ipAddress":  "192.168.100.38",
+                                                     "macAddress":  "be:9e:54:93:df:8c"
+                                                 },
+                                                 {
+                                                     "hostName":  "Z2359",
+                                                     "ipAddress":  "192.168.100.34",
+                                                     "macAddress":  "7e:75:b3:0a:86:76"
+                                                 },
+                                                 {
+                                                     "hostName":  "LAPTOP-996NPL7I",
+                                                     "ipAddress":  "192.168.100.32",
+                                                     "macAddress":  "00:07:29:55:35:57"
+                                                 }
+                                             ],
+                                "inventory":  {
+                                                  "found":  true,
+                                                  "deviceId":  "00259E-HG8145X6%2D13-485754431D3691B7",
+                                                  "serial":  "HWTC1D3691B7",
+                                                  "lastInform":  "2026-10-28T21:28:39.130Z",
+                                                  "hostsReportedAt":  "2026-10-27T19:45:10.542Z",
+                                                  "hosts":  [
+                                                                {
+                                                                    "hostName":  "REDMI-Note-15-5G",
+                                                                    "ipAddress":  "192.168.100.37",
+                                                                    "macAddress":  "d2:d3:3a:8d:85:1c",
+                                                                    "connection":  null,
+                                                                    "band":  null,
+                                                                    "active":  null,
+                                                                    "reportedAt":  "2026-10-28T20:38:05.091Z"
+                                                                },
+                                                                {
+                                                                    "hostName":  "S26-Ultra-de-Warner",
+                                                                    "ipAddress":  "192.168.100.35",
+                                                                    "macAddress":  "56:b9:d2:f2:e7:c1",
+                                                                    "connection":  null,
+                                                                    "band":  null,
+                                                                    "active":  null,
+                                                                    "reportedAt":  "2026-10-28T20:38:05.091Z"
+                                                                },
+                                                                {
+                                                                    "hostName":  "iPhone",
+                                                                    "ipAddress":  "192.168.100.38",
+                                                                    "macAddress":  "be:9e:54:93:df:8c",
+                                                                    "connection":  null,
+                                                                    "band":  null,
+                                                                    "active":  null,
+                                                                    "reportedAt":  "2026-10-28T20:38:05.091Z"
+                                                                },
+                                                                {
+                                                                    "hostName":  "Z2359",
+                                                                    "ipAddress":  "192.168.100.34",
+                                                                    "macAddress":  "7e:75:b3:0a:86:76",
+                                                                    "connection":  null,
+                                                                    "band":  null,
+                                                                    "active":  null,
+                                                                    "reportedAt":  "2026-10-28T20:38:05.091Z"
+                                                                },
+                                                                {
+                                                                    "hostName":  "LAPTOP-996NPL7I",
+                                                                    "ipAddress":  "192.168.100.32",
+                                                                    "macAddress":  "00:07:29:55:35:57",
+                                                                    "connection":  null,
+                                                                    "band":  null,
+                                                                    "active":  null,
+                                                                    "reportedAt":  "2026-10-28T20:38:05.091Z"
+                                                                }
+                                                            ]
+                                              },
+                                "requests":  4,
+                                "methods":  [
+                                                "GET"
+                                            ],
+                                "tasksSent":  0,
+                                "codeSha256":  "1c64b364c0716fe948a022bf1db7f6380031a77e11efc7238550a431cccccb52"
+                            }
+              },
+    "rollback":  {
+                     "executedInProduction":  false,
+                     "testedIsolated":  true,
+                     "environmentOverrides":  false,
+                     "backendReturnsTo":  "smartrayco-backend-wifitrial:5d48a10ea497",
+                     "frontendUnchanged":  true,
+                     "command":  "node scripts/frontend-consolidation-release.cjs rollback"
+                 }
+}
