@@ -71,8 +71,10 @@ def stripname(p):
     return m.group(1) + m.group(2) if m else p
 
 
-def normcontent(b):
-    return REF_HASH_RE.sub(rb'\1\2', b)
+def normcontent(b, pinned=()):
+    # Si dos assets legítimos comparten nombre lógico, sus referencias completas
+    # NO son intercambiables: conservar el hash que los distingue.
+    return REF_HASH_RE.sub(lambda m: m.group(0) if m.group(0).decode() in pinned else m.group(1) + m.group(2), b)
 
 
 def reachable(files):
@@ -95,14 +97,32 @@ def validate_frontend(before, after, scope):
         assert not changed, 'FRONTEND_MUST_BE_IDENTICAL:' + ','.join(sorted(changed))
         return []
     old_reach, new_reach = reachable(before), reachable(after)
+    def groups(paths):
+        result = {}
+        for p in paths:
+            result.setdefault(stripname(p), set()).add(p)
+        return result
+    old_groups, new_groups = groups(old_reach), groups(new_reach)
+    ambiguous = {p for p in set(old_groups) | set(new_groups)
+                 if len(old_groups.get(p, ())) > 1 or len(new_groups.get(p, ())) > 1}
+    pinned_paths = set()
+    for name in sorted(ambiguous):
+        old_paths, new_paths = old_groups.get(name, set()), new_groups.get(name, set())
+        assert old_paths == new_paths, 'AMBIGUOUS_ASSET_MEMBERSHIP_CHANGED:' + name
+        for p in sorted(old_paths):
+            assert before[p] == after[p], 'AMBIGUOUS_ASSET_CONTENT_CHANGED:' + p
+        pinned_paths.update(old_paths)
+    pinned_names = {p.split('/')[-1] for p in pinned_paths}
     def normalized(files, paths):
-        result = {stripname(p): hashlib.sha256(normcontent(files[p])).hexdigest() for p in paths}
+        # Identidades tipadas: una ruta física fijada nunca pisa un nombre lógico.
+        result = {('physical', p) if p in pinned_paths else ('logical', stripname(p)):
+                  hashlib.sha256(normcontent(files[p], pinned_names)).hexdigest() for p in paths}
         assert len(result) == len(paths), 'NORMALIZED_ASSET_NAME_COLLISION'
         return result
     old_norm, new_norm = normalized(before, old_reach), normalized(after, new_reach)
-    assert set(old_norm) == set(new_norm), 'HISTORICAL_ASSETS_STRUCTURE_CHANGED'
-    changed = differences(old_norm, new_norm)
-    if normcontent(before['index.html']) != normcontent(after['index.html']):
+    assert set(old_norm) == set(new_norm), 'HISTORICAL_ASSETS_STRUCTURE_CHANGED:removed=' + ','.join(sorted(k[1] for k in set(old_norm) - set(new_norm))) + ';added=' + ','.join(sorted(k[1] for k in set(new_norm) - set(old_norm)))
+    changed = {key[1] for key in differences(old_norm, new_norm)}
+    if normcontent(before['index.html'], pinned_names) != normcontent(after['index.html'], pinned_names):
         changed.add('index.html')
     allowed = set(scope['frontendAssets'])
     assert changed, 'HISTORICAL_ASSETS_NO_EXPECTED_CHANGE'

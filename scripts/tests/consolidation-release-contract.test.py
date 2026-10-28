@@ -22,6 +22,45 @@ def frontend(version=1):
 
 
 class ReleaseContractTests(unittest.TestCase):
+    def qr_assets(self):
+        files = frontend()
+        workers = ['assets/qr-scanner-worker.min-D85Z9gVD.js', 'assets/qr-scanner-worker.min-PJMWJc5V.js']
+        importer = 'assets/AuthorizeOnuModal-AAAAAAAA.js'
+        files[importer] = ('const a="' + workers[0] + '";const b="' + workers[1] + '";').encode()
+        files['assets/index-AAAAAAAA.js'] += b';import "./AuthorizeOnuModal-AAAAAAAA.js"'
+        files[workers[0]], files[workers[1]] = b'worker module', b'worker iife'
+        return files, workers, importer
+
+    def test_real_qr_worker_names_are_distinct_unchanged_assets(self):
+        before, workers, importer = self.qr_assets()
+        self.assertEqual(stripname(workers[0]), stripname(workers[1]))
+        self.assertNotEqual(before[workers[0]], before[workers[1]])
+        after = dict(before)
+        after['assets/Tr069View-AAAAAAAA.js'] = b'export const hosts=2'
+        self.assertEqual(validate_frontend(before, after, sample_scope(frontend=True)), ['assets/Tr069View.js'])
+        self.assertEqual(set(workers), set(reachable(before)) & set(workers))
+
+    def test_each_ambiguous_worker_is_checked_byte_for_byte_even_if_declared_allowed(self):
+        before, workers, importer = self.qr_assets()
+        scope = sample_scope(frontend=True)
+        scope['frontendAssets'].append('assets/qr-scanner-worker.min.js')
+        for worker in workers:
+            after = {**before, worker: b'changed'}
+            with self.subTest(worker=worker), self.assertRaisesRegex(AssertionError, 'AMBIGUOUS_ASSET_CONTENT_CHANGED'):
+                validate_frontend(before, after, scope)
+
+    def test_ambiguous_worker_membership_and_reference_swap_are_not_hidden(self):
+        before, workers, importer = self.qr_assets()
+        after = dict(before)
+        after[importer] = before[importer].replace(workers[0].encode(), b'PLACEHOLDER').replace(workers[1].encode(), workers[0].encode()).replace(b'PLACEHOLDER', workers[1].encode())
+        with self.assertRaisesRegex(AssertionError, 'HISTORICAL_ASSETS_CHANGED:assets/AuthorizeOnuModal.js'):
+            validate_frontend(before, after, sample_scope(frontend=True))
+        renamed = dict(before)
+        renamed['assets/qr-scanner-worker.min-CCCCCCCC.js'] = renamed.pop(workers[0])
+        renamed[importer] = before[importer].replace(workers[0].encode(), b'assets/qr-scanner-worker.min-CCCCCCCC.js')
+        with self.assertRaisesRegex(AssertionError, 'AMBIGUOUS_ASSET_MEMBERSHIP_CHANGED'):
+            validate_frontend(before, renamed, sample_scope(frontend=True))
+
     def test_hosts_environment_explicit_and_scoped_only(self):
         scope = {**sample_scope(backend=True), 'backendEnvironment': {
             'TR069_HOSTS_ON_DEMAND_ENABLED': 'true', 'TR069_HOSTS_ON_DEMAND_SERIALS': 'HWTC1D3691B7'}}
