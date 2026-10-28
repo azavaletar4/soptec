@@ -1,0 +1,60 @@
+{
+  "readOnly": true,
+  "services": {
+    "frontend": {
+      "image": "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+      "tag": "smartrayco-frontend-consolidado:5d48a10ea497",
+      "started": "2026-10-28T20:33:14.498037989Z",
+      "running": true
+    },
+    "backend": {
+      "image": "sha256:c29ffd09a5a0f96742c568743f9fc8ea8b37b2139dcdeebad67f4d59fd0ec59d",
+      "tag": "smartrayco-backend-wifitrial:5d48a10ea497",
+      "started": "2026-10-28T20:33:14.313852251Z",
+      "running": true
+    },
+    "caddy": {
+      "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+      "tag": "caddy:2",
+      "started": "2026-10-27T17:59:52.601749213Z",
+      "running": true
+    },
+    "mongo": {
+      "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+      "tag": "mongo:8.0",
+      "started": "2026-10-27T17:59:52.61111918Z",
+      "running": true
+    },
+    "genieacs": {
+      "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+      "tag": "drumsergio/genieacs:1.2.16.0",
+      "started": "2026-10-27T17:59:52.552085739Z",
+      "running": true
+    }
+  },
+  "commit": "5d48a10ea497c7c46251c1b784c25537c81f1275",
+  "health": {
+    "status": "ok",
+    "service": "smartrayco-api",
+    "timestamp": "2026-10-28T20:59:39.140Z"
+  },
+  "hosts": {
+    "inventory": {
+      "found": false,
+      "deviceId": null,
+      "serial": "HWTC1D3691B7",
+      "lastInform": null,
+      "hostsReportedAt": null,
+      "hosts": []
+    },
+    "uniqueCandidates": 1,
+    "candidates": [
+      {
+        "id": "00259E-HG8145X6%2D13-485754431D3691B7",
+        "serial": "485754431D3691B7",
+        "hosts": 5
+      }
+    ],
+    "tasksSent": 0
+  }
+}

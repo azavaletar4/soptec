@@ -16,12 +16,15 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
-La corrección posterior de identificación Hosts está preparada **solo local**:
-la proyección NBI descartaba el serial antes de `matchTr069Device`; corregida
-sin cambiar WiFi. Evidencia real: una Huawei, cinco Hosts cacheados, sin datos
-verificables de conexión/banda/Active. 48 pruebas focalizadas y tsc backend PASS.
-Leer el punto 3 del ESTADO DE CONTINUIDAD para archivos/evidencia y continuación;
-producción sigue en `5d48a10ea497`, pendiente de autorización para desplegar.
+La corrección de identificación Hosts `d6ce2c2` sigue **sin desplegar**.
+Despliegue autorizado intentado el 28/10: `prepare` PASS con respaldo de las
+imágenes activas y restauración aislada; `build` detenido por
+`HISTORICAL_ASSETS_NO_EXPECTED_CHANGE` (exige cambios de frontend aunque el
+arreglo es solo backend). No se forzó ni modificó el verificador; `deploy` y
+`verify` no ejecutados. Producción sigue en `5d48a10ea497`, salud OK, mismos
+IDs de imagen y fechas de arranque. 48 pruebas PASS; una Huawei y cinco Hosts
+en caché, pero el servicio activo aún no identifica el equipo. Cero tareas.
+Leer puntos 3 y 5 del ESTADO DE CONTINUIDAD antes de continuar.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
