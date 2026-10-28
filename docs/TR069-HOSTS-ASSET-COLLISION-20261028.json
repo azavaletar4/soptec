@@ -1,0 +1,234 @@
+[
+  {
+    "action": "health",
+    "checkedAt": "2026-10-28T23:21:51.389300+00:00",
+    "services": {
+      "frontend": {
+        "id": "c611205998a174102c15ed9696cdbbfb400b0a2e773329dd099a585efd499ac7",
+        "image": "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+        "tag": "smartrayco-frontend-consolidado:5d48a10ea497",
+        "started": "2026-10-28T20:33:14.498037989Z",
+        "running": true
+      },
+      "backend": {
+        "id": "5331222b163214cec99254ef591400c9d3f5d41c754d24c9b964fcf8bfa56fc8",
+        "image": "sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001",
+        "tag": "smartrayco-backend-wifitrial:d6ce2c2f578f",
+        "started": "2026-10-28T21:30:20.121595954Z",
+        "running": true
+      },
+      "caddy": {
+        "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+        "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+        "tag": "caddy:2",
+        "started": "2026-10-27T17:59:52.601749213Z",
+        "running": true
+      },
+      "mongo": {
+        "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+        "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+        "tag": "mongo:8.0",
+        "started": "2026-10-27T17:59:52.61111918Z",
+        "running": true
+      },
+      "genieacs": {
+        "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+        "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+        "tag": "drumsergio/genieacs:1.2.16.0",
+        "started": "2026-10-27T17:59:52.552085739Z",
+        "running": true
+      }
+    },
+    "health": {
+      "status": "ok",
+      "service": "smartrayco-api",
+      "timestamp": "2026-10-28T23:21:51.616Z"
+    },
+    "frontendCommit": "5d48a10ea497c7c46251c1b784c25537c81f1275"
+  },
+  {
+    "action": "inspect",
+    "checkedAt": "2026-10-28T23:21:57.184923+00:00",
+    "services": {
+      "frontend": {
+        "id": "c611205998a174102c15ed9696cdbbfb400b0a2e773329dd099a585efd499ac7",
+        "image": "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+        "tag": "smartrayco-frontend-consolidado:5d48a10ea497",
+        "started": "2026-10-28T20:33:14.498037989Z",
+        "running": true
+      },
+      "backend": {
+        "id": "5331222b163214cec99254ef591400c9d3f5d41c754d24c9b964fcf8bfa56fc8",
+        "image": "sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001",
+        "tag": "smartrayco-backend-wifitrial:d6ce2c2f578f",
+        "started": "2026-10-28T21:30:20.121595954Z",
+        "running": true
+      },
+      "caddy": {
+        "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+        "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+        "tag": "caddy:2",
+        "started": "2026-10-27T17:59:52.601749213Z",
+        "running": true
+      },
+      "mongo": {
+        "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+        "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+        "tag": "mongo:8.0",
+        "started": "2026-10-27T17:59:52.61111918Z",
+        "running": true
+      },
+      "genieacs": {
+        "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+        "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+        "tag": "drumsergio/genieacs:1.2.16.0",
+        "started": "2026-10-27T17:59:52.552085739Z",
+        "running": true
+      }
+    },
+    "health": {
+      "status": "ok",
+      "service": "smartrayco-api",
+      "timestamp": "2026-10-28T23:21:57.414Z"
+    },
+    "frontendCommit": "5d48a10ea497c7c46251c1b784c25537c81f1275",
+    "candidateTag": "smartrayco-frontend-consolidado:ac511d7c70c8",
+    "graphs": {
+      "active": {
+        "reachableCount": 122,
+        "collisions": {
+          "assets/qr-scanner-worker.min.js": [
+            {
+              "path": "assets/qr-scanner-worker.min-D85Z9gVD.js",
+              "sha256": "f9d5a00a24ef3c0f52453748a018feec9441c0031c7068e41606c744a26491f5",
+              "normalizedContentSha256": "f9d5a00a24ef3c0f52453748a018feec9441c0031c7068e41606c744a26491f5",
+              "referencedBy": [
+                "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang-DdN-Zh96.js"
+              ]
+            },
+            {
+              "path": "assets/qr-scanner-worker.min-PJMWJc5V.js",
+              "sha256": "f4d8445f5a15c4e5f71a8c8c062c6443f09db370b8d3fe1fbdc7fe7889630d14",
+              "normalizedContentSha256": "f4d8445f5a15c4e5f71a8c8c062c6443f09db370b8d3fe1fbdc7fe7889630d14",
+              "referencedBy": [
+                "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang-DdN-Zh96.js"
+              ]
+            }
+          ]
+        },
+        "manifestArtifacts": [
+          "assets/qr-scanner-worker.min-D85Z9gVD.js",
+          "assets/qr-scanner-worker.min-PJMWJc5V.js"
+        ]
+      },
+      "candidate": {
+        "reachableCount": 123,
+        "collisions": {
+          "assets/qr-scanner-worker.min.js": [
+            {
+              "path": "assets/qr-scanner-worker.min-D85Z9gVD.js",
+              "sha256": "f9d5a00a24ef3c0f52453748a018feec9441c0031c7068e41606c744a26491f5",
+              "normalizedContentSha256": "f9d5a00a24ef3c0f52453748a018feec9441c0031c7068e41606c744a26491f5",
+              "referencedBy": [
+                "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang-DuKLjl9E.js"
+              ]
+            },
+            {
+              "path": "assets/qr-scanner-worker.min-PJMWJc5V.js",
+              "sha256": "f4d8445f5a15c4e5f71a8c8c062c6443f09db370b8d3fe1fbdc7fe7889630d14",
+              "normalizedContentSha256": "f4d8445f5a15c4e5f71a8c8c062c6443f09db370b8d3fe1fbdc7fe7889630d14",
+              "referencedBy": [
+                "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang-DuKLjl9E.js"
+              ]
+            }
+          ]
+        },
+        "manifestArtifacts": [
+          "assets/qr-scanner-worker.min-D85Z9gVD.js",
+          "assets/qr-scanner-worker.min-PJMWJc5V.js"
+        ]
+      }
+    },
+    "manifestFileOverlap": [
+      ".vite/manifest.json",
+      "assets/AsistenciaView-OdV_QNzr.css",
+      "assets/FacturacionView-P51cOe60.css",
+      "assets/apexcharts.ssr.esm-fe46cd2d-9CakV-nF.js",
+      "assets/clientLifecycle-C66tkUhY.js",
+      "assets/domain-DTnkHfJg.js",
+      "assets/elapsedTime-B7QjnEzO.js",
+      "assets/fieldInventoryOperation-Bqo0EyGc.js",
+      "assets/fieldProgress-CZSvaN1d.js",
+      "assets/imageCompression-CZrI0dQN.js",
+      "assets/index-Di3g5Usy.css",
+      "assets/inventoryPresentation-BKwDbcl0.js",
+      "assets/leaflet-CIGW-MKW.css",
+      "assets/logo-icon-BLKDjdZa.js",
+      "assets/logo-icon-JbUtx3QJ.png",
+      "assets/mapIcons-D1S92751.js",
+      "assets/materialInventoryOutcome-xSdnZKYW.js",
+      "assets/materialMovementPresentation-DaZ01CsN.js",
+      "assets/mikrotikDeviceRole-eJjItOfE.js",
+      "assets/napOccupancy-BzXnx-La.js",
+      "assets/oltAlertPresentation-DuFjnK97.js",
+      "assets/ontZoneSync-Dbk0EOzL.js",
+      "assets/orderInventory-CE0pGcdv.js",
+      "assets/phone-DeMz4mPO.js",
+      "assets/qr-scanner-worker.min-D85Z9gVD.js",
+      "assets/qr-scanner-worker.min-PJMWJc5V.js",
+      "assets/singleActiveJob-DiG-7Q3E.js",
+      "assets/ticketMotivoAveria-C-e57W6U.js",
+      "assets/turnos-DKU6Nwm1.js",
+      "assets/vehiculoAlertas-D0_xd9VL.js",
+      "assets/workOrderPoints-Ctbn_-lp.js",
+      "index.html"
+    ]
+  },
+  {
+    "action": "health",
+    "checkedAt": "2026-10-28T23:25:58.829971+00:00",
+    "services": {
+      "frontend": {
+        "id": "c611205998a174102c15ed9696cdbbfb400b0a2e773329dd099a585efd499ac7",
+        "image": "sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b",
+        "tag": "smartrayco-frontend-consolidado:5d48a10ea497",
+        "started": "2026-10-28T20:33:14.498037989Z",
+        "running": true
+      },
+      "backend": {
+        "id": "5331222b163214cec99254ef591400c9d3f5d41c754d24c9b964fcf8bfa56fc8",
+        "image": "sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001",
+        "tag": "smartrayco-backend-wifitrial:d6ce2c2f578f",
+        "started": "2026-10-28T21:30:20.121595954Z",
+        "running": true
+      },
+      "caddy": {
+        "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+        "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+        "tag": "caddy:2",
+        "started": "2026-10-27T17:59:52.601749213Z",
+        "running": true
+      },
+      "mongo": {
+        "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+        "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+        "tag": "mongo:8.0",
+        "started": "2026-10-27T17:59:52.61111918Z",
+        "running": true
+      },
+      "genieacs": {
+        "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+        "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+        "tag": "drumsergio/genieacs:1.2.16.0",
+        "started": "2026-10-27T17:59:52.552085739Z",
+        "running": true
+      }
+    },
+    "health": {
+      "status": "ok",
+      "service": "smartrayco-api",
+      "timestamp": "2026-10-28T23:25:59.061Z"
+    },
+    "frontendCommit": "5d48a10ea497c7c46251c1b784c25537c81f1275"
+  }
+]

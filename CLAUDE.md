@@ -50,13 +50,17 @@ Cola/faults vacíos al terminar; gate productivo seguía apagado.
 Guard local `ac511d7` limita la habilitación a serial permitido (solo Huawei
 planeada), sin cambiar el GPV probado; contrato solo permite dos ajustes de
 entorno Hosts y compara el resto completo. 67 pruebas + 14 de release PASS.
-`prepare` PASS con imágenes activas/rollback; `build` FAIL
-`NORMALIZED_ASSET_NAME_COLLISION`. No forzar ni omitir ese control.
-No hubo deploy/verify. Cierre SSH también falló, sin reintento; última salud
-e imágenes comprobadas 23:07 UTC (backend d6ce2c2, frontend 5d48a10).
-Detalle, staging, respaldos y siguiente paso:
-`docs/TR069-HOSTS-DEMAND-DESPLIEGUE-DETENIDO-20261028.md`.
-No repetir la prueba activa ni continuar operaciones sin nueva indicación.
+Colisión de assets resuelta en `32e64ee`: dos workers QR legítimos, distintos
+y sin cambios; se conservan por nombre físico, bytes y referencias exactas.
+17/17 pruebas del contrato PASS. Nuevo `prepare` PASS, rollback probado.
+Nuevo `build` detenido por **otro bloqueo**:
+`HISTORICAL_ASSETS_STRUCTURE_CHANGED:removed=;added=assets/gponSerial.js`.
+No ampliar alcance ni encadenar correcciones: el propietario pidió detenerse.
+No hubo deploy/verify ni tareas TR-069 en este intento. SSH/salud al cierre
+23:25:59 UTC PASS; mismas imágenes, contenedores y arranques (backend d6ce2c2,
+frontend 5d48a10). Detalle y respaldos vigentes:
+`docs/TR069-HOSTS-ASSET-COLLISION-20261028.md` y JSON.
+No repetir la prueba activa; esperar indicación sobre el nuevo bloqueo.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 

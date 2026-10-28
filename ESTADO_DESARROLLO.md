@@ -28,13 +28,10 @@ VM de producción (`192.168.55.201`), corrección Hosts desplegada el
 Verificados código Hosts contra SHA-256 del commit, imagen real, fuentes
 backend completas, frontend completo, 125 assets HTTP, 11 rutas y HTTP 401
 sin autenticación en Hosts y WiFi. Sin migraciones ni tareas GenieACS.
-Última comprobación completa de imágenes/salud: 28/10 **23:07 UTC**, durante
-el ensayo autorizado de Hosts bajo demanda. El intento posterior de build
-falló sin desplegar: no se cambió ninguna imagen activa. La comprobación de
-cierre por SSH no pudo completarse y no se reintentó; no afirmar una salud
-actual más reciente que esa lectura satisfactoria. Los nuevos respaldos del
-intento ac511d7 restauran backend d6ce2c2 y frontend 5d48a10, no versiones
-anteriores; detalle en punto 5.
+Última comprobación SSH de imágenes/salud: 28/10 **23:25:59 UTC**, PASS.
+Mismos contenedores, imágenes y arranques de los cinco servicios; ningún
+despliegue posterior. Respaldos renovados y restauración aislada probada
+contra backend d6ce2c2 y frontend 5d48a10; detalle en punto 5.
 
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
@@ -67,16 +64,17 @@ requiere ENABLED=true y serial en TR069_HOSTS_ON_DEMAND_SERIALS; se planeó
 solo HWTC1D3691B7. Otras ONT se bloquean antes de GET/tareas. No se repitió
 la lectura para probar el guard; pruebas locales 67/67 PASS y tsc backend PASS.
 Contrato de release: solo los dos ajustes de entorno Hosts, jamás WiFi o
-credenciales; hashes del entorno efectivo completo y de rollback. 14/14
+credenciales; hashes del entorno efectivo completo y de rollback. 17/17
 pruebas del contrato PASS (tres escenarios, alcance y entorno restringido).
 Fuente candidata ac511d7c70c8a11700d3553f331af5bb2930926a; snapshot 305 fuentes.
-`prepare` PASS, respaldos/rollback aislado contra imágenes activas; `build`
-FAIL `NORMALIZED_ASSET_NAME_COLLISION` en comparación del grafo de assets.
-Se detuvo sin alterar el verificador, sin deploy/verify ni nuevos intentos.
-Cierre por SSH no completado (`CONTROLLED_TEST_FAILED_NO_RETRY`), sin reintento.
-Resultado/evidencia/respaldos:
-`docs/TR069-HOSTS-DEMAND-DESPLIEGUE-DETENIDO-20261028.md` y
-`docs/TR069-HOSTS-DEMAND-CONTROLLED-20261028.json`.
+Colisión corregida en `32e64ee`: dos workers QR legítimos sin cambios,
+conservados por identidad física y bytes exactos, incluidas sus referencias.
+Nuevo `prepare` PASS, respaldos/rollback aislado contra imágenes activas;
+`build` FAIL por bloqueo distinto: **HISTORICAL_ASSETS_STRUCTURE_CHANGED**,
+sin eliminados, añadido `assets/gponSerial.js`. Se detuvo sin ampliar alcance
+ni modificar otros controles. No deploy/verify ni nuevas tareas TR-069.
+SSH/salud final PASS 23:25:59 UTC. Resultado/evidencia/respaldos:
+`docs/TR069-HOSTS-ASSET-COLLISION-20261028.md` y JSON.
 Nuevo panel Hosts inicialmente cerrado, independiente del detalle general.
 Abrirlo explícitamente o pulsar Actualizar llama POST de lectura, solo
 ADMIN/SUPERADMIN; GET de caché conserva permisos de lectura existentes.
@@ -222,26 +220,24 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución. Prueba real única PASS;
-despliegue condicional detenido ante `NORMALIZED_ASSET_NAME_COLLISION`, como
-pidió el propietario. No forzar, ampliar el alcance para silenciar diferencias,
-omitir controles ni reintentar build/deploy sin nueva indicación. Pendiente de
-diagnóstico puntual de los assets en colisión (nombres aún no identificados) y
-comprobación de SSH/health/cola: el cierre SSH falló, sin reintento. No afirmar
-salud actual o tareas actuales verificadas después de las 23:07 UTC.
-No repetir la prueba activa consumida. Esta sesión envió **una** tarea GPV de
+**5. Próxima tarea autorizada:** ninguna en ejecución. Colisión resuelta y
+probada; despliegue detenido por nuevo asset no declarado `assets/gponSerial.js`,
+conforme a la instrucción explícita de parar ante otro bloqueo. No forzar,
+ampliar alcance ni reintentar build/deploy sin nueva indicación. SSH/health
+final PASS 23:25:59 UTC; cola no reconsultada en este intento, cero tareas nuevas.
+No repetir la prueba activa consumida. El ensayo anterior envió **una** tarea GPV de
 35 hojas con connection_request, expiración y HTTP 200, cero tareas de
 configuración y cero reinicios; cola/faults vacíos a las 23:07:07 UTC.
 Sin medición de tráfico/uptime PPPoE; no afirmar una prueba de navegación.
 No hubo despliegue ni cambios a configuración de equipos.
 Fuente/snapshot vigente: **ac511d7c70c8a11700d3553f331af5bb2930926a**.
 Staging y respaldos actuales (`backend-before.image.tar`, `frontend-before.image.tar`):
-`/opt/smartrayco-staging/frontend-consolidado-tr069-ac511d7-23790cba4f/`.
+`/opt/smartrayco-staging/frontend-consolidado-tr069-ac511d7-1d3e9f92b7/`.
 Restauración aislada verificada contra backend d6ce2c2 y frontend 5d48a10.
 No se necesitó ni ejecutó rollback en producción; deploy/verify no se iniciaron.
 No regenerar release-source.json desde HEAD documental para operar este intento.
 Resultados locales:
-`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-ac511d7-23790cba4f/`.
+`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-ac511d7-1d3e9f92b7/`.
 El staging previo de d6ce2c2 queda como antecedente; no confundir su rollback
 con los respaldos de este intento, que restauran las dos imágenes activas.
 Bandas/unidades RSSI siguen pendientes de verificación; no explorar credenciales
@@ -250,8 +246,8 @@ Para una release NUEVA declarar su commit y alcance, exportar su snapshot
 correspondiente y ejecutar las fases por separado. Nunca ampliar el alcance
 para silenciar una diferencia inesperada ni asumir backend desde el manifiesto
 frontend. Pendiente del
-**propietario**: indicar si se retoma el bloqueo de build y la comprobación
-de cierre pendiente. Cualquier lectura activa adicional de banda/asociaciones
+**propietario**: indicar cómo continuar con el nuevo asset no declarado;
+la comprobación SSH de cierre ya pasó. Cualquier lectura activa adicional de banda/asociaciones
 requiere su autorización aparte y,
 por separado, una prueba de
 **descubrimiento de solo lectura** (una tarea nueva a GenieACS, requiere su
