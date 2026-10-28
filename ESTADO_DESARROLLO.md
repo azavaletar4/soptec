@@ -48,9 +48,28 @@ Active=true; LAPTOP Cable/Ethernet, referencia al puerto LAN 2 y Active=false.
 No se cambió WiFi para probarlo. Estos estados corresponden a esa muestra,
 no son una prueba en vivo ni se renuevan por un Inform posterior.
 
-**3. Cambios locales pendientes (no publicados):** presentación Hosts
-«Sin confirmar», fecha basada en datos de las filas y guard de vigencia de
-Active, commit `8fec55d`; **sin desplegar**. Investigación puntual GET inicial
+**3. Cambios locales pendientes (no publicados):** presentación Hosts sobre
+`8fec55d`, completada después de `a0f06fe`; **sin desplegar**.
+El servicio conserva fecha propia InterfaceType (`connectionReportedAt`) y
+Active (`activeReportedAt`), con campos opcionales para compatibilidad con API
+anterior. Mapeo explícito de valores completos (`802.11`/WiFi/WLAN, Ethernet),
+nunca por substring, nombre/IP/fabricante. Tipo y estado solo se muestran
+confirmados con fecha propia válida, no futura y de hasta 10 min, e Inform
+reciente; después «Sin confirmar». Esto evita presentar los cinco registros
+antiguos como una clasificación actual. Fecha de estado visible debajo de cada
+estado (Lima), conservada al caducar; fechas inválidas/futuras no se presentan
+como lecturas. La cabecera incluye las fechas propias de tipo/estado/datos,
+nunca se rejuvenece con Inform o timestamp del objeto padre.
+Sin evidencia de banda: «Banda no disponible», sin inferencia por WLAN 1/5.
+Actualizar conserva el GET de caché, sin tareas automáticas, endpoints nuevos,
+cambios de permisos ni modificación de la identidad exacta de ONT.
+40/40 pruebas Hosts/GPON/presentación y tsc backend/vue-tsc PASS. Incluye
+muestra real de 15 valores, cuatro WiFi/un Cable, estados true/false, ausentes,
+inválidos/futuros, límite exacto 10 min, caducidad con Inform nuevo, conservación
+de hora y rechazo de tipos desconocidos. En esta sesión no se consultó GenieACS
+ni equipos: se reutilizó exclusivamente la evidencia guardada.
+
+Investigación puntual GET inicial
 a las 21:50:05 UTC:
 Active/InterfaceType/Layer2Interface de los cinco Hosts sin valor ni fecha;
 WLAN 1/5 AssociatedDevice sin instancias/fecha; LANEthernetInterfaceConfig
@@ -78,12 +97,9 @@ No se probó una limitación definitiva del firmware para banda/asociaciones.
 Detalle y plan inicial (antecedente, ejecutado parcialmente):
 `docs/TR069-HOSTS-INTERFACES-20261028.md`; evidencia sanitizada:
 `docs/TR069-HOSTS-INTERFACES-CACHE-20261028.json`.
-Implementación local conserva fecha propia Active (opcional para backend
-anterior); solo muestra Conectado/Desconectado con booleano explícito y fechas
-Active/Inform no futuras de hasta 10 minutos. El reloj local ya existente
-caduca el estado sin consultar equipos. Información antigua/ausente queda
-«Sin confirmar»; no se añadieron inferencias ni parámetros no observados.
-34/34 pruebas focalizadas Hosts/GPON/presentación, tsc backend y vue-tsc PASS.
+El reloj local ya existente caduca la presentación sin consultar equipos;
+un Inform nuevo o un clic en Actualizar no se usa para sustituir la fecha
+propia del campo por una hora de contacto/consulta más reciente.
 Producción y contrato de release intactos; esta mejora futura requiere declarar
 alcance frontend y backend, no reutilizar el contrato backend-only de d6ce2c2.
 
@@ -125,7 +141,7 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Presentación `8fec55d` + evidencia activa posterior; ver `git log -1` | **Local, sin desplegar ni publicar** |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Presentación completada después de `a0f06fe`; ver `git log -1` | **Local, sin desplegar ni publicar** |
 | Identificación Hosts | incluido en `main` | `d6ce2c2` | **Backend en producción** (28/10 21:30 UTC) |
 | WiFi + Hosts base | incluido en `main` | `5d48a10` | Frontend activo; backend anterior disponible como rollback |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
@@ -152,8 +168,10 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución; experimento activo Hosts
-cerrado al primer fallo del segundo lote. No reintentar ni enviar más tareas
+**5. Próxima tarea autorizada:** ninguna en ejecución; tabla Hosts completada
+localmente y detenida antes de publicar. Sin autorización de push/despliegue.
+El experimento activo anterior quedó cerrado al fallo del segundo lote.
+No reintentar ni enviar más tareas
 bajo la autorización consumida. Tipo y Active sí leídos; banda/asociaciones
 siguen sin confirmar. Cero tareas pendientes al cierre. Si el propietario
 autoriza otra sesión, usar refreshObject acotado por objeto (plan original)

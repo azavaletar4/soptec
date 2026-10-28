@@ -2,6 +2,7 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readHostsInventory } from '../tr069Hosts';
 import fs from 'node:fs';
+import { hostConnectionLabel, hostStatusLabel } from '../../../../src/lib/tr069Hosts';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -71,7 +72,7 @@ test('host asociado por WiFi (MAC en AssociatedDevice): conexión WiFi y banda r
   assert.equal(inv.hosts.length, 1);
   assert.deepEqual(inv.hosts[0], {
     hostName: 'Laptop', ipAddress: '192.168.100.10', macAddress: 'aa:bb:cc:dd:ee:01',
-    connection: 'WiFi', band: '2.4 GHz', active: null, activeReportedAt: null, reportedAt: timestamp,
+    connection: 'WiFi', connectionReportedAt: null, band: '2.4 GHz', active: null, activeReportedAt: null, reportedAt: timestamp,
   });
 });
 test('host sin InterfaceType y sin asociación WiFi observada: conexión y banda quedan sin dato (nunca se inventa)', async () => {
@@ -88,7 +89,41 @@ test('InterfaceType explícito manda sobre la inferencia por asociación WiFi', 
   )]);
   const inv = await readHostsInventory(nbiUrl, TEST_SERIAL);
   assert.equal(inv.hosts[0].connection, 'Cable');
+  assert.equal(inv.hosts[0].connectionReportedAt, timestamp);
   assert.equal(inv.hosts[0].band, null, 'Cable nunca lleva banda WiFi');
+});
+
+test('InterfaceType desconocido no se clasifica por substring, nombre o fabricante', async () => {
+  for (const interfaceType of ['NotEthernet', 'unknown-wifi', 'Other', '']) {
+    nbi([device('485754431D3691B7', TEST_DEVICE, { 1: host({ mac: 'aa:bb:cc:dd:ee:01', name: 'WiFi-Huawei-Ethernet', interfaceType }) })]);
+    const inv = await readHostsInventory(nbiUrl, TEST_SERIAL);
+    assert.equal(inv.hosts[0].connection, null);
+    assert.equal(inv.hosts[0].connectionReportedAt, null);
+  }
+});
+
+test('lectura activa real: cuatro WiFi y un Cable; tipos y estados caducan sin rejuvenecer por Inform', async () => {
+  const history = JSON.parse(fs.readFileSync(new URL('../../../../docs/TR069-HOSTS-ACTIVE-READ-20261028.json', import.meta.url), 'utf8'));
+  const sample = history.find((entry: { action: string; tasks: unknown[]; device: { _lastInform: string } }) =>
+    entry.action === 'status' && entry.tasks.length === 0 && entry.device._lastInform === '2026-10-28T22:03:39.211Z');
+  assert.ok(sample);
+  const calls = nbi([sample.device]);
+  const inv = await readHostsInventory(nbiUrl, TEST_SERIAL);
+  const at = Date.parse('2026-10-28T22:04:04Z');
+  assert.equal(inv.deviceId, TEST_DEVICE);
+  assert.deepEqual(inv.hosts.map(h => hostConnectionLabel(h, inv.lastInform, at)), ['WiFi', 'WiFi', 'WiFi', 'WiFi', 'Cable']);
+  assert.deepEqual(inv.hosts.map(h => hostStatusLabel(h, inv.lastInform, at)), ['Desconectado', 'Conectado', 'Desconectado', 'Desconectado', 'Desconectado']);
+  for (const h of inv.hosts) {
+    assert.equal(h.band, null, 'WLAN 1 no equivale a una banda confirmada');
+    assert.equal(h.activeReportedAt, '2026-10-28T22:03:39.213Z');
+    assert.equal(h.connectionReportedAt, '2026-10-28T22:03:39.213Z');
+    const later = Date.parse('2026-10-28T22:13:39.214Z');
+    const freshInform = new Date(later).toISOString();
+    assert.equal(hostStatusLabel(h, freshInform, later), 'Sin confirmar');
+    assert.equal(hostConnectionLabel(h, freshInform, later), 'Sin confirmar');
+    assert.equal(h.activeReportedAt, '2026-10-28T22:03:39.213Z', 'Caducar no borra la última lectura');
+  }
+  assert.equal(calls.length, 1, 'Mapeo y caducidad no envían tareas ni hacen consultas adicionales');
 });
 test('Active explícito se respeta tal cual lo reporta el equipo (true o false)', async () => {
   nbi([device('485754431D3691B7', TEST_DEVICE, {

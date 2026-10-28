@@ -8,6 +8,8 @@ export interface HostEntry {
   /** Derivado de InterfaceType si el equipo lo reporta, o de una asociación WiFi
    * realmente observada (AssociatedDevice) — nunca de una suposición. */
   connection: 'WiFi' | 'Cable' | null;
+  /** Fecha del InterfaceType que respalda el tipo; ausente implica sin confirmar. */
+  connectionReportedAt?: string | null;
   /** Solo si el propio parámetro de la red WiFi la declara explícitamente. */
   band: '2.4 GHz' | '5 GHz' | null;
   /** Active de TR-069 (Hosts.{i}.Active) — null si el equipo nunca lo reportó, no
@@ -25,18 +27,35 @@ export interface HostEntry {
 // No garantiza conexión en vivo ni sustituye una lectura del campo Active.
 export const HOST_STATUS_MAX_AGE_MS = 10 * 60_000;
 
+function validReportTime(raw: string | null | undefined, now: number): string | null {
+  if (typeof raw !== 'string') return null;
+  const time = Date.parse(raw);
+  return Number.isFinite(time) && time <= now ? raw : null;
+}
+
+function recentReport(raw: string | null | undefined, now: number): boolean {
+  return validReportTime(raw, now) !== null && now - Date.parse(raw!) <= HOST_STATUS_MAX_AGE_MS;
+}
+
 export function hostStatusLabel(host: HostEntry, lastInform: string | null, now: number): string {
-  const recent = (raw: string | null | undefined) => {
-    const time = raw ? Date.parse(raw) : NaN;
-    return Number.isFinite(time) && time <= now && now - time <= HOST_STATUS_MAX_AGE_MS;
-  };
-  if (typeof host.active !== 'boolean' || !recent(host.activeReportedAt) || !recent(lastInform)) return 'Sin confirmar';
+  if (typeof host.active !== 'boolean' || !recentReport(host.activeReportedAt, now) || !recentReport(lastInform, now)) return 'Sin confirmar';
   return host.active ? 'Conectado' : 'Desconectado';
 }
 
+export function hostConnectionLabel(host: HostEntry, lastInform: string | null, now: number): string {
+  if (!recentReport(host.connectionReportedAt, now) || !recentReport(lastInform, now)) return 'Sin confirmar';
+  return host.connection === 'WiFi' || host.connection === 'Cable' ? host.connection : 'Sin confirmar';
+}
+
+/** Conserva la hora aunque el estado haya caducado; no presenta fechas inválidas/futuras. */
+export function hostStatusReadAt(host: HostEntry, now: number): string | null {
+  return validReportTime(host.activeReportedAt, now);
+}
+
 /** Fecha de los datos de las filas, nunca la fecha de descubrimiento del objeto padre. */
-export function latestHostsReport(inventory: HostsInventory): string | null {
-  return inventory.hosts.map(h => h.reportedAt).filter((t): t is string => !!t && Number.isFinite(Date.parse(t)))
+export function latestHostsReport(inventory: HostsInventory, now = Date.now()): string | null {
+  return inventory.hosts.flatMap(h => [h.reportedAt, h.activeReportedAt, h.connectionReportedAt])
+    .filter((t): t is string => validReportTime(t, now) !== null)
     .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
 }
 

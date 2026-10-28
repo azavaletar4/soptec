@@ -12,7 +12,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { useAuthStore } from '@/stores/auth';
 import { compareWifiPlan, type WifiSsidPlan } from '@/lib/tr069WifiPlan';
 import { plainWifiTrialMessage, type WifiTrialStatus } from '@/lib/tr069WifiTrial';
-import { hostStatusLabel, latestHostsReport, type HostsInventory } from '@/lib/tr069Hosts';
+import { hostConnectionLabel, hostStatusLabel, hostStatusReadAt, latestHostsReport, type HostsInventory } from '@/lib/tr069Hosts';
 import type { ServiceContract, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { WifiNetwork } from '@/stores/tr069';
 
@@ -62,7 +62,6 @@ const metricsLoadingId = ref<string | null>(null);
 const hostsById = ref<Record<string, HostsInventory | null>>({});
 const hostsLoadingId = ref<string | null>(null);
 const hostsErrorById = ref<Record<string, string | null>>({});
-const CONNECTION_LABELS: Record<string, string> = { WiFi: 'WiFi', Cable: 'Cable' };
 
 async function loadHosts(device: Tr069Device) {
   hostsLoadingId.value = device.id;
@@ -322,6 +321,11 @@ onMounted(async () => {
   }
 });
 
+function formatHostDate(value: string | null) {
+  if (!value) return 'Sin confirmar';
+  return new Date(value).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Lima' });
+}
+
 function formatDate(value: string | null) {
   if (!value) return 'Nunca';
   return new Date(value).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' });
@@ -576,8 +580,8 @@ async function handleUnlink() {
                       <p v-if="!hostsById[device.id]!.hosts.length" class="text-xs text-slate-500">Este equipo no reportó ningún dispositivo conectado.</p>
                       <template v-else>
                         <p class="text-xs text-slate-500 mb-2">
-                          Última información de la lista: {{ latestHostsReport(hostsById[device.id]!) ? formatDate(latestHostsReport(hostsById[device.id]!)) : 'Sin confirmar' }}.
-                          Los datos pueden cambiar; «Sin confirmar» indica que falta información suficiente.
+                          Última información de la lista: {{ formatHostDate(latestHostsReport(hostsById[device.id]!, ontEvidenceNow)) }}.
+                          «Sin confirmar» indica que falta una lectura válida de los últimos 10 minutos. Actualizar consulta la información guardada.
                         </p>
                         <div class="overflow-x-auto">
                           <table class="w-full text-xs">
@@ -596,9 +600,12 @@ async function handleUnlink() {
                                 <td class="py-1 pr-3">{{ host.hostName ?? 'No disponible' }}</td>
                                 <td class="py-1 pr-3 font-mono">{{ host.ipAddress ?? 'No disponible' }}</td>
                                 <td class="py-1 pr-3 font-mono">{{ host.macAddress ?? 'No disponible' }}</td>
-                                <td class="py-1 pr-3">{{ host.connection ? CONNECTION_LABELS[host.connection] : 'Sin confirmar' }}</td>
-                                <td class="py-1 pr-3">{{ host.band ?? 'Sin confirmar' }}</td>
-                                <td class="py-1 pr-3" :title="host.activeReportedAt ? `Información de estado: ${formatDate(host.activeReportedAt)}` : undefined">{{ hostStatusLabel(host, hostsById[device.id]!.lastInform, ontEvidenceNow) }}</td>
+                                <td class="py-1 pr-3">{{ hostConnectionLabel(host, hostsById[device.id]!.lastInform, ontEvidenceNow) }}</td>
+                                <td class="py-1 pr-3">{{ host.band ?? 'Banda no disponible' }}</td>
+                                <td class="py-1 pr-3">
+                                  {{ hostStatusLabel(host, hostsById[device.id]!.lastInform, ontEvidenceNow) }}
+                                  <span class="block text-[11px] text-slate-500">{{ hostStatusReadAt(host, ontEvidenceNow) ? `Última lectura: ${formatHostDate(hostStatusReadAt(host, ontEvidenceNow))}` : 'Lectura sin fecha' }}</span>
+                                </td>
                               </tr>
                             </tbody>
                           </table>

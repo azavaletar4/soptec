@@ -16,8 +16,8 @@ function bool(node: Node | undefined): boolean | null {
 /** Solo mapea valores TR-098 ya conocidos; uno desconocido queda sin inventar. */
 function labelInterfaceType(value: string | null): 'WiFi' | 'Cable' | null {
   if (!value) return null;
-  if (/802\.11|wlan|wifi/i.test(value)) return 'WiFi';
-  if (/ethernet/i.test(value)) return 'Cable';
+  if (/^(802\.11|wlan|wifi)$/i.test(value.trim())) return 'WiFi';
+  if (/^ethernet$/i.test(value.trim())) return 'Cable';
   return null;
 }
 
@@ -84,6 +84,7 @@ export async function readHostsInventory(nbiUrl: string, serial: string): Promis
       ipAddress: str(node.IPAddress as Node | undefined),
       macAddress: mac,
       connection,
+      connectionReportedAt: labelInterfaceType(interfaceValue) ? ts(node.InterfaceType as Node | undefined) : null,
       band: connection === 'WiFi' ? wifiBand : null,
       active: bool(node.Active as Node | undefined),
       activeReportedAt: bool(node.Active as Node | undefined) !== null ? ts(node.Active as Node | undefined) : null,

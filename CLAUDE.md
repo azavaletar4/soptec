@@ -20,7 +20,8 @@ La corrección Hosts `d6ce2c2` **ya está desplegada y verificada** (28/10,
 21:30 UTC): backend `smartrayco-backend-wifitrial:d6ce2c2f578f`; frontend
 intacto en `5d48a10ea497` (misma imagen y arranque). Una Huawei única,
 `found:true`, cinco Hosts reales por GET; serial hexadecimal/canónico y
-serial inexistente verificados. Conexión/banda/Active desconocidos.
+serial inexistente verificados. La banda sigue sin confirmar; el estado debe
+evaluarse con la fecha del propio valor, no solo con el Inform.
 El bloqueo backend-only quedó resuelto en `d844ac6`: alcance explícito en
 `deploy/consolidation-release-scope.json`, fuentes inmutables del commit,
 servicios seleccionados y verificaciones de igualdad para el lado intacto.
@@ -40,8 +41,12 @@ en punto como GPV en vez del refreshObject acotado del plan. Tarea fallida
 retirada, cero pendientes, retries:0, sin más lecturas ni reintentos.
 Banda/asociaciones aún sin confirmar. Inform final 22:08:39.189 UTC.
 Detalle y evidencia: `docs/TR069-HOSTS-ACTIVE-READ-20261028.md` y JSON.
-Presentación local `8fec55d` («Sin confirmar» + guard Active 10 min) sigue
-sin desplegar; 34 pruebas y tsc backend/frontend PASS de esa implementación.
+Presentación local sobre `8fec55d`, completada tras `a0f06fe`, **sin desplegar**:
+tipo WiFi/Cable con fecha propia InterfaceType, estado con fecha propia Active,
+ambos exigen lectura e Inform de hasta 10 min; después «Sin confirmar».
+Hora de estado visible por fila en Lima, conservada al caducar; banda sin
+evidencia «Banda no disponible». Actualizar sigue siendo GET de caché.
+40 pruebas (incluida muestra activa real y caducidad) y tsc backend/frontend PASS.
 No repetir la consulta ni iniciar otras operaciones: nueva autorización para
 lecturas adicionales; no asumir que el Inform actualiza Active automáticamente.
 
