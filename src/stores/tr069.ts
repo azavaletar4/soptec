@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
 import type { WifiInventory, WifiSsidPlan } from '@/lib/tr069WifiPlan';
 import type { WifiTrialStatus } from '@/lib/tr069WifiTrial';
-import type { HostsInventory } from '@/lib/tr069Hosts';
+import type { HostsInventory, HostsReadResult } from '@/lib/tr069Hosts';
 export type { WifiNetwork } from '@/lib/tr069WifiPlan';
 import type { OltTr069AcsProfile, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { Tr069InventorySnapshot } from '@/types/tr069Inventory';
@@ -136,7 +136,11 @@ export const useTr069Store = defineStore('tr069', () => {
   // Solo lectura: nunca encola una tarea, se llama solo al expandir el detalle de un
   // equipo (nunca automático para toda la lista) para no sobrecargar GenieACS.
   function fetchHosts(serial: string) {
-    return apiFetch<HostsInventory>(`/api/genieacs-sync/hosts/${encodeURIComponent(serial)}`);
+    return apiFetch<HostsInventory>(`/api/genieacs-sync/hosts/${encodeURIComponent(serial)}`, {}, 15_000);
+  }
+
+  function readHostsOnDemand(serial: string) {
+    return apiFetch<HostsReadResult>(`/api/genieacs-sync/hosts/${encodeURIComponent(serial)}/read`, { method: 'POST', body: '{}' }, 55_000);
   }
 
   function setWifi(serial: string, payload: { path: string; ssid?: string; password?: string }) {
@@ -222,6 +226,7 @@ export const useTr069Store = defineStore('tr069', () => {
     fetchWifiNetworks,
     setWifi,
     fetchHosts,
+    readHostsOnDemand,
     rebootDevice,
     refreshDevice,
     provisionDevice,

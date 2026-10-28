@@ -48,8 +48,38 @@ Active=true; LAPTOP Cable/Ethernet, referencia al puerto LAN 2 y Active=false.
 No se cambió WiFi para probarlo. Estos estados corresponden a esa muestra,
 no son una prueba en vivo ni se renuevan por un Inform posterior.
 
-**3. Cambios locales pendientes (no publicados):** presentación Hosts sobre
-`8fec55d`, completada después de `a0f06fe`; **sin desplegar**.
+**3. Cambios locales pendientes (no publicados):** actualización Hosts bajo
+demanda y calidad WiFi sobre `4f50068`; **sin desplegar ni habilitar**.
+Nuevo panel Hosts inicialmente cerrado, independiente del detalle general.
+Abrirlo explícitamente o pulsar Actualizar llama POST de lectura, solo
+ADMIN/SUPERADMIN; GET de caché conserva permisos de lectura existentes.
+No hay llamadas por render/entrada de página, polling, cron, timers de refresco
+ni tareas/reintentos automáticos. Si hay operación en vuelo/pendiente para la
+ONT se comparte o comprueba, sin otra tarea. Journal antes del POST y lock
+persistente protegen duplicados, reinicios y procesos concurrentes.
+Solo hojas concretas anunciadas (Hosts y asociaciones conocidas), sin claves,
+prefijos terminados en punto, rutas del navegador o descubrimientos amplios.
+Máximo 64 Hosts/512 hojas; NBI espera 12 s, transporte POST 15 s, tarea expira
+a 45 s. Un 202/timeout se comprueba solo en una acción explícita posterior.
+Fault/vencimiento retira únicamente tarea propia comprobada, sin reenviar.
+Identidad se verifica al principio/final; si no se confirman fechas propias
+de MAC/tipo/estado/referencia/nombre-IP, se conserva el snapshot anterior.
+Feature gate **apagado por defecto** `TR069_HOSTS_ON_DEMAND_ENABLED`; preparar
+código no autoriza habilitarlo ni realizar pruebas activas reales.
+Detalle, archivos, límites de unidades/discovery y prueba real pendiente:
+`docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`.
+
+Señal: correlación exacta de Host/MAC/WLAN. Solo dBm con unidad explícita y
+fechas vigentes de medida/unidad/MAC/referencia, tipo WiFi y estado conectado.
+Verde ≥ -67, amarillo -75..-68, rojo < -75 dBm (política visual propia, sin
+porcentaje). Sin evidencia: No disponible; Ethernet vigente: No aplica.
+No se observó en Huawei una unidad de señal; los campos Unit se usan solo si
+el árbol realmente los declara (los ejemplos completos son simulados).
+GET de caché NBI **22:51:24 UTC**: cinco X_HW_RSSI sin valor/tipo/fecha y cero
+asociaciones, Inform 22:48:39 pero Active/tipo de 22:03:39 ya históricos.
+Evidencia: `docs/TR069-HOSTS-SIGNAL-CACHE-20261028.json`; ninguna tarea activa
+real en esta fase. No se probó que el firmware sea incapaz de dar señal.
+
 El servicio conserva fecha propia InterfaceType (`connectionReportedAt`) y
 Active (`activeReportedAt`), con campos opcionales para compatibilidad con API
 anterior. Mapeo explícito de valores completos (`802.11`/WiFi/WLAN, Ethernet),
@@ -60,14 +90,11 @@ antiguos como una clasificación actual. Fecha de estado visible debajo de cada
 estado (Lima), conservada al caducar; fechas inválidas/futuras no se presentan
 como lecturas. La cabecera incluye las fechas propias de tipo/estado/datos,
 nunca se rejuvenece con Inform o timestamp del objeto padre.
-Sin evidencia de banda: «Banda no disponible», sin inferencia por WLAN 1/5.
-Actualizar conserva el GET de caché, sin tareas automáticas, endpoints nuevos,
-cambios de permisos ni modificación de la identidad exacta de ONT.
-40/40 pruebas Hosts/GPON/presentación y tsc backend/vue-tsc PASS. Incluye
-muestra real de 15 valores, cuatro WiFi/un Cable, estados true/false, ausentes,
-inválidos/futuros, límite exacto 10 min, caducidad con Inform nuevo, conservación
-de hora y rechazo de tipos desconocidos. En esta sesión no se consultó GenieACS
-ni equipos: se reutilizó exclusivamente la evidencia guardada.
+Tabla actual: Dispositivo, IP, MAC, Conexión, Estado, Señal WiFi. No se presenta
+banda por inferencia de WLAN 1/5. 66/66 pruebas Hosts/GPON/panel/señal/roles y
+render real PASS, tsc backend/vue-tsc PASS. Todas las operaciones activas de
+esta implementación se probaron con NBI simulado; el único acceso real fue
+el GET de caché de señal anterior. Sin cambios de otros módulos ni release.
 
 Investigación puntual GET inicial
 a las 21:50:05 UTC:
@@ -141,7 +168,7 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Presentación completada después de `a0f06fe`; ver `git log -1` | **Local, sin desplegar ni publicar** |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Hosts bajo demanda/señal después de `4f50068`; ver `git log -1` | **Local, gate apagado, sin desplegar ni publicar** |
 | Identificación Hosts | incluido en `main` | `d6ce2c2` | **Backend en producción** (28/10 21:30 UTC) |
 | WiFi + Hosts base | incluido en `main` | `5d48a10` | Frontend activo; backend anterior disponible como rollback |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
@@ -168,8 +195,11 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución; tabla Hosts completada
-localmente y detenida antes de publicar. Sin autorización de push/despliegue.
+**5. Próxima tarea autorizada:** ninguna en ejecución; Hosts bajo demanda/señal
+preparado y probado localmente, gate apagado. Detenerse antes de consultas
+activas reales, habilitación o despliegue; requieren autorización específica.
+No asumir que una autorización anterior del experimento cubre el nuevo POST,
+connection_request, expiry o X_HW_RSSI. Sin autorización de push/despliegue.
 El experimento activo anterior quedó cerrado al fallo del segundo lote.
 No reintentar ni enviar más tareas
 bajo la autorización consumida. Tipo y Active sí leídos; banda/asociaciones

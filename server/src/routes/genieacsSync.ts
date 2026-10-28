@@ -6,6 +6,7 @@ import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { collectMetricsForDevice } from '../services/genieacsMetricsService';
 import { getPppoeInfo, queueReboot, queueRefresh } from '../services/tr069DeviceService';
 import { readHostsInventory } from '../services/tr069Hosts';
+import { hostsOnDemandRoutes } from './tr069HostsOnDemand';
 
 // Adaptado de REPLICA-TR069-GENIEACS.md secciones 8/9. Sin tenant_id
 // (single-tenant): "todos" simplemente significa todos los tr069_devices.
@@ -16,6 +17,7 @@ const PPP_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
 
 genieacsSyncRoutes.use('*', requireAuth, requireRole(...STAFF_READ));
 genieacsSyncRoutes.route('/wifi', wifiPreparationRoutes);
+genieacsSyncRoutes.route('/hosts', hostsOnDemandRoutes);
 // No dejar el provisionado combinado como vía alternativa a WiFi/PPPoE.
 genieacsSyncRoutes.post('/pppoe/:serial', tr069PreparationOnly);
 genieacsSyncRoutes.post('/provision/:serial', tr069PreparationOnly);

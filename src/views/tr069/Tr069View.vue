@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useOntEvidenceClock } from '@/composables/useOntEvidenceClock';
 import { enforceOntEvidence } from '@/lib/ontTelemetryEvidence';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -12,7 +12,8 @@ import { getErrorMessage } from '@/lib/errors';
 import { useAuthStore } from '@/stores/auth';
 import { compareWifiPlan, type WifiSsidPlan } from '@/lib/tr069WifiPlan';
 import { plainWifiTrialMessage, type WifiTrialStatus } from '@/lib/tr069WifiTrial';
-import { hostConnectionLabel, hostStatusLabel, hostStatusReadAt, latestHostsReport, type HostsInventory } from '@/lib/tr069Hosts';
+import { hostConnectionLabel, hostStatusLabel, hostStatusReadAt, hostWifiSignalPresentation, latestHostsReport } from '@/lib/tr069Hosts';
+import { createHostsPanelController, emptyHostsPanelState } from '@/lib/tr069HostsPanel';
 import type { ServiceContract, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { WifiNetwork } from '@/stores/tr069';
 
@@ -56,24 +57,19 @@ const expandedId = ref<string | null>(null);
 const metricsById = ref<Record<string, Tr069PerformanceMetric | null>>({});
 const metricsLoadingId = ref<string | null>(null);
 
-// Dispositivos conectados (Hosts): solo lectura de la caché ya reportada por el equipo,
-// nunca una tarea nueva. Se carga únicamente al expandir un equipo (nunca para toda la
-// lista), igual que las métricas, para no sobrecargar GenieACS.
-const hostsById = ref<Record<string, HostsInventory | null>>({});
-const hostsLoadingId = ref<string | null>(null);
-const hostsErrorById = ref<Record<string, string | null>>({});
-
-async function loadHosts(device: Tr069Device) {
-  hostsLoadingId.value = device.id;
-  hostsErrorById.value[device.id] = null;
-  try {
-    hostsById.value[device.id] = await tr069Store.fetchHosts(device.cpe_serial);
-  } catch (e) {
-    hostsErrorById.value[device.id] = getErrorMessage(e, 'No se pudo consultar los dispositivos conectados');
-  } finally {
-    hostsLoadingId.value = null;
-  }
-}
+// Solo abrir Hosts o Actualizar inicia/comprueba una lectura. El detalle general
+// y los renders no consultan Hosts. Otros roles conservan únicamente GET de caché.
+const canReadHostsActively = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? ''));
+const hostsPanel = reactive(emptyHostsPanelState());
+const hostsById = computed(() => hostsPanel.inventory);
+const hostsController = createHostsPanelController(hostsPanel, async (serial, active) => {
+  if (active) return tr069Store.readHostsOnDemand(serial);
+  const inventory = await tr069Store.fetchHosts(serial);
+  const at = new Date().toISOString();
+  return { state: 'completed', requestedAt: at, checkedAt: at, inventory, message: 'Información guardada. No se consultó al equipo.' };
+});
+const signalColors = { good: 'text-emerald-700', fair: 'text-amber-600', poor: 'text-red-700' };
+const signalLabels = { good: 'Buena', fair: 'Regular', poor: 'Débil' };
 
 const linkModalDevice = ref<Tr069Device | null>(null);
 const clientFilter = ref('');
@@ -361,8 +357,10 @@ async function handleCollectAll() {
 async function toggleExpand(device: Tr069Device) {
   if (expandedId.value === device.id) {
     expandedId.value = null;
+    hostsController.close(device.id);
     return;
   }
+  if (expandedId.value) hostsController.close(expandedId.value);
   expandedId.value = device.id;
   if (!(device.id in metricsById.value)) {
     metricsLoadingId.value = device.id;
@@ -374,7 +372,6 @@ async function toggleExpand(device: Tr069Device) {
       metricsLoadingId.value = null;
     }
   }
-  if (!(device.id in hostsById.value)) await loadHosts(device);
 }
 
 async function refreshDeviceMetrics(device: Tr069Device) {
@@ -565,34 +562,39 @@ async function handleUnlink() {
 
                 <div class="mt-4 pt-4 border-t border-slate-200">
                   <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-sm font-semibold text-slate-700">Dispositivos conectados</h3>
-                    <button class="text-sky-600 hover:underline text-xs" :disabled="hostsLoadingId === device.id" @click="loadHosts(device)">
-                      {{ hostsLoadingId === device.id ? 'Consultando...' : 'Actualizar' }}
+                    <button type="button" class="text-sm font-semibold text-slate-700 hover:underline" :aria-expanded="!!hostsPanel.opened[device.id]" @click="hostsController.toggle(device.id, device.cpe_serial, canReadHostsActively)">
+                      Dispositivos conectados · {{ hostsPanel.opened[device.id] ? 'Ocultar' : 'Mostrar' }}
+                    </button>
+                    <button v-if="hostsPanel.opened[device.id]" type="button" class="text-sky-600 hover:underline text-xs" :disabled="hostsPanel.loading[device.id]" @click="hostsController.refresh(device.id, device.cpe_serial, canReadHostsActively)">
+                      {{ hostsPanel.loading[device.id] ? 'Consultando...' : 'Actualizar' }}
                     </button>
                   </div>
-                  <p v-if="hostsErrorById[device.id]" class="text-xs text-red-600">{{ hostsErrorById[device.id] }}</p>
-                  <template v-else-if="hostsLoadingId === device.id && !hostsById[device.id]">
-                    <p class="text-xs text-slate-500">Consultando...</p>
-                  </template>
-                  <template v-else-if="hostsById[device.id]">
+                  <template v-if="hostsPanel.opened[device.id]">
+                  <p v-if="hostsPanel.errors[device.id]" role="alert" class="text-xs text-red-600">{{ hostsPanel.errors[device.id] }}</p>
+                  <p v-if="hostsPanel.loading[device.id]" role="status" class="text-xs text-slate-500">Consultando al equipo. La lista anterior puede seguir visible mientras responde.</p>
+                  <p v-if="hostsPanel.result[device.id]" role="status" class="text-xs text-slate-500 mb-2">
+                    Última solicitud: {{ formatHostDate(hostsPanel.result[device.id]!.requestedAt) }}.
+                    {{ hostsPanel.result[device.id]!.message }}
+                  </p>
+                  <template v-if="hostsById[device.id]">
                     <p v-if="!hostsById[device.id]!.found" class="text-xs text-amber-700">No se pudo identificar este equipo en GenieACS para leer sus dispositivos conectados.</p>
                     <template v-else>
                       <p v-if="!hostsById[device.id]!.hosts.length" class="text-xs text-slate-500">Este equipo no reportó ningún dispositivo conectado.</p>
                       <template v-else>
                         <p class="text-xs text-slate-500 mb-2">
                           Última información de la lista: {{ formatHostDate(latestHostsReport(hostsById[device.id]!, ontEvidenceNow)) }}.
-                          «Sin confirmar» indica que falta una lectura válida de los últimos 10 minutos. Actualizar consulta la información guardada.
+                          «Sin confirmar» indica información histórica o insuficiente: hace falta una lectura válida de los últimos 10 minutos.
                         </p>
                         <div class="overflow-x-auto">
                           <table class="w-full text-xs">
                             <thead class="text-slate-500">
                               <tr>
-                                <th class="text-left py-1 pr-3">Nombre</th>
-                                <th class="text-left py-1 pr-3">Dirección IP</th>
-                                <th class="text-left py-1 pr-3">Dirección MAC</th>
+                                <th class="text-left py-1 pr-3">Dispositivo</th>
+                                <th class="text-left py-1 pr-3">IP</th>
+                                <th class="text-left py-1 pr-3">MAC</th>
                                 <th class="text-left py-1 pr-3">Conexión</th>
-                                <th class="text-left py-1 pr-3">Banda</th>
                                 <th class="text-left py-1 pr-3">Estado</th>
+                                <th class="text-left py-1 pr-3">Señal WiFi</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -601,10 +603,14 @@ async function handleUnlink() {
                                 <td class="py-1 pr-3 font-mono">{{ host.ipAddress ?? 'No disponible' }}</td>
                                 <td class="py-1 pr-3 font-mono">{{ host.macAddress ?? 'No disponible' }}</td>
                                 <td class="py-1 pr-3">{{ hostConnectionLabel(host, hostsById[device.id]!.lastInform, ontEvidenceNow) }}</td>
-                                <td class="py-1 pr-3">{{ host.band ?? 'Banda no disponible' }}</td>
                                 <td class="py-1 pr-3">
                                   {{ hostStatusLabel(host, hostsById[device.id]!.lastInform, ontEvidenceNow) }}
                                   <span class="block text-[11px] text-slate-500">{{ hostStatusReadAt(host, ontEvidenceNow) ? `Última lectura: ${formatHostDate(hostStatusReadAt(host, ontEvidenceNow))}` : 'Lectura sin fecha' }}</span>
+                                </td>
+                                <td class="py-1 pr-3">
+                                  <span v-if="hostWifiSignalPresentation(host, hostsById[device.id]!.lastInform, ontEvidenceNow).level" :class="signalColors[hostWifiSignalPresentation(host, hostsById[device.id]!.lastInform, ontEvidenceNow).level!]" aria-hidden="true">● </span>
+                                  {{ hostWifiSignalPresentation(host, hostsById[device.id]!.lastInform, ontEvidenceNow).label }}
+                                  <span v-if="hostWifiSignalPresentation(host, hostsById[device.id]!.lastInform, ontEvidenceNow).level"> · {{ signalLabels[hostWifiSignalPresentation(host, hostsById[device.id]!.lastInform, ontEvidenceNow).level!] }}</span>
                                 </td>
                               </tr>
                             </tbody>
@@ -612,6 +618,7 @@ async function handleUnlink() {
                         </div>
                       </template>
                     </template>
+                  </template>
                   </template>
                 </div>
               </td>

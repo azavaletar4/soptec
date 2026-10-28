@@ -72,7 +72,8 @@ test('host asociado por WiFi (MAC en AssociatedDevice): conexión WiFi y banda r
   assert.equal(inv.hosts.length, 1);
   assert.deepEqual(inv.hosts[0], {
     hostName: 'Laptop', ipAddress: '192.168.100.10', macAddress: 'aa:bb:cc:dd:ee:01',
-    connection: 'WiFi', connectionReportedAt: null, band: '2.4 GHz', active: null, activeReportedAt: null, reportedAt: timestamp,
+    connection: 'WiFi', connectionReportedAt: null, macReportedAt: timestamp, layer2Interface: null, layer2ReportedAt: null,
+    wifiSignal: null, band: '2.4 GHz', active: null, activeReportedAt: null, reportedAt: timestamp,
   });
 });
 test('host sin InterfaceType y sin asociación WiFi observada: conexión y banda quedan sin dato (nunca se inventa)', async () => {

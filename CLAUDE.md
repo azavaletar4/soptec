@@ -41,14 +41,20 @@ en punto como GPV en vez del refreshObject acotado del plan. Tarea fallida
 retirada, cero pendientes, retries:0, sin más lecturas ni reintentos.
 Banda/asociaciones aún sin confirmar. Inform final 22:08:39.189 UTC.
 Detalle y evidencia: `docs/TR069-HOSTS-ACTIVE-READ-20261028.md` y JSON.
-Presentación local sobre `8fec55d`, completada tras `a0f06fe`, **sin desplegar**:
-tipo WiFi/Cable con fecha propia InterfaceType, estado con fecha propia Active,
-ambos exigen lectura e Inform de hasta 10 min; después «Sin confirmar».
-Hora de estado visible por fila en Lima, conservada al caducar; banda sin
-evidencia «Banda no disponible». Actualizar sigue siendo GET de caché.
-40 pruebas (incluida muestra activa real y caducidad) y tsc backend/frontend PASS.
-No repetir la consulta ni iniciar otras operaciones: nueva autorización para
-lecturas adicionales; no asumir que el Inform actualiza Active automáticamente.
+**Preparación local posterior a `4f50068`, sin desplegar:** Hosts cerrado por
+defecto dentro del detalle; solo abrir Hosts/Actualizar por ADMIN/SUPERADMIN
+inicia una lectura acotada. Sin polling, cron, timers de refresco ni reintentos;
+consulta pendiente se comprueba manualmente y se reutiliza, con journal/lock,
+timeout y expiración. Ruta activa exige auth/rol y está **deshabilitada por
+defecto** (`TR069_HOSTS_ON_DEMAND_ENABLED`), pendiente de autorización real.
+Tipo/estado caducan a 10 min; tabla de seis columnas y señal en dBm solo con
+unidad explícita, MAC/WLAN/fechas vigentes. Sin unidad: No disponible; Ethernet
+vigente: No aplica. No porcentajes ni banda inventada. GET de caché 22:51 UTC:
+cinco X_HW_RSSI sin valor/fecha y cero asociaciones; ninguna tarea enviada.
+66 pruebas y tsc backend/frontend PASS, incluido render real de tabla.
+Detalle, límites del firmware y habilitación pendiente:
+`docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`.
+No ejecutar nuevas lecturas activas reales ni publicar sin autorización específica.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
