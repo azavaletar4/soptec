@@ -10,9 +10,42 @@ def hashfile(p):
  return h.hexdigest()
 def current(s):return json.loads(run(['docker','inspect','smartrayco-'+s+'-1']))[0]
 def states():return {s:{'id':current(s)['Id'],'image':current(s)['Image'],'started':current(s)['State']['StartedAt']} for s in ['frontend','backend','caddy','mongo','genieacs']}
-def tree(cid,root):
+def tree(cid,root,raw=False):
  data=subprocess.check_output(['docker','cp',cid+':'+root+'/.','-'])
- with tarfile.open(fileobj=io.BytesIO(data))as t:return {m.name.removeprefix('./'):hashlib.sha256(t.extractfile(m).read()).hexdigest() for m in t if m.isfile()}
+ with tarfile.open(fileobj=io.BytesIO(data))as t:
+  if raw:return {m.name.removeprefix('./'):t.extractfile(m).read() for m in t if m.isfile()}
+  return {m.name.removeprefix('./'):hashlib.sha256(t.extractfile(m).read()).hexdigest() for m in t if m.isfile()}
+# Vite nombra cada chunk con un hash de su contenido e incluye ese nombre en los
+# chunks que lo importan (import "./x-HASH.js") y en el mapa de prefetch del
+# entry comun (__vite__mapDeps). Si un solo chunk cambia, todos los que lo
+# referencian cambian de nombre en cascada, sin que su logica cambie en
+# absoluto. Ademas, el frontend en vivo acarrea archivos huerfanos de builds
+# incrementales anteriores (nunca se limpia /usr/share/nginx/html entre fases;
+# confirmado real: 657 de 779 archivos del contenedor activo no los referencia
+# nada) y el Dockerfile de esta release copia el dist/ nuevo ENCIMA de esa
+# imagen sin vaciarla, asi que ambos arboles cargan ese ruido historico.
+# Comparar el arbol crudo completo (incluso ya sin el hash) mezcla huerfanos
+# con la pieza real. Se compara solo el grafo REALMENTE ALCANZABLE desde
+# index.html (igual que lo cargaria el navegador), por nombre sin el sufijo
+# hash y con las referencias a otros archivos neutralizadas; lo unico que
+# puede diferir de verdad ahi es el alcance declarado en FRONT_ALLOW.
+NAME_HASH_RE=re.compile(r'^(.*?)-[\w-]{8,12}(\.(?:js|css))$')
+REF_HASH_RE=re.compile(rb'([\w.\-]+?)-[\w-]{8,12}(\.(?:js|css))')
+REF_HASH_TXT_RE=re.compile(r'[\w./\-]+?-[\w-]{8,12}\.(?:js|css)')
+def stripname(p):
+ m=NAME_HASH_RE.match(p);return (m.group(1)+m.group(2))if m else p
+def normcontent(b):return REF_HASH_RE.sub(rb'\1\2',b)
+def reachable(files):
+ index=files['index.html'].decode('utf-8','replace')
+ seeds=re.findall(r'assets/[\w.\-]+\.(?:js|css)',index);seen=set(seeds);queue=list(seeds)
+ while queue:
+  cur=queue.pop();content=files.get(cur)
+  if content is None:continue
+  text=content.decode('utf-8','replace')
+  for ref in REF_HASH_TXT_RE.findall(text):
+   cand='assets/'+ref.split('/')[-1]
+   if cand in files and cand not in seen:seen.add(cand);queue.append(cand)
+ return seen
 def compose(m,extras=[]):
  a=['docker','compose','-p','smartrayco','--project-directory',str(repo)]
  for f in m['composeFiles']+extras:a+=['-f',f]
@@ -101,7 +134,14 @@ elif ACTION=='build':
    dest=stage/(name+'-release-manifest.json');run(['docker','cp',cid+':/usr/share/nginx/html/release-manifest.json',str(dest)]);manifest=json.loads(dest.read_text());assert manifest['commit']==I['commit'];manifests.append(manifest)
    if name=='canonical':
     m['frontendImage']=iid;m['assets']=tree(cid,'/usr/share/nginx/html');assert tree(cid,'/etc/nginx')==m['oldNginx']
-    assert all(m['assets'].get(p)==h for p,h in m['oldAssets'].items() if p!='index.html'),'HISTORICAL_ASSETS_CHANGED'
+    oldRaw=tree(current('frontend')['Id'],'/usr/share/nginx/html',raw=True);newRaw=tree(cid,'/usr/share/nginx/html',raw=True)
+    oldReach=reachable(oldRaw);newReach=reachable(newRaw)
+    oldNorm={stripname(p):hashlib.sha256(normcontent(oldRaw[p])).hexdigest() for p in oldReach}
+    newNorm={stripname(p):hashlib.sha256(normcontent(newRaw[p])).hexdigest() for p in newReach}
+    assert set(oldNorm)==set(newNorm),'HISTORICAL_ASSETS_STRUCTURE_CHANGED'
+    changed={k for k in oldNorm if oldNorm[k]!=newNorm[k]}
+    assert changed,'HISTORICAL_ASSETS_NO_EXPECTED_CHANGE'
+    assert changed<=set(FRONT_ALLOW),'HISTORICAL_ASSETS_CHANGED:'+','.join(sorted(changed-set(FRONT_ALLOW)))
   finally:run(['docker','rm',cid])
  assert manifests[0]==manifests[1],'BUILD_NOT_REPRODUCIBLE'
  expectedConfig={key:hashlib.sha256((args[key]or'').encode()).hexdigest()for key in ['VITE_SUPABASE_URL','VITE_SUPABASE_ANON_KEY','VITE_MATERIAL_CUSTODY_LIVE_SINCE']}

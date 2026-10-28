@@ -2,6 +2,19 @@
 
 ## Antes de empezar
 
+**CIERRE DE JORNADA 28/10/2026 (noche Perú) — leer primero la sección
+"CIERRE DE JORNADA" al inicio de `ESTADO_DESARROLLO.md` antes de cualquier
+otra cosa.** Resumen: `build` de `fabc136` terminó `"built":true` hoy tras
+corregir el verificador dos veces (ambas correcciones documentadas con
+evidencia real, no repetir ese diagnóstico). `deploy` sigue sin ejecutarse —
+es la decisión pendiente del propietario desde su propia PowerShell. La
+prueba manual real de cambio de WiFi en `HWTC1D3691B7` sigue sin hacerse.
+Comando exacto para retomar y procedimiento completo (respaldo/rollback):
+sección "CIERRE DE JORNADA" de `ESTADO_DESARROLLO.md`. Esto prevalece sobre
+la "Base vigente" de abajo para lo relativo a TR-069/WiFi; el resto de esa
+base (frontend consolidado 288f2d8, Asistencia, Puntos, Campo, inventario)
+sigue intacto y no cambia con este cierre.
+
 **Base vigente — frontend consolidado y WiFi desplegados (27/10, 17:08 Perú).**
 Usar `integration/frontend-productivo-tr069-20261027`, worktree
 `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`.
@@ -40,6 +53,72 @@ Seguimiento de ciclos y certificación integral de 3.000 clientes siguen
 pendientes, pero no invalidan la recuperación real ya confirmada.
 
 ## TR-069 Huawei (HWTC1D3691B7) — gestión independiente operativa, corrección de identificación DESPLEGADA (27/10/2026)
+
+**`build` de `fabc136` terminó `"built":true` — segundo bloqueo diagnosticado
+y corregido con evidencia real, nada desplegado (28/10/2026):** al reintentar
+`build` con la primera corrección, `HISTORICAL_ASSETS_CHANGED` volvió a
+fallar, ahora señalando `OltDetailView.js`, `RankingTecnicosView.js`,
+`RoutineDetailView.js`, `equipmentPhotoType.js`, `foFibra.js`, `index.js` y
+`release-manifest.json` — ninguno tocado por `fabc136`
+(`git diff --stat 288f2d8 fabc136` confirma 0 cambios ahí). Se reprodujo el
+fallo real (PowerShell SÍ ejecuta el verificador corregido: solo aparecían
+estos 7, no los ~120 que marcaría la versión vieja) y se extrajeron ambas
+imágenes reales (la que corre ahora y la candidata recién construida) por
+SSH, solo lectura, para comparar. **Causa real:** el frontend en producción
+ya acarrea archivos huérfanos de builds incrementales anteriores — del
+contenedor activo, 779 archivos en total pero solo 122 realmente alcanzables
+desde `index.html`; el resto (657) es historial nunca limpiado de fases
+previas (Asistencia, Puntos, Campo...). El `Dockerfile` generado para esta
+release copia el `dist/` nuevo ENCIMA de esa imagen sin vaciarla primero, así
+que la imagen candidata hereda ese mismo historial. Comparar el árbol crudo
+completo (aun sin el hash, la primera corrección) mezclaba huérfanos de
+distintas generaciones con la pieza real, dando falsos positivos. **Corregido
+sin relajar el control:** la comparación ahora solo recorre el grafo
+REALMENTE ALCANZABLE desde `index.html` (igual que lo cargaría el navegador,
+siguiendo imports de verdad) en ambas imágenes — confirmado real: 122
+alcanzables en cada lado, estructura idéntica, y el único archivo con
+contenido distinto es `assets/Tr069View.js` (el declarado). Validado con las
+imágenes reales antes de tocar el script, y después **ejecutado el `build`
+completo, que terminó `{"built":true,"reproducible":true,
+"contractGuardValidatedReadOnly":true,"servicesChanged":false}`** — sin
+desplegar, sin tocar producción, sin tareas GenieACS. El acarreo de archivos
+huérfanos en la imagen en vivo es una condición preexistente (no causada por
+esta release ni por esta corrección), inofensiva para la operación (archivos
+sin referenciar, no se sirven) pero pendiente de una limpieza futura del
+Dockerfile de consolidación — no se tocó en esta sesión por estar fuera de
+alcance. Siguiente paso: `deploy` desde la terminal del propietario.
+
+**`build` de `fabc136` corregido tras `HISTORICAL_ASSETS_CHANGED` — candidato
+local, nada desplegado (28/10/2026, recuperación tras corte de luz):** el
+propietario ejecutó `node scripts/frontend-consolidation-release.cjs build`
+desde su propia terminal (continuación del `prepare` ya verificado) y obtuvo
+`{"ok":false,"reason":"HISTORICAL_ASSETS_CHANGED"}`. Causa real identificada y
+confirmada con una comparación de builds reales (commit `288f2d8` en
+producción vs `fabc136`, mismo entorno, dos worktrees descartables): Vite
+nombra cada chunk con un hash de su propio contenido e incluye ese nombre en
+todo chunk que lo importa, incluido el mapa de prefetch del entry común
+(`__vite__mapDeps`); como `fabc136` sí modifica frontend (`Tr069View.vue` +
+`src/lib/tr069WifiTrial.ts`, formulario simplificado), el chunk de esa vista
+cambia de nombre, y ese cambio de nombre se propaga en cascada a los ~120
+demás archivos compilados sin que su lógica cambie en absoluto — confirmado
+byte a byte: el único archivo con contenido realmente distinto, una vez
+neutralizadas las referencias con hash, es el chunk de `Tr069View`. La
+comparación anterior (`scripts/frontend-consolidation-release.py`) exigía
+hash exacto igual para todo archivo salvo `index.html`, un supuesto válido
+solo para parches 100% backend (como `5104253` antes) pero incompatible con
+cualquier cambio de frontend, por mínimo que sea. **Corrección aplicada** (sin
+relajar el control): la comparación ahora se hace por nombre sin el sufijo
+hash y con las referencias internas a otros archivos neutralizadas — detecta
+igual cualquier cambio real fuera de alcance, pero ya no confunde el
+reetiquetado de Vite con una regresión. El alcance permitido para esta
+release (`assets/Tr069View.js`, el único) queda declarado explícitamente en
+`scripts/frontend-consolidation-release.cjs` (`frontAllow`), inyectado al
+script remoto — no es un bypass genérico, una release futura con otro alcance
+de frontend debe actualizar esa lista. Validado con los dos builds reales
+(estructura idéntica, único archivo cambiado = el declarado) antes de tocar
+el script; sin ejecutar `deploy` ni tocar producción. Pendiente: que el
+propietario reintente `build` desde su terminal — ver comando exacto y
+siguientes pasos en `ESTADO_DESARROLLO.md` (sección al inicio del archivo).
 
 **Despliegue de la corrección `fabc136` — PAUSADO en `prepare`, nada en vivo
 tocado (27/10/2026, misma sesión posterior):** autorizado por el propietario.

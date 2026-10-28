@@ -1,5 +1,263 @@
 # SmartRayco — Estado de desarrollo
 
+## CIERRE DE JORNADA — retomar aquí mañana, sin repetir investigación (28/10/2026, noche Perú)
+
+**1. Último build exitoso (hoy, confirmado real, no solo preparado):**
+```json
+{"built":true,"sourceCommit":"fabc13672cd3340ad39420de33992c08f3fceb36",
+"reproducible":true,"contractGuardValidatedReadOnly":true,"artifactCount":125,
+"servicesChanged":false}
+```
+Esto fue DESPUÉS de corregir el verificador dos veces (ver sección completa
+justo debajo de ésta para la causa y la evidencia de cada corrección — no
+repetir ese diagnóstico, ya está cerrado):
+- 1ª corrección: comparar por nombre sin el sufijo hash de Vite + contenido
+  con referencias internas neutralizadas (el renombrado en cascada de
+  `__vite__mapDeps` no es una regresión real).
+- 2ª corrección: restringir esa comparación al grafo REALMENTE ALCANZABLE
+  desde `index.html` (la imagen en producción acarrea ~657 archivos
+  huérfanos de fases anteriores nunca limpiados; compararlos crudos daba
+  falsos positivos). Validado con las imágenes reales: 122 archivos
+  alcanzables en ambos lados, estructura idéntica, único cambio real =
+  `assets/Tr069View.js` (el alcance declarado de `fabc136`).
+- Ningún cambio funcional fuera de TR-069 — Asistencia, Puntos, App de
+  Campo, OLT, Rutinas demostrados equivalentes byte a byte.
+
+**2. Git — estado exacto al cerrar:**
+- Rama: `main` (local). Remoto sigue en `88dec40`; esta rama va 21+ commits
+  adelante (acumulado de sesiones previas, ya documentado, no es nuevo).
+- Últimos commits reales: `be795a7` (doc del `prepare` pausado) sobre
+  `fabc136` (la corrección WiFi) — ambos siguen intactos, verificados.
+- **Sin commit todavía de esta sesión** (ver punto 6: se commitea al cierre
+  de este mismo mensaje, solo documentación + los dos scripts de release).
+- Archivos modificados por ESTA sesión (a commitear): `CLAUDE.md`,
+  `ESTADO_DESARROLLO.md`, `scripts/frontend-consolidation-release.py`,
+  `scripts/frontend-consolidation-release.cjs`.
+- Archivos pendientes de **sesiones anteriores, ajenos a este trabajo** (NO
+  tocar, NO commitear desde aquí — son de otras fases/tareas en curso):
+  `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado) y ~13 archivos
+  `docs/ASISTENCIA-*`/`docs/FASE175-*`/`docs/PUNTOS-*` sin seguimiento más
+  `server/src/services/__tests__/trafficAnalyticsCounterStates.test.ts`.
+
+**3. Procedimiento de despliegue — ya preparado, con respaldo y rollback
+listos, nada ejecutado todavía:**
+- `prepare` ya corrió y quedó verificado en
+  `/opt/smartrayco-staging/frontend-consolidado-tr069-fabc136-20261027/`:
+  respaldo de las imágenes que corren ahora (`backend-before.image.tar`,
+  `frontend-before.image.tar`) + rollback probado.
+- `build` ya corrió hoy y terminó `"built":true` (ver punto 1) — imágenes
+  candidatas taggeadas en la VM: `smartrayco-frontend-consolidado:fabc13672cd3`
+  y backend equivalente, ninguna activa todavía.
+- **Pendiente:** `deploy` — el único paso que cambia los contenedores en
+  vivo. El propietario lo ejecuta desde su propia PowerShell (decisión ya
+  tomada: opción A). Comando exacto:
+  ```powershell
+  cd D:\SmartRayco
+  node scripts/frontend-consolidation-release.cjs deploy
+  ```
+- Rollback disponible en cuanto se quiera, con o sin haber desplegado:
+  ```powershell
+  node scripts/frontend-consolidation-release.cjs rollback
+  ```
+  Revierte a las imágenes exactas que corren ahora mismo (`288f2d8ac3c4`),
+  verificado con hash antes de aplicar.
+- Verificación posterior (lectura, no cambia nada):
+  ```powershell
+  node scripts/frontend-consolidation-release.cjs verify
+  ```
+
+**4. Prueba WiFi real sobre la Huawei HWTC1D3691B7 — SIGUE PENDIENTE.** Nunca
+se ejecutó un cambio real de SSID contra esta ONT en ninguna sesión. Lo que
+existe es: comunicación TR-069 confirmada, identificación por serial
+corregida y desplegada, y ahora el candidato `fabc136` con el falso bloqueo
+de timestamp corregido — pero la corrección en sí **no se ha probado en
+vivo todavía**. Requiere, en este orden: (a) `deploy` de `fabc136` (punto 3),
+(b) que el propietario abra el panel y ejecute la prueba manual real de
+cambio de WiFi desde la interfaz simplificada, (c) confirmar que el cambio
+se aplicó y que PPPoE/internet del cliente no se interrumpió. Nada de esto
+se intenta sin autorización explícita del propietario en el momento.
+
+**5. Comando exacto para retomar mañana** (en orden, sin repetir nada de lo
+ya hecho arriba):
+```powershell
+cd D:\SmartRayco
+git log --oneline -3          # confirmar que be795a7/fabc136 siguen ahí
+node scripts/frontend-consolidation-release.cjs verify   # opcional, solo lectura
+```
+Y luego decidir con el propietario si se ejecuta `deploy` (punto 3) o se
+sigue revisando antes.
+
+**6. Commit de cierre:** solo documentación + los dos scripts de release
+corregidos (`CLAUDE.md`, `ESTADO_DESARROLLO.md`,
+`scripts/frontend-consolidation-release.{py,cjs}`) — ningún archivo ajeno de
+otras sesiones/fases. Sin push (rama local, igual que el resto de esta
+rama). Sin deploy, sin migraciones, sin tareas GenieACS/OLT/MikroTik.
+
+## `build` de `fabc136` terminó `"built":true` (28/10/2026) — segundo bloqueo de `HISTORICAL_ASSETS_CHANGED`, causa real: huérfanos de builds anteriores
+
+**Contexto:** con la primera corrección (comparación por nombre sin hash +
+contenido normalizado), el propietario reintentó `build` y volvió a fallar:
+```
+HISTORICAL_ASSETS_CHANGED:assets/OltDetailView.js,assets/RankingTecnicosView.js,
+assets/RoutineDetailView.js,assets/equipmentPhotoType.js,assets/foFibra.js,
+assets/index.js,release-manifest.json
+```
+
+**1. Reproducido con el script real:** `node scripts/frontend-consolidation-release.cjs
+build` desde `D:\SmartRayco` dio exactamente el mismo error. Confirma que
+PowerShell SÍ ejecuta la versión corregida del verificador (de lo contrario
+habría marcado ~120 archivos como la versión original, no estos 7
+puntuales) — se descarta el punto 2 del pedido (no hay una versión distinta
+corriendo).
+
+**2. Diferencia real vs. ruido confirmada con las imágenes reales, no solo
+con lectura de código:** se extrajeron por SSH (solo lectura, contenedores
+`--network none` nunca iniciados) tanto `smartrayco-frontend-consolidado:288f2d8ac3c4`
+(la que corre ahora) como `smartrayco-frontend-consolidado:fabc13672cd3`
+(la candidata ya construida, seguía taggeada aunque el build había fallado).
+Hallazgo: la imagen EN PRODUCCIÓN AHORA MISMO tiene **779 archivos en
+`assets/`, de los cuales solo 122 son alcanzables de verdad desde
+`index.html`** (confirmado con un crawler real que sigue las referencias de
+import) — los otros 657 son historial acumulado de builds incrementales
+anteriores (Asistencia, Puntos, Campo...) que nunca se limpió. Ejemplo
+verificado: había **9 versiones distintas** de `OltDetailView-*.js`
+coexistiendo en la misma imagen, ninguna referenciada salvo la vigente. El
+Dockerfile generado para esta release hace `FROM <imagen actual> ... COPY
+--from=build dist/ /usr/share/nginx/html/` — copia el `dist/` nuevo ENCIMA
+de esa imagen sin vaciar el directorio primero, así que la candidata hereda
+el mismo historial acumulado más sus propios archivos nuevos.
+
+**3/4. Distinción cambios reales vs. ruido de nombres/referencias:** la
+primera corrección (normalizar hash + comparar por nombre) era necesaria
+pero no suficiente: al comparar el árbol CRUDO completo (sin filtrar por
+alcanzabilidad), coexistían múltiples generaciones históricas con el mismo
+nombre normalizado, y el diccionario de Python se quedaba con una cualquiera
+(orden no determinista del tar) — producía falsos "cambiados" para archivos
+que `fabc136` nunca tocó. Confirmado con `git diff --stat 288f2d8 fabc136`:
+cero cambios en `OltDetailView.vue`, `RankingTecnicosView.vue`,
+`RoutineDetailView.vue`, `equipmentPhotoType.ts`, `foFibra.ts`. `release-manifest.json`
+tampoco es un cambio real: cambia siempre (incluye el commit nuevo), pero no
+lo carga nada desde `index.html`, así que ni debía compararse.
+
+**5. Cambios funcionales no relacionados con TR-069: ninguno encontrado.**
+Con el grafo realmente alcanzable (122 archivos en cada imagen, estructura
+idéntica), el único archivo con contenido distinto es `assets/Tr069View.js`
+— exactamente el alcance declarado. Asistencia, Puntos, App de Campo, OLT,
+Rutinas y el resto quedan demostrados equivalentes byte a byte (tras
+neutralizar solo el renombrado de Vite), no solo "se asume que no cambiaron".
+
+**6. Corrección aplicada sin relajar el control** (demostrada la
+equivalencia antes de tocar nada): en
+`scripts/frontend-consolidation-release.py` se agregó `reachable(files)` —
+un crawler que arranca en `index.html`, sigue toda referencia
+`nombre-HASH.(js|css)` encontrada en cada archivo (igual que lo haría el
+navegador) y construye el grafo alcanzable real. La comparación
+normalizada (nombre sin hash + contenido con referencias neutralizadas) se
+restringe a ESE grafo en ambos lados, no al árbol crudo completo. Sigue
+exigiendo estructura idéntica (`HISTORICAL_ASSETS_STRUCTURE_CHANGED`) y que
+lo único distinto esté en `FRONT_ALLOW` (`HISTORICAL_ASSETS_CHANGED:<lista>`
+si no). Validado con las dos imágenes reales antes de modificar el script:
+122 alcanzables en cada lado, estructura idéntica, único cambio =
+`assets/Tr069View.js`.
+
+**7. `build` completo ejecutado y confirmado:**
+```json
+{"built":true,"sourceCommit":"fabc13672cd3340ad39420de33992c08f3fceb36",
+"reproducible":true,"contractGuardValidatedReadOnly":true,"artifactCount":125,
+"servicesChanged":false}
+```
+Sin desplegar, sin tocar producción, sin tareas GenieACS/OLT/MikroTik.
+
+**Hallazgo pendiente, no bloqueante (fuera de alcance de esta corrección):**
+la imagen de frontend en producción acumula ~657 archivos huérfanos de fases
+anteriores nunca limpiados entre builds incrementales. Inofensivo para la
+operación (nada los referencia, no se sirven, no hay riesgo de seguridad),
+pero infla el tamaño de la imagen y seguirá creciendo con cada release
+incremental similar mientras el Dockerfile de consolidación no limpie
+`/usr/share/nginx/html` antes de copiar el `dist/` nuevo. No se tocó en esta
+sesión — es una limpieza de la cadena de build, no del parche TR-069.
+
+**Pendiente:** `deploy` desde la terminal del propietario:
+```powershell
+cd D:\SmartRayco
+node scripts/frontend-consolidation-release.cjs deploy
+```
+Si `deploy` termina bien, el siguiente paso es la prueba manual real de
+cambio de WiFi sobre `HWTC1D3691B7`, todavía no realizada.
+
+## `build` de `fabc136` corregido tras `HISTORICAL_ASSETS_CHANGED` (28/10/2026, recuperación tras corte de luz)
+
+**Contexto:** tras el corte de luz, el propietario eligió desplegar
+personalmente desde su PowerShell (opción A) usando el `prepare` ya
+verificado. Al ejecutar `node scripts/frontend-consolidation-release.cjs
+build` obtuvo:
+```
+{"ok":false,"type":"AssertionError","reason":"HISTORICAL_ASSETS_CHANGED"}
+```
+
+**Causa real (confirmada con builds reales, no solo lectura de código):**
+`git diff --stat 288f2d8 fabc136 -- src/` muestra que `fabc136` SÍ cambia
+frontend (`src/views/tr069/Tr069View.vue` + `src/lib/tr069WifiTrial.ts`,
+intencional — es el formulario WiFi simplificado), a diferencia del parche
+anterior (`5104253`, 100% backend). Se compilaron ambos commits en dos
+worktrees descartables (`git worktree add`, `node_modules` compartido vía
+symlink, env ficticio solo para comparar, sin tocar producción) y se
+compararon los ~124 archivos de `dist/assets`. Resultado: de 123 archivos
+`.js`, prácticamente todos cambiaron de **nombre** (hash de Vite), pero el
+contenido real (neutralizando las referencias embebidas a otros nombres con
+hash) es **idéntico** salvo en un único archivo: el chunk de `Tr069View`. La
+causa es el mapa de prefetch de Vite (`__vite__mapDeps`, dentro del chunk
+`index-*.js` común): lista los nombres de todos los chunks para precarga; al
+cambiar el nombre de UN chunk, ese mapa cambia, lo que cambia el contenido
+(y por lo tanto el nombre) de `index-*.js`, lo que a su vez obliga a todo
+archivo que lo importa por nombre a cambiar también — cascada completa, sin
+ningún cambio de lógica real en los ~122 archivos restantes. Verificado
+también que `src/stores/tr069.ts` (usado también por `OltDetailView.vue` y
+`src/stores/campo.ts` — Averías/App de Campo) solo importa un **tipo**
+(`import type { WifiTrialStatus }`, se borra al compilar) de
+`tr069WifiTrial.ts`, así que tampoco tiene cambio real; y que los 4 CSS
+emitidos (`index`, `AsistenciaView`, `FacturacionView`, `leaflet`) salieron
+con el mismo hash exacto en ambos builds — cero impacto de estilos.
+
+**Corrección aplicada en `scripts/frontend-consolidation-release.py`** (sin
+desactivar ni relajar el control, solo corrigiendo el método de comparación):
+el chequeo ya no compara nombre+hash exacto de cada archivo contra el
+anterior (eso siempre fallaría ante cualquier cambio de frontend, por mínimo
+que sea, debido a la cascada). Ahora: (1) se re-lee en vivo el contenido
+crudo del frontend que sigue corriendo (`tree(..., raw=True)`, mismo
+mecanismo ya usado por `prepare`, sin tocar nada); (2) se compara por nombre
+**sin** el sufijo hash, con las referencias internas a otros archivos (`import
+"./x-HASH.js"`, entradas del mapa de prefetch) neutralizadas; (3) se exige
+que la estructura de nombres sea idéntica (`HISTORICAL_ASSETS_STRUCTURE_CHANGED`
+si no) y que el único archivo con contenido distinto sea el declarado en
+`FRONT_ALLOW` (`HISTORICAL_ASSETS_CHANGED:<lista>` si aparece cualquier otro).
+`FRONT_ALLOW=['assets/Tr069View.js']` se declara explícitamente en
+`scripts/frontend-consolidation-release.cjs` (igual que ya existía `backNames`
+para el backend) y se inyecta al script remoto — **no es un bypass
+genérico**: una release futura con otro alcance de frontend debe declarar su
+propio `frontAllow`, o el chequeo seguirá rechazando cualquier archivo fuera
+de lista.
+
+**Validación realizada (sin tocar producción ni GenieACS):** la lógica nueva
+se probó con el código real del archivo (extraído y ejecutado tal cual, no
+reescrito a mano) contra los dos builds reales de verificación — estructura
+idéntica (124 archivos cada uno) y único archivo cambiado =
+`assets/Tr069View.js`, exactamente el declarado. `npx tsc`/`vue-tsc` no
+aplica (son scripts `.py`/`.cjs`, no TypeScript); se verificó sintaxis con
+`ast.parse` y `node --check`, ambos limpios. No se ejecutó `build` real
+contra la VM (lo haría el propietario) ni ninguna acción de `deploy`.
+
+**Pendiente:** que el propietario reintente desde su PowerShell:
+```powershell
+cd D:\SmartRayco
+node scripts/frontend-consolidation-release.cjs build
+```
+Si pasa `HISTORICAL_ASSETS_CHANGED`, el siguiente bloqueo esperado (ya
+documentado abajo) es el clasificador de seguridad en el paso de validación
+de contrato contra Supabase real (`Credential Materialization`) — eso no lo
+toca esta corrección, sigue pendiente de decidir entre las dos opciones ya
+planteadas.
+
 ## Despliegue selectivo de la corrección WiFi (commit `fabc136`) — PAUSADO en `prepare`, nada en vivo tocado (27/10/2026, misma sesión posterior)
 
 El propietario autorizó desplegar selectivamente la corrección de arriba. Se
