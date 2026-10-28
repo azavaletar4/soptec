@@ -14,6 +14,13 @@ const ASSOCIATED_FIELDS = ['AssociatedDeviceMACAddress', 'MACAddress', 'RSSI', '
 export const HOSTS_READ_LIFETIME_MS = 45_000;
 export class HostsDemandError extends Error {}
 
+/** Habilitación explícita por serial: el interruptor global no autoriza otras ONT. */
+export function hostsDemandEnabledForSerial(raw: string): boolean {
+  const serial = normalizeGponSerial(raw);
+  return !!serial && process.env.TR069_HOSTS_ON_DEMAND_ENABLED === 'true' &&
+    (process.env.TR069_HOSTS_ON_DEMAND_SERIALS ?? '').split(',').some(s => normalizeGponSerial(s) === serial);
+}
+
 /** Solo hojas concretas anunciadas; nunca prefijos, comodines, claves ni refresh del árbol. */
 export function buildHostsReadPlan(device: HostsDevice): string[] {
   const lan = (device as Node).InternetGatewayDevice?.LANDevice?.[1];
@@ -39,12 +46,12 @@ export function buildHostsReadPlan(device: HostsDevice): string[] {
 }
 
 export function createHostsOnDemand(deps: {
-  request?: typeof fetch; now?: () => number; directory?: string; enabled?: () => boolean;
+  request?: typeof fetch; now?: () => number; directory?: string; enabled?: (serial: string) => boolean;
 } = {}) {
   const request = deps.request ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const now = deps.now ?? Date.now;
   const directory = deps.directory ?? process.env.TR069_HOSTS_READS_DIR ?? '/var/lib/smartrayco-olt/hosts-reads';
-  const enabled = deps.enabled ?? (() => process.env.TR069_HOSTS_ON_DEMAND_ENABLED === 'true');
+  const enabled = deps.enabled ?? hostsDemandEnabledForSerial;
   const inFlight = new Map<string, Promise<HostsReadResult>>();
 
   async function collection(nbi: string, name: 'tasks' | 'faults', query: object) {
@@ -58,7 +65,7 @@ export function createHostsOnDemand(deps: {
     task.expiry === record.expiresAt && JSON.stringify(task.parameterNames) === JSON.stringify(record.parameters);
 
   async function perform(nbi: string, serial: string): Promise<HostsReadResult> {
-    if (!enabled()) throw new HostsDemandError('La consulta bajo demanda aún no está habilitada.');
+    if (!enabled(serial)) throw new HostsDemandError('La consulta bajo demanda no está habilitada para este equipo.');
     let device = await readHostsDevice(nbi, serial, request);
     if (!device) throw new HostsDemandError('No se encontró un único equipo para consultar sus dispositivos.');
     const beforeDevice = structuredClone(device);

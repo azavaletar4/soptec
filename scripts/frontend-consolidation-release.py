@@ -6,6 +6,7 @@ scope=I['scope'];validate_scope(scope)
 assert scope['sourceCommit']==I['commit']==I['snapshot']['commit'],'SOURCE_COMMIT_MISMATCH'
 assert set(I['back'])==set(scope['backendSources']),'BACKEND_INPUT_SCOPE_MISMATCH'
 services=release_services(scope)
+hosts_environment=backend_environment(scope)
 
 def run(a,cwd=repo):return subprocess.check_output(a,cwd=cwd,text=True,stderr=subprocess.PIPE).strip()
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -16,6 +17,8 @@ def hashfile(p):
  return h.hexdigest()
 def current(s):return json.loads(run(['docker','inspect','smartrayco-'+s+'-1']))[0]
 def states():return {s:{'id':current(s)['Id'],'image':current(s)['Image'],'started':current(s)['State']['StartedAt']}for s in ['frontend','backend','caddy','mongo','genieacs']}
+def environment_hashes(cid):
+ return {k:hashlib.sha256(v.encode()).hexdigest()for k,v in (item.split('=',1)for item in current(cid)['Config']['Env'])}
 def tree(cid,root,raw=False):
  data=subprocess.check_output(['docker','cp',cid+':'+root+'/.','-'])
  with tarfile.open(fileobj=io.BytesIO(data))as t:
@@ -60,6 +63,7 @@ def probe(m):
  assert tree(current('frontend')['Id'],'/usr/share/nginx/html')==m['assets'],'CANDIDATE_ASSETS_NOT_DEPLOYED'
  assert tree(current('frontend')['Id'],'/etc/nginx')==m['oldNginx'],'NGINX_CONFIG_CHANGED'
  assert backend_tree(current('backend')['Id'])==m['backendSources'],'CANDIDATE_BACKEND_NOT_DEPLOYED'
+ assert environment_hashes('backend')==m['expectedBackendEnvironmentHashes'],'BACKEND_EFFECTIVE_ENVIRONMENT_CHANGED'
  manifest=json.loads(http('/release-manifest.json'));assert manifest['commit']==m['frontendCommit'],'FRONTEND_MANIFEST_COMMIT_MISMATCH'
  checked=[]
  for route in ['/','/tr069','/asistencia','/campo','/campo/mi-custodia','/puntos','/soporte','/mikrotik','/analitica','/rutinas','/olt']:
@@ -73,6 +77,7 @@ def verify_rollback(m):
  assert all(current(s)['Image']==m['before'][s]['image']for s in ['frontend','backend']),'ROLLBACK_IMAGE_MISMATCH'
  assert tree(current('frontend')['Id'],'/usr/share/nginx/html')==m['oldAssets'],'ROLLBACK_ASSETS_MISMATCH'
  assert backend_tree(current('backend')['Id'])==m['oldBackend'],'ROLLBACK_SOURCES_MISMATCH'
+ assert environment_hashes('backend')==m['oldBackendEnvironmentHashes'],'ROLLBACK_ENVIRONMENT_MISMATCH'
 
 if ACTION=='prepare':
  assert not(stage/'prepared.json').exists(),'ALREADY_PREPARED';before=states();b=current('backend');f=current('frontend')
@@ -87,6 +92,10 @@ if ACTION=='prepare':
    else:assert backend_tree(cid)==backend_tree(before[s]['id']),'ROLLBACK_RESTORE_MISMATCH_backend'
   finally:run(['docker','rm',cid])
  config=json.loads(run(compose(m)+['config','--format','json']));assert config['services']['backend']['image']==b['Config']['Image']and config['services']['frontend']['image']==f['Config']['Image'],'LIVE_COMPOSE_IMAGE_MISMATCH'
+ m['oldBackendEnvironmentHashes']=environment_hashes('backend');m['expectedBackendEnvironmentHashes']=dict(m['oldBackendEnvironmentHashes'])
+ for key,value in hosts_environment.items():
+  assert key not in config['services']['backend'].get('environment',{})or config['services']['backend']['environment'][key]==value,'HOSTS_ENVIRONMENT_OVERRIDDEN_'+key
+  m['expectedBackendEnvironmentHashes'][key]=hashlib.sha256(value.encode()).hexdigest()
  # Compose efectivo y entorno de los contenedores deben coincidir antes de promover.
  for s in ['backend','frontend']:
   live=dict(item.split('=',1)for item in current(s)['Config']['Env'])
@@ -132,6 +141,7 @@ elif ACTION=='build':
   folder=stage/'backend';folder.mkdir();write_sources(folder,I['back'])
   docker='FROM '+m['backendRollbackTag']+'\n'
   for p in scope['backendSources']:docker+='COPY '+json.dumps([p,'/app/'+p])+'\n'
+  for key,value in hosts_environment.items():docker+='ENV '+key+'='+json.dumps(value)+'\n'
   (folder/'Dockerfile').write_text(docker+'LABEL org.opencontainers.image.revision="'+I['commit']+'"\n')
   m['backendTag']='smartrayco-backend-wifitrial:'+I['commit'][:12];expected={p:hashlib.sha256(text.encode()).hexdigest()for p,text in I['back'].items()};backend_trees=[]
   for repro in [False,True]:

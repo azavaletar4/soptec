@@ -9,7 +9,8 @@ def differences(before, after):
 
 
 def validate_scope(scope):
-    assert set(scope) == {'version', 'sourceCommit', 'backendSources', 'frontendSources', 'frontendAssets'}, 'INVALID_SCOPE_FIELDS'
+    required = {'version', 'sourceCommit', 'backendSources', 'frontendSources', 'frontendAssets'}
+    assert set(scope) in [required, required | {'backendEnvironment'}], 'INVALID_SCOPE_FIELDS'
     assert scope['version'] == 1 and re.fullmatch('[a-f0-9]{40}', scope['sourceCommit']), 'INVALID_SCOPE_VERSION_OR_COMMIT'
     for key in ['backendSources', 'frontendSources', 'frontendAssets']:
         values = scope[key]
@@ -19,6 +20,20 @@ def validate_scope(scope):
     assert all(p.startswith(('server/src/', 'src/lib/')) and p.endswith('.ts') for p in scope['backendSources']), 'INVALID_BACKEND_SCOPE'
     assert bool(scope['frontendSources']) == bool(scope['frontendAssets']), 'INCOMPLETE_FRONTEND_SCOPE'
     assert release_services(scope), 'EMPTY_RELEASE_SCOPE'
+    backend_environment(scope)
+
+
+def backend_environment(scope):
+    env = scope.get('backendEnvironment', {})
+    assert isinstance(env, dict), 'INVALID_BACKEND_ENVIRONMENT'
+    if not env:
+        return {}
+    assert scope['backendSources'], 'ENVIRONMENT_REQUIRES_BACKEND_RELEASE'
+    assert set(env) == {'TR069_HOSTS_ON_DEMAND_ENABLED', 'TR069_HOSTS_ON_DEMAND_SERIALS'}, 'UNDECLARED_BACKEND_ENVIRONMENT'
+    assert env['TR069_HOSTS_ON_DEMAND_ENABLED'] in ['true', 'false'], 'INVALID_HOSTS_ENABLE_FLAG'
+    serials = env['TR069_HOSTS_ON_DEMAND_SERIALS'].split(',')
+    assert 1 <= len(serials) <= 16 and len(set(serials)) == len(serials) and all(re.fullmatch('[A-Z0-9]{4}[0-9A-F]{8}', s) for s in serials), 'INVALID_HOSTS_SERIAL_SCOPE'
+    return env
 
 
 def release_services(scope):

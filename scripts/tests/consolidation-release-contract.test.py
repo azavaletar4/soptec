@@ -22,6 +22,20 @@ def frontend(version=1):
 
 
 class ReleaseContractTests(unittest.TestCase):
+    def test_hosts_environment_explicit_and_scoped_only(self):
+        scope = {**sample_scope(backend=True), 'backendEnvironment': {
+            'TR069_HOSTS_ON_DEMAND_ENABLED': 'true', 'TR069_HOSTS_ON_DEMAND_SERIALS': 'HWTC1D3691B7'}}
+        validate_scope(scope)
+        self.assertEqual(backend_environment(scope), scope['backendEnvironment'])
+        self.assertEqual(backend_environment(sample_scope(backend=True)), {})
+
+    def test_environment_rejects_wifi_credentials_or_missing_serial_scope(self):
+        for env in [{'TR069_WIFI_TRIAL_ENABLED': 'false'}, {'PASSWORD': 'x'},
+                    {'TR069_HOSTS_ON_DEMAND_ENABLED': 'true'},
+                    {'TR069_HOSTS_ON_DEMAND_ENABLED': 'true', 'TR069_HOSTS_ON_DEMAND_SERIALS': '*'}]:
+            with self.subTest(env=env), self.assertRaises(AssertionError):
+                validate_scope({**sample_scope(backend=True), 'backendEnvironment': env})
+
     def check_mode(self, backend, front):
         scope = sample_scope(backend, front)
         validate_scope(scope)

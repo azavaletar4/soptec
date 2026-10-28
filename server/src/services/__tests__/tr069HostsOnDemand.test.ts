@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
-import { buildHostsReadPlan, createHostsOnDemand, HOSTS_READ_LIFETIME_MS } from '../tr069HostsOnDemand';
+import { buildHostsReadPlan, createHostsOnDemand, hostsDemandEnabledForSerial, HOSTS_READ_LIFETIME_MS } from '../tr069HostsOnDemand';
 import { createHostsOnDemandRoutes } from '../../routes/tr069HostsOnDemand';
 import { hostStatusLabel } from '../../../../src/lib/tr069Hosts';
 import type { Role } from '../../types';
@@ -173,6 +173,25 @@ test('plan no inventa asociaciones ni unidades y excluye claves/prefijos aunque 
 test('feature gate apagado impide incluso GET; código importado o página cerrada no realizan peticiones', async t => {
   const l = lab(t); const service = createHostsOnDemand({ ...l.deps, enabled: () => false });
   assert.equal(l.calls.length, 0); await assert.rejects(service.read(nbi, serial)); assert.equal(l.calls.length, 0);
+});
+
+test('habilitación productiva exige interruptor y serial permitido; ninguna otra ONT queda autorizada', () => {
+  const enabled = process.env.TR069_HOSTS_ON_DEMAND_ENABLED, list = process.env.TR069_HOSTS_ON_DEMAND_SERIALS;
+  try {
+    process.env.TR069_HOSTS_ON_DEMAND_ENABLED = 'true';
+    delete process.env.TR069_HOSTS_ON_DEMAND_SERIALS;
+    assert.equal(hostsDemandEnabledForSerial(serial), false);
+    process.env.TR069_HOSTS_ON_DEMAND_SERIALS = serial;
+    assert.equal(hostsDemandEnabledForSerial(serial), true);
+    assert.equal(hostsDemandEnabledForSerial(hex), true);
+    assert.equal(hostsDemandEnabledForSerial('HWTC00000000'), false);
+    assert.equal(hostsDemandEnabledForSerial('bad'), false);
+    process.env.TR069_HOSTS_ON_DEMAND_ENABLED = 'false';
+    assert.equal(hostsDemandEnabledForSerial(serial), false);
+  } finally {
+    if (enabled === undefined) delete process.env.TR069_HOSTS_ON_DEMAND_ENABLED; else process.env.TR069_HOSTS_ON_DEMAND_ENABLED = enabled;
+    if (list === undefined) delete process.env.TR069_HOSTS_ON_DEMAND_SERIALS; else process.env.TR069_HOSTS_ON_DEMAND_SERIALS = list;
+  }
 });
 
 test('ruta usa requireRole real: solo ADMIN/SUPERADMIN, cuerpo sin rutas de configuración', async () => {
