@@ -71,7 +71,7 @@ test('host asociado por WiFi (MAC en AssociatedDevice): conexión WiFi y banda r
   assert.equal(inv.hosts.length, 1);
   assert.deepEqual(inv.hosts[0], {
     hostName: 'Laptop', ipAddress: '192.168.100.10', macAddress: 'aa:bb:cc:dd:ee:01',
-    connection: 'WiFi', band: '2.4 GHz', active: null, reportedAt: timestamp,
+    connection: 'WiFi', band: '2.4 GHz', active: null, activeReportedAt: null, reportedAt: timestamp,
   });
 });
 test('host sin InterfaceType y sin asociación WiFi observada: conexión y banda quedan sin dato (nunca se inventa)', async () => {
@@ -98,6 +98,7 @@ test('Active explícito se respeta tal cual lo reporta el equipo (true o false)'
   const inv = await readHostsInventory(nbiUrl, TEST_SERIAL);
   assert.equal(inv.hosts.find(h => h.macAddress === 'aa:bb:cc:dd:ee:04')!.active, true);
   assert.equal(inv.hosts.find(h => h.macAddress === 'aa:bb:cc:dd:ee:05')!.active, false);
+  assert.equal(inv.hosts[0].activeReportedAt, timestamp);
 });
 test('identidad exacta: nunca mezcla hosts de otra ONT', async () => {
   nbi([
@@ -168,5 +169,6 @@ test('caché real Huawei: cinco Hosts registrados; conexión, banda y Active sin
     assert.equal(host.connection, null);
     assert.equal(host.band, null);
     assert.equal(host.active, null);
+    assert.equal(host.activeReportedAt, null);
   }
 });

@@ -12,7 +12,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { useAuthStore } from '@/stores/auth';
 import { compareWifiPlan, type WifiSsidPlan } from '@/lib/tr069WifiPlan';
 import { plainWifiTrialMessage, type WifiTrialStatus } from '@/lib/tr069WifiTrial';
-import type { HostsInventory } from '@/lib/tr069Hosts';
+import { hostStatusLabel, latestHostsReport, type HostsInventory } from '@/lib/tr069Hosts';
 import type { ServiceContract, Tr069Device, Tr069PerformanceMetric } from '@/types/domain';
 import type { WifiNetwork } from '@/stores/tr069';
 
@@ -63,7 +63,6 @@ const hostsById = ref<Record<string, HostsInventory | null>>({});
 const hostsLoadingId = ref<string | null>(null);
 const hostsErrorById = ref<Record<string, string | null>>({});
 const CONNECTION_LABELS: Record<string, string> = { WiFi: 'WiFi', Cable: 'Cable' };
-const ACTIVE_LABELS: Record<string, string> = { true: 'Conectado', false: 'Desconectado' };
 
 async function loadHosts(device: Tr069Device) {
   hostsLoadingId.value = device.id;
@@ -577,8 +576,8 @@ async function handleUnlink() {
                       <p v-if="!hostsById[device.id]!.hosts.length" class="text-xs text-slate-500">Este equipo no reportó ningún dispositivo conectado.</p>
                       <template v-else>
                         <p class="text-xs text-slate-500 mb-2">
-                          Datos reportados por el equipo: {{ hostsById[device.id]!.hostsReportedAt ? new Date(hostsById[device.id]!.hostsReportedAt!).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'No disponible' }}.
-                          No es una lectura en vivo — refleja el último reporte del equipo.
+                          Última información de la lista: {{ latestHostsReport(hostsById[device.id]!) ? formatDate(latestHostsReport(hostsById[device.id]!)) : 'Sin confirmar' }}.
+                          Los datos pueden cambiar; «Sin confirmar» indica que falta información suficiente.
                         </p>
                         <div class="overflow-x-auto">
                           <table class="w-full text-xs">
@@ -597,9 +596,9 @@ async function handleUnlink() {
                                 <td class="py-1 pr-3">{{ host.hostName ?? 'No disponible' }}</td>
                                 <td class="py-1 pr-3 font-mono">{{ host.ipAddress ?? 'No disponible' }}</td>
                                 <td class="py-1 pr-3 font-mono">{{ host.macAddress ?? 'No disponible' }}</td>
-                                <td class="py-1 pr-3">{{ host.connection ? CONNECTION_LABELS[host.connection] : 'No disponible' }}</td>
-                                <td class="py-1 pr-3">{{ host.band ?? 'No disponible' }}</td>
-                                <td class="py-1 pr-3">{{ host.active !== null ? ACTIVE_LABELS[String(host.active)] : 'No disponible' }}</td>
+                                <td class="py-1 pr-3">{{ host.connection ? CONNECTION_LABELS[host.connection] : 'Sin confirmar' }}</td>
+                                <td class="py-1 pr-3">{{ host.band ?? 'Sin confirmar' }}</td>
+                                <td class="py-1 pr-3" :title="host.activeReportedAt ? `Información de estado: ${formatDate(host.activeReportedAt)}` : undefined">{{ hostStatusLabel(host, hostsById[device.id]!.lastInform, ontEvidenceNow) }}</td>
                               </tr>
                             </tbody>
                           </table>

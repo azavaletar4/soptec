@@ -86,6 +86,7 @@ export async function readHostsInventory(nbiUrl: string, serial: string): Promis
       connection,
       band: connection === 'WiFi' ? wifiBand : null,
       active: bool(node.Active as Node | undefined),
+      activeReportedAt: bool(node.Active as Node | undefined) !== null ? ts(node.Active as Node | undefined) : null,
       reportedAt: ts(node.HostName as Node | undefined) ?? ts(node.IPAddress as Node | undefined) ?? ts(node.MACAddress as Node | undefined),
     });
   }

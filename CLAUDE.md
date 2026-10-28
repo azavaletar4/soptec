@@ -31,6 +31,14 @@ No repetir el diagnóstico de `HISTORICAL_ASSETS_NO_EXPECTED_CHANGE`: solo
 se exige cambio de assets cuando el alcance declara frontend. El manifiesto
 frontend NO identifica por sí solo una release backend-only.
 Leer ESTADO DE CONTINUIDAD para evidencia, staging y rollback exactos.
+Investigación posterior de conexión/estado Hosts (solo GET, 28/10 21:50 UTC):
+cinco Hosts, pero Active/InterfaceType/Layer2Interface sin valores; asociaciones
+WiFi y puertos Ethernet sin instancias, banda sin valor. No concluir que el
+firmware no los soporte: falta lectura/descubrimiento. Presentación local
+«Sin confirmar», fecha de filas y guard de vigencia Active (10 min), aún sin
+desplegar. 34 pruebas y tsc backend/frontend PASS. Próxima lectura activa
+requiere autorización aparte; rutas exactas y límites en
+`docs/TR069-HOSTS-INTERFACES-20261028.md`. No repetir el sondeo de caché.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 

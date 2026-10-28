@@ -39,10 +39,34 @@ verificable para este firmware — ver punto 5. **Hosts comprobado contra el
 código real desplegado por GET:** `HWTC1D3691B7` y `485754431D3691B7`
 identifican una única Huawei y devuelven los mismos cinco registros de su
 caché (nombre/IP/MAC). Conexión/banda/Active quedan desconocidos, sin valores
-inventados. Serial inexistente devuelve lista vacía. Falta validación visual
-del propietario desde el panel; no se cambió WiFi para probarlo.
+inventados. Serial inexistente devuelve lista vacía. El propietario confirmó
+visualmente los cinco nombres/IP/MAC; conexión, banda y estado siguen sin
+datos verificables. No se cambió WiFi para probarlo.
 
-**3. Cambios locales pendientes (no publicados):** `d844ac6` corrige el
+**3. Cambios locales pendientes (no publicados):** presentación Hosts
+«Sin confirmar», fecha basada en datos de las filas y guard de vigencia de
+Active; **sin desplegar**. Investigación puntual GET a las 21:50:05 UTC:
+Active/InterfaceType/Layer2Interface de los cinco Hosts sin valor ni fecha;
+WLAN 1/5 AssociatedDevice sin instancias/fecha; LANEthernetInterfaceConfig
+anunciado sin puertos; Channel/Standard/X_HW_RFBand sin valores;
+OperatingFrequencyBand ausente. Sin correlación MAC disponible, no se infiere
+WiFi/cable ni desconexión por ausencia de asociaciones. Últimos valores
+nombre/IP/MAC 21:38:39.146 UTC; Inform 21:48:39.158 UTC no los rejuvenece;
+UpTime 71687 s pertenece al CPE y es de 20:38:05 UTC, no de los Hosts.
+No se probó una limitación definitiva del firmware: faltan valores cacheados.
+Detalle y plan de lectura activa **NO ejecutado**:
+`docs/TR069-HOSTS-INTERFACES-20261028.md`; evidencia sanitizada:
+`docs/TR069-HOSTS-INTERFACES-CACHE-20261028.json`.
+Implementación local conserva fecha propia Active (opcional para backend
+anterior); solo muestra Conectado/Desconectado con booleano explícito y fechas
+Active/Inform no futuras de hasta 10 minutos. El reloj local ya existente
+caduca el estado sin consultar equipos. Información antigua/ausente queda
+«Sin confirmar»; no se añadieron inferencias ni parámetros no observados.
+34/34 pruebas focalizadas Hosts/GPON/presentación, tsc backend y vue-tsc PASS.
+Producción y contrato de release intactos; esta mejora futura requiere declarar
+alcance frontend y backend, no reutilizar el contrato backend-only de d6ce2c2.
+
+Antecedente operativo vigente: `d844ac6` corrige el
 procedimiento de release (tooling local, no código funcional desplegado).
 Hosts `d6ce2c2` ya está desplegado. Causa anterior: `assert changed` obligatorio
 en frontend + listas históricas de archivos y despliegue de ambos servicios.
@@ -80,7 +104,7 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Tooling `d844ac6` + continuidad posterior; ver `git log -1` | **Solo local, sin publicar** |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Hosts presentación/estado posterior a `34236e0`; ver `git log -1` | **Local, sin desplegar ni publicar** |
 | Identificación Hosts | incluido en `main` | `d6ce2c2` | **Backend en producción** (28/10 21:30 UTC) |
 | WiFi + Hosts base | incluido en `main` | `5d48a10` | Frontend activo; backend anterior disponible como rollback |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
@@ -107,8 +131,16 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución; despliegue completado
-y verificado, detenerse para validación visual del propietario.
+**5. Próxima tarea autorizada:** investigación y mejora local Hosts completadas;
+detenerse antes de consultas activas o despliegue. Falta autorización expresa
+para leer desde la ONT los valores anunciados (getParameterValues de Host
+Active/InterfaceType/Layer2Interface, banda/canal declarados y refreshObject
+solo AssociatedDevice de WLAN 1/5 y LANEthernetInterfaceConfig). Plan exacto en
+`docs/TR069-HOSTS-INTERFACES-20261028.md`. No refrescar el árbol completo ni
+WLANConfiguration completa, no recoger claves y no clasificar por exclusión.
+Un descubrimiento futuro debe verificar nombres reales de hojas (por ejemplo
+AssociatedDeviceMACAddress de TR-098 frente al MACAddress del mapeador genérico).
+No se autorizó ni ejecutó ninguna tarea en esta sesión.
 Staging vigente y respaldos (`backend-before.image.tar`, `frontend-before.image.tar`):
 `/opt/smartrayco-staging/frontend-consolidado-tr069-d6ce2c2-68c2358762/`.
 Rollback disponible: `node scripts/frontend-consolidation-release.cjs rollback`,
@@ -122,10 +154,8 @@ Para una release NUEVA declarar su commit y alcance, exportar su snapshot
 correspondiente y ejecutar las fases por separado. Nunca ampliar el alcance
 para silenciar una diferencia inesperada ni asumir backend desde el manifiesto
 frontend. Pendiente del
-**propietario**: (a) probar manualmente desde el panel que el botón WiFi ya
-no queda indefinidamente en "Guardando cambios", que el nombre sigue
-funcionando, y que la nueva pantalla "Dispositivos conectados" carga bien
-(botón "Detalle" en `/tr069`); (b) decidir si autoriza una prueba de
+**propietario**: decidir si autoriza el plan activo de Hosts anterior y,
+por separado, una prueba de
 **descubrimiento de solo lectura** (una tarea nueva a GenieACS, requiere su
 propia autorización aparte) contra `WLANConfiguration.5.PreSharedKey` para
 confirmar si existe la instancia `.1` — hay evidencia pública (no local, no

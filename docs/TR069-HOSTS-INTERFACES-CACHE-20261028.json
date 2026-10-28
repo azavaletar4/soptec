@@ -1,0 +1,1609 @@
+{
+  "checkedAt": "2026-10-28T21:50:05.710Z",
+  "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+  "serial": "485754431D3691B7",
+  "lastInform": "2026-10-28T21:48:39.158Z",
+  "readOnly": true,
+  "methods": [
+    "GET"
+  ],
+  "tasksSent": 0,
+  "paths": [
+    {
+      "path": "InternetGatewayDevice",
+      "object": null,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.DeviceInfo",
+      "object": null,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.DeviceInfo.UpTime",
+      "object": false,
+      "timestamp": "2026-10-28T20:38:05.029Z",
+      "valuePresent": true,
+      "value": 71687,
+      "type": "xsd:unsignedInt"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice",
+      "object": true,
+      "timestamp": "2026-10-28T21:38:39.144Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1",
+      "object": true,
+      "timestamp": "2026-10-27T19:45:10.542Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts",
+      "object": true,
+      "timestamp": "2026-10-27T19:45:10.542Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host",
+      "object": true,
+      "timestamp": "2026-10-28T21:38:39.144Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1",
+      "object": true,
+      "timestamp": "2026-10-28T01:38:37.590Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.Active",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.AddressSource",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.ClientID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.HostName",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "REDMI-Note-15-5G",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.IPAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "192.168.100.37",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.InterfaceType",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.Layer2Interface",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.LeaseTimeRemaining",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.MACAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "d2:d3:3a:8d:85:1c",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.UserClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.VendorClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.X_HW_NegotiatedRate",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.X_HW_RSSI",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.X_HW_Stats",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2",
+      "object": true,
+      "timestamp": "2026-10-28T04:38:37.814Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.Active",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.AddressSource",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.ClientID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.HostName",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "S26-Ultra-de-Warner",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.IPAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "192.168.100.35",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.InterfaceType",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.Layer2Interface",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.LeaseTimeRemaining",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.MACAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "56:b9:d2:f2:e7:c1",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.UserClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.VendorClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.X_HW_NegotiatedRate",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.X_HW_RSSI",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.X_HW_Stats",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3",
+      "object": true,
+      "timestamp": "2026-10-28T13:38:38.537Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.Active",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.AddressSource",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.ClientID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.HostName",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "iPhone",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.IPAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "192.168.100.38",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.InterfaceType",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.Layer2Interface",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.LeaseTimeRemaining",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.MACAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "be:9e:54:93:df:8c",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.UserClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.VendorClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.X_HW_NegotiatedRate",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.X_HW_RSSI",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.X_HW_Stats",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4",
+      "object": true,
+      "timestamp": "2026-10-28T13:38:38.537Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.Active",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.AddressSource",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.ClientID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.HostName",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "Z2359",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.IPAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "192.168.100.34",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.InterfaceType",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.Layer2Interface",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.LeaseTimeRemaining",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.MACAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "7e:75:b3:0a:86:76",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.UserClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.VendorClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.X_HW_NegotiatedRate",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.X_HW_RSSI",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.X_HW_Stats",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5",
+      "object": true,
+      "timestamp": "2026-10-28T17:38:38.861Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.Active",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.AddressSource",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.ClientID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.HostName",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "LAPTOP-996NPL7I",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.IPAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "192.168.100.32",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.InterfaceType",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.Layer2Interface",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.LeaseTimeRemaining",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.MACAddress",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "value": "00:07:29:55:35:57",
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.UserClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.VendorClassID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.X_HW_NegotiatedRate",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.X_HW_RSSI",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.5.X_HW_Stats",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.HostNumberOfEntries",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.LANEthernetInterfaceConfig",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.LANEthernetInterfaceNumberOfEntries",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.LANHostConfigManagement",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.LANUSBInterfaceConfig",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.LANUSBInterfaceNumberOfEntries",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.LANWLANConfigurationNumberOfEntries",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration",
+      "object": true,
+      "timestamp": "2026-10-28T21:38:39.144Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1",
+      "object": true,
+      "timestamp": "2026-10-28T21:38:39.144Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.APWMMParameter",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AuthenticationServiceMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AutoChannelEnable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AutoRateFallBackEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BSSID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BasicAuthenticationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BasicDataTransmitRates",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BasicEncryptionModes",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BeaconAdvertisementEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.BeaconType",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Channel",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.ChannelPlus",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.ChannelsInUse",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.DeviceOperationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.DistanceFromRoot",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Enable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.IEEE11iAuthenticationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.IEEE11iEncryptionModes",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.InsecureOOBAccessEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase",
+      "object": false,
+      "timestamp": "2026-10-27T19:45:10.554Z",
+      "valuePresent": true,
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.LocationDescription",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.LowerLayers",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.MACAddressControlEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.MaxBitRate",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Name",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.OperationalDataTransmitRates",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PeerBSSID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PossibleChannels",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PossibleDataTransmitRates",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.RadioEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.RegulatoryDomain",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSIDAdvertisementEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.STAWMMParameter",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Standard",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Stats",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Status",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalAssociations",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalBytesReceived",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalBytesSent",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalIntegrityFailures",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalPSKFailures",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalPacketsReceived",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TotalPacketsSent",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TransmitPower",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.TransmitPowerSupported",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.UAPSDEnable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.UAPSDSupported",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WEPEncryptionLevel",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WEPKey",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WEPKeyIndex",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WMMEnable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WMMSupported",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WPAAuthenticationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WPAEncryptionModes",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.WPS",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_AdvanceConf",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_AssociateNum",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_AttachConf",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_HT20",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_Mode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_PowerValue",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RFBand",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RadiuServer",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RadiusKey",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RadiusPort",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_RetryTimeout",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_Service",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_Standard",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_SupportedStandards",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_VLAN",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WPAand11iAuthenticationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WPAand11iEncryptionModes",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WPSKeyWord",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WebVisibility",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_HW_WorkMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.X_IEEE80211wEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5",
+      "object": true,
+      "timestamp": "2026-10-28T21:38:39.144Z",
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.APWMMParameter",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AssociatedDevice",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AuthenticationServiceMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AutoChannelEnable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.AutoRateFallBackEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BSSID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BasicAuthenticationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BasicDataTransmitRates",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BasicEncryptionModes",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BeaconAdvertisementEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.BeaconType",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Channel",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.ChannelPlus",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.ChannelsInUse",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.DeviceOperationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.DistanceFromRoot",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Enable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.IEEE11iAuthenticationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.IEEE11iEncryptionModes",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.InsecureOOBAccessEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.KeyPassphrase",
+      "object": false,
+      "timestamp": "2026-10-28T19:18:38.977Z",
+      "valuePresent": true,
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.LocationDescription",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.LowerLayers",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.MACAddressControlEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.MaxBitRate",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Name",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.OperationalDataTransmitRates",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PeerBSSID",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PossibleChannels",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PossibleDataTransmitRates",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PreSharedKey",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.RadioEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.RegulatoryDomain",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID",
+      "object": false,
+      "timestamp": "2026-10-28T21:38:39.146Z",
+      "valuePresent": true,
+      "type": "xsd:string"
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSIDAdvertisementEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.STAWMMParameter",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Standard",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Stats",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Status",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalAssociations",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalBytesReceived",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalBytesSent",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalIntegrityFailures",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalPSKFailures",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalPacketsReceived",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TotalPacketsSent",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TransmitPower",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.TransmitPowerSupported",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.UAPSDEnable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.UAPSDSupported",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WEPEncryptionLevel",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WEPKey",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WEPKeyIndex",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WMMEnable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WMMSupported",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WPAAuthenticationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WPAEncryptionModes",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.WPS",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_AdvanceConf",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_AssociateNum",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_AttachConf",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_HT20",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_Mode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_PowerValue",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RFBand",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RadiuServer",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RadiusKey",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RadiusPort",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_RetryTimeout",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_Service",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_Standard",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_SupportedStandards",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_VLAN",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WPAand11iAuthenticationMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WPAand11iEncryptionModes",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WPSKeyWord",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WebVisibility",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_HW_WorkMode",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.X_IEEE80211wEnabled",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.WiFi",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_DHCPv6",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_IPv6Config",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_LanService",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_RouterAdvertisement",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_WLANForGuest",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_WLANForISP",
+      "object": true,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_WlanEnable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_WlanPowerValue",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    },
+    {
+      "path": "InternetGatewayDevice.LANDevice.1.X_HW_Wps2Enable",
+      "object": false,
+      "timestamp": null,
+      "valuePresent": false
+    }
+  ]
+}
