@@ -135,7 +135,14 @@ def validate_vite_manifest(files, pinned_paths):
             assert key == '_' + p.split('/')[-1], 'VITE_GENERATED_KEY_MISMATCH:' + key
         for field in ['imports', 'dynamicImports', 'css', 'assets']:
             values = entry.get(field, [])
-            assert isinstance(values, list) and all(isinstance(v, str) for v in values) and len(values) == len(set(values)), 'INVALID_VITE_LIST:' + key + ':' + field
+            assert isinstance(values, list) and all(isinstance(v, str) for v in values), 'INVALID_VITE_LIST:' + key + ':' + field
+            # Vite repite una misma clave en imports/dynamicImports cuando el
+            # código fuente tiene varias llamadas import()/import estático al
+            # mismo módulo (confirmado real: AsistenciaPanel y vue3-apexcharts
+            # en producción y candidato). css/assets son rutas físicas y no
+            # deben repetirse dentro de la misma entrada.
+            if field in ('css', 'assets'):
+                assert len(values) == len(set(values)), 'INVALID_VITE_LIST:' + key + ':' + field
             for ref in values:
                 if field in ['imports', 'dynamicImports']:
                     assert ref in manifest, 'VITE_IMPORT_MISSING:' + key + ':' + ref
