@@ -5,15 +5,21 @@ if(!['prepare','build','deploy','verify','rollback'].includes(action))throw Erro
 const snapshot=JSON.parse(fs.readFileSync('release-source.json','utf8'));
 const stage='/opt/smartrayco-staging/frontend-consolidado-tr069-'+snapshot.commit.slice(0,7)+'-20261027';
 const ssh=['-o','BatchMode=yes','-o','ConnectTimeout=10','-i',path.join(process.env.USERPROFILE,'.ssh','smartrayco-deploy'),'root@192.168.55.201'];
-const backNames=['server/src/routes/genieacs.ts','server/src/routes/genieacsSync.ts','server/src/routes/tr069WifiPreparation.ts','server/src/middleware/tr069PreparationOnly.ts','server/src/services/tr069WifiPreparation.ts','server/src/services/tr069WifiTrial.ts','src/lib/gponSerial.ts','src/lib/tr069WifiPlan.ts','src/lib/tr069WifiTrial.ts'];
+const backNames=['server/src/routes/genieacs.ts','server/src/routes/genieacsSync.ts','server/src/routes/tr069WifiPreparation.ts','server/src/middleware/tr069PreparationOnly.ts','server/src/services/tr069WifiPreparation.ts','server/src/services/tr069WifiTrial.ts','server/src/services/tr069Hosts.ts','src/lib/gponSerial.ts','src/lib/tr069WifiPlan.ts','src/lib/tr069WifiTrial.ts','src/lib/tr069Hosts.ts'];
 // Alcance exacto del diff de frontend de esta release (fabc136 vs 288f2d8):
 // src/views/tr069/Tr069View.vue + src/lib/tr069WifiTrial.ts (se compila junto,
 // mismo chunk). Verificado con `git diff --stat 288f2d8 fabc136 -- src/` y una
 // comparacion de builds reales: es el UNICO chunk con contenido distinto una
-// vez neutralizado el renombrado en cascada de Vite. Si una release futura
-// reutiliza este script con un alcance de frontend distinto, este arreglo
-// debe actualizarse (no es generico todavia).
-const frontAllow=['assets/Tr069View.js'];
+// vez neutralizado el renombrado en cascada de Vite. Ampliado el 28/10/2026
+// (commit 3670edc, Hosts/Dispositivos conectados): src/stores/tr069.ts
+// compila en un chunk COMPARTIDO ("assets/tr069.js", usado tambien por
+// OltDetailView.vue y campo.ts, no solo por Tr069View.vue) — agregar
+// fetchHosts() ahi (unico cambio real, aditivo, confirmado con
+// `git diff -- src/stores/tr069.ts`) cambia ese chunk compartido aunque
+// ninguna funcion existente se haya tocado. Si una release futura reutiliza
+// este script con un alcance de frontend distinto, este arreglo debe
+// actualizarse (no es generico todavia).
+const frontAllow=['assets/Tr069View.js','assets/tr069.js'];
 if(action==='prepare'){
  const rt=path.resolve('../frontend-consolidation-artifacts');fs.mkdirSync(rt,{recursive:true});
  const archive=path.join(rt,'source.tar');
