@@ -18,6 +18,17 @@ sin merge/push/despliegue automático.
 
 ### Bitácora detallada de sesiones anteriores (antecedente — no es el punto de partida)
 
+**Nota de cierre (Fase 1 + Fase 2, sesión posterior a la investigación):**
+la corrección del botón WiFi (`16e2bd2`, SSID habilitado + contraseña
+bloqueada a propósito + estados `unconfirmed`/`stuck`) **ya se desplegó**,
+autorizado condicionalmente por el propietario tras verificar
+respaldos/compatibilidad — `deploy`/`verify` en verde,
+`ssidTasksSent:0` confirmado antes y después. Por separado, se implementó
+"Dispositivos conectados" (Hosts) en el detalle TR-069 — commit `3670edc`,
+**a propósito sin desplegar**. Detalle completo: secciones "TR-069 WiFi —
+corrección final DESPLEGADA" y "Hosts / Dispositivos conectados" al inicio
+de `ESTADO_DESARROLLO.md`.
+
 **Nota de cierre (investigación solo lectura, sesión posterior al
 incidente):** búsqueda pública (foro oficial de GenieACS) confirma que
 `KeyPassphrase` directo es un problema ya conocido en Huawei (error 9007

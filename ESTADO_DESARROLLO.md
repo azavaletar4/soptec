@@ -16,40 +16,37 @@ la sección histórica correspondiente, no hace falta repetirlo.
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
 Frontend y backend en la VM de producción (`192.168.55.201`) corren el
-commit **`508b75e84cc942a1923cd654dfe26a6f369a9590`** (`508b75e` — SSID +
-contraseña WiFi + corrección del botón deshabilitado) — desplegado el
-28/10/2026 19:09 UTC, confirmado vía `/release-manifest.json` del
-contenedor, el `Image` real de `smartrayco-frontend-1`/`smartrayco-backend-1`
-(no solo el tag) y `verify` ejecutado aparte después del `deploy`. Imágenes:
-`smartrayco-frontend-consolidado:508b75e84cc9`,
-`smartrayco-backend-wifitrial:508b75e84cc9`. Resto de servicios
-(Mongo/Caddy/GenieACS) sin cambios — mismos `started`
-que antes del deploy. Rollback verificado y disponible: vuelve a
-`f87aeefc5190` (la versión con el bug, SSID+contraseña sin la corrección
-del botón), nunca más atrás. Detalle completo: sección "TR-069 WiFi —
-botón «Aplicar cambios» — DESPLEGADO" más abajo.
+commit **`16e2bd2b6f6372aba73c402768f852702bd097e2`** (`16e2bd2` — SSID +
+contraseña bloqueada + corrección del "Guardando cambios" indefinido) —
+desplegado el 28/10/2026 20:12 UTC, confirmado vía `/release-manifest.json`
+del contenedor, el `Image` real de
+`smartrayco-frontend-1`/`smartrayco-backend-1` (no solo el tag) y `verify`
+ejecutado aparte después del `deploy`. Imágenes:
+`smartrayco-frontend-consolidado:16e2bd2b6f63`,
+`smartrayco-backend-wifitrial:16e2bd2b6f63`. Resto de servicios
+(Mongo/Caddy/GenieACS) sin cambios — mismos `started` que antes del
+deploy. Rollback verificado y disponible: vuelve a `508b75e84cc9` (la
+versión con el bug de contraseña bloqueada-para-siempre), nunca más atrás.
+Detalle completo: sección "TR-069 WiFi — corrección final DESPLEGADA" más
+abajo. **La función Hosts/Dispositivos conectados (commit `3670edc`) NO
+está incluida en este deploy — sigue solo local, sin desplegar,** tal como
+se pidió explícitamente.
 
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
-`HWTC1D3691B7` (contrato `CTR-2026-00214`): confirmado real dos veces
-(27/10 y de nuevo el 28/10 con el nombre `wifi 5 rayco`). **El cambio de
-contraseña NO funcionó** en su primera prueba real (28/10): el propietario
-confirmó que la contraseña nueva "aparece como incorrecta al conectarse" y
-el panel quedó indefinidamente en "Guardando cambios". Causa raíz
-encontrada (ver sección "TR-069: SSID cambia, contraseña falla..." más
-abajo): este firmware reporta `KeyPassphrase` como cadena vacía al leerlo
-de vuelta — SmartRayco no puede confirmar por TR-069 si la contraseña
-realmente se aplicó. **El cambio de contraseña queda bloqueado en el
-código** (candidato local `b51c161`, sin desplegar) hasta resolver cómo
-verificarlo con este firmware. No declarar el cambio de contraseña
-"funcional" — sigue sin confirmarse que la escritura en sí haya funcionado.
+`HWTC1D3691B7` (contrato `CTR-2026-00214`): confirmado real más de una vez.
+**El cambio de contraseña sigue bloqueado** (ya desplegado así,
+`16e2bd2`) hasta confirmar un método verificable para este firmware — ver
+punto 5. El botón ya no queda indefinidamente en "Guardando cambios"
+(corregido y desplegado), pero **eso todavía no tiene su primera prueba
+real** — la hace el propietario desde el panel.
 
 **3. Cambios locales pendientes (no desplegados, no publicados):**
-- Commit `b51c161` (sobre `508b75e`): bloquea el envío de contraseña nueva
-  y corrige el seguimiento de estado (nuevos estados `unconfirmed`/`stuck`
-  para que el panel no quede indefinidamente en "Guardando cambios") —
-  **18/18 + 284/284 + 482/482 pruebas en verde, `vue-tsc`/`tsc` limpios,
-  sin desplegar**. Pendiente: autorización expresa de `deploy`.
+- Commit `3670edc` (sobre `16e2bd2`): sección "Dispositivos conectados"
+  (Hosts) en el detalle TR-069 — solo lectura, carga perezosa al expandir,
+  **293/293 + 482/482 pruebas en verde, `vue-tsc`/`tsc` limpios, sin
+  desplegar** (pedido explícitamente así). Pendiente: autorización
+  explícita de `deploy` en una sesión futura, aparte de esta.
 - Archivos sueltos de OTRAS fases ya cerradas, pendientes de commit desde
   antes de esta sesión — no tocarlos sin indicación explícita de esa fase:
   `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado), ~13 archivos
@@ -60,9 +57,9 @@ verificarlo con este firmware. No declarar el cambio de contraseña
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `b51c161` | 33 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
-| WiFi SSID + contraseña + botón corregido | incluido en `main` | `508b75e` | **En producción** (desplegado 28/10/2026 19:09 UTC) — con el bug de contraseña bloqueada-para-siempre |
-| Corrección del incidente (contraseña bloqueada + estados unconfirmed/stuck) | incluido en `main` | `b51c161` | Candidato local, probado, **sin desplegar** |
+| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | `3670edc` | 36 commits adelante de `origin/main`, **sin publicar** (fast-forward limpio, sin divergencia) |
+| WiFi SSID + contraseña bloqueada + botón corregido | incluido en `main` | `16e2bd2` | **En producción** (desplegado 28/10/2026 20:12 UTC) |
+| Hosts / Dispositivos conectados | incluido en `main` | `3670edc` | Candidato local, probado, **sin desplegar** (a propósito) |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
 | Rama remota activa en GitHub | `origin/main` | `88dec40` | Muy desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
 
@@ -87,22 +84,21 @@ es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
 **5. Próxima tarea autorizada:** ninguna en ejecución. Pendiente del
-**propietario**: (a) autorizar el `deploy` de `b51c161` (bloquea el envío
-de contraseña y corrige el seguimiento de estado) — **sigue sin desplegar,
-la versión en vivo sigue siendo `508b75e`, que SÍ deja enviar contraseñas
-sin bloqueo**; (b) decidir si autoriza una prueba de **descubrimiento de
-solo lectura** (una tarea nueva a GenieACS, por eso requiere su propia
-autorización aparte, distinta de simplemente leer la caché) contra
-`WLANConfiguration.5.PreSharedKey` para confirmar si existe la instancia
-`.1` — hay evidencia pública (no local, no de SmartOLT) de que
-`PreSharedKey.{i}.KeyPassphrase` es el parámetro que sí funciona en otros
-Huawei, pero localmente no hay ninguna instancia descubierta todavía (ver
-sección "Huawei: método correcto de contraseña WiFi" más abajo). No
-iniciar ningún `deploy`, migración, ni tarea GenieACS/OLT/MikroTik sin que
-el propietario lo pida en ese mismo turno (regla 16 de `CLAUDE.md`).
-Rollback disponible en cualquier momento:
+**propietario**: (a) probar manualmente desde el panel que el botón ya no
+queda indefinidamente en "Guardando cambios" y que el cambio de nombre
+WiFi sigue funcionando; (b) decidir si autoriza una prueba de
+**descubrimiento de solo lectura** (una tarea nueva a GenieACS, requiere su
+propia autorización aparte) contra `WLANConfiguration.5.PreSharedKey` para
+confirmar si existe la instancia `.1` — hay evidencia pública (no local, no
+de SmartOLT) de que `PreSharedKey.{i}.KeyPassphrase` es el parámetro que sí
+funciona en otros Huawei, pero localmente no hay ninguna instancia
+descubierta todavía (ver sección "Huawei: método correcto de contraseña
+WiFi"); (c) decidir cuándo desplegar Hosts (`3670edc`, listo y probado,
+sin desplegar a propósito). No iniciar ningún `deploy`, migración, ni
+tarea GenieACS/OLT/MikroTik sin que el propietario lo pida en ese mismo
+turno (regla 16 de `CLAUDE.md`). Rollback disponible en cualquier momento:
 `node scripts/frontend-consolidation-release.cjs rollback` (vuelve a
-`f87aeefc5190` — con el bug de contraseña bloqueada-para-siempre, no más
+`508b75e84cc9` — con el bug de contraseña bloqueada-para-siempre, no más
 atrás).
 
 ### Procedimiento de despliegue (5 fases separadas, siempre en este orden)
@@ -148,6 +144,117 @@ invocación, nunca combinadas:
   inesperados), **se detiene y lo reporta** en vez de asumir o corregirlo
   por su cuenta — la causa casi siempre es que el otro agente avanzó en
   medio tiempo.
+
+## Hosts / Dispositivos conectados — implementado local, sin desplegar (28/10/2026, Fase 2)
+
+Autorizado explícitamente: implementar la consulta de dispositivos
+conectados con interfaz sencilla tipo SmartOLT, **solo local, sin
+desplegar**.
+
+**1. Datos reales que la Huawei `HWTC1D3691B7` SÍ reporta** (confirmado
+leyendo la caché de GenieACS, solo lectura, sin ninguna tarea nueva):
+5 hosts con `HostName`, `IPAddress` y `MACAddress` reales y actuales
+(ej. `"REDMI-Note-15-5G"`, `192.168.100.37`, `d2:d3:3a:8d:85:1c`).
+
+**2. Datos que la Huawei NUNCA reporta** (confirmado, no es un límite del
+código): `Hosts.{i}.Active` (estado conectado/desconectado) e
+`InterfaceType` (WiFi/cable) — ningún host tiene valor cacheado para
+ninguno de los dos, nunca. Las tablas `AssociatedDevice` de ambas
+`WLANConfiguration` (2.4 y 5 GHz) tampoco tienen ninguna instancia
+descubierta todavía. Por eso, con este equipo, "Conexión", "Banda" y
+"Estado" siempre muestran **"No disponible"** — no es un error, es lo que
+el equipo reporta (o no reporta) realmente.
+
+**3. Lógica implementada (lista para cuando algún equipo SÍ reporte más):**
+`connection` se deriva de `InterfaceType` si el equipo lo declara
+explícitamente; si no, se infiere **solo** cuando la MAC del host aparece
+en la tabla `AssociatedDevice` de alguna `WLANConfiguration` (evidencia
+real de asociación WiFi, nunca una suposición) — en ese caso la banda viene
+de `OperatingFrequencyBand` de esa misma instancia, nunca del número de
+instancia ni del nombre de la red. Un `InterfaceType` explícito del equipo
+siempre tiene prioridad sobre esa inferencia.
+
+**4. Interfaz:** sección "Dispositivos conectados" dentro del mismo detalle
+expandible que ya tenía "Métricas" (botón renombrado a "Detalle", carga
+perezosa, **solo al expandir un equipo, nunca automática para toda la
+lista** — evita sobrecargar GenieACS). Tabla simple: Nombre, IP, MAC,
+Conexión, Banda, Estado — todo en "No disponible" cuando el equipo no lo
+reporta, sin parámetros técnicos. Se muestra la fecha real del último
+reporte de Hosts (puede ser más vieja que el último Inform del equipo) para
+distinguir datos actuales de almacenados, sin inventar un "en vivo" que no
+existe.
+
+**5. Reutilización:** mismo patrón exacto que PPPoE/WiFi — identidad
+exacta por serial GPON (`matchTr069Device`, nunca mezcla datos de otra
+ONT), GET NBI con proyección exacta (nunca una tarea), mismo permiso
+`STAFF_READ` ya aplicado a todo `genieacsSyncRoutes`. Generalizado para
+cualquier equipo TR-069 registrado (no solo `HWTC1D3691B7`): es una lectura
+pura, sin el riesgo de escritura que justificaba restringir el cambio de
+WiFi a un solo equipo de prueba.
+
+**6. Pruebas:** 9 pruebas nuevas del servicio (identidad exacta y
+aislamiento entre ONT, inferencia WiFi solo por asociación real,
+precedencia de `InterfaceType` explícito, `Active` true/false/ausente,
+ambigüedad, serial inválido). 293/293 y 482/482 de las suites completas sin
+regresión. `vue-tsc`/`tsc` limpios.
+
+**Archivos:** `src/lib/tr069Hosts.ts`, `server/src/services/tr069Hosts.ts`
+(nuevos); `server/src/services/__tests__/tr069Hosts.test.ts` (nuevo);
+`server/src/routes/genieacsSync.ts`, `src/stores/tr069.ts`,
+`src/views/tr069/Tr069View.vue` (extendidos). Commit `3670edc`.
+
+**Nada enviado a GenieACS, nada desplegado, ningún otro módulo tocado.**
+
+## TR-069 WiFi — corrección final DESPLEGADA en producción (28/10/2026 20:12 UTC)
+
+Autorizado condicionalmente ("si las verificaciones y respaldos son
+correctos"): desplegar exclusivamente la corrección del botón WiFi
+(`b51c161` + documentación posterior, hasta `16e2bd2`).
+
+**1. Verificación previa:** `git log`/`git status` confirmaron `main` en
+`16e2bd2`, sin cambios pendientes relevantes; 18/18 pruebas del servicio
+re-confirmadas antes de tocar nada. En la VM: imágenes/GenieACS sin
+tareas pendientes para el equipo (baseline en 0, confirmado antes y
+después).
+
+**2. `prepare`/`build`/`deploy`/`verify`, en ese orden, cada uno real contra
+la VM:** `prepare` → `rollbackTested:true` (respaldo de las imágenes
+`508b75e` entonces en vivo). `build` → `reproducible:true`,
+`contractGuardValidatedReadOnly:true`, único archivo de frontend cambiado
+(mismo alcance de siempre: `assets/Tr069View.js`) — Asistencia, Puntos,
+Campo, OLT y Rutinas equivalentes byte a byte, confirmando compatibilidad
+con la versión productiva. Antes de `deploy`, confirmado en vivo que las
+etiquetas de rollback coincidían exactamente con las imágenes `508b75e`
+todavía en ejecución. `deploy` y `verify` (aparte): salud OK, 9 rutas
+principales, 125 artefactos contra manifiesto, `401` sin autenticar,
+**`ssidTasksSent:0` las dos veces**. Confirmado además por fuera, leyendo
+GenieACS directamente: 0 tareas antes y después del deploy.
+
+**3. Imágenes:**
+
+| Servicio | Anterior | Nueva |
+|---|---|---|
+| Frontend | `smartrayco-frontend-consolidado:508b75e84cc9` | `smartrayco-frontend-consolidado:16e2bd2b6f63` |
+| Backend | `smartrayco-backend-wifitrial:508b75e84cc9` | `smartrayco-backend-wifitrial:16e2bd2b6f63` |
+
+Caddy/Mongo/GenieACS: sin tocar (mismos `started`).
+
+**4. Permisos, identidad y protecciones — sin cambios, re-confirmados por
+las pruebas:** `requireRole('ADMIN','SUPERADMIN')` sigue envolviendo
+`/trial/*`; `scope()`/`validateWifiTrialContract` siguen limitando todo a
+`HWTC1D3691B7`/`CTR-2026-00214` exacto; el candado de una sola operación
+pendiente real (no por la sola existencia de un registro) sigue intacto.
+
+**5. Riesgos pendientes:** la corrección del estado todavía no tiene su
+primera prueba real del propietario desde el panel; el cambio de nombre
+WiFi sigue funcionando (sin tocar su lógica), la contraseña sigue
+bloqueada a propósito hasta resolver el método de verificación con este
+firmware (ver sección "Huawei: método correcto de contraseña WiFi").
+
+**Rollback disponible:** `node scripts/frontend-consolidation-release.cjs
+rollback` (vuelve a `508b75e84cc9`, con el bug de contraseña
+bloqueada-para-siempre, nunca más atrás). **Ningún cambio real de
+SSID/contraseña enviado a la Huawei durante el despliegue.**
 
 ## Huawei: método correcto de contraseña WiFi — investigación solo lectura, nada escrito (28/10/2026, sesión posterior al incidente)
 
