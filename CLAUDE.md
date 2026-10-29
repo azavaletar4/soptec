@@ -16,6 +16,20 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**Ficha OLT atascada en "Esperando conexión" — corregido, SIN publicar ni
+desplegar (29/10/2026, misma noche):** distinto del problema de
+comunicación TR-069 ya diagnosticado (no repetido). `deriveTr069EnableStatus`
+mezclaba "nunca contactó" con "contactó antes, ahora viejo" en la misma
+etiqueta. Agregados `configurado` (habilitado, sin match, <10 min) y
+`sin_comunicacion_reciente` (hubo match real, ahora >30 min viejo, nunca
+se confunde con "nunca contactó"); `conectado` ahora dice "Conectado a
+GenieACS". `canManageTr069` sigue exigiendo exactamente `'conectado'`.
+Confirmado por código: "Administrar TR-069" solo hace
+`tr069-mgmt acs <url>` + `state unlock` (OMCI separado de wan-ip/PPPoE/
+VLAN 120, nunca los toca) — sin ejecutarlo. Frontend-lib 510/510 PASS
+(+9), backend sin cambios. Commit local, sin publicar. Detalle:
+`docs/TR069-ENABLE-STATUS-ESTANCADO-20261029.md`.
+
 **Hosts bloqueado por tareas ajenas atascadas — corregido, SIN publicar ni
 desplegar (29/10/2026, misma noche):** 8 tareas `refreshObject` (botón
 general "Actualizar" de la tarjeta TR-069, no Hosts) seguían creciendo sin

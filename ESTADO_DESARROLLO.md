@@ -97,6 +97,26 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
+**Ficha OLT atascada en "Esperando conexión" — corregido, SIN publicar ni
+desplegar (29/10/2026, misma noche):** distinto del problema de
+comunicación TR-069 ya diagnosticado (`tr069_enabled=false` para
+`HWTC1D3691B7`, no se repite). Causa real: `deriveTr069EnableStatus`
+(`src/lib/tr069EnableStatus.ts`) mezclaba "nunca contactó" con "contactó
+antes y ahora está viejo" bajo la misma etiqueta `esperando_conexion` — el
+caso real (GenieACS llegó a registrar la Huawei) quedaba indistinguible de
+"nunca pasó nada". Agregados 2 estados: `configurado` (habilitado, sin
+match, dentro de 10 min — mismo margen ya usado en el guard de Hosts) y
+`sin_comunicacion_reciente` (hubo match real, ahora viejo >30 min, nunca
+se confunde con "nunca contactó"); `conectado` ahora se rotula "Conectado
+a GenieACS". `canManageTr069` sigue exigiendo exactamente `'conectado'`
+— un contacto viejo tampoco habilita "Administrar TR-069". Confirmado por
+revisión de código (Fase 1): "Administrar TR-069"/habilitar solo ejecuta
+`pon-onu-mng` → `tr069-mgmt {veip} acs <url>` + `state unlock` — objeto
+OMCI separado de `wan-ip`/PPPoE/VLAN 120, nunca los toca (sin ejecutarlo
+en esta tarea). Frontend-lib **510/510 PASS** (antes 501, +9), backend
+336/336 sin cambios (corrección 100% frontend). Commit local, sin
+publicar. Detalle completo: `docs/TR069-ENABLE-STATUS-ESTANCADO-20261029.md`.
+
 **Hosts bloqueado por tareas ajenas atascadas — corregido, SIN publicar ni
 desplegar (29/10/2026, misma noche):** causa confirmada: 8 tareas
 `refreshObject` (creciendo, generadas por el botón general "Actualizar" de

@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import { runSignalRefresh } from '@/lib/signalRefreshFlow';
 import { gponVendorFromSerial, isThirdPartyOnt } from '@/lib/gponVendorId';
-import { deriveTr069EnableStatus, canManageTr069, TR069_ENABLE_STATUS_LABEL, type Tr069EnableStatus } from '@/lib/tr069EnableStatus';
+import { deriveTr069EnableStatus, canManageTr069, shouldKeepPollingTr069, TR069_ENABLE_STATUS_LABEL, type Tr069EnableStatus } from '@/lib/tr069EnableStatus';
 
 // Replica el layout del panel de detalle de ONU estilo SmartOLT (columna de
 // identidad/config a la izquierda, grafico + estado en vivo a la derecha,
@@ -48,6 +48,7 @@ const tr069EnableStatus = computed<Tr069EnableStatus>(() =>
     requestInFlight: tr069Enabling.value || (tr069Status.value?.requestInFlight ?? false),
     lastError: tr069EnableError.value,
     matchedDevice: tr069Status.value?.matchedDevice ?? null,
+    enabledAt: props.ont.tr069_enabled_at ?? null,
     nowMs: Date.now(),
   }),
 );
@@ -71,7 +72,7 @@ function scheduleTr069Poll() {
   tr069PollTimer = setTimeout(async () => {
     tr069PollAttempts += 1;
     await refreshTr069Status();
-    if (tr069EnableStatus.value === 'esperando_conexion' || tr069EnableStatus.value === 'habilitando') scheduleTr069Poll();
+    if (shouldKeepPollingTr069(tr069EnableStatus.value)) scheduleTr069Poll();
   }, TR069_POLL_INTERVAL_MS);
 }
 
@@ -94,7 +95,7 @@ async function confirmEnableTr069Guided() {
 onMounted(() => {
   if (props.ont.tr069_enabled) {
     refreshTr069Status().then(() => {
-      if (tr069EnableStatus.value === 'esperando_conexion') scheduleTr069Poll();
+      if (shouldKeepPollingTr069(tr069EnableStatus.value)) scheduleTr069Poll();
     });
   }
 });
@@ -290,7 +291,9 @@ async function toggleConfig() {
                   class="badge"
                   :class="{
                     conectado: 'bg-emerald-500/15 text-emerald-700',
+                    configurado: 'bg-sky-500/15 text-sky-700',
                     esperando_conexion: 'bg-amber-500/15 text-amber-700',
+                    sin_comunicacion_reciente: 'bg-orange-500/15 text-orange-700',
                     habilitando: 'bg-amber-500/15 text-amber-700',
                     error: 'bg-red-500/15 text-red-600',
                     no_habilitado: 'bg-slate-200 text-slate-600',
