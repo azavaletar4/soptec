@@ -16,6 +16,17 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**Señal WiFi de Hosts — investigada, SIN implementar, local sin publicar
+(29/10/2026, misma noche):** `X_HW_RSSI` (único parámetro de señal del
+equipo) tiene valor real para `S26-Ultra-de-Warner` (`-40`, activo WiFi),
+pero **sin ninguna unidad verificable** en todo el árbol TR-069
+(`X_HW_RSSIUnit`/`RSSI`/`SignalStrength`/etc. ausentes, 0 asociaciones).
+Investigación pública no confirma la unidad para este modelo/firmware. No
+se implementó color/dBm — sería inventar una unidad no documentada.
+Comportamiento actual ("No disponible") es correcto, sin cambios de
+código funcional. 1 prueba real agregada, backend 326/326 PASS. Detalle:
+`docs/TR069-HOSTS-SENAL-WIFI-INVESTIGACION-20261029.md`.
+
 **Corrección "solo 2 de 5 Hosts visibles" — PUBLICADA y DESPLEGADA
 (29/10/2026, misma noche, autorizada expresamente):** causa real confirmada
 por lectura directa de la caché de GenieACS (solo lectura, cero tareas

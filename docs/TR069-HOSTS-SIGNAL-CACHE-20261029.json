@@ -1,0 +1,303 @@
+{
+  "checkedAt": "2026-10-29T19:51:36.694Z",
+  "deviceId": "00259E-HG8145X6%2D13-485754431D3691B7",
+  "serial": "485754431D3691B7",
+  "lastInform": "2026-10-29T19:51:36.692Z",
+  "readOnly": true,
+  "methods": [
+    "GET"
+  ],
+  "tasksSent": 0,
+  "associations": 0,
+  "hostLeaves": [
+    {
+      "valuePresent": true,
+      "value": false,
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:boolean",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.Active"
+    },
+    {
+      "valuePresent": true,
+      "value": "802.11",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.InterfaceType"
+    },
+    {
+      "valuePresent": true,
+      "value": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.Layer2Interface"
+    },
+    {
+      "valuePresent": true,
+      "value": "7e:75:b3:0a:86:76",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.MACAddress"
+    },
+    {
+      "valuePresent": true,
+      "value": "Z2359",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.HostName"
+    },
+    {
+      "valuePresent": true,
+      "value": 0,
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:int",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.X_HW_RSSI"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.X_HW_RSSIUnit"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.RSSI"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.RSSIUnit"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.SignalStrength"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.1.SignalStrengthUnit"
+    },
+    {
+      "valuePresent": true,
+      "value": true,
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:boolean",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.Active"
+    },
+    {
+      "valuePresent": true,
+      "value": "Ethernet",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.InterfaceType"
+    },
+    {
+      "valuePresent": true,
+      "value": "InternetGatewayDevice.LANDevice.1.LANEthernetInterfaceConfig.2",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.Layer2Interface"
+    },
+    {
+      "valuePresent": true,
+      "value": "00:07:29:55:35:57",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.MACAddress"
+    },
+    {
+      "valuePresent": true,
+      "value": "LAPTOP-996NPL7I",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.HostName"
+    },
+    {
+      "valuePresent": true,
+      "value": 0,
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:int",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.X_HW_RSSI"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.X_HW_RSSIUnit"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.RSSI"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.RSSIUnit"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.SignalStrength"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.2.SignalStrengthUnit"
+    },
+    {
+      "valuePresent": true,
+      "value": false,
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:boolean",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.Active"
+    },
+    {
+      "valuePresent": true,
+      "value": "802.11",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.InterfaceType"
+    },
+    {
+      "valuePresent": true,
+      "value": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.Layer2Interface"
+    },
+    {
+      "valuePresent": true,
+      "value": "be:9e:54:93:df:8c",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.MACAddress"
+    },
+    {
+      "valuePresent": true,
+      "value": "iPhone",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.HostName"
+    },
+    {
+      "valuePresent": true,
+      "value": 0,
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:int",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.X_HW_RSSI"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.X_HW_RSSIUnit"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.RSSI"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.RSSIUnit"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.SignalStrength"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.3.SignalStrengthUnit"
+    },
+    {
+      "valuePresent": true,
+      "value": true,
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:boolean",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.Active"
+    },
+    {
+      "valuePresent": true,
+      "value": "802.11",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.InterfaceType"
+    },
+    {
+      "valuePresent": true,
+      "value": "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.Layer2Interface"
+    },
+    {
+      "valuePresent": true,
+      "value": "56:b9:d2:f2:e7:c1",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.MACAddress"
+    },
+    {
+      "valuePresent": true,
+      "value": "S26-Ultra-de-Warner",
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:string",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.HostName"
+    },
+    {
+      "valuePresent": true,
+      "value": -40,
+      "timestamp": "2026-10-29T19:51:36.694Z",
+      "type": "xsd:int",
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.X_HW_RSSI"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.X_HW_RSSIUnit"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.RSSI"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.RSSIUnit"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.SignalStrength"
+    },
+    {
+      "valuePresent": false,
+      "timestamp": null,
+      "type": null,
+      "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.SignalStrengthUnit"
+    }
+  ],
+  "associatedDeviceLeaves": []
+}

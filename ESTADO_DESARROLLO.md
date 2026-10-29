@@ -95,6 +95,29 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
+**Señal WiFi de Hosts — investigada, SIN implementar (29/10/2026, misma
+noche):** reporte real: `S26-Ultra-de-Warner` aparece conectado por WiFi
+pero el panel muestra "Señal WiFi: No disponible". Lectura real completa
+(solo lectura, cero tareas): `X_HW_RSSI` (único parámetro de señal del
+equipo) SÍ tiene un valor real y reciente para ese Host (`-40`, activo,
+WiFi) — pero **ninguna unidad verificable existe en ningún nivel**:
+`X_HW_RSSIUnit`/`RSSI`/`RSSIUnit`/`SignalStrength`/`SignalStrengthUnit`
+ausentes en los 4 Hosts actuales, y 0 instancias `AssociatedDevice` en esta
+muestra. Investigación pública (GenieACS/Huawei forums, un proyecto de
+terceros no oficial en GitHub) no confirma la unidad para este
+modelo/firmware (`HG8145X6`/`V5R023C00S342`) — el único dato de terceros
+encontrado describe un comportamiento distinto (conversión de magnitud
+positiva) al observado aquí (ya negativo). **No se implementó color/dBm**:
+sería inventar una unidad no documentada, prohibido explícitamente por
+esta tarea y por la regla permanente del proyecto. Sin cambios en
+`tr069HostsSignal.ts`/`tr069Hosts.ts`/frontend — el comportamiento actual
+("No disponible") es correcto, no un defecto. Agregada 1 prueba real
+(`server/src/services/__tests__/tr069HostsSignal.test.ts`) con los 4 Hosts
+reales de hoy (evidencia `docs/TR069-HOSTS-SIGNAL-CACHE-20261029.json`).
+Backend 326/326 PASS (antes 325). **Commit local creado, sin publicar a
+GitHub** (no se pidió publicar en este turno). Detalle completo:
+`docs/TR069-HOSTS-SENAL-WIFI-INVESTIGACION-20261029.md`.
+
 **3. Cambios locales pendientes (no publicados):** ninguno de Hosts — la
 corrección de "solo 2 de 5 Hosts visibles" (29/10/2026) **ya está publicada
 y desplegada** (ver punto 1, commit `eb96f77`). Causa exacta confirmada por
