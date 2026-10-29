@@ -16,6 +16,17 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**Sincronización GitHub completada (29/10/2026, solo repositorio, sin
+despliegue):** `main` local (57 commits adelante, 0 atrás de `origin/main`,
+sin divergencia) se publicó con `git push origin main` normal — ambos
+quedaron en `0bed05f`. Se crearon y publicaron 2 tags anotados sobre las
+imágenes productivas exactas: `desplegado-tr069-hosts-backend-d6ce2c2`
+(backend en vivo; el tag documenta que es un overlay de 1 solo archivo
+sobre la imagen de `5d48a10`, no un build completo — ver detalle en
+`ESTADO_DESARROLLO.md`) y `desplegado-tr069-hosts-frontend-5d48a10` (build
+completo del frontend). **El despliegue de Hosts bajo demanda sigue sin
+autorización y sin desplegar** — esto no cambia con la sincronización.
+
 La corrección Hosts `d6ce2c2` **ya está desplegada y verificada** (28/10,
 21:30 UTC): backend `smartrayco-backend-wifitrial:d6ce2c2f578f`; frontend
 intacto en `5d48a10ea497` (misma imagen y arranque). Una Huawei única,

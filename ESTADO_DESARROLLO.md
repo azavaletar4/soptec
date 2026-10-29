@@ -33,6 +33,34 @@ Mismos contenedores, imágenes y arranques de los cinco servicios; ningún
 despliegue posterior. Respaldos renovados y restauración aislada probada
 contra backend d6ce2c2 y frontend 5d48a10; detalle en punto 5.
 
+**Sincronización con GitHub completada (2026-10-29, solo repositorio — sin
+tocar producción):** `main` local estaba 57 commits adelante de
+`origin/main` y 0 atrás (sin divergencia); se confirmó con `git fetch
+origin` + `git merge-base --is-ancestor origin/main main` antes de publicar
+y se ejecutó `git push origin main` normal (sin force/merge/rebase).
+`main` y `origin/main` quedaron en el mismo commit `0bed05f`. Se crearon y
+publicaron 2 tags anotados documentando las imágenes productivas exactas:
+- `desplegado-tr069-hosts-backend-d6ce2c2` → commit `d6ce2c2f578f...`.
+  **Advertencia documentada en el propio tag:** la imagen en vivo NO es un
+  build completo de este commit — es la imagen backend que ya corría
+  (`...wifitrial:5d48a10ea497`) con un overlay de exactamente 1 archivo
+  (`server/src/services/tr069Hosts.ts`, según
+  `deploy/consolidation-release-scope.json` en el commit `d844ac6`:
+  `backendSources` con ese único archivo, `frontendSources`/`frontendAssets`
+  vacíos). Verificado con `git diff --stat 5d48a10ea497 d6ce2c2f578f` que
+  ningún otro archivo de `server/` cambia entre ambos commits — por eso el
+  contenido es equivalente a un build completo en este commit, aunque el
+  mecanismo real fue selectivo. No tratar este tag como "build íntegro
+  reproducible desde cero" sin releer esa advertencia.
+- `desplegado-tr069-hosts-frontend-5d48a10` → commit `5d48a10ea497...`,
+  build completo (no selectivo) del frontend consolidado; intacto desde
+  entonces (ver arriba).
+Ningún otro tag local preexistente (de fases anteriores) se publicó en esta
+sesión — siguen solo en el repositorio local hasta que se autorice.
+**El despliegue de Hosts bajo demanda (`e2c7bf7`/`ac511d7`) sigue SIN
+autorización expresa y SIN desplegar** — esta sincronización no lo cambia;
+ver punto 3 y 5.
+
 **2. Último cambio funcional probado en producción real:**
 Cambio de **nombre (SSID)** WiFi vía TR-069 sobre la Huawei de prueba
 `HWTC1D3691B7` (contrato `CTR-2026-00214`): confirmado real más de una vez.
@@ -236,7 +264,7 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 | WiFi + Hosts base | incluido en `main` | `5d48a10` | Frontend activo; backend anterior disponible como rollback |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
-| Rama remota activa en GitHub | `origin/main` | `88dec40` | Muy desactualizada frente a lo desplegado; no forzar ni mezclar sin PR revisada |
+| Rama remota activa en GitHub | `origin/main` | `0bed05f` | **Sincronizada** con `main` local (2026-10-29, push normal, 57 commits, sin force/merge/rebase) |
 
 El repositorio tiene además **36 ramas locales (incluida `main`) y 24
 worktrees (incluido éste)** — contado el 28/10/2026, en su mayoría de fases
