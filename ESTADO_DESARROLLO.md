@@ -95,6 +95,36 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
+**Fallo de consulta Hosts en producción — diagnosticado, mensaje corregido,
+SIN publicar ni desplegar (29/10/2026, misma noche):** reporte: el panel
+mostraba "No se pudo completar la consulta..." al consultar Hosts.
+Diagnóstico real (solo lectura, ejecutando `hostsOnDemand.read` dentro del
+contenedor desplegado `eb96f77b7dca` vía `docker exec`, cero tareas a
+GenieACS): causa real es que la Huawei de prueba no envía un Inform desde
+hace 18-22+ minutos (`_lastInform` muy por detrás del reloj del servidor,
+confirmado dos veces) — el guard ya existente (`informAge > 10 min` en
+`tr069HostsOnDemand.ts`) rechaza correctamente la lectura activa; **no es
+un error de nuestro código**, es una condición externa del equipo de
+prueba. Descartado con evidencia real: GenieACS sano (`healthy`, sin
+errores), identidad resuelta sin ambigüedad, sin timeout (falla en
+106 ms, antes de cualquier red), lectura pasiva (`GET`) funcionando normal
+(found=true, 4 Hosts, 78 ms). **Gap real sí corregido:** el panel
+(`src/lib/tr069HostsPanel.ts`) descartaba el mensaje específico que el
+backend ya devuelve en lenguaje sencillo (HTTP 409, siempre texto
+human-readable por diseño de `tr069HostsOnDemand.ts`) y mostraba siempre
+el mismo texto genérico sin pista de la causa real. Nueva función pura
+`plainHostsErrorMessage`: solo confía en el mensaje del servidor cuando
+`status === 409` exacto (única garantía de lenguaje sencillo); cualquier
+otro fallo (red, timeout cliente, 502 del `GET`) conserva el genérico de
+siempre. El historial anterior ya se conservaba bien (sin cambios ahí,
+confirmado con prueba nueva). Frontend-lib **501/501 PASS** (antes 498,
++3); backend 330/330 PASS sin cambios (corrección solo frontend);
+contrato 31/31; tsc/vue-tsc limpios. Sin tocar la mejora de señal WiFi
+(`ddcf083`/`0b0fc28` intactos). **Commit local creado, sin publicar ni
+desplegar** — procedimiento exacto de publicación ya documentado, a la
+espera de autorización. Detalle completo:
+`docs/TR069-HOSTS-FALLO-CONSULTA-20261029.md`.
+
 **Señal WiFi de Hosts — IMPLEMENTADA con alcance acotado, SIN publicar ni
 desplegar (29/10/2026, misma noche, autorizado expresamente):** supera al
 párrafo siguiente ("SIN implementar"), que queda como antecedente directo

@@ -16,6 +16,20 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**Fallo de consulta Hosts en producción — diagnosticado, SIN publicar ni
+desplegar (29/10/2026, misma noche):** causa real: la Huawei de prueba no
+informa desde hace 18-22+ minutos — el guard ya existente
+(`informAge > 10 min`) rechaza correctamente, **no es un bug nuestro**
+(descartado: GenieACS sano, identidad resuelta, sin timeout, `GET` pasivo
+funcionando). Gap real corregido: el panel descartaba el mensaje en
+lenguaje sencillo que el backend ya devuelve (409) y mostraba siempre un
+texto genérico sin pista de la causa. Nueva `plainHostsErrorMessage` en
+`src/lib/tr069HostsPanel.ts` — solo confía en el mensaje del servidor con
+`status===409` exacto. Historial anterior ya se conservaba bien, sin
+cambios ahí. Frontend-lib 501/501 PASS, backend sin cambios. Señal WiFi
+(`ddcf083`/`0b0fc28`) intacta. Commit local, procedimiento de publicación
+ya documentado. Detalle: `docs/TR069-HOSTS-FALLO-CONSULTA-20261029.md`.
+
 **Señal WiFi de Hosts — IMPLEMENTADA con alcance acotado por
 fabricante+modelo+firmware, local sin publicar ni desplegar (29/10/2026,
 misma noche, autorizado expresamente):** supera al párrafo siguiente ("sin
