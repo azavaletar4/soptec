@@ -15,35 +15,37 @@ la sección histórica correspondiente, no hace falta repetirlo.
 
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
-VM de producción (`192.168.55.201`), **corrección de historial Hosts
-`eb96f77` DESPLEGADA el 29/10/2026 19:40:21 UTC**, autorizado expresamente
-por el propietario, `verify` posterior PASS:
-- Backend: **`eb96f77b7dca389bb7ddbf416f09be4008cda3e1`**,
-  `smartrayco-backend-wifitrial:eb96f77b7dca`, imagen
-  `sha256:442fa45706d922225cf788c1e9e5a20ec9b145de5e8d591d55d7cd2d65b6bfce`.
-- Frontend: mismo commit, `smartrayco-frontend-consolidado:eb96f77b7dca`,
-  imagen `sha256:8a34d94ea936dc0f2431ece8261104c29d3789d9a9d3b54787e0793d88c98b32`.
+VM de producción (`192.168.55.201`), **señal WiFi + mensajes de error de
+Hosts `cee686b` DESPLEGADO el 29/10/2026 20:46:23 UTC**, autorizado
+expresamente por el propietario, `verify` posterior PASS:
+- Backend: **`cee686b673c1df82d58eb1e27471d6f3e674a2de`**,
+  `smartrayco-backend-wifitrial:cee686b673c1`, imagen
+  `sha256:f07219e440dfea6128b3f258f6730739221808f0bad96fff1855278dc4ee0b02`.
+- Frontend: mismo commit, `smartrayco-frontend-consolidado:cee686b673c1`,
+  imagen `sha256:3975008527630393eddef96fc49b4fb4cee919d0b6417f92c823f487bfcf83a4`.
   Build completo del commit para ambos servicios; único asset frontend
   cambiado `assets/Tr069View.js` (declarado).
 - Caddy/Mongo/GenieACS: mismas imágenes/contenedores desde 29/10 16:51:49 UTC,
   sin tocar por este despliegue.
 126 artefactos verificados, 11 rutas PASS (incluye `/asistencia`, `/puntos`,
 `/campo`, `/olt`, `/mikrotik`, `/rutinas` — preservados), HTTP 401 sin
-autenticación, `ssidTasksSent:0`. Gate `TR069_HOSTS_ON_DEMAND_ENABLED=true`
-confirmado en vivo, serial único `HWTC1D3691B7` sin wildcard. Cola GenieACS
-vacía tras el deploy. Sin migraciones ni tareas de configuración GenieACS.
-Corrección real: un host ausente del árbol en vivo del CPE se conserva
-visible con su última lectura real (nunca "Desconectado" sin evidencia
-nueva) — ver `server/src/services/tr069HostsHistory.ts`, persistido en el
-volumen Docker `olt_telemetry` (sobrevive a reconstrucciones del backend).
+autenticación, `ssidTasksSent:0`. **RSSI solo con identidad verificada**:
+confirmado leyendo el código real del contenedor —
+`VERIFIED_X_HW_RSSI_DBM_FIRMWARE` contiene únicamente
+`00259E`/`HG8145X6-13`/`V5R023C00S342`. Mensaje de error 409 ya en
+lenguaje sencillo se muestra tal cual al administrador
+(`plainHostsErrorMessage`); historial anterior se conserva igual que
+antes. Cola GenieACS tenía 1 tarea `refreshObject` de un botón distinto
+(no de Hosts, no de este deploy — ver punto 2/Fase 3 de la sesión del
+29/10 noche). Sin migraciones ni tareas de configuración GenieACS nuevas.
 Rollback preparado y probado (`prepare` fresco) → restaura backend/frontend
-a `...ac511d7c70c8` (imágenes previas a este despliegue).
-Detalle completo: `docs/TR069-HOSTS-HISTORIAL-DESPLEGADO-20261029.md`
-(causa/diseño: `docs/TR069-HOSTS-HISTORIAL-20261029.md`).
+a `...eb96f77b7dca` (imágenes previas a este despliegue).
+Detalle completo: `docs/TR069-HOSTS-DESPLIEGUE-SENAL-Y-DIAGNOSTICO-20261029.md`.
 
-Antecedente (superado por el despliegue anterior): Hosts bajo demanda
-`ac511d7` se desplegó el 29/10 18:45:53 UTC — detalle:
-`docs/TR069-HOSTS-DESPLIEGUE-20261029.md`.
+Antecedentes (superados por el despliegue anterior, conservados como
+historial): corrección de historial Hosts `eb96f77` (29/10 19:40:21 UTC,
+`docs/TR069-HOSTS-HISTORIAL-DESPLEGADO-20261029.md`); Hosts bajo demanda
+`ac511d7` (29/10 18:45:53 UTC, `docs/TR069-HOSTS-DESPLIEGUE-20261029.md`).
 
 **Sincronización con GitHub completada (2026-10-29, solo repositorio — sin
 tocar producción):** `main` local estaba 57 commits adelante de
@@ -95,8 +97,9 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
-**Fallo de consulta Hosts en producción — diagnosticado, mensaje corregido,
-SIN publicar ni desplegar (29/10/2026, misma noche):** reporte: el panel
+**Fallo de consulta Hosts en producción — diagnosticado, mensaje
+corregido, PUBLICADO y DESPLEGADO (29/10/2026, misma noche, autorizado
+expresamente — ver punto 1):** reporte: el panel
 mostraba "No se pudo completar la consulta..." al consultar Hosts.
 Diagnóstico real (solo lectura, ejecutando `hostsOnDemand.read` dentro del
 contenedor desplegado `eb96f77b7dca` vía `docker exec`, cero tareas a
@@ -120,13 +123,33 @@ siempre. El historial anterior ya se conservaba bien (sin cambios ahí,
 confirmado con prueba nueva). Frontend-lib **501/501 PASS** (antes 498,
 +3); backend 330/330 PASS sin cambios (corrección solo frontend);
 contrato 31/31; tsc/vue-tsc limpios. Sin tocar la mejora de señal WiFi
-(`ddcf083`/`0b0fc28` intactos). **Commit local creado, sin publicar ni
-desplegar** — procedimiento exacto de publicación ya documentado, a la
-espera de autorización. Detalle completo:
-`docs/TR069-HOSTS-FALLO-CONSULTA-20261029.md`.
+(`ddcf083`/`0b0fc28`, ver abajo — también publicados y desplegados juntos
+en el mismo commit `cee686b`). **Publicado y desplegado** (ver punto 1).
+Detalle completo: `docs/TR069-HOSTS-FALLO-CONSULTA-20261029.md`; detalle
+del despliegue real:
+`docs/TR069-HOSTS-DESPLIEGUE-SENAL-Y-DIAGNOSTICO-20261029.md`.
 
-**Señal WiFi de Hosts — IMPLEMENTADA con alcance acotado, SIN publicar ni
-desplegar (29/10/2026, misma noche, autorizado expresamente):** supera al
+**Comunicación TR-069 real de la Huawei de prueba — diagnosticada, SIN
+intervenir (29/10/2026, ~20:47 UTC):** `_lastInform` real =
+`2026-10-29T20:11:52.625Z`, sin cambiar en 36+ minutos (dos lecturas
+independientes); identidad y registro en GenieACS correctos
+(`00259E`/`HG8145X6-13`/serial exacto). Una tarea `refreshObject` ajena a
+Hosts (botón general "Actualizar" de la tarjeta TR-069,
+`tr069DeviceService.ts` → `queueRefresh`, no nuestro código de Hosts)
+quedó pendiente desde las 20:41:42 UTC sin respuesta — el
+`connection_request` tampoco alcanza al equipo. GenieACS sano, sin
+errores. **No es un defecto de SmartRayco**: es ausencia real de
+comunicación con el equipo físico. Hipótesis razonable y cronológicamente
+compatible (no verificable desde este código): la desactivación de TR-069
+en SmartOLT que el propietario reportó podría haber retirado la
+asignación de gestión de esta ONT. Nada forzado: solo lecturas `GET` y
+consultas de colecciones, cero tareas nuevas, sin reiniciar el equipo.
+Detalle completo: `docs/TR069-HOSTS-DESPLIEGUE-SENAL-Y-DIAGNOSTICO-20261029.md`
+(sección "FASE 3").
+
+**Señal WiFi de Hosts — IMPLEMENTADA con alcance acotado, PUBLICADA y
+DESPLEGADA (29/10/2026, misma noche, autorizado expresamente — ver punto
+1):** supera al
 párrafo siguiente ("SIN implementar"), que queda como antecedente directo
 — el propietario aportó la evidencia que faltaba: la interfaz propia de la
 Huawei mostró `RSSI -39 dBm` para `S26-Ultra-de-Warner` en el mismo
@@ -150,9 +173,9 @@ Regular amarillo (-68 a -75), Débil rojo (<-75); nunca porcentaje ni
 velocidad. Sin cambios en consulta exclusiva abrir/Actualizar, sin
 polling. Backend **330/330 PASS** (antes 326, +4 nuevas incl. la prueba de
 seguridad de alcance con 6 identidades no verificadas), frontend-lib
-498/498 PASS, contrato 31/31 PASS, tsc/vue-tsc limpios. **Commit local
-creado, sin publicar a GitHub ni desplegar** (la tarea pidió detenerse
-antes de publicar; se autorizará por separado). Detalle completo:
+498/498 PASS, contrato 31/31 PASS, tsc/vue-tsc limpios. **Publicada y
+desplegada** en el commit `cee686b` (ver punto 1 y el párrafo de
+despliegue arriba). Detalle completo:
 `docs/TR069-HOSTS-SENAL-WIFI-CALIDAD-20261029.md`.
 
 **Antecedente directo (superado arriba) — Señal WiFi de Hosts, investigada
@@ -304,13 +327,14 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Corrección de historial Hosts (ausentes del árbol en vivo) | incluido en `main` | `eb96f77` (sobre `4cf4ae8`) | **Backend+frontend en producción** (29/10 19:40:21 UTC, build completo) |
-| Hosts bajo demanda (función + guard) (antecedente, superado por `eb96f77`) | incluido en `main` | `ac511d7` | Imagen anterior; respaldada como rollback (`...ac511d7c70c8`) |
+| Señal WiFi + mensajes de error de Hosts | incluido en `main` | `cee686b` (sobre `0b0fc28`/`ddcf083`) | **Backend+frontend en producción** (29/10 20:46:23 UTC, build completo) |
+| Corrección de historial Hosts (antecedente, superado por `cee686b`) | incluido en `main` | `eb96f77` (sobre `4cf4ae8`) | Imagen anterior; respaldada como rollback (`...eb96f77b7dca`) |
+| Hosts bajo demanda (función + guard) (antecedente, imagen de rollback más antigua) | incluido en `main` | `ac511d7` | Imagen anterior a `eb96f77`; ya no es el rollback directo |
 | Identificación Hosts (antecedente, imagen de rollback más antigua) | incluido en `main` | `d6ce2c2` | Imagen anterior a `ac511d7`; ya no es el rollback directo |
 | WiFi + Hosts base (antecedente, imagen de rollback más antigua) | incluido en `main` | `5d48a10` | Imagen anterior a `ac511d7`; ya no es el rollback directo |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de los deploys; no cambia el código de la app |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
-| Rama remota activa en GitHub | `origin/main` | igual a `main` local (ver commit de este documento) | **Sincronizada**, sin divergencia |
+| Rama remota activa en GitHub | `origin/main` | `cee686b` | **Sincronizada** con `main` local, sin divergencia |
 
 El repositorio tiene además **36 ramas locales (incluida `main`) y 24
 worktrees (incluido éste)** — contado el 28/10/2026, en su mayoría de fases

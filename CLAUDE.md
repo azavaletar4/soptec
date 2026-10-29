@@ -16,32 +16,25 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
-**Fallo de consulta Hosts en producción — diagnosticado, SIN publicar ni
-desplegar (29/10/2026, misma noche):** causa real: la Huawei de prueba no
-informa desde hace 18-22+ minutos — el guard ya existente
-(`informAge > 10 min`) rechaza correctamente, **no es un bug nuestro**
-(descartado: GenieACS sano, identidad resuelta, sin timeout, `GET` pasivo
-funcionando). Gap real corregido: el panel descartaba el mensaje en
-lenguaje sencillo que el backend ya devuelve (409) y mostraba siempre un
-texto genérico sin pista de la causa. Nueva `plainHostsErrorMessage` en
-`src/lib/tr069HostsPanel.ts` — solo confía en el mensaje del servidor con
-`status===409` exacto. Historial anterior ya se conservaba bien, sin
-cambios ahí. Frontend-lib 501/501 PASS, backend sin cambios. Señal WiFi
-(`ddcf083`/`0b0fc28`) intacta. Commit local, procedimiento de publicación
-ya documentado. Detalle: `docs/TR069-HOSTS-FALLO-CONSULTA-20261029.md`.
-
-**Señal WiFi de Hosts — IMPLEMENTADA con alcance acotado por
-fabricante+modelo+firmware, local sin publicar ni desplegar (29/10/2026,
-misma noche, autorizado expresamente):** supera al párrafo siguiente ("sin
-implementar"). Evidencia nueva del propietario: ONT propia mostró
-`-39 dBm` para `S26-Ultra-de-Warner`, TR-069 reportó `X_HW_RSSI=-40` —
-confirma la unidad **solo para esta identidad exacta**
-(`00259E`/`HG8145X6-13`/`V5R023C00S342`). Lista de 1 combinación
-verificada en `tr069HostsSignal.ts`; otro modelo/firmware sigue "No
-disponible" (probado con 6 variantes). 4 niveles: Excelente/Buena verde,
-Regular amarillo, Débil rojo — nunca porcentaje/velocidad. Sin polling,
-sin cambios de consulta. Backend 330/330 PASS. Commit local, sin
-publicar. Detalle: `docs/TR069-HOSTS-SENAL-WIFI-CALIDAD-20261029.md`.
+**Señal WiFi + mensajes de error de Hosts — PUBLICADO y DESPLEGADO
+(29/10/2026, 20:46:23 UTC, autorizado expresamente):** commit `cee686b`
+(incluye `ddcf083`+`0b0fc28`+`cee686b`) en producción — backend/frontend
+`...cee686b673c1`, 126 artefactos, 11 rutas PASS, `401`, `ssidTasksSent:0`.
+RSSI solo con identidad verificada (`00259E`/`HG8145X6-13`/
+`V5R023C00S342`, confirmado leyendo el código real del contenedor);
+mensaje 409 en lenguaje sencillo mostrado tal cual. `main` local y
+`origin/main` sincronizados en `cee686b`. Rollback a `...eb96f77b7dca`
+preparado y probado, no ejecutado. Diagnóstico TR-069 de la misma sesión
+(solo lectura, sin intervenir): la Huawei de prueba no envía Inform desde
+`2026-10-29T20:11:52.625Z` (36+ min); GenieACS sano; una tarea
+`refreshObject` ajena a Hosts (botón general, no nuestro código) quedó
+pendiente sin respuesta — consistente con pérdida real de comunicación
+con el equipo, posiblemente relacionada con la desactivación de TR-069 en
+SmartOLT que reportó el propietario (hipótesis, no verificable desde este
+código). Detalle completo:
+`docs/TR069-HOSTS-DESPLIEGUE-SENAL-Y-DIAGNOSTICO-20261029.md`
+(antecedentes de diseño: `docs/TR069-HOSTS-FALLO-CONSULTA-20261029.md`,
+`docs/TR069-HOSTS-SENAL-WIFI-CALIDAD-20261029.md`).
 
 **Antecedente (superado arriba) — Señal WiFi de Hosts, investigada SIN
 implementar (29/10/2026, turno anterior):** `X_HW_RSSI` tenía valor real
