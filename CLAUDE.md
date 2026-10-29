@@ -16,6 +16,21 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**TR-069 HABILITADO REALMENTE en `HWTC1D3691B7` (29/10/2026, 23:24:51 UTC,
+autorizado expresamente):** identidad reverificada en vivo (735
+posiciones, match exacto) antes de escribir. Único comando real (Telnet
+OLT): `tr069-mgmt 1 acs http://192.168.55.201:7547` + `state unlock` en
+`pon-onu-mng gpon-onu_1/2/2:24`. Releído después: ambas líneas presentes,
+`service 1 gemport 1 vlan 120` (Internet) intacto. `admin_state=enable`/
+`run_state=working` sin cambios — servicio confirmado sin interrupción.
+`olt_onts.tr069_enabled=true` ahora. **GenieACS: 0 dispositivos, sin
+Inform nuevo** 2-3 min después — no se declara recuperado, no se forzó
+nada; pendiente de observar. Cola de tareas GenieACS vacía (ya lo estaba
+antes, esta tarea no tocó GenieACS). Cero cambios a WAN/VLAN/PPPoE/WiFi.
+Hallazgo corregido en la misma sesión: credencial de OLT expuesta
+brevemente por un `select('*')` propio — no se repitió. Detalle:
+`docs/TR069-HABILITACION-REAL-HWTC1D3691B7-20261029.md`.
+
 **Ficha OLT atascada en "Esperando conexión" — corregido, SIN publicar ni
 desplegar (29/10/2026, misma noche):** distinto del problema de
 comunicación TR-069 ya diagnosticado (no repetido). `deriveTr069EnableStatus`

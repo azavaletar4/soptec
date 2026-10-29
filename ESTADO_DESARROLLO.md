@@ -97,6 +97,29 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
+**TR-069 HABILITADO REALMENTE en `HWTC1D3691B7` (29/10/2026, 23:24:51 UTC,
+autorizado expresamente):** identidad reverificada en vivo contra la OLT
+real (735 posiciones, serial exacto en `1/2/2:24`) antes de escribir;
+`validateTr069EnableRequest` (función real, sin modificar) aprobó la
+solicitud. Único comando ejecutado (Telnet, ZTE C300 real):
+`pon-onu-mng gpon-onu_1/2/2:24` → `tr069-mgmt 1 acs
+http://192.168.55.201:7547` + `tr069-mgmt 1 state unlock`. Releído
+después: ambas líneas presentes, `service 1 gemport 1 vlan 120`
+(Internet) intacto en el mismo bloque. `show gpon onu state`:
+`admin_state=enable`, `run_state=working`, sin cambios — servicio de
+Internet confirmado sin interrupción. `olt_onts` actualizado:
+`tr069_enabled=true`, `tr069_acs_url=http://192.168.55.201:7547`,
+`tr069_enabled_at=2026-10-29T23:24:51.352Z`. **GenieACS: 0 dispositivos,
+sin Inform nuevo** 2-3 min después — no se declara recuperada la
+conexión, no se forzó ningún reintento; queda pendiente de observar sin
+ninguna acción adicional. Cola de tareas GenieACS: vacía (ya estaba así
+antes de esta operación; esta tarea no tocó GenieACS en absoluto). Cero
+cambios a WAN/VLAN/PPPoE/WiFi/otros equipos — un solo comando, una sola
+ONU. Hallazgo aparte ya corregido en la misma sesión: un `select('*')`
+sobre `olt_devices` expuso brevemente una credencial en texto plano por
+error propio — no se repitió, sin impacto fuera de esta conversación.
+Detalle completo: `docs/TR069-HABILITACION-REAL-HWTC1D3691B7-20261029.md`.
+
 **Ficha OLT atascada en "Esperando conexión" — corregido, SIN publicar ni
 desplegar (29/10/2026, misma noche):** distinto del problema de
 comunicación TR-069 ya diagnosticado (`tr069_enabled=false` para
