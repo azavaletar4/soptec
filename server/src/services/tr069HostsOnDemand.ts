@@ -13,6 +13,19 @@ const LAN = 'InternetGatewayDevice.LANDevice.1.';
 const HOST_FIELDS = ['Active', 'InterfaceType', 'Layer2Interface', 'HostName', 'IPAddress', 'MACAddress', 'X_HW_RSSI', 'X_HW_RSSIUnit'];
 const ASSOCIATED_FIELDS = ['AssociatedDeviceMACAddress', 'MACAddress', 'RSSI', 'RSSIUnit', 'SignalStrength', 'SignalStrengthUnit', 'X_HW_RSSI', 'X_HW_RSSIUnit'];
 export const HOSTS_READ_LIFETIME_MS = 45_000;
+/**
+ * Una tarea ajena a esta lectura (de otro botón/función TR-069, p. ej. el
+ * "Actualizar" general de la tarjeta) que lleva mucho tiempo sin resolverse
+ * ya no representa una operación realmente en curso — bloquear Hosts para
+ * siempre por ella sería un bloqueo permanente, no una protección real.
+ * 5 minutos es varias veces el tiempo máximo que toma cualquier intento real
+ * (connection_request 12 s + envío 15 s + un par de lecturas de cola, todo
+ * bajo el minuto). Nunca se cancela ni se borra esa tarea desde aquí — solo
+ * deja de impedir una lectura NUEVA y acotada de Hosts. Una tarea sin fecha
+ * utilizable se trata como si pudiera seguir activa (nunca se asume vieja
+ * sin poder confirmarlo).
+ */
+export const FOREIGN_TASK_STALE_AFTER_MS = 5 * 60_000;
 export class HostsDemandError extends Error {}
 
 /** Habilitación explícita por serial: el interruptor global no autoriza otras ONT. */
@@ -124,7 +137,16 @@ export function createHostsOnDemand(deps: {
         if (own || !record.taskId) return result(record.state, record.taskId ? 'La lectura sigue pendiente. Pulsa Actualizar para comprobarla.' : 'El envío no está confirmado. Actualizar solo comprobará su estado, sin reenviarlo.');
         return await complete(); // Lectura final acotada de caché, manteniendo el lock; nunca otra tarea.
       }
-      if (tasks.length) throw new HostsDemandError('El equipo tiene otra operación pendiente. Espera antes de solicitar una lectura.');
+      // Solo una tarea ajena realmente reciente bloquea — una vieja y atascada
+      // (de otra función, nunca de esta lectura: aquí ya no quedan tareas
+      // propias por el bloque anterior) ya no se trata como "en curso". Nunca
+      // se cancela ni se borra ninguna tarea; solo se deja de esperarla.
+      const nowForTasks = now();
+      const blockingTasks = tasks.filter(t => {
+        const age = nowForTasks - Date.parse(t.timestamp);
+        return !Number.isFinite(age) || age < FOREIGN_TASK_STALE_AFTER_MS;
+      });
+      if (blockingTasks.length) throw new HostsDemandError('El equipo tiene otra operación pendiente. Espera antes de solicitar una lectura.');
       const informAge = now() - Date.parse(device._lastInform ?? '');
       if (!Number.isFinite(informAge) || informAge < 0 || informAge > 10 * 60_000) throw new HostsDemandError('El equipo no tiene comunicación reciente. Se conserva la información anterior.');
       const parameters = buildHostsReadPlan(device);

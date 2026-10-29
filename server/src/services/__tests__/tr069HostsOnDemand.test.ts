@@ -75,6 +75,11 @@ function lab(t: { after: (fn: () => void) => void }, mode: 'complete' | 'pending
     failGet() { getFails = true; },
     rows(value: any[]) { rows = value; },
     busy() { tasks = [{ _id: 'bbbbbbbbbbbbbbbbbbbbbbbb', name: 'other' }]; },
+    foreignTask(ageMs: number, name = 'refreshObject') {
+      tasks = [{ _id: 'cccccccccccccccccccccccc', name, device: device._id, objectName: 'InternetGatewayDevice.DeviceInfo',
+        timestamp: new Date(clock - ageMs).toISOString() }];
+    },
+    setTasks(list: any[]) { tasks = list; },
     hold(fn: () => Promise<void>) { hold = fn; }, now: () => clock };
 }
 
@@ -184,6 +189,61 @@ test('identidad inválida, ausente o ambigua, falta de Inform, cola ocupada y fa
     await assert.rejects(l.service.read(nbi, kind === 'invalid' ? 'bad' : serial));
     assert.equal(l.counts().posts, 0, kind);
   }
+});
+
+test('tarea ajena reciente (de otro botón, p. ej. "Actualizar" general) bloquea igual que antes — sigue siendo una operación realmente activa', async t => {
+  const l = lab(t);
+  l.foreignTask(60_000); // 1 min: muy por debajo del margen de 5 min, claramente en curso.
+  await assert.rejects(l.service.read(nbi, serial), /otra operación pendiente/);
+  assert.equal(l.counts().posts, 0, 'nunca se envía una segunda operación mientras la ajena luce activa');
+});
+
+test('tarea ajena vieja y atascada (más de 5 min) ya no bloquea Hosts — pero nunca se cancela ni se borra', async t => {
+  const l = lab(t);
+  l.foreignTask(6 * 60_000); // 6 min: por encima del margen — ya no es "en curso" en ningún sentido real.
+  const r = await l.service.read(nbi, serial);
+  assert.equal(r.state, 'completed', 'la lectura de Hosts procede con normalidad');
+  assert.equal(l.counts().posts, 1, 'Hosts sí envía su propia lectura, acotada y distinta de la tarea ajena');
+  assert.equal(l.counts().deleted, 0, 'la tarea ajena vieja nunca se cancela ni se borra desde aquí');
+  assert.ok(!l.calls.some(c => c.method === 'DELETE'), 'ningún DELETE se envía contra la tarea ajena');
+});
+
+test('justo antes del límite de 5 minutos todavía bloquea; justo en el límite (o después) ya no', async t => {
+  const l = lab(t);
+  l.foreignTask(5 * 60_000 - 1); // un instante antes del margen: todavía bloquea.
+  await assert.rejects(l.service.read(nbi, serial), /otra operación pendiente/);
+  const l2 = lab(t);
+  l2.foreignTask(5 * 60_000); // exactamente en el margen: ya se considera vieja.
+  const r = await l2.service.read(nbi, serial);
+  assert.equal(r.state, 'completed');
+});
+
+test('varias tareas ajenas: una sola reciente entre varias viejas sigue bloqueando — nunca se asume "viejo" por mayoría', async t => {
+  const l = lab(t);
+  l.setTasks([
+    { _id: 'd1', name: 'refreshObject', device: l.device._id, timestamp: new Date(l.now() - 20 * 60_000).toISOString() },
+    { _id: 'd2', name: 'reboot', device: l.device._id, timestamp: new Date(l.now() - 10 * 60_000).toISOString() },
+    { _id: 'd3', name: 'refreshObject', device: l.device._id, timestamp: new Date(l.now() - 30_000).toISOString() }, // esta sí es reciente
+  ]);
+  await assert.rejects(l.service.read(nbi, serial), /otra operación pendiente/);
+  assert.equal(l.counts().posts, 0);
+});
+
+test('tarea ajena sin fecha utilizable: se trata como posiblemente activa, nunca como vieja por defecto', async t => {
+  const l = lab(t);
+  l.setTasks([{ _id: 'sinfecha', name: 'refreshObject', device: l.device._id }]); // sin "timestamp"
+  await assert.rejects(l.service.read(nbi, serial), /otra operación pendiente/);
+  assert.equal(l.counts().posts, 0);
+});
+
+test('tarea ajena vieja no duplica operaciones: una sola lectura propia en vuelo, igual que sin tareas ajenas', async t => {
+  const l = lab(t); let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; }); l.hold(() => gate);
+  l.foreignTask(10 * 60_000);
+  const a = l.service.read(nbi, serial), b = l.service.read(nbi, hex);
+  assert.equal(a, b, 'misma promesa compartida, igual que el caso sin tareas ajenas');
+  release(); await Promise.all([a, b]);
+  assert.equal(l.counts().posts, 1, 'una sola operación propia enviada, nunca duplicada por la tarea ajena vieja');
 });
 
 test('plan no inventa asociaciones ni unidades y excluye claves/prefijos aunque el árbol las anuncie', () => {

@@ -16,6 +16,19 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**Hosts bloqueado por tareas ajenas atascadas — corregido, SIN publicar ni
+desplegar (29/10/2026, misma noche):** 8 tareas `refreshObject` (botón
+general "Actualizar" de la tarjeta TR-069, no Hosts) seguían creciendo sin
+resolverse porque la Huawei no se comunica (diagnóstico TR-069 previo, no
+repetido). El código de Hosts bloqueaba por la sola existencia de
+*cualquier* tarea. Corregido en `tr069HostsOnDemand.ts`:
+`FOREIGN_TASK_STALE_AFTER_MS = 5 min` — una tarea ajena de esa antigüedad o
+más ya no bloquea; una reciente (<5 min) sigue bloqueando igual que antes;
+sin fecha utilizable se trata como posiblemente activa. **Nunca se cancela
+ni se borra ninguna tarea** (probado, cero `DELETE`). Backend 336/336 PASS
+(+6). Commit local, sin publicar. Las 8 tareas reales quedan intactas en
+GenieACS. Detalle: `docs/TR069-HOSTS-BLOQUEO-TAREAS-PENDIENTES-20261029.md`.
+
 **Señal WiFi + mensajes de error de Hosts — PUBLICADO y DESPLEGADO
 (29/10/2026, 20:46:23 UTC, autorizado expresamente):** commit `cee686b`
 (incluye `ddcf083`+`0b0fc28`+`cee686b`) en producción — backend/frontend

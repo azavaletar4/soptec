@@ -97,6 +97,26 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
+**Hosts bloqueado por tareas ajenas atascadas — corregido, SIN publicar ni
+desplegar (29/10/2026, misma noche):** causa confirmada: 8 tareas
+`refreshObject` (creciendo, generadas por el botón general "Actualizar" de
+la tarjeta TR-069, `queueRefresh` — nunca por Hosts) seguían sin resolverse
+porque la Huawei no se comunica (ver diagnósticos TR-069 previos, no
+repetidos aquí); el código de Hosts bloqueaba por la sola existencia de
+*cualquier* tarea, sin mirar antigüedad. Corregido en
+`server/src/services/tr069HostsOnDemand.ts`: nueva constante
+`FOREIGN_TASK_STALE_AFTER_MS = 5 min` — una tarea ajena con esa antigüedad
+o más ya no bloquea (Hosts procede con su propia lectura, acotada); una
+tarea reciente (<5 min) sigue bloqueando igual que antes, para no chocar
+con algo realmente en curso; una tarea sin fecha utilizable se trata como
+posiblemente activa (nunca "vieja" por defecto). **Nunca se cancela ni se
+borra ninguna tarea ajena** — confirmado con prueba dedicada (cero
+`DELETE`). Backend **336/336 PASS** (antes 330, +6 nuevas: reciente,
+vieja, límite exacto de 5 min, varias mezcladas, sin fecha, sin duplicar
+operaciones). Commit local, sin publicar — las 8 tareas reales quedan
+intactas en GenieACS, se recomienda no borrarlas (ver detalle). Detalle
+completo: `docs/TR069-HOSTS-BLOQUEO-TAREAS-PENDIENTES-20261029.md`.
+
 **Fallo de consulta Hosts en producción — diagnosticado, mensaje
 corregido, PUBLICADO y DESPLEGADO (29/10/2026, misma noche, autorizado
 expresamente — ver punto 1):** reporte: el panel
