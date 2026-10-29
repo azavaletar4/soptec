@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { normalizeGponSerial } from '../../../src/lib/gponSerial';
 import type { HostsReadResult, HostsReadState } from '../../../src/lib/tr069Hosts';
 import { readHostsDevice, hostsInventoryFromDevice, type HostsDevice } from './tr069Hosts';
+import { applyHostsHistory } from './tr069HostsHistory';
 
 type Node = Record<string, any>;
 type RecordRead = { deviceId: string; serial: string; requestedAt: string; expiresAt: string;
@@ -77,9 +78,12 @@ export function createHostsOnDemand(deps: {
     catch { throw new HostsDemandError('Ya hay una lectura en curso para este equipo.'); }
     let record: RecordRead | null = null;
     const save = () => { const temp = file + '.tmp'; fs.writeFileSync(temp, JSON.stringify(record), { mode: 0o600 }); fs.renameSync(temp, file); };
+    // El merge de historial solo decora la respuesta externa; la confirmación
+    // de la lectura (abajo, en complete()) sigue comparando exclusivamente
+    // contra los hosts que el equipo reportó en vivo, nunca contra fantasmas.
     const result = (state: HostsReadState, message: string): HostsReadResult => ({ state,
       requestedAt: record!.requestedAt, checkedAt: new Date(now()).toISOString(), message,
-      inventory: hostsInventoryFromDevice(device, serial) });
+      inventory: applyHostsHistory(hostsInventoryFromDevice(device, serial), directory, now) });
     const cancel = async (task: Node) => {
       if (!record?.taskId || task._id !== record.taskId || !matchesTask(task, record)) throw new Error('No se pudo retirar de forma segura la lectura pendiente.');
       const r = await request(`${nbi}/tasks/${encodeURIComponent(record.taskId)}`, { method: 'DELETE', signal: AbortSignal.timeout(5_000) });

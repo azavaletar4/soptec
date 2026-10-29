@@ -133,6 +133,32 @@ test('timeout de envío incierto no reintenta; adopta solo la tarea exacta y ret
   assert.deepEqual(l.counts(), { posts: 1, deleted: 1 });
 });
 
+test('el CPE deja de reportar tres Hosts (ya no están en su propio árbol): la lectura real los conserva como "Sin confirmar", nunca "Desconectado" ni ausentes', async t => {
+  const l = lab(t);
+  const first = await l.service.read(nbi, serial);
+  assert.equal(first.inventory.hosts.length, 5);
+  const macsBefore = first.inventory.hosts.map(h => h.macAddress).sort();
+
+  // El equipo real deja de anunciar tres instancias (DHCP/ARP caducado, no solo "Active=false").
+  const hosts = l.device.InternetGatewayDevice.LANDevice[1].Hosts.Host;
+  const kept = Object.keys(hosts).slice(0, 2);
+  for (const key of Object.keys(hosts)) if (!kept.includes(key)) delete hosts[key];
+  l.advance(11 * 60_000); // Más del plazo de frescura (10 min): los ausentes ya no pueden presentarse como confirmados.
+  l.device._lastInform = new Date(l.now()).toISOString(); // El equipo vuelve a contactar, ahora con menos Hosts.
+
+  const second = await l.service.read(nbi, serial);
+  assert.equal(second.state, 'completed');
+  assert.equal(second.inventory.hosts.length, 5, 'los tres ausentes del árbol en vivo se mantienen visibles');
+  assert.deepEqual(second.inventory.hosts.map(h => h.macAddress).sort(), macsBefore, 'ningún MAC conocido se pierde');
+
+  const stillReported = second.inventory.hosts.filter(h => kept.includes(Object.keys(hosts).find(k => hosts[k].MACAddress._value === h.macAddress) ?? ''));
+  for (const h of second.inventory.hosts) {
+    const isLive = stillReported.includes(h);
+    if (isLive) assert.notEqual(hostStatusLabel(h, second.inventory.lastInform, l.now()), 'Sin confirmar', 'los dos que sí responden ahora deben tener un estado fresco');
+    else assert.equal(hostStatusLabel(h, second.inventory.lastInform, l.now()), 'Sin confirmar', 'ausente del árbol en vivo: nunca se declara "Desconectado" sin evidencia nueva');
+  }
+});
+
 test('fault de GenieACS: devuelve información histórica y cancela solo su propia lectura, sin retry', async t => {
   const l = lab(t, 'fault'); const r = await l.service.read(nbi, serial);
   assert.equal(r.state, 'failed'); assert.equal(r.inventory.hosts.length, 5);

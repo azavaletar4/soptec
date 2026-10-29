@@ -6,6 +6,7 @@ import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { collectMetricsForDevice } from '../services/genieacsMetricsService';
 import { getPppoeInfo, queueReboot, queueRefresh } from '../services/tr069DeviceService';
 import { readHostsInventory } from '../services/tr069Hosts';
+import { applyHostsHistory } from '../services/tr069HostsHistory';
 import { hostsOnDemandRoutes } from './tr069HostsOnDemand';
 
 // Adaptado de REPLICA-TR069-GENIEACS.md secciones 8/9. Sin tenant_id
@@ -24,6 +25,10 @@ genieacsSyncRoutes.post('/provision/:serial', tr069PreparationOnly);
 
 function nbiUrl() {
   return process.env.GENIEACS_NBI || 'http://localhost:7557';
+}
+
+function hostsHistoryDir() {
+  return process.env.TR069_HOSTS_READS_DIR || '/var/lib/smartrayco-olt/hosts-reads';
 }
 
 /**
@@ -77,7 +82,8 @@ genieacsSyncRoutes.get('/pppoe/:serial', async (c) => {
 genieacsSyncRoutes.get('/hosts/:serial', async (c) => {
   const serial = c.req.param('serial') ?? '';
   try {
-    return c.json(await readHostsInventory(nbiUrl(), serial));
+    const inventory = await readHostsInventory(nbiUrl(), serial);
+    return c.json(applyHostsHistory(inventory, hostsHistoryDir()));
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Error al consultar GenieACS' }, 502);
   }

@@ -92,18 +92,40 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
-**3. Cambios locales pendientes (no publicados):** ninguno de Hosts — el
-candidato `ac511d7` (función `e2c7bf7` + guard por serial `ac511d7`) **ya
-está desplegado** (ver punto 1). Comportamiento operativo confirmado en
-vivo: panel Hosts solo consulta al abrir su sección o pulsar Actualizar
-(sin polling/cron/timers/reintentos automáticos), gate restringido a
-`HWTC1D3691B7` sin wildcard, máximo 64 Hosts/512 hojas, NBI 12 s/POST 15 s/
-tarea 45 s, journal + lock contra duplicados. Historial de la corrección
-del verificador Vite (`91e9ff1`, 31/31 PASS) y del bloqueo previo por
-`HISTORICAL_ASSETS_CHANGED` quedan como antecedente resuelto — no repetir
-ese diagnóstico. Detalle completo del despliegue:
-`docs/TR069-HOSTS-DESPLIEGUE-20261029.md`; antecedentes de diseño:
-`docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`,
+**3. Cambios locales pendientes (no publicados):** corrección real de
+"solo 2 de 5 Hosts visibles" (29/10/2026), **candidato local sin push ni
+despliegue**. Causa exacta confirmada por lectura directa de la caché de
+GenieACS (solo lectura, cero tareas nuevas): el propio CPE Huawei dejó de
+anunciar 3 de las 5 instancias `Hosts.Host.{i}` en su árbol TR-069 (DHCP/ARP
+caducado en el equipo, comportamiento normal del router) — backend y
+frontend ya mostraban el 100% de lo que la caché trae, sin ningún filtro
+oculto; el problema real era que no existía memoria de los Hosts ya
+conocidos cuando el equipo deja de anunciarlos. Corregido con
+`server/src/services/tr069HostsHistory.ts` (`applyHostsHistory`): historial
+local por MAC (mismo directorio `TR069_HOSTS_READS_DIR`), conserva visibles
+los hosts ausentes con su última lectura real tal cual (nunca inventa un
+valor), retención 30 días, tope 64 fantasmas; `hostStatusLabel` ya resolvía
+solo a "Sin confirmar" para datos viejos, así que un ausente nunca se
+declara "Desconectado" sin evidencia nueva. Conectado en `GET
+/hosts/:serial` y en el resultado de la lectura bajo demanda — nunca en la
+comparación interna de "lectura confirmada", que sigue siendo solo sobre
+datos en vivo. Vista "Todos"/"Conectados" agregada en `Tr069View.vue` (sin
+estado nuevo persistido). Hosts sigue consultando solo al abrir/Actualizar,
+sin polling — sin cambios en ese comportamiento. Pruebas: backend 325/325
+PASS (+7 nuevas), frontend-lib 498/498 PASS (+1 nueva), tsc/vue-tsc limpios.
+Detalle completo: `docs/TR069-HOSTS-HISTORIAL-20261029.md`.
+
+El despliegue `ac511d7` de Hosts bajo demanda (función `e2c7bf7` + guard por
+serial) sigue **desplegado** (ver punto 1), sin relación con este candidato
+nuevo — comportamiento operativo confirmado en vivo: panel Hosts solo
+consulta al abrir su sección o pulsar Actualizar (sin polling/cron/timers/
+reintentos automáticos), gate restringido a `HWTC1D3691B7` sin wildcard,
+máximo 64 Hosts/512 hojas, NBI 12 s/POST 15 s/tarea 45 s, journal + lock
+contra duplicados. Historial de la corrección del verificador Vite
+(`91e9ff1`, 31/31 PASS) y del bloqueo previo por `HISTORICAL_ASSETS_CHANGED`
+quedan como antecedente resuelto — no repetir ese diagnóstico. Detalle
+completo del despliegue: `docs/TR069-HOSTS-DESPLIEGUE-20261029.md`;
+antecedentes de diseño: `docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`,
 `docs/TR069-HOSTS-VITE-VERIFICADOR-CORREGIDO-20261028.md`.
 
 Señal: correlación exacta de Host/MAC/WLAN. Solo dBm con unidad explícita y

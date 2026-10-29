@@ -69,6 +69,15 @@ const hostsController = createHostsPanelController(hostsPanel, async (serial, ac
   return { state: 'completed', requestedAt: at, checkedAt: at, inventory, message: 'Información guardada. No se consultó al equipo.' };
 });
 const signalColors = { good: 'text-emerald-700', fair: 'text-amber-600', poor: 'text-red-700' };
+// Vista simple: "Todos" (incluye los ya conocidos sin lectura reciente) o solo
+// "Conectados" ahora mismo — nunca oculta datos, solo reduce qué se muestra.
+const hostsFilter = ref<'all' | 'connected'>('all');
+function visibleHosts(deviceId: string) {
+  const inventory = hostsById.value[deviceId];
+  if (!inventory) return [];
+  if (hostsFilter.value === 'all') return inventory.hosts;
+  return inventory.hosts.filter(h => hostStatusLabel(h, inventory.lastInform, ontEvidenceNow.value) === 'Conectado');
+}
 const signalLabels = { good: 'Buena', fair: 'Regular', poor: 'Débil' };
 
 const linkModalDevice = ref<Tr069Device | null>(null);
@@ -581,11 +590,18 @@ async function handleUnlink() {
                     <template v-else>
                       <p v-if="!hostsById[device.id]!.hosts.length" class="text-xs text-slate-500">Este equipo no reportó ningún dispositivo conectado.</p>
                       <template v-else>
-                        <p class="text-xs text-slate-500 mb-2">
-                          Última información de la lista: {{ formatHostDate(latestHostsReport(hostsById[device.id]!, ontEvidenceNow)) }}.
-                          «Sin confirmar» indica información histórica o insuficiente: hace falta una lectura válida de los últimos 10 minutos.
-                        </p>
-                        <div class="overflow-x-auto">
+                        <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                          <p class="text-xs text-slate-500">
+                            Última información de la lista: {{ formatHostDate(latestHostsReport(hostsById[device.id]!, ontEvidenceNow)) }}.
+                            «Sin confirmar» indica información histórica o insuficiente: hace falta una lectura válida de los últimos 10 minutos.
+                          </p>
+                          <div class="flex gap-1 text-xs shrink-0" role="group" aria-label="Filtrar dispositivos">
+                            <button type="button" class="px-2 py-0.5 rounded border" :class="hostsFilter === 'all' ? 'bg-slate-700 text-white border-slate-700' : 'border-slate-300 text-slate-600'" @click="hostsFilter = 'all'">Todos ({{ hostsById[device.id]!.hosts.length }})</button>
+                            <button type="button" class="px-2 py-0.5 rounded border" :class="hostsFilter === 'connected' ? 'bg-slate-700 text-white border-slate-700' : 'border-slate-300 text-slate-600'" @click="hostsFilter = 'connected'">Conectados ({{ visibleHosts(device.id).length }})</button>
+                          </div>
+                        </div>
+                        <p v-if="!visibleHosts(device.id).length" class="text-xs text-slate-500">Ningún dispositivo conocido está conectado ahora mismo.</p>
+                        <div v-else class="overflow-x-auto">
                           <table class="w-full text-xs">
                             <thead class="text-slate-500">
                               <tr>
@@ -598,7 +614,7 @@ async function handleUnlink() {
                               </tr>
                             </thead>
                             <tbody>
-                              <tr v-for="(host, i) in hostsById[device.id]!.hosts" :key="i" class="border-t border-slate-100">
+                              <tr v-for="(host, i) in visibleHosts(device.id)" :key="i" class="border-t border-slate-100">
                                 <td class="py-1 pr-3">{{ host.hostName ?? 'No disponible' }}</td>
                                 <td class="py-1 pr-3 font-mono">{{ host.ipAddress ?? 'No disponible' }}</td>
                                 <td class="py-1 pr-3 font-mono">{{ host.macAddress ?? 'No disponible' }}</td>

@@ -23,12 +23,17 @@ const at = '2026-10-28T22:03:39.213Z', recent = Date.parse(at) + 1000;
 const row: HostEntry = { hostName: 'Equipo real', ipAddress: '192.168.100.35', macAddress: '56:b9:d2:f2:e7:c1',
   connection: 'WiFi', connectionReportedAt: at, active: true, activeReportedAt: at, band: null, reportedAt: at };
 
-async function html(opened: boolean, now = recent, error: string | null = null) {
+async function html(opened: boolean, now = recent, error: string | null = null, filter: 'all' | 'connected' = 'all', hosts: HostEntry[] = [row]) {
   const state = emptyHostsPanelState(); state.opened.id = opened; state.errors.id = error;
-  state.inventory.id = { found: true, deviceId: 'exact-id', serial: 'HWTC1D3691B7', lastInform: at, hostsReportedAt: null, hosts: [row] };
+  state.inventory.id = { found: true, deviceId: 'exact-id', serial: 'HWTC1D3691B7', lastInform: at, hostsReportedAt: null, hosts };
   state.result.id = { state: 'completed', requestedAt: at, checkedAt: at, message: 'Lectura recibida del equipo.', inventory: state.inventory.id };
   let requests = 0;
-  const app = Vue.createSSRApp({ render, setup: () => ({ hostsPanel: state, hostsById: state.inventory,
+  const visibleHosts = (id: string) => {
+    const inv = state.inventory[id];
+    if (!inv) return [];
+    return filter === 'all' ? inv.hosts : inv.hosts.filter(h => hostStatusLabel(h, inv.lastInform, now) === 'Conectado');
+  };
+  const app = Vue.createSSRApp({ render, setup: () => ({ hostsPanel: state, hostsById: state.inventory, hostsFilter: filter, visibleHosts,
     device: { id: 'id', cpe_serial: 'HWTC1D3691B7' }, canReadHostsActively: true, ontEvidenceNow: now,
     hostConnectionLabel, hostStatusLabel, hostStatusReadAt, hostWifiSignalPresentation, latestHostsReport, formatHostDate,
     signalColors: { good: 'text-emerald-700', fair: 'text-amber-600', poor: 'text-red-700' },
@@ -58,5 +63,15 @@ test('tabla real: seis columnas, estado/fecha legibles, señal desconocida sin d
 test('estado antiguo y error conservan lista/hora; no muestran un conectado histórico como actual', async () => {
   const rendered = await html(true, recent + 11 * 60_000, 'No se pudo completar la consulta.');
   assert.match(rendered, /Sin confirmar/); assert.match(rendered, /Última lectura:/); assert.match(rendered, /Equipo real/);
-  assert.match(rendered, /No se pudo completar/); assert.ok(!rendered.includes('Conectado'));
+  assert.match(rendered, /No se pudo completar/);
+  assert.ok(!/Conectado(?!s)/.test(rendered), 'el estado "Conectado" (no el botón "Conectados") no debe aparecer para un dato histórico');
+});
+
+test('vista "Todos" conserva un dispositivo conocido sin confirmar; "Conectados" lo oculta sin perderlo', async () => {
+  const stale: HostEntry = { ...row, macAddress: '00:11:22:33:44:55', hostName: 'Fantasma',
+    connectionReportedAt: '2026-10-01T00:00:00.000Z', activeReportedAt: '2026-10-01T00:00:00.000Z', reportedAt: '2026-10-01T00:00:00.000Z' };
+  const all = await html(true, recent, null, 'all', [row, stale]);
+  assert.match(all, /Equipo real/); assert.match(all, /Fantasma/); assert.match(all, /Sin confirmar/);
+  const connected = await html(true, recent, null, 'connected', [row, stale]);
+  assert.match(connected, /Equipo real/); assert.ok(!connected.includes('Fantasma'), 'el filtro "Conectados" no muestra el histórico sin confirmar');
 });
