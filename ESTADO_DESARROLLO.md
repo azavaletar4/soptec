@@ -15,23 +15,32 @@ la sección histórica correspondiente, no hace falta repetirlo.
 
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
-VM de producción (`192.168.55.201`), corrección Hosts desplegada el
-28/10/2026 **21:30 UTC**, `verify` posterior PASS:
-- Backend: **`d6ce2c2f578fe9ac1bfdef20c3cb50eee127e201`**,
-  `smartrayco-backend-wifitrial:d6ce2c2f578f`, imagen
-  `sha256:1e6ab34c4fae061efc4943a7fa717b88acd388eb5f06038e96de2aa8255e3001`.
-- Frontend **intacto**: `smartrayco-frontend-consolidado:5d48a10ea497`,
-  imagen `sha256:eaa37bca78b9a3ab9006728d8794fd60b1abc9f4da75e88f59aeeb672d1c103b`;
-  mismo contenedor/arranque del 28/10 20:33 UTC. Su `/release-manifest.json`
-  conserva `5d48a10`; eso es correcto para una release solo backend.
-- Caddy/Mongo/GenieACS: mismas imágenes, contenedores y arranques.
-Verificados código Hosts contra SHA-256 del commit, imagen real, fuentes
-backend completas, frontend completo, 125 assets HTTP, 11 rutas y HTTP 401
-sin autenticación en Hosts y WiFi. Sin migraciones ni tareas GenieACS.
-Última comprobación SSH de imágenes/salud: 28/10 **23:42:35 UTC**, PASS.
-Mismos contenedores, imágenes y arranques de los cinco servicios; ningún
-despliegue posterior. Respaldos renovados y restauración aislada probada
-contra backend d6ce2c2 y frontend 5d48a10; detalle en punto 5.
+VM de producción (`192.168.55.201`), **Hosts bajo demanda `ac511d7`
+DESPLEGADO el 29/10/2026 18:45:53 UTC**, autorizado expresamente por el
+propietario, `verify` posterior PASS:
+- Backend: **`ac511d7c70c8a11700d3553f331af5bb2930926a`**,
+  `smartrayco-backend-wifitrial:ac511d7c70c8`, imagen
+  `sha256:a83fcef6c57c4bd71ce9b22b34978822d47f83323de21ba76c31fd64af172725`.
+- Frontend: mismo commit, `smartrayco-frontend-consolidado:ac511d7c70c8`,
+  imagen `sha256:1f2c7b2c0be5e6f7aabc6d5074d3923cf5006bde9bb77aa976764e719ef5ab12`.
+  **Build completo** del commit para ambos servicios (no un overlay
+  selectivo como la release `d6ce2c2` anterior).
+- Caddy/Mongo/GenieACS: mismas imágenes de siempre; reiniciados por la VM
+  el 29/10 16:51:49 UTC (contenedor nuevo, imagen idéntica), sin relación
+  con este despliegue.
+126 artefactos verificados, 11 rutas PASS, HTTP 401 sin autenticación en
+Hosts/WiFi, `ssidTasksSent:0`. Gate `TR069_HOSTS_ON_DEMAND_ENABLED=true`
+confirmado en vivo (`printenv` del contenedor, solo esa clave), serial único
+`HWTC1D3691B7` sin wildcard. Cola GenieACS (`GET /tasks`) vacía tras el
+deploy. Sin migraciones ni tareas de configuración GenieACS. Rollback
+preparado (`prepare` fresco de esta sesión — el `prepare` de la sesión
+anterior quedó obsoleto por un reinicio de la VM que cambió
+`Id`/`StartedAt` del contenedor, detectado correctamente como
+`SERVICE_DRIFT_frontend`; su stage se movió, no se borró, a
+`...-superseded-20261029-pre-restart`) → restaura a backend
+`smartrayco-backend-wifitrial:d6ce2c2f578f` y frontend
+`smartrayco-frontend-consolidado:5d48a10ea497`.
+Detalle completo: `docs/TR069-HOSTS-DESPLIEGUE-20261029.md`.
 
 **Sincronización con GitHub completada (2026-10-29, solo repositorio — sin
 tocar producción):** `main` local estaba 57 commits adelante de
@@ -83,82 +92,19 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
-**3. Cambios locales pendientes (no publicados):** Hosts bajo demanda
-`e2c7bf7` + guard por serial `ac511d7`; **sin desplegar ni habilitar**.
-La única prueba real autorizada pasó con el código e2c7bf7 exacto aislado en
-/tmp, sin sustituir /app ni habilitar el gate del servicio publicado. Se añadió
-después un guard más restrictivo para cumplir «solo Huawei»: habilitación
-requiere ENABLED=true y serial en TR069_HOSTS_ON_DEMAND_SERIALS; se planeó
-solo HWTC1D3691B7. Otras ONT se bloquean antes de GET/tareas. No se repitió
-la lectura para probar el guard; pruebas locales 67/67 PASS y tsc backend PASS.
-Contrato de release: solo los dos ajustes de entorno Hosts, jamás WiFi o
-credenciales; hashes del entorno efectivo completo y de rollback. Suite actual:
-**30 PASS + 1 FAIL** (regresión nativa del bloqueo Vite, ver debajo).
-Fuente candidata ac511d7c70c8a11700d3553f331af5bb2930926a; snapshot 305 fuentes.
-Colisión corregida en `32e64ee`: dos workers QR legítimos sin cambios,
-conservados por identidad física y bytes exactos, incluidas sus referencias.
-Extracción GPON resuelta en `dce97e7`: fuente sin cambios; AST del helper y OLT
-equivalentes con bindings; index idéntico tras remapear solo las precargas
-OLT/TR-069. Transición específica fijada por hashes, commit, fuentes y grafo;
-sin ampliar frontendAssets ni permitir cambios funcionales de módulos protegidos.
-Corrección local de metadatos `8b9f89d`: estructura Vite, archivos reales,
-imports estáticos/dinámicos compilados, entradas HTML, cobertura y hashes.
-Solo `.vite/manifest.json` validado deja de compararse binariamente; mantiene
-identidad/dependencias protegidas y los otros estáticos/huérfanos estrictos.
-**Regla de unicidad corregida, `91e9ff1` (continuación, sesión posterior a
-`cb5ba7f`) — build real ya PASA, SIGUE SIN DESPLEGAR:** la regla
-`len(values) == len(set(values))` para las 4 listas del manifiesto Vite
-(`imports`/`dynamicImports`/`css`/`assets`) causaba
-`INVALID_VITE_LIST:...AsistenciaPanel...:dynamicImports` porque Vite repite
-nativamente una clave en `imports`/`dynamicImports` cuando el código fuente
-tiene varias llamadas `import()`/import estático al mismo módulo
-(AsistenciaPanel→index.html ×4, ApexCharts SSR ×2, idéntico en activo y
-candidato) — no era colisión física ni corrupción, ya que el resto de
-controles (tipo, existencia de la clave, grafo, hashes) pasaban antes de
-llegar a esa regla. Corregido para exigir unicidad solo en `css`/`assets`
-(rutas físicas); `imports`/`dynamicImports` mantienen sus demás controles.
-Las listas normalizadas (`record[field] = sorted(...)`) siguen conservando
-repeticiones, así que la comparación `before`/`after` de módulos protegidos
-(`VITE_METADATA_IDENTITY_CHANGED`/`VITE_PROTECTED_DEPENDENCIES_CHANGED`) no
-perdió margen: un cambio real seguiría detectándose igual. Suite de contrato:
-**31 PASS** (antes 30 PASS + 1 FAIL), vía `node
-scripts/tests/consolidation-release-contract.test.cjs` (Python real de la VM)
-y localmente sin red, mismo resultado. `prepare`+`build` reales sobre el
-candidato `ac511d7` (mismo alcance ya declarado, Hosts backend+frontend,
-serial único `HWTC1D3691B7`):
-`{"built":true,"reproducible":true,"contractGuardValidatedReadOnly":true,
-"artifactCount":126,"frontendChangedAssets":["assets/Tr069View.js",
-"assets/tr069.js"],"servicesChanged":false}` — pasó exactamente el punto
-donde antes fallaba. Único archivo de código tocado:
-`scripts/consolidation-release-contract.py`; ningún módulo funcional (Hosts,
-OLT, MikroTik, WiFi, PPPoE, WAN, VLAN) tocado. **Pendiente, no ejecutado en
-esta sesión:** `deploy`/`verify`, doble build backend/frontend completo,
-nginx del candidato, archivos de imágenes candidatas, controles de drift
-predeploy y HTTP de todas las rutas/assets — no afirmar que pasarían sin
-ejecutarlos. Sin tareas GenieACS, sin cambios en producción.
-**Despliegue de Hosts sigue sin autorización expresa del propietario** — no
-ejecutar `deploy` sin ese pedido explícito en el turno correspondiente.
-Resultado/evidencia: `docs/TR069-HOSTS-VITE-VERIFICADOR-CORREGIDO-20261028.md`
-(antecedente del bloqueo, conservado tal cual:
-`docs/TR069-HOSTS-VITE-VERIFICADOR-20261028.md` y JSON referenciados allí).
-Nuevo panel Hosts inicialmente cerrado, independiente del detalle general.
-Abrirlo explícitamente o pulsar Actualizar llama POST de lectura, solo
-ADMIN/SUPERADMIN; GET de caché conserva permisos de lectura existentes.
-No hay llamadas por render/entrada de página, polling, cron, timers de refresco
-ni tareas/reintentos automáticos. Si hay operación en vuelo/pendiente para la
-ONT se comparte o comprueba, sin otra tarea. Journal antes del POST y lock
-persistente protegen duplicados, reinicios y procesos concurrentes.
-Solo hojas concretas anunciadas (Hosts y asociaciones conocidas), sin claves,
-prefijos terminados en punto, rutas del navegador o descubrimientos amplios.
-Máximo 64 Hosts/512 hojas; NBI espera 12 s, transporte POST 15 s, tarea expira
-a 45 s. Un 202/timeout se comprueba solo en una acción explícita posterior.
-Fault/vencimiento retira únicamente tarea propia comprobada, sin reenviar.
-Identidad se verifica al principio/final; si no se confirman fechas propias
-de MAC/tipo/estado/referencia/nombre-IP, se conserva el snapshot anterior.
-Feature gate **apagado por defecto** `TR069_HOSTS_ON_DEMAND_ENABLED` y lista de
-seriales vacía por defecto; la prueba autorizada aislada no habilitó producción.
-Detalle, archivos, límites de unidades/discovery y prueba real pendiente:
-`docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`.
+**3. Cambios locales pendientes (no publicados):** ninguno de Hosts — el
+candidato `ac511d7` (función `e2c7bf7` + guard por serial `ac511d7`) **ya
+está desplegado** (ver punto 1). Comportamiento operativo confirmado en
+vivo: panel Hosts solo consulta al abrir su sección o pulsar Actualizar
+(sin polling/cron/timers/reintentos automáticos), gate restringido a
+`HWTC1D3691B7` sin wildcard, máximo 64 Hosts/512 hojas, NBI 12 s/POST 15 s/
+tarea 45 s, journal + lock contra duplicados. Historial de la corrección
+del verificador Vite (`91e9ff1`, 31/31 PASS) y del bloqueo previo por
+`HISTORICAL_ASSETS_CHANGED` quedan como antecedente resuelto — no repetir
+ese diagnóstico. Detalle completo del despliegue:
+`docs/TR069-HOSTS-DESPLIEGUE-20261029.md`; antecedentes de diseño:
+`docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`,
+`docs/TR069-HOSTS-VITE-VERIFICADOR-CORREGIDO-20261028.md`.
 
 Señal: correlación exacta de Host/MAC/WLAN. Solo dBm con unidad explícita y
 fechas vigentes de medida/unidad/MAC/referencia, tipo WiFi y estado conectado.
@@ -259,12 +205,12 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Desarrollo activo (éste) | `main` local, `D:\SmartRayco` | Función e2c7bf7 + guard ac511d7 + continuidad; ver `git log -1` | **Local; prueba real PASS, build bloqueado, sin desplegar/publicar** |
-| Identificación Hosts | incluido en `main` | `d6ce2c2` | **Backend en producción** (28/10 21:30 UTC) |
-| WiFi + Hosts base | incluido en `main` | `5d48a10` | Frontend activo; backend anterior disponible como rollback |
-| Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de este deploy; no cambia el código de la app |
+| Hosts bajo demanda (función + guard) | incluido en `main` | `ac511d7` | **Backend+frontend en producción** (29/10 18:45:53 UTC, build completo) |
+| Identificación Hosts (antecedente, superada en backend por `ac511d7`) | incluido en `main` | `d6ce2c2` | Imagen anterior; respaldada como rollback (`...wifitrial:d6ce2c2f578f`) |
+| WiFi + Hosts base (antecedente, superada en frontend por `ac511d7`) | incluido en `main` | `5d48a10` | Imagen anterior; respaldada como rollback (`...consolidado:5d48a10ea497`) |
+| Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de los deploys; no cambia el código de la app |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
-| Rama remota activa en GitHub | `origin/main` | `0bed05f` | **Sincronizada** con `main` local (2026-10-29, push normal, 57 commits, sin force/merge/rebase) |
+| Rama remota activa en GitHub | `origin/main` | `9e90c94` (se actualizará al commit documental de este despliegue) | **Sincronizada** con `main` local, sin divergencia |
 
 El repositorio tiene además **36 ramas locales (incluida `main`) y 24
 worktrees (incluido éste)** — contado el 28/10/2026, en su mayoría de fases
@@ -286,47 +232,28 @@ configuración del repositorio en esta sesión (cambiar la rama por defecto
 es una acción administrativa de GitHub, no un commit); queda como decisión
 pendiente del propietario.
 
-**5. Próxima tarea autorizada:** ninguna en ejecución. Colisión y extracción
-GPON resueltas. Nuevo validador semántico de metadata local, aún no publicable:
-rechaza repeticiones nativas de dynamicImports. Diagnóstico consolidado completo
-entregado; instrucción explícita de parar sin parches sucesivos. No forzar,
-ampliar alcance ni reintentar build/deploy sin nueva indicación. SSH/health
-final PASS 23:42:35 UTC; cola no reconsultada en este intento, cero tareas nuevas.
-No repetir la prueba activa consumida. El ensayo anterior envió **una** tarea GPV de
-35 hojas con connection_request, expiración y HTTP 200, cero tareas de
-configuración y cero reinicios; cola/faults vacíos a las 23:07:07 UTC.
-Sin medición de tráfico/uptime PPPoE; no afirmar una prueba de navegación.
-No hubo despliegue ni cambios a configuración de equipos.
-Fuente/snapshot vigente: **ac511d7c70c8a11700d3553f331af5bb2930926a**.
-Staging y respaldos actuales (`backend-before.image.tar`, `frontend-before.image.tar`):
-`/opt/smartrayco-staging/frontend-consolidado-tr069-ac511d7-6e89052be8/`.
-Restauración aislada verificada contra backend d6ce2c2 y frontend 5d48a10.
-No se necesitó ni ejecutó rollback en producción; deploy/verify no se iniciaron.
-No regenerar release-source.json desde HEAD documental para operar este intento.
-Resultados locales:
-`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-ac511d7-6e89052be8/`.
-El staging previo de d6ce2c2 queda como antecedente; no confundir su rollback
-con los respaldos de este intento, que restauran las dos imágenes activas.
-Bandas/unidades RSSI siguen pendientes de verificación; no explorar credenciales
-o árboles completos. Los experimentos anteriores están documentados, no repetirlos.
-Para una release NUEVA declarar su commit y alcance, exportar su snapshot
-correspondiente y ejecutar las fases por separado. Nunca ampliar el alcance
-para silenciar una diferencia inesperada ni asumir backend desde el manifiesto
-frontend. Pendiente del
-**propietario**: indicar cómo continuar desde el diagnóstico consolidado Vite;
-la comprobación SSH de cierre ya pasó. Cualquier lectura activa adicional de banda/asociaciones
-requiere su autorización aparte y,
-por separado, una prueba de
-**descubrimiento de solo lectura** (una tarea nueva a GenieACS, requiere su
-propia autorización aparte) contra `WLANConfiguration.5.PreSharedKey` para
-confirmar si existe la instancia `.1` — hay evidencia pública (no local, no
-de SmartOLT) de que `PreSharedKey.{i}.KeyPassphrase` es el parámetro que sí
-funciona en otros Huawei, pero localmente no hay ninguna instancia
-descubierta todavía (ver sección "Huawei: método correcto de contraseña
-WiFi"). No iniciar ningún `deploy`, migración, ni tarea GenieACS/OLT/
-MikroTik sin que el propietario lo pida en ese mismo turno (regla 16 de
-`CLAUDE.md`).
-El rollback histórico a `16e2bd2b6f63` es antecedente: no usarlo para esta release.
+**5. Próxima tarea autorizada:** ninguna en ejecución. Hosts bajo demanda
+`ac511d7` quedó **desplegado y verificado** el 29/10/2026 (ver punto 1);
+la validación visual del panel la realiza el propietario directamente,
+fuera de esta sesión — no repetir una lectura activa de Hosts contra la
+Huawei real para "confirmarlo de nuevo" sin que lo pida.
+Pendiente, sin cambiar con este despliegue: bandas/unidades RSSI sin
+verificar (no explorar credenciales ni árboles completos); el cambio de
+**contraseña** WiFi sigue bloqueado en código hasta confirmar
+`WLANConfiguration.{i}.PreSharedKey.{j}.KeyPassphrase` contra una instancia
+real (ver "Huawei: método correcto de contraseña WiFi" más abajo) — una
+prueba de descubrimiento de solo lectura contra eso requiere su propia
+autorización aparte, no incluida aquí.
+Staging de este despliegue (respaldos y resultados reales, no antecedente):
+`/opt/smartrayco-staging/frontend-consolidado-tr069-ac511d7-25b428d7a4/` y
+`scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-ac511d7-25b428d7a4/`.
+El stage de la sesión anterior (mismo sufijo, antes del reinicio de la VM)
+quedó renombrado como antecedente:
+`.../frontend-consolidado-tr069-ac511d7-25b428d7a4-superseded-20261029-pre-restart`
+— no usarlo para rollback, usar el `prepare` fresco de este despliegue.
+No iniciar ningún `deploy`, migración, ni tarea GenieACS/OLT/MikroTik sin
+que el propietario lo pida en ese mismo turno (regla 16 de `CLAUDE.md`).
+El rollback histórico a `16e2bd2b6f63` sigue siendo antecedente: no usarlo.
 
 ### Procedimiento de despliegue (5 fases separadas, siempre en este orden)
 

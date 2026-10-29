@@ -16,18 +16,36 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
-**Sincronización GitHub completada (29/10/2026, solo repositorio, sin
-despliegue):** `main` local (57 commits adelante, 0 atrás de `origin/main`,
-sin divergencia) se publicó con `git push origin main` normal — ambos
-quedaron en `0bed05f`. Se crearon y publicaron 2 tags anotados sobre las
-imágenes productivas exactas: `desplegado-tr069-hosts-backend-d6ce2c2`
-(backend en vivo; el tag documenta que es un overlay de 1 solo archivo
-sobre la imagen de `5d48a10`, no un build completo — ver detalle en
-`ESTADO_DESARROLLO.md`) y `desplegado-tr069-hosts-frontend-5d48a10` (build
-completo del frontend). **El despliegue de Hosts bajo demanda sigue sin
-autorización y sin desplegar** — esto no cambia con la sincronización.
+**Hosts bajo demanda `ac511d7` YA DESPLEGADO y verificado (29/10/2026,
+18:45 UTC), autorizado expresamente por el propietario** — supera al
+párrafo siguiente (`d6ce2c2`), que queda como antecedente. Backend y
+frontend: `...wifitrial:ac511d7c70c8` / `...consolidado:ac511d7c70c8`,
+**build completo** (no selectivo) del commit, `reproducible:true`,
+126 artefactos, 11 rutas PASS, `401` sin autenticación, `ssidTasksSent:0`.
+Gate `TR069_HOSTS_ON_DEMAND_ENABLED=true` confirmado en vivo, serial único
+`HWTC1D3691B7` (sin wildcard). Cola GenieACS vacía tras el deploy. Hosts
+solo consulta al abrir su sección o pulsar Actualizar — sin polling,
+confirmado por prueba (497/497 PASS incluye ese caso). Rollback preparado
+(`prepare` fresco, no reutilizó el `prepare` de la sesión anterior porque
+un reinicio de la VM cambió `Id`/`StartedAt` del contenedor — `build`
+detectó `SERVICE_DRIFT_frontend` correctamente y se corrigió repitiendo
+`prepare`, sin tocar el script). Validación visual del panel queda para
+el propietario. Detalle completo: `docs/TR069-HOSTS-DESPLIEGUE-20261029.md`.
 
-La corrección Hosts `d6ce2c2` **ya está desplegada y verificada** (28/10,
+**Sincronización GitHub completada (29/10/2026, repositorio):** `main`
+local y `origin/main` coinciden en `9e90c94` tras publicar 58 commits con
+`git push origin main` normal (sin force/merge/rebase); el commit
+documental de este despliegue se publica también, manteniendo ambas
+puntas sincronizadas. Se crearon y publicaron 2 tags anotados sobre las
+imágenes productivas previas a esta release:
+`desplegado-tr069-hosts-backend-d6ce2c2` (backend que corrió hasta este
+despliegue; el tag documenta que era un overlay de 1 solo archivo sobre
+la imagen de `5d48a10`, no un build completo) y
+`desplegado-tr069-hosts-frontend-5d48a10` (build completo del frontend).
+Ver la nueva sección permanente "Disciplina de sincronización GitHub y
+despliegues" más abajo.
+
+La corrección Hosts `d6ce2c2` fue desplegada y verificada (28/10,
 21:30 UTC): backend `smartrayco-backend-wifitrial:d6ce2c2f578f`; frontend
 intacto en `5d48a10ea497` (misma imagen y arranque). Una Huawei única,
 `found:true`, cinco Hosts reales por GET; serial hexadecimal/canónico y
@@ -653,6 +671,56 @@ de calidad.
   respaldo + revisión de riesgos + reversión preparada antes de aplicar.
 
 Elige el nivel según el riesgo real del cambio, no automáticamente el más alto.
+
+## Disciplina de sincronización GitHub y despliegues (permanente, 29/10/2026)
+
+Establecida tras la sincronización de 58 commits y el despliegue de Hosts
+del 29/10/2026 — reutiliza siempre
+`scripts/frontend-consolidation-release.cjs` (`prepare`/`build`/`deploy`/
+`verify`/`rollback`) y `deploy/consolidation-release-scope.json`; **no crear
+un sistema paralelo** ni una auditoría general para cumplir esto.
+
+1. Antes de cualquier `deploy`, confirmar que el código autorizado ya está
+   respaldado en GitHub (`git fetch origin` + comparar `main` local contra
+   `origin/main`; nunca asumir desde memoria de una sesión anterior).
+2. Si hay commits locales sin publicar, distinguir cuáles pertenecen a la
+   fase que se va a desplegar de los pendientes de otras fases (ver punto 3
+   de "ESTADO DE CONTINUIDAD" en `ESTADO_DESARROLLO.md`); sincronizar solo
+   con operaciones Git seguras (`push` normal) — nunca `force`, `merge` ni
+   `rebase` para "resolver" una divergencia sin antes detenerse a revisarla.
+3. Cada despliegue real registra: commit fuente, archivos exactos incluidos
+   (backend/frontend), imagen Docker anterior y nueva (con su sha256), y su
+   estado de verificación (`prepare`/`build`/`deploy`/`verify` PASS/FAIL).
+4. Si la compilación es selectiva (overlay de archivos declarados sobre una
+   imagen base, no un build completo del commit), **documentarlo
+   explícitamente** — qué archivos vinieron de qué commit y sobre qué
+   imagen base — y **nunca** crear un tag o nota que le atribuya
+   falsamente un commit completo. Si es un build completo reproducible,
+   puede documentarse como tal (ver `build.reproducible`/`artifactCount`).
+5. Después de un `deploy`, ejecutar `verify` y las comprobaciones
+   funcionales que correspondan (rutas, salud, autenticación, cola
+   GenieACS si aplica) antes de darlo por bueno; registrar el resultado
+   real, no solo "parece que funcionó".
+6. Tras desplegar, actualizar `CLAUDE.md` y `ESTADO_DESARROLLO.md` **in
+   situ** (nunca apilar notas sueltas), publicar ese commit documental en
+   GitHub si no arrastra archivos de otras fases, y verificar que `main`
+   local y `origin/main` vuelven a coincidir exactamente.
+7. Distinguir siempre y por separado: **IMPLEMENTADO** (código existe y
+   pasa sus pruebas), **RESPALDADO EN GITHUB** (publicado, `main` y
+   `origin/main` coinciden), **DESPLEGADO** (corriendo en la VM de
+   producción, confirmado leyendo el sistema en vivo) y **PROBADO
+   FUNCIONALMENTE** (verificación real, no solo compilación). Una fase no
+   está "cerrada" si falta cualquiera de los cuatro.
+8. No declarar una fase cerrada ante el propietario mientras falte alguno
+   de esos cuatro estados — decir expresamente cuál falta.
+9. No incluir en un despliegue cambios de otras fases aunque ya estén en
+   `main` (ver regla de alcance explícito del punto 4 y
+   `deploy/consolidation-release-scope.json`).
+10. Si GitHub, `main` local y lo que corre en la VM no coinciden entre sí,
+    **detener el siguiente despliegue** hasta identificar la causa exacta
+    de la diferencia — nunca asumir cuál de las tres fuentes tiene razón
+    (mismo principio que la regla 8 de "Migración OLT" para OLT vs
+    Supabase, aplicado aquí a código/imagen en vez de datos de cliente).
 
 ## Migración OLT — vínculo cliente/contrato/ONT (permanente)
 
