@@ -191,6 +191,26 @@ test('equipo identificado sin Hosts devuelve lista vacía; no confunde ausencia 
   assert.deepEqual(inv.hosts, []);
 });
 
+test('identidad de fabricante/modelo/firmware se extrae del propio equipo y habilita (o no) la señal X_HW_RSSI de extremo a extremo', async () => {
+  const wlan = 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1';
+  const s26 = { ...host({ mac: '56:b9:d2:f2:e7:c1', name: 'S26-Ultra-de-Warner', ip: '192.168.100.35', interfaceType: '802.11', active: true }),
+    Layer2Interface: { _value: wlan, _timestamp: timestamp }, X_HW_RSSI: { _value: -40, _timestamp: timestamp } };
+  function withFirmware(softwareVersion: string) {
+    const base = device('485754431D3691B7', TEST_DEVICE, { 1: s26 });
+    return { ...base,
+      _deviceId: { _SerialNumber: '485754431D3691B7', _OUI: '00259E', _ProductClass: 'HG8145X6-13' },
+      InternetGatewayDevice: { ...base.InternetGatewayDevice, DeviceInfo: { SoftwareVersion: { _value: softwareVersion } } } };
+  }
+
+  nbi([withFirmware('V5R023C00S342')]);
+  const verified = await readHostsInventory(nbiUrl, TEST_SERIAL);
+  assert.equal(verified.hosts[0]!.wifiSignal?.dbm, -40, 'con la identidad real verificada, X_HW_RSSI se interpreta como dBm');
+
+  nbi([withFirmware('V5R023C00S999')]);
+  const unverified = await readHostsInventory(nbiUrl, TEST_SERIAL);
+  assert.equal(unverified.hosts[0]!.wifiSignal, null, 'otro firmware del mismo modelo no está verificado: sin señal');
+});
+
 test('caché real Huawei: cinco Hosts registrados; conexión, banda y Active sin valor quedan desconocidos', async () => {
   const cache = JSON.parse(fs.readFileSync(new URL('../../../../docs/TR069-HOSTS-CACHE-20261028.json', import.meta.url), 'utf8'));
   assert.equal(cache.before.length, 1);

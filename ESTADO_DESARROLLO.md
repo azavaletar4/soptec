@@ -95,28 +95,45 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
-**Señal WiFi de Hosts — investigada, SIN implementar (29/10/2026, misma
-noche):** reporte real: `S26-Ultra-de-Warner` aparece conectado por WiFi
-pero el panel muestra "Señal WiFi: No disponible". Lectura real completa
-(solo lectura, cero tareas): `X_HW_RSSI` (único parámetro de señal del
-equipo) SÍ tiene un valor real y reciente para ese Host (`-40`, activo,
-WiFi) — pero **ninguna unidad verificable existe en ningún nivel**:
-`X_HW_RSSIUnit`/`RSSI`/`RSSIUnit`/`SignalStrength`/`SignalStrengthUnit`
-ausentes en los 4 Hosts actuales, y 0 instancias `AssociatedDevice` en esta
-muestra. Investigación pública (GenieACS/Huawei forums, un proyecto de
-terceros no oficial en GitHub) no confirma la unidad para este
-modelo/firmware (`HG8145X6`/`V5R023C00S342`) — el único dato de terceros
-encontrado describe un comportamiento distinto (conversión de magnitud
-positiva) al observado aquí (ya negativo). **No se implementó color/dBm**:
-sería inventar una unidad no documentada, prohibido explícitamente por
-esta tarea y por la regla permanente del proyecto. Sin cambios en
-`tr069HostsSignal.ts`/`tr069Hosts.ts`/frontend — el comportamiento actual
-("No disponible") es correcto, no un defecto. Agregada 1 prueba real
-(`server/src/services/__tests__/tr069HostsSignal.test.ts`) con los 4 Hosts
-reales de hoy (evidencia `docs/TR069-HOSTS-SIGNAL-CACHE-20261029.json`).
-Backend 326/326 PASS (antes 325). **Commit local creado, sin publicar a
-GitHub** (no se pidió publicar en este turno). Detalle completo:
-`docs/TR069-HOSTS-SENAL-WIFI-INVESTIGACION-20261029.md`.
+**Señal WiFi de Hosts — IMPLEMENTADA con alcance acotado, SIN publicar ni
+desplegar (29/10/2026, misma noche, autorizado expresamente):** supera al
+párrafo siguiente ("SIN implementar"), que queda como antecedente directo
+— el propietario aportó la evidencia que faltaba: la interfaz propia de la
+Huawei mostró `RSSI -39 dBm` para `S26-Ultra-de-Warner` en el mismo
+periodo que TR-069 reportó `X_HW_RSSI=-40` (diferencia coherente con el
+desfase entre lecturas). Esto confirma, **solo para esta identidad exacta**
+(`_deviceId._OUI=00259E`, `_ProductClass=HG8145X6-13`,
+`DeviceInfo.SoftwareVersion=V5R023C00S342`), que `X_HW_RSSI` está en dBm
+aunque el equipo nunca declare su unidad.
+Implementado con alcance explícitamente acotado —
+`VERIFIED_X_HW_RSSI_DBM_FIRMWARE` en
+`server/src/services/tr069HostsSignal.ts`, lista de 1 sola combinación
+verificada; `RSSI`/`SignalStrength` genéricos siguen exigiendo unidad
+declarada incluso en este mismo firmware; otro modelo u otro firmware del
+mismo modelo sigue "No disponible" (probado explícitamente, 6 variantes).
+Identidad extraída del propio equipo en `tr069Hosts.ts`
+(`_deviceId._OUI`/`_ProductClass`, `DeviceInfo.SoftwareVersion` — 3 campos
+nuevos en la proyección NBI, solo lectura). Clasificación de 4 niveles en
+`src/lib/tr069Hosts.ts`
+(`hostWifiSignalPresentation`): Excelente/Buena verde (≥-55 / -56 a -67),
+Regular amarillo (-68 a -75), Débil rojo (<-75); nunca porcentaje ni
+velocidad. Sin cambios en consulta exclusiva abrir/Actualizar, sin
+polling. Backend **330/330 PASS** (antes 326, +4 nuevas incl. la prueba de
+seguridad de alcance con 6 identidades no verificadas), frontend-lib
+498/498 PASS, contrato 31/31 PASS, tsc/vue-tsc limpios. **Commit local
+creado, sin publicar a GitHub ni desplegar** (la tarea pidió detenerse
+antes de publicar; se autorizará por separado). Detalle completo:
+`docs/TR069-HOSTS-SENAL-WIFI-CALIDAD-20261029.md`.
+
+**Antecedente directo (superado arriba) — Señal WiFi de Hosts, investigada
+SIN implementar (29/10/2026, misma noche, turno anterior):** reporte real:
+`S26-Ultra-de-Warner` aparece conectado por WiFi pero el panel mostraba
+"Señal WiFi: No disponible". Lectura real completa (solo lectura, cero
+tareas): `X_HW_RSSI` (único parámetro de señal del equipo) SÍ tenía un
+valor real y reciente para ese Host (`-40`, activo, WiFi) — pero en ese
+momento **ninguna unidad verificable existía en ningún nivel** del propio
+árbol TR-069, y la investigación pública tampoco la confirmaba. Detalle
+completo: `docs/TR069-HOSTS-SENAL-WIFI-INVESTIGACION-20261029.md`.
 
 **3. Cambios locales pendientes (no publicados):** ninguno de Hosts — la
 corrección de "solo 2 de 5 Hosts visibles" (29/10/2026) **ya está publicada

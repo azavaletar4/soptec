@@ -68,7 +68,7 @@ const hostsController = createHostsPanelController(hostsPanel, async (serial, ac
   const at = new Date().toISOString();
   return { state: 'completed', requestedAt: at, checkedAt: at, inventory, message: 'Información guardada. No se consultó al equipo.' };
 });
-const signalColors = { good: 'text-emerald-700', fair: 'text-amber-600', poor: 'text-red-700' };
+const signalColors = { excellent: 'text-emerald-700', good: 'text-emerald-700', fair: 'text-amber-600', poor: 'text-red-700' };
 // Vista simple: "Todos" (incluye los ya conocidos sin lectura reciente) o solo
 // "Conectados" ahora mismo — nunca oculta datos, solo reduce qué se muestra.
 const hostsFilter = ref<'all' | 'connected'>('all');
@@ -78,7 +78,7 @@ function visibleHosts(deviceId: string) {
   if (hostsFilter.value === 'all') return inventory.hosts;
   return inventory.hosts.filter(h => hostStatusLabel(h, inventory.lastInform, ontEvidenceNow.value) === 'Conectado');
 }
-const signalLabels = { good: 'Buena', fair: 'Regular', poor: 'Débil' };
+const signalLabels = { excellent: 'Excelente', good: 'Buena', fair: 'Regular', poor: 'Débil' };
 
 const linkModalDevice = ref<Tr069Device | null>(null);
 const clientFilter = ref('');

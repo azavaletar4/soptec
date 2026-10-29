@@ -16,16 +16,24 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
-**Señal WiFi de Hosts — investigada, SIN implementar, local sin publicar
-(29/10/2026, misma noche):** `X_HW_RSSI` (único parámetro de señal del
-equipo) tiene valor real para `S26-Ultra-de-Warner` (`-40`, activo WiFi),
-pero **sin ninguna unidad verificable** en todo el árbol TR-069
-(`X_HW_RSSIUnit`/`RSSI`/`SignalStrength`/etc. ausentes, 0 asociaciones).
-Investigación pública no confirma la unidad para este modelo/firmware. No
-se implementó color/dBm — sería inventar una unidad no documentada.
-Comportamiento actual ("No disponible") es correcto, sin cambios de
-código funcional. 1 prueba real agregada, backend 326/326 PASS. Detalle:
-`docs/TR069-HOSTS-SENAL-WIFI-INVESTIGACION-20261029.md`.
+**Señal WiFi de Hosts — IMPLEMENTADA con alcance acotado por
+fabricante+modelo+firmware, local sin publicar ni desplegar (29/10/2026,
+misma noche, autorizado expresamente):** supera al párrafo siguiente ("sin
+implementar"). Evidencia nueva del propietario: ONT propia mostró
+`-39 dBm` para `S26-Ultra-de-Warner`, TR-069 reportó `X_HW_RSSI=-40` —
+confirma la unidad **solo para esta identidad exacta**
+(`00259E`/`HG8145X6-13`/`V5R023C00S342`). Lista de 1 combinación
+verificada en `tr069HostsSignal.ts`; otro modelo/firmware sigue "No
+disponible" (probado con 6 variantes). 4 niveles: Excelente/Buena verde,
+Regular amarillo, Débil rojo — nunca porcentaje/velocidad. Sin polling,
+sin cambios de consulta. Backend 330/330 PASS. Commit local, sin
+publicar. Detalle: `docs/TR069-HOSTS-SENAL-WIFI-CALIDAD-20261029.md`.
+
+**Antecedente (superado arriba) — Señal WiFi de Hosts, investigada SIN
+implementar (29/10/2026, turno anterior):** `X_HW_RSSI` tenía valor real
+para `S26-Ultra-de-Warner` (`-40`, activo WiFi) pero sin ninguna unidad
+verificable en el árbol TR-069 ni en investigación pública en ese momento.
+Detalle: `docs/TR069-HOSTS-SENAL-WIFI-INVESTIGACION-20261029.md`.
 
 **Corrección "solo 2 de 5 Hosts visibles" — PUBLICADA y DESPLEGADA
 (29/10/2026, misma noche, autorizada expresamente):** causa real confirmada

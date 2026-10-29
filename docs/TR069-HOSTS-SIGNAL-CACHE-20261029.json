@@ -299,5 +299,18 @@
       "path": "InternetGatewayDevice.LANDevice.1.Hosts.Host.4.SignalStrengthUnit"
     }
   ],
-  "associatedDeviceLeaves": []
+  "associatedDeviceLeaves": [],
+  "identity": {
+    "oui": "00259E",
+    "productClass": "HG8145X6-13",
+    "softwareVersion": "V5R023C00S342",
+    "manufacturer": "Huawei Technologies Co., Ltd"
+  },
+  "ontOwnInterfaceCrossCheck": {
+    "note": "Confirmado por el propietario (29/10/2026): la interfaz propia de la ONT muestra RSSI -39 dBm para S26-Ultra-de-Warner en el mismo periodo; GenieACS reporto X_HW_RSSI=-40 para el mismo host. La diferencia es coherente con el desfase entre ambas lecturas (momentos distintos), no una discrepancia de escala.",
+    "ontInterfaceRssiDbm": -39,
+    "tr069XHwRssi": -40,
+    "host": "S26-Ultra-de-Warner",
+    "mac": "56:b9:d2:f2:e7:c1"
+  }
 }

@@ -1,9 +1,13 @@
 import { normalizeGponSerial, matchTr069Device } from '../../../src/lib/gponSerial';
 import type { HostEntry, HostsInventory } from '../../../src/lib/tr069Hosts';
-import { readHostWifiSignal } from './tr069HostsSignal';
+import { readHostWifiSignal, type FirmwareIdentity } from './tr069HostsSignal';
 
 type Node = { _value?: unknown; _timestamp?: string; _writable?: boolean; [key: string]: unknown };
-export type HostsDevice = Node & { _id: string; _deviceId: { _SerialNumber: string }; _lastInform?: string };
+export type HostsDevice = Node & {
+  _id: string;
+  _deviceId: { _SerialNumber: string; _OUI?: string; _ProductClass?: string };
+  _lastInform?: string;
+};
 
 function str(node: Node | undefined): string | null {
   return typeof node?._value === 'string' && node._value.length > 0 ? node._value : null;
@@ -32,8 +36,9 @@ export async function readHostsDevice(nbiUrl: string, serial: string, request: t
   const projection = encodeURIComponent([
     // NBI excluye los campos no proyectados: conservar la identidad que valida
     // matchTr069Device, igual que readWifiInventory (que lee el documento completo).
-    '_id', '_deviceId._SerialNumber',
+    '_id', '_deviceId._SerialNumber', '_deviceId._OUI', '_deviceId._ProductClass',
     '_lastInform',
+    'InternetGatewayDevice.DeviceInfo.SoftwareVersion',
     'InternetGatewayDevice.LANDevice.1.Hosts._timestamp',
     'InternetGatewayDevice.LANDevice.1.Hosts.Host',
     'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.AssociatedDevice',
@@ -61,6 +66,15 @@ export function hostsInventoryFromDevice(device: HostsDevice | null, serial: str
 
   const root = device.InternetGatewayDevice as Node | undefined;
   const lan1 = (root?.LANDevice as Node | undefined)?.['1'] as Node | undefined;
+
+  // Identidad exacta de fabricante/modelo/firmware — nunca el serial, que ya
+  // identifica el equipo, sino la combinación que habilita (o no) interpretar
+  // X_HW_RSSI como dBm (ver tr069HostsSignal.ts, alcance verificado y acotado).
+  const identity: FirmwareIdentity = {
+    oui: typeof device._deviceId?._OUI === 'string' ? device._deviceId._OUI : null,
+    productClass: typeof device._deviceId?._ProductClass === 'string' ? device._deviceId._ProductClass : null,
+    softwareVersion: str((root?.DeviceInfo as Node | undefined)?.SoftwareVersion as Node | undefined),
+  };
 
   // Banda por MAC, solo con asociaciones WiFi REALMENTE observadas (AssociatedDevice) y banda
   // REALMENTE declarada (OperatingFrequencyBand) — nunca por número de instancia ni por nombre.
@@ -98,7 +112,7 @@ export function hostsInventoryFromDevice(device: HostsDevice | null, serial: str
       macReportedAt: ts(node.MACAddress as Node | undefined),
       layer2Interface: str(node.Layer2Interface as Node | undefined),
       layer2ReportedAt: ts(node.Layer2Interface as Node | undefined),
-      wifiSignal: connection === 'WiFi' ? readHostWifiSignal(node, wlans) : null,
+      wifiSignal: connection === 'WiFi' ? readHostWifiSignal(node, wlans, identity) : null,
       band: connection === 'WiFi' ? wifiBand : null,
       active: bool(node.Active as Node | undefined),
       activeReportedAt: bool(node.Active as Node | undefined) !== null ? ts(node.Active as Node | undefined) : null,

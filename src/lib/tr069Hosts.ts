@@ -76,8 +76,10 @@ export function normalizeHostMac(raw: string | null | undefined): string | null 
   return value && /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(value) ? value : null;
 }
 
+export type WifiSignalLevel = 'excellent' | 'good' | 'fair' | 'poor';
+
 export function hostWifiSignalPresentation(host: HostEntry, lastInform: string | null, now: number): {
-  label: string; level: 'good' | 'fair' | 'poor' | null;
+  label: string; level: WifiSignalLevel | null;
 } {
   const connection = hostConnectionLabel(host, lastInform, now);
   if (connection === 'Cable') return { label: 'No aplica', level: null };
@@ -88,8 +90,10 @@ export function hostWifiSignalPresentation(host: HostEntry, lastInform: string |
       ![signal.reportedAt, signal.unitReportedAt, signal.macReportedAt, host.macReportedAt, host.layer2ReportedAt].every(t => recentHostReport(t, now))) {
     return { label: 'No disponible', level: null };
   }
-  // Umbrales de presentación propios, no porcentaje ni diagnóstico del fabricante.
-  const level = signal.dbm >= -67 ? 'good' : signal.dbm >= -75 ? 'fair' : 'poor';
+  // Umbrales orientativos de cobertura (no porcentaje ni velocidad de internet):
+  // -30 a -55 Excelente, -56 a -67 Buena (ambas verdes), -68 a -75 Regular
+  // (amarillo), menor de -75 Débil (rojo).
+  const level: WifiSignalLevel = signal.dbm >= -55 ? 'excellent' : signal.dbm >= -67 ? 'good' : signal.dbm >= -75 ? 'fair' : 'poor';
   return { label: `${signal.dbm} dBm`, level };
 }
 

@@ -1,12 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { readHostWifiSignal } from '../tr069HostsSignal';
+import { readHostWifiSignal, type FirmwareIdentity } from '../tr069HostsSignal';
 import { hostStatusLabel, hostWifiSignalPresentation, type HostEntry } from '../../../../src/lib/tr069Hosts';
 
 const at = '2026-10-28T22:03:39.213Z', now = Date.parse(at) + 1000;
 const mac = 'aa:bb:cc:dd:ee:01', wlan = 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1';
 const leaf = (value: unknown) => ({ _value: value, _timestamp: at });
+// Identidad real verificada (ver tr069HostsSignal.ts): única combinación donde
+// X_HW_RSSI se interpreta como dBm sin que el equipo declare la unidad.
+const VERIFIED_IDENTITY: FirmwareIdentity = { oui: '00259E', productClass: 'HG8145X6-13', softwareVersion: 'V5R023C00S342' };
+
 function fixture(dbm = -60, unit: string | null = 'dBm') {
   const raw = { MACAddress: leaf(mac), Layer2Interface: leaf(wlan) };
   const associated = { AssociatedDeviceMACAddress: leaf(mac.toUpperCase()), SignalStrength: leaf(dbm), ...(unit ? { SignalStrengthUnit: leaf(unit) } : {}) };
@@ -16,13 +20,58 @@ function fixture(dbm = -60, unit: string | null = 'dBm') {
     macReportedAt: at, layer2Interface: wlan, layer2ReportedAt: at, active: true, activeReportedAt: at, band: null, reportedAt: at, wifiSignal: signal };
   return { raw, associated, wlans, row };
 }
+// Variante con X_HW_RSSI directo en el propio Host (como lo reporta la Huawei
+// real), para probar el alcance verificado por fabricante+modelo+firmware.
+function xhwFixture(dbm: number, identity: FirmwareIdentity | undefined, mac2 = mac) {
+  const raw = { MACAddress: leaf(mac2), Layer2Interface: leaf(wlan), X_HW_RSSI: leaf(dbm) };
+  const wlans = { 1: { AssociatedDevice: {} } };
+  const signal = readHostWifiSignal(raw, wlans, identity);
+  const row: HostEntry = { hostName: 'Equipo', ipAddress: null, macAddress: mac2, connection: 'WiFi', connectionReportedAt: at,
+    macReportedAt: at, layer2Interface: wlan, layer2ReportedAt: at, active: true, activeReportedAt: at, band: null, reportedAt: at, wifiSignal: signal };
+  return { raw, wlans, row };
+}
 
-test('señal simulada con MAC/WLAN y unidad explícita: intensidad dBm, verde/amarillo/rojo sin porcentaje', () => {
-  for (const [dbm, level] of [[-60, 'good'], [-67, 'good'], [-68, 'fair'], [-75, 'fair'], [-76, 'poor']] as const) {
+test('señal simulada con MAC/WLAN y unidad explícita: intensidad dBm, cuatro niveles orientativos sin porcentaje', () => {
+  for (const [dbm, level] of [
+    [-30, 'excellent'], [-55, 'excellent'], [-56, 'good'], [-60, 'good'], [-67, 'good'],
+    [-68, 'fair'], [-75, 'fair'], [-76, 'poor'], [-100, 'poor'],
+  ] as const) {
     const { row } = fixture(dbm);
     assert.deepEqual(hostWifiSignalPresentation(row, at, now), { label: `${dbm} dBm`, level });
     assert.ok(!hostWifiSignalPresentation(row, at, now).label.includes('%'));
+    assert.ok(!/mbps|kbps|velocidad/i.test(hostWifiSignalPresentation(row, at, now).label));
   }
+});
+
+test('X_HW_RSSI en el firmware verificado (Huawei HG8145X6-13 / V5R023C00S342): sí se interpreta como dBm, con los cuatro niveles', () => {
+  for (const [dbm, level] of [[-39, 'excellent'], [-55, 'excellent'], [-56, 'good'], [-67, 'good'], [-68, 'fair'], [-75, 'fair'], [-76, 'poor']] as const) {
+    const { row } = xhwFixture(dbm, VERIFIED_IDENTITY);
+    assert.ok(row.wifiSignal, `dbm=${dbm} debería producir señal verificada`);
+    assert.deepEqual(hostWifiSignalPresentation(row, at, now), { label: `${dbm} dBm`, level });
+  }
+});
+
+test('el mismo X_HW_RSSI en un modelo o firmware NO verificado nunca se interpreta como dBm — la regla no se generaliza', () => {
+  const variants: (FirmwareIdentity | undefined)[] = [
+    undefined, // identidad desconocida/no proyectada
+    { oui: null, productClass: null, softwareVersion: null },
+    { ...VERIFIED_IDENTITY, softwareVersion: 'V5R023C00S999' }, // mismo modelo, otro firmware
+    { ...VERIFIED_IDENTITY, productClass: 'HG8145V5' }, // otro modelo Huawei
+    { ...VERIFIED_IDENTITY, oui: '001122' }, // otro fabricante/OUI
+    { oui: '00259E', productClass: 'HG8145X6-13', softwareVersion: '' },
+  ];
+  for (const identity of variants) {
+    const { row } = xhwFixture(-40, identity);
+    assert.equal(row.wifiSignal, null, 'sin verificación exacta de oui+modelo+firmware, nunca se interpreta la unidad');
+    assert.equal(hostWifiSignalPresentation(row, at, now).label, 'No disponible');
+  }
+});
+
+test('en el firmware verificado, RSSI/SignalStrength genéricos SIGUEN exigiendo unidad explícita (la excepción es solo para X_HW_RSSI)', () => {
+  const raw = { MACAddress: leaf(mac), Layer2Interface: leaf(wlan) };
+  const associated = { AssociatedDeviceMACAddress: leaf(mac.toUpperCase()), SignalStrength: leaf(-40) }; // sin SignalStrengthUnit
+  const wlans = { 1: { AssociatedDevice: { 1: associated } } };
+  assert.equal(readHostWifiSignal(raw, wlans, VERIFIED_IDENTITY), null, 'SignalStrength sin unidad sigue sin ser verificable, aun en firmware confiable para X_HW_RSSI');
 });
 
 test('RSSI sin unidad verificada, porcentajes, valores imposibles o señal ausente: No disponible', () => {
@@ -55,16 +104,21 @@ test('Ethernet confirmado: No aplica; nunca interpreta RSSI ajeno como WiFi', ()
   const { row } = fixture(); assert.deepEqual(hostWifiSignalPresentation({ ...row, connection: 'Cable' }, at, now), { label: 'No aplica', level: null });
 });
 
-test('caso real reportado (29/10): S26-Ultra conectado por WiFi con X_HW_RSSI=-40 real, pero sin unidad declarada en ningún nivel — sigue "No disponible", no es un error', () => {
+test('caso real confirmado (29/10): S26-Ultra conectado por WiFi, X_HW_RSSI=-40 real, firmware verificado por el cruce con la propia ONT (-39 dBm) — ahora SÍ se muestra la señal', () => {
   const cache = JSON.parse(fs.readFileSync(new URL('../../../../docs/TR069-HOSTS-SIGNAL-CACHE-20261029.json', import.meta.url), 'utf8'));
-  // Confirma la investigación de solo lectura: ni X_HW_RSSIUnit, RSSI, RSSIUnit,
-  // SignalStrength ni SignalStrengthUnit existen en ningún Host — y no hay
-  // ninguna instancia AssociatedDevice para correlacionar por esa vía tampoco.
+  // La investigación original sigue siendo válida: ni X_HW_RSSIUnit, RSSI,
+  // RSSIUnit, SignalStrength ni SignalStrengthUnit existen en ningún Host —
+  // la unidad nunca la declara el equipo; se confirmó por otra vía (ver
+  // cache.ontOwnInterfaceCrossCheck) y solo para esta identidad exacta.
   for (const suffix of ['X_HW_RSSIUnit', 'RSSI', 'RSSIUnit', 'SignalStrength', 'SignalStrengthUnit']) {
     assert.ok(cache.hostLeaves.filter((l: any) => l.path.endsWith('.' + suffix)).every((l: any) => !l.valuePresent),
       suffix + ' nunca declarado con valor en este equipo');
   }
-  assert.equal(cache.associatedDeviceLeaves.length, 0, 'sin asociaciones WiFi reportadas en esta muestra');
+  assert.equal(cache.identity.oui, VERIFIED_IDENTITY.oui);
+  assert.equal(cache.identity.productClass, VERIFIED_IDENTITY.productClass);
+  assert.equal(cache.identity.softwareVersion, VERIFIED_IDENTITY.softwareVersion);
+  assert.equal(cache.ontOwnInterfaceCrossCheck.tr069XHwRssi, -40);
+  assert.equal(cache.ontOwnInterfaceCrossCheck.ontInterfaceRssiDbm, -39);
 
   const byHost = (i: number) => {
     const field = (name: string) => cache.hostLeaves.find((l: any) => l.path === `InternetGatewayDevice.LANDevice.1.Hosts.Host.${i}.${name}`);
@@ -75,26 +129,37 @@ test('caso real reportado (29/10): S26-Ultra conectado por WiFi con X_HW_RSSI=-4
     };
   };
   const wlans = { 1: { AssociatedDevice: {} } };
-  // Cuatro dispositivos reales, cuatro MAC distintas: ninguno obtiene señal verificable.
+  const buildRow = (host: ReturnType<typeof byHost>, identity?: FirmwareIdentity): HostEntry => ({
+    hostName: host.HostName._value, ipAddress: null, macAddress: host.MACAddress._value,
+    connection: 'WiFi', connectionReportedAt: cache.checkedAt, macReportedAt: cache.checkedAt,
+    layer2Interface: host.Layer2Interface._value, layer2ReportedAt: cache.checkedAt,
+    active: host.Active._value === true, activeReportedAt: cache.checkedAt, band: null, reportedAt: cache.checkedAt,
+    wifiSignal: readHostWifiSignal(host, wlans, identity),
+  });
+
+  // Sin la identidad verificada (como antes de confirmarla), los 4 Hosts
+  // reales siguen "No disponible" — incluido S26-Ultra con su -40 real.
   for (const i of [1, 2, 3, 4]) {
-    const host = byHost(i);
-    assert.equal(readHostWifiSignal(host, wlans), null, `Host.${i} (${host.HostName._value}) no debe tener señal sin unidad verificada`);
+    const row = buildRow(byHost(i));
+    assert.equal(row.wifiSignal, null, `Host.${i} sin identidad verificada no debe tener señal`);
   }
 
-  // El caso exacto reportado: S26-Ultra, activo, WiFi, X_HW_RSSI real -40 (valor
-  // plausible de dBm) — igual se presenta "No disponible", nunca se inventa la unidad.
+  // Con la identidad real y verificada: S26-Ultra (activo, -40) SÍ muestra
+  // señal — Excelente/verde. Los desconectados (X_HW_RSSI=0) siguen sin señal
+  // verificable: 0 está fuera del rango válido, nunca se confunde con 0 dBm.
   const s26 = byHost(4);
   assert.equal(s26.HostName._value, 'S26-Ultra-de-Warner');
   assert.equal(s26.X_HW_RSSI._value, -40);
-  const row: HostEntry = {
-    hostName: s26.HostName._value, ipAddress: '192.168.100.35', macAddress: s26.MACAddress._value,
-    connection: 'WiFi', connectionReportedAt: cache.checkedAt, macReportedAt: cache.checkedAt,
-    layer2Interface: s26.Layer2Interface._value, layer2ReportedAt: cache.checkedAt,
-    active: true, activeReportedAt: cache.checkedAt, band: null, reportedAt: cache.checkedAt,
-    wifiSignal: readHostWifiSignal(s26, wlans),
-  };
-  assert.equal(row.wifiSignal, null);
-  assert.deepEqual(hostWifiSignalPresentation(row, cache.lastInform, Date.parse(cache.checkedAt)), { label: 'No disponible', level: null });
+  const s26Row = buildRow(s26, VERIFIED_IDENTITY);
+  assert.ok(s26Row.wifiSignal, 'con identidad verificada, -40 real debe producir señal');
+  assert.deepEqual(hostWifiSignalPresentation(s26Row, cache.lastInform, Date.parse(cache.checkedAt)), { label: '-40 dBm', level: 'excellent' });
+
+  for (const i of [1, 3]) { // Z2359 e iPhone: WiFi pero desconectados, X_HW_RSSI=0
+    const host = byHost(i);
+    assert.equal(host.X_HW_RSSI._value, 0);
+    const row = buildRow(host, VERIFIED_IDENTITY);
+    assert.equal(row.wifiSignal, null, `Host.${i} con X_HW_RSSI=0 (desconectado) nunca es "0 dBm"`);
+  }
 });
 
 test('caché real de señal: cinco X_HW_RSSI sin valor/unidad y cero asociaciones; Inform reciente no actualiza Active', () => {

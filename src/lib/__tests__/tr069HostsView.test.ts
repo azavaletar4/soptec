@@ -36,8 +36,8 @@ async function html(opened: boolean, now = recent, error: string | null = null, 
   const app = Vue.createSSRApp({ render, setup: () => ({ hostsPanel: state, hostsById: state.inventory, hostsFilter: filter, visibleHosts,
     device: { id: 'id', cpe_serial: 'HWTC1D3691B7' }, canReadHostsActively: true, ontEvidenceNow: now,
     hostConnectionLabel, hostStatusLabel, hostStatusReadAt, hostWifiSignalPresentation, latestHostsReport, formatHostDate,
-    signalColors: { good: 'text-emerald-700', fair: 'text-amber-600', poor: 'text-red-700' },
-    signalLabels: { good: 'Buena', fair: 'Regular', poor: 'Débil' },
+    signalColors: { excellent: 'text-emerald-700', good: 'text-emerald-700', fair: 'text-amber-600', poor: 'text-red-700' },
+    signalLabels: { excellent: 'Excelente', good: 'Buena', fair: 'Regular', poor: 'Débil' },
     hostsController: { toggle: () => requests++, refresh: () => requests++ },
   }) });
   const warnings: string[] = []; app.config.warnHandler = message => { warnings.push(message); };
