@@ -16,20 +16,25 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
-**Corrección "solo 2 de 5 Hosts visibles" — candidato local, SIN publicar
-ni desplegar (29/10/2026, misma noche):** causa real confirmada por lectura
-directa de la caché de GenieACS (solo lectura, cero tareas nuevas): el
-propio CPE Huawei dejó de anunciar 3 de 5 instancias `Hosts.Host.{i}` en su
-árbol TR-069 (DHCP/ARP caducado, normal del router) — backend/frontend ya
-mostraban el 100% de la caché, sin filtro oculto. Corregido con
-`server/src/services/tr069HostsHistory.ts`: conserva visibles los hosts
-ausentes con su última lectura real (nunca inventa un valor); `hostStatusLabel`
-ya resolvía solo a "Sin confirmar" para datos viejos, así que nunca se
-declaran "Desconectado" sin evidencia nueva. Vista "Todos"/"Conectados"
-agregada. Backend 325/325 PASS, frontend-lib 498/498 PASS. Detalle:
-`docs/TR069-HOSTS-HISTORIAL-20261029.md`. Commit local creado, **sin
-publicar a GitHub a la espera de autorización** (la tarea pidió detenerse
-antes de publicar).
+**Corrección "solo 2 de 5 Hosts visibles" — PUBLICADA y DESPLEGADA
+(29/10/2026, misma noche, autorizada expresamente):** causa real confirmada
+por lectura directa de la caché de GenieACS (solo lectura, cero tareas
+nuevas): el propio CPE Huawei dejó de anunciar 3 de 5 instancias
+`Hosts.Host.{i}` en su árbol TR-069 (DHCP/ARP caducado, normal del router)
+— backend/frontend ya mostraban el 100% de la caché, sin filtro oculto.
+Corregido con `server/src/services/tr069HostsHistory.ts`: conserva visibles
+los hosts ausentes con su última lectura real (nunca inventa un valor);
+`hostStatusLabel` ya resolvía solo a "Sin confirmar" para datos viejos, así
+que nunca se declaran "Desconectado" sin evidencia nueva. Vista
+"Todos"/"Conectados" agregada. Backend 325/325 PASS, frontend-lib 498/498
+PASS. Commits `4cf4ae8` (corrección) + `eb96f77` (ajuste de clases Tailwind
+tras un `HISTORICAL_ASSETS_CHANGED:assets/index.css` real por clases nuevas
+sin uso previo — corregido reutilizando el patrón de `MikrotikDetailView.vue`,
+cero CSS nuevo). `main` local y `origin/main` sincronizados. Desplegado:
+backend/frontend `...eb96f77b7dca`, 126 artefactos, 11 rutas PASS, `401`
+sin autenticación, `ssidTasksSent:0`, rollback a `...ac511d7c70c8` probado.
+Detalle causa/diseño: `docs/TR069-HOSTS-HISTORIAL-20261029.md`; despliegue
+real: `docs/TR069-HOSTS-HISTORIAL-DESPLEGADO-20261029.md`.
 
 **Hosts bajo demanda `ac511d7` YA DESPLEGADO y verificado (29/10/2026,
 18:45 UTC), autorizado expresamente por el propietario** — supera al

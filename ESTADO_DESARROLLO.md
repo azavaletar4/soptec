@@ -15,32 +15,35 @@ la sección histórica correspondiente, no hace falta repetirlo.
 
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
-VM de producción (`192.168.55.201`), **Hosts bajo demanda `ac511d7`
-DESPLEGADO el 29/10/2026 18:45:53 UTC**, autorizado expresamente por el
-propietario, `verify` posterior PASS:
-- Backend: **`ac511d7c70c8a11700d3553f331af5bb2930926a`**,
-  `smartrayco-backend-wifitrial:ac511d7c70c8`, imagen
-  `sha256:a83fcef6c57c4bd71ce9b22b34978822d47f83323de21ba76c31fd64af172725`.
-- Frontend: mismo commit, `smartrayco-frontend-consolidado:ac511d7c70c8`,
-  imagen `sha256:1f2c7b2c0be5e6f7aabc6d5074d3923cf5006bde9bb77aa976764e719ef5ab12`.
-  **Build completo** del commit para ambos servicios (no un overlay
-  selectivo como la release `d6ce2c2` anterior).
-- Caddy/Mongo/GenieACS: mismas imágenes de siempre; reiniciados por la VM
-  el 29/10 16:51:49 UTC (contenedor nuevo, imagen idéntica), sin relación
-  con este despliegue.
-126 artefactos verificados, 11 rutas PASS, HTTP 401 sin autenticación en
-Hosts/WiFi, `ssidTasksSent:0`. Gate `TR069_HOSTS_ON_DEMAND_ENABLED=true`
-confirmado en vivo (`printenv` del contenedor, solo esa clave), serial único
-`HWTC1D3691B7` sin wildcard. Cola GenieACS (`GET /tasks`) vacía tras el
-deploy. Sin migraciones ni tareas de configuración GenieACS. Rollback
-preparado (`prepare` fresco de esta sesión — el `prepare` de la sesión
-anterior quedó obsoleto por un reinicio de la VM que cambió
-`Id`/`StartedAt` del contenedor, detectado correctamente como
-`SERVICE_DRIFT_frontend`; su stage se movió, no se borró, a
-`...-superseded-20261029-pre-restart`) → restaura a backend
-`smartrayco-backend-wifitrial:d6ce2c2f578f` y frontend
-`smartrayco-frontend-consolidado:5d48a10ea497`.
-Detalle completo: `docs/TR069-HOSTS-DESPLIEGUE-20261029.md`.
+VM de producción (`192.168.55.201`), **corrección de historial Hosts
+`eb96f77` DESPLEGADA el 29/10/2026 19:40:21 UTC**, autorizado expresamente
+por el propietario, `verify` posterior PASS:
+- Backend: **`eb96f77b7dca389bb7ddbf416f09be4008cda3e1`**,
+  `smartrayco-backend-wifitrial:eb96f77b7dca`, imagen
+  `sha256:442fa45706d922225cf788c1e9e5a20ec9b145de5e8d591d55d7cd2d65b6bfce`.
+- Frontend: mismo commit, `smartrayco-frontend-consolidado:eb96f77b7dca`,
+  imagen `sha256:8a34d94ea936dc0f2431ece8261104c29d3789d9a9d3b54787e0793d88c98b32`.
+  Build completo del commit para ambos servicios; único asset frontend
+  cambiado `assets/Tr069View.js` (declarado).
+- Caddy/Mongo/GenieACS: mismas imágenes/contenedores desde 29/10 16:51:49 UTC,
+  sin tocar por este despliegue.
+126 artefactos verificados, 11 rutas PASS (incluye `/asistencia`, `/puntos`,
+`/campo`, `/olt`, `/mikrotik`, `/rutinas` — preservados), HTTP 401 sin
+autenticación, `ssidTasksSent:0`. Gate `TR069_HOSTS_ON_DEMAND_ENABLED=true`
+confirmado en vivo, serial único `HWTC1D3691B7` sin wildcard. Cola GenieACS
+vacía tras el deploy. Sin migraciones ni tareas de configuración GenieACS.
+Corrección real: un host ausente del árbol en vivo del CPE se conserva
+visible con su última lectura real (nunca "Desconectado" sin evidencia
+nueva) — ver `server/src/services/tr069HostsHistory.ts`, persistido en el
+volumen Docker `olt_telemetry` (sobrevive a reconstrucciones del backend).
+Rollback preparado y probado (`prepare` fresco) → restaura backend/frontend
+a `...ac511d7c70c8` (imágenes previas a este despliegue).
+Detalle completo: `docs/TR069-HOSTS-HISTORIAL-DESPLEGADO-20261029.md`
+(causa/diseño: `docs/TR069-HOSTS-HISTORIAL-20261029.md`).
+
+Antecedente (superado por el despliegue anterior): Hosts bajo demanda
+`ac511d7` se desplegó el 29/10 18:45:53 UTC — detalle:
+`docs/TR069-HOSTS-DESPLIEGUE-20261029.md`.
 
 **Sincronización con GitHub completada (2026-10-29, solo repositorio — sin
 tocar producción):** `main` local estaba 57 commits adelante de
@@ -92,9 +95,10 @@ tipo/estado/referencia leídos a las 23:07:06.893 UTC. Cinco Hosts: cuatro WiFi
 y portátil Cable; Active=true S26-Ultra y Z2359, false los otros tres en esa
 muestra. Cero tareas/faults al terminar (23:07:07 UTC), sin otro POST ni retry.
 
-**3. Cambios locales pendientes (no publicados):** corrección real de
-"solo 2 de 5 Hosts visibles" (29/10/2026), **candidato local sin push ni
-despliegue**. Causa exacta confirmada por lectura directa de la caché de
+**3. Cambios locales pendientes (no publicados):** ninguno de Hosts — la
+corrección de "solo 2 de 5 Hosts visibles" (29/10/2026) **ya está publicada
+y desplegada** (ver punto 1, commit `eb96f77`). Causa exacta confirmada por
+lectura directa de la caché de
 GenieACS (solo lectura, cero tareas nuevas): el propio CPE Huawei dejó de
 anunciar 3 de las 5 instancias `Hosts.Host.{i}` en su árbol TR-069 (DHCP/ARP
 caducado en el equipo, comportamiento normal del router) — backend y
@@ -113,19 +117,22 @@ datos en vivo. Vista "Todos"/"Conectados" agregada en `Tr069View.vue` (sin
 estado nuevo persistido). Hosts sigue consultando solo al abrir/Actualizar,
 sin polling — sin cambios en ese comportamiento. Pruebas: backend 325/325
 PASS (+7 nuevas), frontend-lib 498/498 PASS (+1 nueva), tsc/vue-tsc limpios.
-Detalle completo: `docs/TR069-HOSTS-HISTORIAL-20261029.md`.
+Detalle de causa/diseño: `docs/TR069-HOSTS-HISTORIAL-20261029.md`; detalle
+del despliegue real (publicación, `HISTORICAL_ASSETS_CHANGED` por clases
+Tailwind nuevas y su corrección, 4 fases PASS, imágenes antes/después):
+`docs/TR069-HOSTS-HISTORIAL-DESPLEGADO-20261029.md`.
 
-El despliegue `ac511d7` de Hosts bajo demanda (función `e2c7bf7` + guard por
-serial) sigue **desplegado** (ver punto 1), sin relación con este candidato
-nuevo — comportamiento operativo confirmado en vivo: panel Hosts solo
-consulta al abrir su sección o pulsar Actualizar (sin polling/cron/timers/
-reintentos automáticos), gate restringido a `HWTC1D3691B7` sin wildcard,
-máximo 64 Hosts/512 hojas, NBI 12 s/POST 15 s/tarea 45 s, journal + lock
-contra duplicados. Historial de la corrección del verificador Vite
-(`91e9ff1`, 31/31 PASS) y del bloqueo previo por `HISTORICAL_ASSETS_CHANGED`
-quedan como antecedente resuelto — no repetir ese diagnóstico. Detalle
-completo del despliegue: `docs/TR069-HOSTS-DESPLIEGUE-20261029.md`;
-antecedentes de diseño: `docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`,
+Comportamiento operativo de Hosts bajo demanda (sin cambios en esta
+corrección, ya confirmado en vivo): panel solo consulta al abrir su sección
+o pulsar Actualizar (sin polling/cron/timers/reintentos automáticos), gate
+restringido a `HWTC1D3691B7` sin wildcard, máximo 64 Hosts/512 hojas, NBI
+12 s/POST 15 s/tarea 45 s, journal + lock contra duplicados. Historial de la
+corrección del verificador Vite (`91e9ff1`, 31/31 PASS) y del bloqueo previo
+por `HISTORICAL_ASSETS_CHANGED` (el de assets Vite de 28/10, no el de CSS de
+esta corrección) quedan como antecedente resuelto — no repetir ese
+diagnóstico. Antecedente del despliegue `ac511d7` (ahora superado):
+`docs/TR069-HOSTS-DESPLIEGUE-20261029.md`; antecedentes de diseño:
+`docs/TR069-HOSTS-BAJO-DEMANDA-Y-SENAL-20261028.md`,
 `docs/TR069-HOSTS-VITE-VERIFICADOR-CORREGIDO-20261028.md`.
 
 Señal: correlación exacta de Host/MAC/WLAN. Solo dBm con unidad explícita y
@@ -227,12 +234,13 @@ Sin push, merge ni migraciones; cero tareas GenieACS.
 
 | Trabajo | Rama/worktree | Commit | Estado |
 |---|---|---|---|
-| Hosts bajo demanda (función + guard) | incluido en `main` | `ac511d7` | **Backend+frontend en producción** (29/10 18:45:53 UTC, build completo) |
-| Identificación Hosts (antecedente, superada en backend por `ac511d7`) | incluido en `main` | `d6ce2c2` | Imagen anterior; respaldada como rollback (`...wifitrial:d6ce2c2f578f`) |
-| WiFi + Hosts base (antecedente, superada en frontend por `ac511d7`) | incluido en `main` | `5d48a10` | Imagen anterior; respaldada como rollback (`...consolidado:5d48a10ea497`) |
+| Corrección de historial Hosts (ausentes del árbol en vivo) | incluido en `main` | `eb96f77` (sobre `4cf4ae8`) | **Backend+frontend en producción** (29/10 19:40:21 UTC, build completo) |
+| Hosts bajo demanda (función + guard) (antecedente, superado por `eb96f77`) | incluido en `main` | `ac511d7` | Imagen anterior; respaldada como rollback (`...ac511d7c70c8`) |
+| Identificación Hosts (antecedente, imagen de rollback más antigua) | incluido en `main` | `d6ce2c2` | Imagen anterior a `ac511d7`; ya no es el rollback directo |
+| WiFi + Hosts base (antecedente, imagen de rollback más antigua) | incluido en `main` | `5d48a10` | Imagen anterior a `ac511d7`; ya no es el rollback directo |
 | Fix del propio script de release (`assets/tr069.js` + archivo de backend nuevo faltante) | incluido en `main` | `d323d0e` | Ya aplicado antes de los deploys; no cambia el código de la app |
 | Integración frontend 27/10 (antecedente) | `integration/frontend-productivo-tr069-20261027` (worktree `scripts/inventory-auth-lab/runtime/frontend-productivo-tr069-worktree`) | `69c4c6f` | Publicada en `origin`; no es la base de este trabajo |
-| Rama remota activa en GitHub | `origin/main` | `9e90c94` (se actualizará al commit documental de este despliegue) | **Sincronizada** con `main` local, sin divergencia |
+| Rama remota activa en GitHub | `origin/main` | igual a `main` local (ver commit de este documento) | **Sincronizada**, sin divergencia |
 
 El repositorio tiene además **36 ramas locales (incluida `main`) y 24
 worktrees (incluido éste)** — contado el 28/10/2026, en su mayoría de fases
