@@ -596,8 +596,8 @@ async function handleUnlink() {
                             «Sin confirmar» indica información histórica o insuficiente: hace falta una lectura válida de los últimos 10 minutos.
                           </p>
                           <div class="flex gap-1 text-xs shrink-0" role="group" aria-label="Filtrar dispositivos">
-                            <button type="button" class="px-2 py-0.5 rounded border" :class="hostsFilter === 'all' ? 'bg-slate-700 text-white border-slate-700' : 'border-slate-300 text-slate-600'" @click="hostsFilter = 'all'">Todos ({{ hostsById[device.id]!.hosts.length }})</button>
-                            <button type="button" class="px-2 py-0.5 rounded border" :class="hostsFilter === 'connected' ? 'bg-slate-700 text-white border-slate-700' : 'border-slate-300 text-slate-600'" @click="hostsFilter = 'connected'">Conectados ({{ visibleHosts(device.id).length }})</button>
+                            <button type="button" class="px-2 py-0.5 rounded" :class="hostsFilter === 'all' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" @click="hostsFilter = 'all'">Todos ({{ hostsById[device.id]!.hosts.length }})</button>
+                            <button type="button" class="px-2 py-0.5 rounded" :class="hostsFilter === 'connected' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" @click="hostsFilter = 'connected'">Conectados ({{ visibleHosts(device.id).length }})</button>
                           </div>
                         </div>
                         <p v-if="!visibleHosts(device.id).length" class="text-xs text-slate-500">Ningún dispositivo conocido está conectado ahora mismo.</p>
