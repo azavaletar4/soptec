@@ -16,6 +16,16 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**SINCRONIZACIÓN GITHUB COMPLETADA (30/10/2026):** los 4 commits locales
+de TR-069/Hosts (`644e456`, `7cc47d7`, `9e0e355`, `f648290`) ya están en
+`origin/main` — push normal, sin force/rebase/merge, confirmado por la
+salida del propio push (`06816a3..f648290`). Pruebas focalizadas PASS
+antes de publicar (510/510 frontend-lib, 336/336 backend). Archivos de
+otras fases (Fase 175, Puntos, Asistencia, prueba de traffic analytics)
+siguen locales, sin tocar ni publicar. Detalle completo, estado real de
+producción (separado del repositorio) e instrucciones para Codex: sección
+"SINCRONIZACIÓN GITHUB COMPLETADA" al inicio de `ESTADO_DESARROLLO.md`.
+
 **TR-069 HABILITADO REALMENTE en `HWTC1D3691B7` (29/10/2026, 23:24:51 UTC,
 autorizado expresamente):** identidad reverificada en vivo (735
 posiciones, match exacto) antes de escribir. Único comando real (Telnet

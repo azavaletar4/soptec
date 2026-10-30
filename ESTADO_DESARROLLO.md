@@ -13,6 +13,48 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
+**SINCRONIZACIÓN GITHUB COMPLETADA (30/10/2026, repositorio — sin tocar
+producción/OLT/GenieACS/MikroTik/PPPoE):** `main` local estaba 4 commits
+adelante de `origin/main` y 0 atrás (sin divergencia, confirmado con
+`git fetch origin` + `git merge-base --is-ancestor origin/main main` antes
+de publicar). Commits publicados, en orden (todos ya documentados en este
+mismo archivo, no se repiten aquí): `644e456` (Hosts: tareas ajenas
+atascadas ya no bloquean indefinidamente), `7cc47d7` (ficha OLT:
+"Conectado a GenieACS"/"Sin comunicación reciente" ya no se confunden con
+"nunca contactó"), `9e0e355` (TR-069 habilitado realmente en
+`HWTC1D3691B7`), `f648290` (WAN de gestión VLAN 200 restaurada — **GenieACS
+confirmó un Inform real**, serial `485754431D3691B7`, con
+`ConnectionRequestURL` apuntando a `10.15.15.200:7547`). Pruebas focalizadas
+de los módulos con código (no solo docs) corridas antes de publicar:
+frontend-lib `npm run test:fetch-timeout` **510/510 PASS**, backend
+`npm run test:provisioning` **336/336 PASS**. Revisión explícita de la
+diferencia completa contra `origin/main` sin ninguna credencial/secreto
+(un único falso positivo revisado: `h.Password = {_object:false}` es un
+nombre de parámetro TR-069 en un test, no una credencial real). `git push
+origin main` normal (sin force/rebase/merge) — confirmado por la propia
+salida del push: `06816a3..f648290 main -> main` (fast-forward). Un
+segundo `git fetch` para reconfirmar fue bloqueado por el clasificador de
+seguridad del entorno; no necesario, la salida del push ya es evidencia
+suficiente de que `origin/main` quedó en `f648290`, igual que `main` local.
+**Archivos de otras fases, sin tocar ni perder** (quedan locales,
+intactos, sin commitear — no forman parte de esta sincronización):
+`docs/ASISTENCIA-SEMIAUTOMATICA-FASE-A-PROPUESTA.md`, 4 documentos
+`docs/FASE175-*-20261026.md`, 8 documentos `docs/PUNTOS-*-2026102{5,6}.md`,
+`server/src/services/__tests__/trafficAnalyticsCounterStates.test.ts` y
+`docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado, no de esta tarea).
+**Estado real de producción (separado del estado del repositorio — sigue
+igual que antes de esta sincronización, esta tarea no desplegó nada):**
+VM sigue corriendo `cee686b` (backend/frontend, ver sección "Señal WiFi +
+mensajes de error de Hosts" más abajo); las correcciones de los commits
+`644e456`/`7cc47d7` de este push son candidatos locales **sin desplegar
+todavía** — la OLT/GenieACS sí tienen la WAN de gestión real restaurada
+(commits `9e0e355`/`f648290` son documentación de una operación ya
+ejecutada contra el equipo real, no código pendiente de desplegar).
+**Para Codex:** partir de `origin/main` en `f648290` — incluye los 4
+commits de arriba; los archivos de otras fases listados siguen solo en
+este equipo local, no en GitHub, revisar con el propietario antes de
+tocarlos o descartarlos.
+
 **1. Código actualmente desplegado** (confirmado leyendo el sistema en vivo,
 nunca asumido desde un commit o checkout local):
 VM de producción (`192.168.55.201`), **señal WiFi + mensajes de error de
