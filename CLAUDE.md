@@ -31,6 +31,24 @@ Hallazgo corregido en la misma sesión: credencial de OLT expuesta
 brevemente por un `select('*')` propio — no se repitió. Detalle:
 `docs/TR069-HABILITACION-REAL-HWTC1D3691B7-20261029.md`.
 
+**TR-069 — COMUNICACIÓN REAL CONFIRMADA: WAN de gestión restaurada
+(30/10/2026, 00:35:22 UTC, autorizado expresamente):** el `tr069-mgmt
+acs/state` del punto anterior no bastaba — faltaba la WAN de gestión
+dedicada completa (VLAN 200, IP, `switchport-bind`, `veip`), borrada por la
+reautorización previa del equipo. Restaurada con el procedimiento ya
+existente (`planTr069ManagementWan`, `server/src/services/
+tr069ManagementWan.ts`) tras reverificar en vivo que `10.15.15.200` seguía
+libre y que VLAN 200/gateway `10.15.15.1` coinciden con las 9 ONTs reales
+que ya usan ese patrón en esta OLT. Solo los 7 sub-objetos faltantes
+(`acs`/`state` no se repitió). Releído después: VLAN 120/Internet intacto
+línea por línea, `admin enable`/`working` sin cambios. **GenieACS registró
+el equipo con un Inform real nuevo** (serial `485754431D3691B7`,
+`_lastInform=_registered=2026-10-30T00:35:22.447Z`, antes 0 dispositivos) —
+su `ConnectionRequestURL` reportado apunta a `10.15.15.200:7547`,
+confirmando que la ruta de vuelta por la nueva IP funciona. Sin
+`connection_request` ni reintento forzado. Sin migraciones/push/despliegue.
+Detalle: `docs/TR069-GESTION-RESTAURADA-HWTC1D3691B7-20261030.md`.
+
 **Ficha OLT atascada en "Esperando conexión" — corregido, SIN publicar ni
 desplegar (29/10/2026, misma noche):** distinto del problema de
 comunicación TR-069 ya diagnosticado (no repetido). `deriveTr069EnableStatus`

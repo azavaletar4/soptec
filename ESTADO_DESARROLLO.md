@@ -120,6 +120,41 @@ sobre `olt_devices` expuso brevemente una credencial en texto plano por
 error propio — no se repitió, sin impacto fuera de esta conversación.
 Detalle completo: `docs/TR069-HABILITACION-REAL-HWTC1D3691B7-20261029.md`.
 
+**TR-069 — COMUNICACIÓN REAL CONFIRMADA: WAN de gestión restaurada
+(30/10/2026, 00:35:22 UTC, autorizado expresamente):** diagnóstico
+posterior (`docs/TR069-GESTION-INDEPENDIENTE-HUAWEI.md`, no repetido)
+encontró que el `tr069-mgmt acs/state` del punto anterior no bastaba: la
+WAN de gestión dedicada completa (VLAN 200, IP estática, `switchport-bind`,
+`veip`) había sido borrada por la reautorización previa del equipo y nunca
+se recreó. Restaurada con el procedimiento ya existente
+(`planTr069ManagementWan`/`configureTr069ManagementWanCommands`,
+`server/src/services/tr069ManagementWan.ts`): verificado en vivo que
+`10.15.15.200` seguía libre y que VLAN 200/gateway `10.15.15.1` coinciden
+con las 9 ONTs reales que ya usan ese mismo patrón en esta OLT. Único
+comando real ejecutado (los 7 sub-objetos que faltaban; `tr069-mgmt
+acs/state` no se repitió, ya estaba): `tcont 2`/`gemport 2`/`service-port 2
+vlan 200` + `service mgmt`/`switchport-bind`/`ip-host 2`/`veip 1 port
+udp`/`tr069-mgmt 1 tag`. Releído después: VLAN 120/tcont1/gemport1/
+service-port1 (Internet) intactos línea por línea; `show gpon onu state`
+sigue `admin enable`/`working`, sin cambios. **GenieACS registró el equipo
+con un Inform real nuevo** (`_id
+00259E-HG8145X6%2D13-485754431D3691B7`, `_lastInform=_registered=
+2026-10-30T00:35:22.447Z`, primer Inform desde que había quedado en 0
+dispositivos) — y su propio `ConnectionRequestURL` reportado
+(`http://10.15.15.200:7547/...`) confirma que la ruta de vuelta por la
+nueva IP de gestión ya funciona, no solo que el Inform saliente llegó. Sin
+`connection_request` ni reintento forzado — Inform del ciclo periódico
+normal del equipo. Nota de proceso: el primer intento de verificación (no
+de escritura) falló por un bug propio del script (pasé el resultado de
+`fullRunningConfigCommand()` dos veces anidado), lo cual disparó un bug
+preexistente de índice en `server/src/telnet/client.ts` (`commandVerb`
+puede recibir `undefined`) — no fue un rechazo real de la OLT; se detuvo,
+se corrigió el script y se repitió solo la lectura antes de continuar.
+Scripts temporales de esta tarea y 2 remanentes de la sesión anterior
+(`preflight.ts`/`cross_check.ts`) eliminados del contenedor/VM/equipo
+local. Sin migraciones, sin push, sin despliegue de código. Detalle
+completo: `docs/TR069-GESTION-RESTAURADA-HWTC1D3691B7-20261030.md`.
+
 **Ficha OLT atascada en "Esperando conexión" — corregido, SIN publicar ni
 desplegar (29/10/2026, misma noche):** distinto del problema de
 comunicación TR-069 ya diagnosticado (`tr069_enabled=false` para
