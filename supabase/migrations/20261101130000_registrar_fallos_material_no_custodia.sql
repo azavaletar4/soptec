@@ -61,11 +61,9 @@ end $$;
 -- (b) agrega la rama "when sqlstate '22023'" con el mismo patron exacto que
 -- la rama P1650 existente (mismo ON CONFLICT con guarda de status, mismo
 -- mensaje estructurado). Nada mas cambia en el cuerpo -- ni la relajacion
--- de idempotencia, ni el UPDATE final, ni ninguna otra linea. El REVOKE
--- posterior (abajo) SI es nuevo respecto de 20261020130000 -- reafirma
--- explicitamente el REVOKE original de 20261019170000 (CREATE OR REPLACE
--- preserva el ACL existente; esta linea es defensiva/redundante, nunca
--- cambia quien puede ejecutar la funcion).
+-- de idempotencia, ni el UPDATE final, ni ninguna otra linea. No se repite
+-- ningun REVOKE/GRANT: CREATE OR REPLACE preserva el ACL existente
+-- (el REVOKE de 20261019170000 sobre esta funcion sigue vigente sin tocarlo).
 create or replace function public.execute_tracked_material_inventory(p_operation_id uuid,p_job_type text,p_job_id uuid,p_action text,p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
 declare previous public.material_inventory_rejections; result jsonb; failure text;
