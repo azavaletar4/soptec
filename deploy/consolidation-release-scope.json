@@ -1,20 +1,12 @@
 {
   "version": 1,
-  "sourceCommit": "cee686b673c1df82d58eb1e27471d6f3e674a2de",
-  "backendSources": [
-    "server/src/services/tr069Hosts.ts",
-    "server/src/services/tr069HostsSignal.ts"
-  ],
+  "sourceCommit": "d063e8f27d272c90498d4efbe2d79ed6f8e83c51",
+  "backendSources": [],
   "frontendSources": [
-    "src/lib/__tests__/tr069HostsPanel.test.ts",
-    "src/lib/__tests__/tr069HostsView.test.ts",
-    "src/lib/tr069Hosts.ts",
-    "src/lib/tr069HostsPanel.ts",
-    "src/views/tr069/Tr069View.vue"
+    "src/views/campo/CampoTrabajoDetailView.vue",
+    "src/components/inventario/RoutineInventory.vue",
+    "src/lib/fieldInventoryOperation.ts",
+    "src/lib/__tests__/fieldInventoryOperation.test.ts"
   ],
-  "frontendAssets": ["assets/Tr069View.js", "assets/tr069.js"],
-  "backendEnvironment": {
-    "TR069_HOSTS_ON_DEMAND_ENABLED": "true",
-    "TR069_HOSTS_ON_DEMAND_SERIALS": "HWTC1D3691B7"
-  }
+  "frontendAssets": ["assets/CampoTrabajoDetailView.js", "assets/fieldInventoryOperation.js", "assets/routineTraslado.js"]
 }
