@@ -1,12 +1,16 @@
 {
   "version": 1,
-  "sourceCommit": "d063e8f27d272c90498d4efbe2d79ed6f8e83c51",
+  "sourceCommit": "2f3ea3ec608a235bdd9f79e9c616fdfc91245733",
   "backendSources": [],
   "frontendSources": [
     "src/views/campo/CampoTrabajoDetailView.vue",
     "src/components/inventario/RoutineInventory.vue",
     "src/lib/fieldInventoryOperation.ts",
-    "src/lib/__tests__/fieldInventoryOperation.test.ts"
+    "src/lib/__tests__/fieldInventoryOperation.test.ts",
+    "src/lib/materialRejectionPresentation.ts",
+    "src/lib/__tests__/materialRejectionPresentation.test.ts",
+    "src/stores/technicianCustody.ts",
+    "src/views/inventario/InventarioCustodiaView.vue"
   ],
-  "frontendAssets": ["assets/CampoTrabajoDetailView.js", "assets/fieldInventoryOperation.js", "assets/routineTraslado.js"]
+  "frontendAssets": ["assets/CampoTrabajoDetailView.js", "assets/fieldInventoryOperation.js", "assets/routineTraslado.js", "assets/InventarioCustodiaView.js", "assets/technicianCustody.js"]
 }
