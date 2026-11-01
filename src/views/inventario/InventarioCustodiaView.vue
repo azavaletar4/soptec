@@ -14,6 +14,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { chooseCustodyTechnician, currentCustodyDelivery, custodyEquipmentLocation, shortfallReasonLabel } from '@/lib/technicianCustodyPresentation';
 import { classifyShortfallRecency } from '@/lib/materialCustodyShortfall';
+import { isRejectionRetryable } from '@/lib/materialRejectionPresentation';
 import { formatPeruDateTime } from '@/lib/oltAlertPresentation';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useInventoryStore } from '@/stores/inventory';
@@ -57,7 +58,11 @@ async function loadRejections() {
   catch (e) { rejectionError.value = getErrorMessage(e, 'No se pudieron consultar los intentos pendientes de regularizar.'); }
 }
 function canRetry(row: DetailedRejectedMaterialOperation): boolean {
-  return row.jobOpen && row.items.length > 0 && row.items.every((it) => it.availableNow >= it.quantityRequested);
+  // Un rechazo PERMANENTE (ej. cantidad/producto/solicitud invalida, '22023')
+  // nunca se ofrece para reintento automatico -- repetir la MISMA solicitud
+  // fallaria siempre, sin importar la custodia (isRejectionRetryable()).
+  return isRejectionRetryable(row.sqlstate_code)
+    && row.jobOpen && row.items.length > 0 && row.items.every((it) => it.availableNow >= it.quantityRequested);
 }
 async function retryRejection(row: DetailedRejectedMaterialOperation) {
   if (!canRetry(row)) return;
@@ -430,7 +435,7 @@ onMounted(loadAll);
           <router-link v-if="row.jobPath" class="text-xs text-sky-700 underline" :to="row.jobPath">Ver orden</router-link>
           <div class="flex flex-wrap items-center gap-2 pt-1">
             <button
-              v-if="row.jobOpen"
+              v-if="row.jobOpen && isRejectionRetryable(row.sqlstate_code)"
               type="button"
               :disabled="!canRetry(row) || retryingRejection === row.operation_id"
               :title="canRetry(row) ? 'Registra el mismo material/cantidad, descontando la custodia del técnico' : 'La custodia del técnico todavía no alcanza para todo el intento'"
@@ -439,9 +444,13 @@ onMounted(loadAll);
             >
               {{ retryingRejection === row.operation_id ? 'Reintentando...' : 'Reintentar consumo' }}
             </button>
+            <p v-else-if="row.jobOpen" class="text-xs text-red-700">
+              No se puede reintentar automáticamente: el dato registrado no es válido (cantidad, producto o solicitud). Pide al técnico que corrija el consumo desde la App de Campo, o usa «Descartar» si no corresponde repetirlo.
+            </p>
           </div>
           <details class="text-xs"><summary>Descartar intento equivocado</summary>
-            <p class="my-2">Descartarlo no registra consumo ni modifica existencias. No lo descartes si el material se utilizó realmente — usa "Reintentar" en vez de esto.</p>
+            <p v-if="isRejectionRetryable(row.sqlstate_code)" class="my-2">Descartarlo no registra consumo ni modifica existencias. No lo descartes si el material se utilizó realmente — usa "Reintentar" en vez de esto.</p>
+            <p v-else class="my-2">Descartarlo no registra consumo ni modifica existencias. Si el material SÍ se utilizó realmente, pide al técnico que lo registre de nuevo con el dato corregido desde la App de Campo antes de descartar este intento.</p>
             <input v-model="rejectionNotes[row.operation_id]" maxlength="500" class="field-input" placeholder="Motivo del descarte" />
             <button type="button" :disabled="resolvingRejection === row.operation_id || !rejectionNotes[row.operation_id]?.trim()" class="btn-secondary mt-2" @click="cancelRejection(row)">Descartar con motivo</button>
           </details>

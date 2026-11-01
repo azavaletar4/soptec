@@ -17,6 +17,11 @@ export interface RejectedMaterialOperation {
   operation_id: string; job_type: 'installation' | 'ticket' | 'routine'; job_id: string;
   actor_id: string; action: string; payload: Record<string, unknown>; message: string; created_at: string;
   actor: { full_name: string | null; email: string | null } | null;
+  /** 'P1650' (custodia) es transitorio; cualquier otro código (ej. '22023',
+   * validación de datos) es permanente -- ver isRejectionRetryable(). `null`
+   * son filas de antes de que el servidor empezara a distinguirlo (siempre
+   * eran P1650 en ese entonces). */
+  sqlstate_code: string | null;
 }
 
 /** Fase 169: el mismo rechazo, pero con lo que un administrador necesita

@@ -19,6 +19,22 @@ export function isJobOpenForRetry(jobType: 'installation' | 'ticket' | 'routine'
   return OPEN_ROUTINE_STATUSES.has(status);
 }
 
+/**
+ * 'P1650' (custodia insuficiente) es TRANSITORIO: la misma solicitud puede
+ * funcionar después de una entrega real de material -- Reintentar tiene
+ * sentido. `null` son filas históricas previas a que el servidor empezara
+ * a distinguir el motivo (siempre eran P1650 en ese entonces -- nunca otra
+ * cosa) y se tratan igual. Cualquier otro código (hoy, '22023': cantidad
+ * inválida, producto inactivo/serializado, kit mal formado, solicitud
+ * inválida) es PERMANENTE: repetir la MISMA solicitud fallará siempre, sin
+ * importar cuánta custodia tenga el técnico -- nunca ofrecer un reintento
+ * automático para estos, se necesita corregir el dato o una regularización
+ * administrativa aparte (Descartar).
+ */
+export function isRejectionRetryable(sqlstateCode: string | null | undefined): boolean {
+  return sqlstateCode === 'P1650' || sqlstateCode == null;
+}
+
 export interface RejectionPayloadItem {
   productId: string;
   quantity: number;

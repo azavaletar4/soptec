@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isJobOpenForRetry, parseRejectionItems } from '../materialRejectionPresentation';
+import { isJobOpenForRetry, isRejectionRetryable, parseRejectionItems } from '../materialRejectionPresentation';
 
 test('isJobOpenForRetry: instalacion -- solo pending/scheduled/in_progress admiten reintento', () => {
   assert.equal(isJobOpenForRetry('installation', 'pending'), true);
@@ -47,4 +47,20 @@ test('parseRejectionItems: items malformados se descartan, nunca rompen ni inven
 test('parseRejectionItems: payload vacio o accion desconocida -> vacio', () => {
   assert.deepEqual(parseRejectionItems('kit', {}), []);
   assert.deepEqual(parseRejectionItems('reverse', { movementId: 'm1' }), []);
+});
+
+test('isRejectionRetryable: P1650 (custodia) y null (historico pre-columna) son transitorios -- admiten reintento', () => {
+  assert.equal(isRejectionRetryable('P1650'), true);
+  assert.equal(isRejectionRetryable(null), true);
+  assert.equal(isRejectionRetryable(undefined), true);
+});
+
+test('isRejectionRetryable: 22023 (validacion: cantidad/producto/solicitud invalida) es permanente -- nunca reintento automatico', () => {
+  assert.equal(isRejectionRetryable('22023'), false);
+});
+
+test('isRejectionRetryable: cualquier otro codigo futuro no catalogado se trata como permanente por seguridad', () => {
+  assert.equal(isRejectionRetryable('42501'), false);
+  assert.equal(isRejectionRetryable('55P03'), false);
+  assert.equal(isRejectionRetryable('XX000'), false);
 });
