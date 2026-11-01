@@ -1,0 +1,1 @@
+{"code": 0, "stdout": "{\"ontsErrorCode\":null,\"ontsCount\":1,\"ontRows\":[{\"id\":\"00095d26-298e-42e0-a3aa-a6adde3ef2f5\",\"serialMatches\":true,\"hasClientId\":true,\"retiredAt\":null}],\"contractErrorCode\":null,\"contractOk\":true,\"clientMatches\":true,\"tr069ErrorCode\":null,\"tr069Count\":0,\"tr069AssocOk\":null}", "stderr": ""}

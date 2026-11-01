@@ -27,7 +27,10 @@ const STALE_PENDING_MS = 20 * 60 * 1000;
 function isValidWifiPassword(pw: string) { return pw.length >= 8 && pw.length <= 63 && /^[\x20-\x7e]+$/.test(pw); }
 const CONTRACT_ID = 'bf6b0f88-3c55-4c9b-aca2-5dfa739e738c';
 export const WIFI_TRIAL_CONTRACT = 'CTR-2026-00214';
-const ONT_ID = '8d3eb272-b90b-48b9-b834-2176e6003b6b';
+// Verificado en vivo 2026-11-01 (solo lectura, docs/TR069-WIFI-GUARD-ONT-ID-CHECK-20261101.json):
+// unica ONT activa del contrato, serial/cliente/contrato concordantes; el ID anterior quedo
+// obsoleto (reimport/resincronizacion OLT cambio la fila, serial y contrato se mantuvieron).
+const ONT_ID = '00095d26-298e-42e0-a3aa-a6adde3ef2f5';
 
 export async function validateWifiTrialContract() {
   const { data: onts, error } = await supabaseAdmin.from('olt_onts')
