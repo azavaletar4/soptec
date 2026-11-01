@@ -104,7 +104,14 @@ test('Ajuste pendiente: piloto tras terminación técnica, sin tocar históricos
    assert.equal(sql(`select to_jsonb(c) from work_order_point_confirmations c where id='${frozen.id}';`),frozenRow);
    assert.throws(()=>as(adjust('ticket',alreadyFinal,5,2),root),/Cierre administrativo definitivo/);
    assert.equal(sql("select md5(prosrc) from pg_proc where oid='technician_point_contributions(timestamptz,timestamptz)'::regprocedure;"),rankingSource);
-   assert.equal(sql("select count(*) from technician_point_contributions('2026-11-01 05:00Z','2026-11-02 05:00Z');"),'0');
+   // Ventana arbitraria sin ninguna fixture -- antes era '2026-11-01..02',
+   // pero esa fecha coincide con el dia real de activacion oficial: al
+   // ejecutarse EN o despues del 1/11/2026, confirmed_at de alreadyFinal
+   // (clock_timestamp() real, linea 48) cae dentro de esa misma ventana y
+   // la deja de estar vacia -- no es un fallo de technician_point_contributions,
+   // es la prueba acoplada al reloj real. 2099 nunca coincide con una fixture
+   // ni con "ahora".
+   assert.equal(sql("select count(*) from technician_point_contributions('2099-01-01 05:00Z','2099-01-02 05:00Z');"),'0');
    for(const role of ['authenticated','service_role'])for(const table of ['work_order_point_changes','work_order_point_confirmations'])assert.equal(sql(`select has_table_privilege('${role}','${table}','INSERT,UPDATE,DELETE,TRUNCATE');`),'f');
    assert.throws(()=>as(adjust('ticket',pilot),admin,'anon'),/permission denied/);
   });

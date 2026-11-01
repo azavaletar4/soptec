@@ -29,7 +29,7 @@ import { useTechnicianCustodyStore } from '@/stores/technicianCustody';
 import type { MyInventoryCustody } from '@/types/domain';
 import { createInventoryRefresh } from '@/lib/inventoryRefresh';
 import { startInventorySignals } from '@/lib/inventorySignals';
-import { executeFieldInventory, pendingFieldInventory, type FieldInventoryAction } from '@/lib/fieldInventoryOperation';
+import { executeFieldInventory, hasUnconfirmedInventory, pendingFieldInventory, type FieldInventoryAction } from '@/lib/fieldInventoryOperation';
 import type { FieldInventoryContext, FieldInventoryProduct, FieldInventoryMovement, FieldInventoryUnit, FieldInventoryView } from '@/types/fieldInventory';
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
@@ -107,6 +107,9 @@ async function readInventory<T>(context: FieldInventoryContext, view: FieldInven
 const fieldInventory = { read: readInventory };
 const inventoryWriteBusy = ref(false);
 const inventoryPendingNotice = ref('');
+// Rutinas usan su propio mecanismo de pendiente (RoutineInventory.vue,
+// routineInventoryRequest.ts) -- este flag es lo que ese componente emite.
+const routineInventoryPending = ref(false);
 async function writeFieldInventory(action: FieldInventoryAction, payload: Record<string, unknown>) {
   if (inventoryWriteBusy.value) throw Error('Ya hay una operación de inventario en curso.');
   if (inventoryAccessBlocked.value) throw Error('Comprueba el acceso a la orden antes de registrar inventario.');
@@ -1669,7 +1672,7 @@ async function handleCloseSubmit() {
   // por falta de custodia (Fase 166 no bloquea ESE caso a propósito) -- aquí no
   // se sabe si se aplicó o no, así que cerrar a ciegas podría dejar un consumo
   // real sin registrar, sin que quede ningún rastro para revisión administrativa.
-  if ((jobType === 'installation' || jobType === 'ticket') && inventoryPendingNotice.value) {
+  if (hasUnconfirmedInventory(jobType, inventoryPendingNotice.value, routineInventoryPending.value)) {
     closeError.value = 'Hay un material o equipo sin confirmar en esta orden — ábrelo arriba y confírmalo antes de cerrar.';
     return;
   }
@@ -2259,7 +2262,8 @@ async function handleCloseSubmit() {
       <!-- Materiales -->
       <RoutineInventory v-if="jobType === 'routine'" :key="jobId" :routine="trabajo.raw as Routine" :can-write="canReturnRoutine"
         :material-availability="availableOf" :material-custody-label="custodyLabel" :material-custody-state="materialCustodyState"
-        @inventory-changed="loadMyMaterialCustody" @retry-custody="loadMyMaterialCustody" />
+        @inventory-changed="loadMyMaterialCustody" @retry-custody="loadMyMaterialCustody"
+        @pending-changed="(v) => (routineInventoryPending = v)" />
       <section v-if="isLockedForTecnico" class="surface p-3.5 mb-3 bg-slate-50">
         <h2 class="text-sm font-semibold mb-1">✅ {{ jobType === 'routine' ? 'Rutina completada' : 'Instalación completada' }}</h2>
         <p class="text-xs text-slate-500">

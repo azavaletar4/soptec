@@ -9,6 +9,22 @@ export interface FieldInventoryRequest {
 export interface FieldInventoryReceipt {
   operationId: string; jobType: string; jobId: string; action: string; ids: string[]; at: string;
 }
+/**
+ * Una operación de inventario INCIERTA (sin respuesta del servidor, distinta
+ * de un rechazo YA CONFIRMADO por custodia insuficiente -- ese nunca bloquea
+ * a propósito, Fase 166) nunca debe dejarse cerrar a ciegas: no se sabe si se
+ * aplicó o no, y cerrar perdería la única señal visible de que algo quedó sin
+ * resolver (caso real: auditoría 2026-11-01, Jadir Zavaleta / 25 m de UTP).
+ */
+export function hasUnconfirmedInventory(
+  jobType: string,
+  installationOrTicketPendingNotice: string,
+  routinePending: boolean,
+): boolean {
+  return ((jobType === 'installation' || jobType === 'ticket') && !!installationOrTicketPendingNotice)
+    || (jobType === 'routine' && routinePending);
+}
+
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 type Invoke = (request: FieldInventoryRequest) => Promise<{ data: unknown; error: { code?: string; message: string } | null }>;
 const keyFor = (c: FieldInventoryContext, namespace: string) => `${namespace}:${c.actorId}:${c.jobType}:${c.jobId}`;

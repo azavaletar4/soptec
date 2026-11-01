@@ -20,7 +20,7 @@ const props = defineProps<{ routine: Routine; canWrite?: boolean;
   materialCustodyLabel?: (id: string, unit: string) => string;
   materialCustodyState?: MaterialCustodyLoadState;
 }>();
-const emit = defineEmits<{ inventoryChanged: []; retryCustody: [] }>();
+const emit = defineEmits<{ inventoryChanged: []; retryCustody: []; pendingChanged: [boolean] }>();
 const auth = useAuthStore();
 const custodyStore = useTechnicianCustodyStore();
 const custody = ref<Pick<MyInventoryCustody, 'materials' | 'units'>>({ materials: [], units: [] });
@@ -70,6 +70,10 @@ const outgoingChoices = computed(() => assigned.value.filter(u => u.status === '
 function refreshPending() {
   pending.value = auth.user ? pendingRoutineInventory(localStorage, auth.user.id, props.routine.id) : null;
 }
+// El padre (CampoTrabajoDetailView.vue) necesita saber si hay una operación
+// incierta (sin respuesta del servidor) antes de permitir cerrar la rutina --
+// mismo criterio ya aplicado a Altas/Averías, nunca expuesto antes para Rutinas.
+watch(pending, (v) => emit('pendingChanged', !!v), { immediate: true });
 const context = (): FieldInventoryContext => ({ jobType: 'routine', jobId: props.routine.id,
   actorId: auth.user?.id ?? '', clientId: props.routine.client_id, contractId: props.routine.contract_id });
 const current = (c: FieldInventoryContext) => JSON.stringify(c) === JSON.stringify(context());

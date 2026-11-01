@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { executeFieldInventory, pendingFieldInventory, type FieldInventoryRequest } from '../fieldInventoryOperation.ts';
+import { executeFieldInventory, hasUnconfirmedInventory, pendingFieldInventory, type FieldInventoryRequest } from '../fieldInventoryOperation.ts';
 const context={actorId:'actor',jobId:'job',jobType:'installation' as const,clientId:'client',contractId:'contract'};
 function storage(){const map=new Map<string,string>();return {getItem:(k:string)=>map.get(k)??null,setItem:(k:string,v:string)=>{map.set(k,v);},removeItem:(k:string)=>{map.delete(k);}};}
 const success=(r:FieldInventoryRequest)=>({data:{operationId:r.p_operation_id,jobType:r.p_job_type,jobId:r.p_job_id,action:r.p_action,ids:['event'],at:'2026-10-15'},error:null});
@@ -33,4 +33,14 @@ test('55P03 tras respuesta perdida conserva intención y reintenta con la misma 
     assert.equal(r.p_operation_id,'stable-operation');return success(r);
   },()=> 'must-not-use-new-id');
   assert.equal(pendingFieldInventory(s,context),null);
+});
+test('hasUnconfirmedInventory: Altas/Averías bloquean solo por su propio aviso; Rutinas usan su propia señal', () => {
+  assert.equal(hasUnconfirmedInventory('installation', '', false), false);
+  assert.equal(hasUnconfirmedInventory('installation', 'Hay una operación de inventario pendiente de confirmar.', false), true);
+  assert.equal(hasUnconfirmedInventory('ticket', 'pendiente', false), true);
+  assert.equal(hasUnconfirmedInventory('ticket', '', false), false);
+  // Rutina ignora el aviso de Alta/Avería (mecanismo distinto) y solo mira su propio flag.
+  assert.equal(hasUnconfirmedInventory('routine', 'pendiente', false), false);
+  assert.equal(hasUnconfirmedInventory('routine', '', true), true);
+  assert.equal(hasUnconfirmedInventory('routine', '', false), false);
 });
