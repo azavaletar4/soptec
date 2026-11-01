@@ -1,0 +1,1 @@
+{"code": 0, "stdout": "{\"cutoffUtc\":\"2026-11-01T05:00:00.000Z\",\"ticketsError\":null,\"installationsError\":null,\"routinesError\":null,\"officialEligibleCount\":1,\"confirmationQueryError\":\"42501\",\"withConfirmation\":0,\"withoutConfirmation\":0,\"missingSample\":[]}", "stderr": ""}

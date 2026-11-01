@@ -580,6 +580,7 @@ async function handleAddMaterial() {
     void loadMyMaterialCustody(); // Fase 165 etapa 2: el selector de Averias depende de la custodia fresca.
   } catch (e) {
     materialError.value = getErrorMessage(e, 'Error al registrar el material (revisa tu custodia disponible)');
+    toast.error(materialError.value);
   } finally {
     savingMaterial.value = false;
   }
@@ -606,6 +607,7 @@ async function handleSaveMaterialQty(m: FieldInventoryMovement) {
     void loadMyMaterialCustody();
   } catch (e) {
     materialError.value = getErrorMessage(e, 'Error al corregir la cantidad');
+    toast.error(materialError.value);
   } finally {
     materialActionBusy.value = null;
   }
@@ -620,6 +622,7 @@ async function handleRemoveMaterial(m: FieldInventoryMovement) {
     void loadMyMaterialCustody();
   } catch (e) {
     materialError.value = getErrorMessage(e, 'Error al quitar el material');
+    toast.error(materialError.value);
   } finally {
     materialActionBusy.value = null;
   }
@@ -1207,7 +1210,14 @@ function syncInventoryContext() {
  const key = JSON.stringify([actor, auth.role, auth.session?.access_token, t?.clientId, t?.contractId]);
  if (key === inventoryContextKey) return;
  inventoryContextKey = key; inventoryPendingNotice.value = '';
- try { if (actor && localStorage.getItem(`campo-inventory:v1:${actor}:${jobType}:${jobId}`)) inventoryPendingNotice.value = 'Hay una operación de inventario pendiente de confirmar.'; } catch { /* mantener intención persistida intacta */ }
+ try {
+  if (actor && localStorage.getItem(`campo-inventory:v1:${actor}:${jobType}:${jobId}`)) {
+   inventoryPendingNotice.value = 'Hay una operación de inventario pendiente de confirmar.';
+   // Aviso inconfundible al abrir la orden: una operación sin confirmar (p.ej. material
+   // registrado sin conexión) nunca debe pasar desapercibida solo por el aviso en pantalla.
+   toast.error('Tienes un material/equipo sin confirmar en esta orden. Ábrelo y confírmalo antes de cerrar.');
+  }
+ } catch { /* mantener intención persistida intacta */ }
  inventoryRefresh.setContext(t && actor && ['ADMIN','SUPERADMIN','TECNICO_RED'].includes(auth.role ?? '') ? fieldContext() : null);
 }
 async function refreshInventory(afterWrite = false) { if (!inventoryViewAlive || jobType === 'routine') return; syncInventoryContext(); await inventoryRefresh.refresh(afterWrite); }
@@ -1653,6 +1663,16 @@ function openLightbox(photos: LightboxPhoto[], startId: string) {
 
 async function handleCloseSubmit() {
   if (!trabajo.value) return;
+
+  // Una operación de inventario sin confirmar (p.ej. material registrado sin
+  // conexión, nunca respondido por el servidor) es distinta de un rechazo real
+  // por falta de custodia (Fase 166 no bloquea ESE caso a propósito) -- aquí no
+  // se sabe si se aplicó o no, así que cerrar a ciegas podría dejar un consumo
+  // real sin registrar, sin que quede ningún rastro para revisión administrativa.
+  if ((jobType === 'installation' || jobType === 'ticket') && inventoryPendingNotice.value) {
+    closeError.value = 'Hay un material o equipo sin confirmar en esta orden — ábrelo arriba y confírmalo antes de cerrar.';
+    return;
+  }
   // El cliente firma la hoja física de servicio; no se requiere firma digital.
 
   // Planta Externa (Zona + Caja NAP) es obligatoria al completar un alta —
