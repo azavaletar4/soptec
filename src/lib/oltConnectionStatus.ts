@@ -46,6 +46,38 @@ function isLinked(o: ConnectionStatusOnt): boolean {
   return Boolean(o.client_id) && Boolean(o.contract_id) && Boolean(o.service_contracts);
 }
 
+/**
+ * Motivo por el que una ONT cuenta como "pendiente de vincular" — distingue
+ * las dos formas reales encontradas en producción (2026-11-02, indicador
+ * «4 ONTs pendientes de vincular» sin detalle):
+ *   - 'no_client': nunca se vinculó a ningún cliente (el caso típico de
+ *     migración SmartOLT — una ONT importada que solo trae su `description`
+ *     de texto libre, sin `client_id`).
+ *   - 'client_without_contract': SÍ tiene `client_id` pero le falta el
+ *     contrato (o el contrato referenciado no resolvió) — un vínculo a
+ *     medias, más delicado que "nunca vinculada": no basta "asignar
+ *     cliente", hay que revisar o crear el contrato correcto.
+ * Nunca una tercera categoría aquí: una ONT que existe en la OLT real pero
+ * JAMÁS se importó a `olt_onts` no tiene fila que mostrar -- no aparece en
+ * este listado en absoluto (ver nota de limitación en OltDetailView.vue).
+ */
+export type UnlinkedOntReason = 'no_client' | 'client_without_contract';
+
+/**
+ * Mismo criterio exacto que `computeConnectionStatusCounts` (`isLinked`),
+ * reutilizado tal cual -- esta función NUNCA debe tener un criterio de
+ * vínculo distinto al del contador, o el listado dejaría de coincidir con
+ * el número que el usuario ve. Genérica sobre T para conservar el tipo
+ * completo de entrada (p. ej. `OltOnt`, con más campos que `ConnectionStatusOnt`)
+ * en la salida -- así el detalle completo sigue disponible para abrir
+ * `OntDetailModal` sin una segunda consulta.
+ */
+export function listUnlinkedOnts<T extends ConnectionStatusOnt>(onts: readonly T[]): (T & { unlinkedReason: UnlinkedOntReason })[] {
+  return onts
+    .filter((o) => !isLinked(o))
+    .map((o) => ({ ...o, unlinkedReason: o.client_id ? 'client_without_contract' : 'no_client' as const }));
+}
+
 type LinkedBucket = 'online' | 'offline' | 'unknown' | 'suspended';
 
 /** `admin_state='disable'` manda SIEMPRE, antes de mirar `status` — ver nota 13ax arriba. */

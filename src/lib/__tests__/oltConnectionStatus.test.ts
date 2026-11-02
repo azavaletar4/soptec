@@ -7,6 +7,7 @@ import {
   filterDisconnectedClients,
   evaluateSyncFreshness,
   suspensionReasonLabel,
+  listUnlinkedOnts,
   type ConnectionStatusOnt,
 } from '../oltConnectionStatus';
 
@@ -270,4 +271,65 @@ test('evaluateSyncFreshness: sin ningun dato todavia (OLT recien creada) -> "No 
   const r = evaluateSyncFreshness(null, Date.now());
   assert.equal(r.checkedAtIso, null);
   assert.equal(r.minutesAgo, null);
+});
+
+// ---- listUnlinkedOnts: detalle de las ONT que cuenta "pendientes de
+// vincular" en OltDetailView.vue -- mismo criterio exacto que
+// computeConnectionStatusCounts (isLinked), nunca uno distinto. ----
+
+test('listUnlinkedOnts: vacio cuando no hay ninguna ONT sin vincular', () => {
+  assert.deepEqual(listUnlinkedOnts([linkedSample()]), []);
+});
+
+test('listUnlinkedOnts: sin client_id -> motivo "no_client"', () => {
+  const sinCliente = ont({ id: 'ont-x', client_id: null, description: 'Jerry Cruz Luna' });
+  const r = listUnlinkedOnts([sinCliente]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].unlinkedReason, 'no_client');
+  assert.equal(r[0].id, 'ont-x');
+});
+
+test('listUnlinkedOnts: con client_id pero sin contrato -> motivo "client_without_contract", nunca "no_client"', () => {
+  const vinculoAMedias = ont({ id: 'ont-y', client_id: 'cli-9', contract_id: null, description: 'Luis Aponte Herrera' });
+  const r = listUnlinkedOnts([vinculoAMedias]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].unlinkedReason, 'client_without_contract');
+});
+
+test('listUnlinkedOnts: client_id presente pero el contrato referenciado no resolvio (service_contracts null) -> tambien "client_without_contract"', () => {
+  const contratoNoResuelto = ont({ id: 'ont-z', client_id: 'cli-9', contract_id: 'ctr-borrado', service_contracts: null });
+  const r = listUnlinkedOnts([contratoNoResuelto]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].unlinkedReason, 'client_without_contract');
+});
+
+test('listUnlinkedOnts: conserva todos los campos originales (generico sobre T) -- el detalle completo sigue disponible sin otra consulta', () => {
+  const original = ont({ id: 'ont-full', client_id: null, serial: 'MSTC8CCE647E', description: 'Janet Armas Asto', slot: 2, port: 8, ont_id: 3 });
+  const r = listUnlinkedOnts([original]);
+  assert.equal(r[0].serial, 'MSTC8CCE647E');
+  assert.equal(r[0].description, 'Janet Armas Asto');
+  assert.equal(r[0].slot, 2);
+  assert.equal(r[0].port, 8);
+  assert.equal(r[0].ont_id, 3);
+});
+
+test('listUnlinkedOnts: el total coincide EXACTAMENTE con unlinked de computeConnectionStatusCounts, en una lista mixta real', () => {
+  const lista = [
+    linkedSample({ id: 'ont-1' }),
+    ont({ id: 'ont-2', client_id: null, description: 'Jerry Cruz Luna' }),
+    ont({ id: 'ont-3', client_id: null, description: 'Jerry Cruz Luna 2', status: 'online' }),
+    ont({ id: 'ont-4', client_id: null, description: 'Janet Armas Asto', status: 'online' }),
+    ont({ id: 'ont-5', client_id: 'cli-80aa', contract_id: null, description: 'Luis Aponte Herrera', status: 'online' }),
+  ];
+  const counts = computeConnectionStatusCounts(lista);
+  const detalle = listUnlinkedOnts(lista);
+  assert.equal(detalle.length, counts.unlinked);
+  assert.equal(detalle.length, 4);
+  assert.deepEqual(detalle.map((o) => o.unlinkedReason), ['no_client', 'no_client', 'no_client', 'client_without_contract']);
+});
+
+test('listUnlinkedOnts: nunca incluye una ONT vinculada, aunque este offline o suspendida', () => {
+  const vinculadaOffline = linkedSample({ id: 'ont-off', status: 'offline' });
+  const vinculadaSuspendida = linkedSample({ id: 'ont-sus', admin_state: 'disable' });
+  assert.deepEqual(listUnlinkedOnts([vinculadaOffline, vinculadaSuspendida]), []);
 });
