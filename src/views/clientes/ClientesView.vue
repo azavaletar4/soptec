@@ -14,7 +14,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
-import { isCurrentSubscriber, isRetiredClient, OPEN_INSTALLATION_STATUSES } from '@/lib/clientLifecycle';
+import { classifyClientSection, isRetiredClient, OPEN_INSTALLATION_STATUSES, type ClientSection } from '@/lib/clientLifecycle';
 import type { ClientWithLifecycle } from '@/stores/clients';
 import type { Client, ClientStatus, ContractPriority, DocumentType, Installation } from '@/types/domain';
 
@@ -61,7 +61,13 @@ const saving = ref(false);
 const formError = ref<string | null>(null);
 const pendingPppoeHint = ref<string | null>(null);
 const searchQuery = ref('');
-const clientSection = ref<'current' | 'retired'>('current');
+const clientSection = ref<ClientSection>('current');
+const SECTION_TABS: { value: ClientSection; label: string }[] = [
+  { value: 'current', label: 'Clientes vigentes' },
+  { value: 'pending_install', label: 'Pendientes de instalación' },
+  { value: 'unfulfilled', label: 'No instalados' },
+  { value: 'retired', label: 'Clientes retirados' },
+];
 const classificationReady = ref(false);
 const classificationError = ref<string | null>(null);
 const canPrepareReincorporation = computed(() => auth.role === 'ADMIN' || auth.role === 'SUPERADMIN');
@@ -78,11 +84,23 @@ async function retirementCompleted() {
   try { await Promise.all([clientsStore.fetchClients(), contractsStore.fetchContracts()]); }
   catch { toast.error('Baja confirmada. No se pudo actualizar el listado; recarga para consultar el estado actual.'); }
 }
-const retiredClients = computed(() => clientsStore.clients.filter(isRetiredClient));
-const currentClients = computed(() => clientsStore.clients.filter((c) => !isRetiredClient(c)));
-const currentSubscribers = computed(() => currentClients.value.filter(isCurrentSubscriber));
-const withoutCurrentServiceCount = computed(() => currentClients.value.length - currentSubscribers.value.length);
-const sectionClients = computed(() => clientSection.value === 'retired' ? retiredClients.value : currentClients.value);
+// Las 4 secciones reales del listado (ver src/lib/clientLifecycle.ts):
+// vigentes, pendientes de instalación, no instalados y retirados — un solo
+// recorrido, cada ficha cae en exactamente una.
+const sectionBuckets = computed(() => {
+  const buckets: Record<ClientSection, ClientWithLifecycle[]> = { current: [], pending_install: [], unfulfilled: [], retired: [] };
+  for (const c of clientsStore.clients) buckets[classifyClientSection(c)].push(c);
+  return buckets;
+});
+const currentClients = computed(() => sectionBuckets.value.current);
+const pendingInstallClients = computed(() => sectionBuckets.value.pending_install);
+const unfulfilledClients = computed(() => sectionBuckets.value.unfulfilled);
+const retiredClients = computed(() => sectionBuckets.value.retired);
+// Dentro de "vigentes", fichas sin ningún contrato (consultables, nunca
+// contrataron nada todavía) — se conservan visibles con una nota aparte,
+// mismo criterio que ya existía.
+const withoutAnyContractCount = computed(() => currentClients.value.filter((c) => !c.service_contracts.length).length);
+const sectionClients = computed(() => sectionBuckets.value[clientSection.value]);
 const pendingInstallationClients = computed(() => new Set(clientsStore.clients
   .filter((c) => c.installations.some((i) => OPEN_INSTALLATION_STATUSES.has(i.status)))
   .map((c) => c.id)));
@@ -217,12 +235,14 @@ function pendingInstallLabel(c: Client): string | null {
 // que TYPE_TABS en HistoricoAtendidosView.vue. Se combinan con la busqueda
 // de texto (el filtro acota la lista primero, la busqueda filtra sobre
 // ese subconjunto).
-type QuickFilter = 'all' | 'active' | 'pending_install' | 'suspended' | 'multi_service';
+// "Pendientes de instalación" ya es una sección propia (ver sectionBuckets);
+// se quitó de aquí porque, dentro de "vigentes", siempre daría vacío (una
+// ficha con Alta abierta ahora cae directo en esa sección, nunca en esta).
+type QuickFilter = 'all' | 'active' | 'suspended' | 'multi_service';
 const quickFilter = ref<QuickFilter>('all');
 const QUICK_FILTER_TABS: { value: QuickFilter; label: string }[] = [
   { value: 'all', label: 'Todos' },
   { value: 'active', label: 'Activos' },
-  { value: 'pending_install', label: 'Pendientes de instalación' },
   { value: 'suspended', label: 'Suspendidos' },
   { value: 'multi_service', label: 'Con múltiples servicios' },
 ];
@@ -231,7 +251,6 @@ const filteredClientsList = computed(() => {
   if (!classificationReady.value) return [];
   let list = sectionClients.value;
   if (quickFilter.value === 'active') list = list.filter((c) => c.service_contracts.some((ct) => ct.status === 'active') || (!c.service_contracts.length && c.status === 'active'));
-  else if (quickFilter.value === 'pending_install') list = list.filter((c) => hasOpenInstallation(c.id));
   else if (quickFilter.value === 'suspended') list = list.filter((c) => c.service_contracts.some((ct) => ct.status === 'suspended') || (!c.service_contracts.length && c.status === 'suspended'));
   else if (quickFilter.value === 'multi_service') list = list.filter((c) => c.service_contracts.length >= 2);
 
@@ -492,8 +511,8 @@ function goToDetail(client: Client) {
       <div>
         <h1 class="text-2xl font-semibold">Clientes</h1>
         <p class="text-slate-600 text-sm mt-1">
-          {{ classificationError ? 'Clasificación no disponible' : !classificationReady ? 'Cargando clasificación…' : `${currentSubscribers.length} abonados vigentes · ${retiredClients.length} retirados` }}
-          <span v-if="classificationReady && withoutCurrentServiceCount"> · {{ withoutCurrentServiceCount }} fichas sin servicio vigente</span>
+          {{ classificationError ? 'Clasificación no disponible' : !classificationReady ? 'Cargando clasificación…' : `${currentClients.length} vigentes · ${pendingInstallClients.length} pendientes de instalación · ${unfulfilledClients.length} no instalados · ${retiredClients.length} retirados` }}
+          <span v-if="classificationReady && withoutAnyContractCount"> · {{ withoutAnyContractCount }} fichas sin ningún contrato</span>
         </p>
       </div>
       <div v-if="canManageClients" class="flex gap-2">
@@ -506,14 +525,14 @@ function goToDetail(client: Client) {
     <p v-if="classificationError" role="alert" class="mb-4 text-sm text-red-600">{{ classificationError }}</p>
 
     <div class="flex flex-wrap gap-2 mb-4" aria-label="Secciones de clientes">
-      <button v-for="section in (['current', 'retired'] as const)" :key="section" type="button"
-        class="btn-secondary" :class="clientSection === section ? 'ring-2 ring-sky-500' : ''" :aria-pressed="clientSection === section" :disabled="!classificationReady"
-        @click="clientSection = section">
-        {{ section === 'current' ? 'Clientes vigentes' : 'Clientes retirados' }}
-        <span v-if="classificationReady">({{ section === 'current' ? `${currentSubscribers.length} abonados` : retiredClients.length }})</span>
+      <button v-for="section in SECTION_TABS" :key="section.value" type="button"
+        class="btn-secondary" :class="clientSection === section.value ? 'ring-2 ring-sky-500' : ''" :aria-pressed="clientSection === section.value" :disabled="!classificationReady"
+        @click="clientSection = section.value">
+        {{ section.label }}
+        <span v-if="classificationReady">({{ sectionBuckets[section.value].length }})</span>
       </button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">Abonados vigentes incluye servicios suspendidos y pendientes de instalación. Las fichas sin servicio se conservan para consulta y no se cuentan como abonados. El estado de la ficha se conserva.</p>
+    <p class="text-xs text-slate-500 mb-3">Vigentes incluye servicios suspendidos. Pendientes de instalación: contratación con una Alta todavía abierta. No instalados: la contratación se canceló antes de instalarse, nunca recibió servicio — vuelve a ser elegible para una nueva venta. Retirados: tuvo servicio instalado y ya no tiene ninguno vigente. El estado de la ficha se conserva siempre.</p>
     <p v-if="classificationReady" class="text-sm text-slate-600 mb-3">{{ filteredClientsList.length }} de {{ sectionClients.length }} en esta sección</p>
 
     <div class="flex flex-wrap gap-2 mb-3">

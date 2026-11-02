@@ -10,26 +10,60 @@ export const CLIENT_LIFECYCLE_SELECT = 'service_contracts(status), installations
 
 export const OPEN_INSTALLATION_STATUSES = new Set<string>(['pending', 'scheduled', 'in_progress']);
 
-// Una suspensión conserva la relación comercial. Una Alta abierta también,
-// aunque la ficha o un contrato anterior sigan marcados como baja.
-export function isRetiredClient(client: ClientLifecycle): boolean {
-  if (client.installations.some((i) => OPEN_INSTALLATION_STATUSES.has(i.status))) return false;
-  if (client.service_contracts.some((c) => c.status !== 'cancelled')) return false;
-  return client.service_contracts.length > 0 || client.status === 'retired';
+// Cuatro secciones reales para el listado de Clientes (distinto del CRM de
+// Prospectos comerciales, tabla `prospects` — ese sigue intacto y separado):
+//   - current: tiene un contrato vigente (activo o suspendido) y no hay
+//     ninguna Alta todavía abierta para esa ficha.
+//   - pending_install: hay una Alta abierta (pending/scheduled/in_progress)
+//     para esta ficha — con contrato vigente o sin él (Alta independiente,
+//     ver CLAUDE.md "Migración OLT"). Prioridad siempre sobre las demás: una
+//     Alta en curso nunca se confunde con "nunca instalado" ni "retirado".
+//   - unfulfilled: todos los contratos quedaron cancelados y NUNCA hubo una
+//     instalación completada para esta ficha — contratación que no llegó a
+//     concretarse (ver contract_cancel_unfulfilled,
+//     docs/CLIENTES-CONTRATACION-NO-INSTALADA.md). Nunca es un abonado ni un
+//     ex-abonado real.
+//   - retired: todos los contratos cancelados y hubo una instalación
+//     completada alguna vez (ex-abonado real), o no hay evidencia de
+//     instalación en absoluto y la propia ficha ya dice 'retired'.
+//
+// Importante, verificado contra datos reales de producción antes de escribir
+// esto (2026-11-02): de 742 contratos vigentes, solo 65 (8.8%) tienen una
+// instalación con estado 'completed' vinculada — 674 son clientes reales sin
+// ningún registro de instalación (el seguimiento de Altas es posterior a
+// gran parte de la migración). Por eso la señal de "Pendientes de
+// instalación" es la EXISTENCIA de una Alta abierta, nunca la AUSENCIA de
+// una completada — lo segundo habría reclasificado mal al 90% de los
+// abonados reales. Mismo motivo por el que, con contratos todos cancelados y
+// CERO instalaciones registradas (sin evidencia alguna, ni completada ni
+// cancelada), se respeta el estado crudo de la ficha en vez de asumir
+// "nunca instalado": los 2 casos reales confirmados de este patrón en
+// producción ya están en 'retired'.
+export type ClientSection = 'current' | 'pending_install' | 'unfulfilled' | 'retired';
+
+export function classifyClientSection(client: ClientLifecycle): ClientSection {
+  if (client.installations.some((i) => OPEN_INSTALLATION_STATUSES.has(i.status))) return 'pending_install';
+  const vigente = client.service_contracts.some((c) => c.status === 'active' || c.status === 'suspended');
+  if (vigente) return 'current';
+  if (!client.service_contracts.length) return client.status === 'retired' ? 'retired' : 'current';
+  // De aquí en más, todos los contratos de esta ficha están cancelados.
+  if (client.installations.some((i) => i.status === 'completed')) return 'retired';
+  if (client.installations.length) return 'unfulfilled'; // evidencia directa: hubo un intento, nunca se completó
+  return client.status === 'prospect' ? 'unfulfilled' : 'retired'; // sin evidencia alguna: se respeta la ficha
 }
 
-// Una ficha comercial sin servicio sigue siendo consultable, pero no es
-// un abonado. El estado de la ficha por sí solo no acredita un servicio.
-export function isCurrentSubscriber(client: ClientLifecycle): boolean {
-  return !isRetiredClient(client) && client.service_contracts.length > 0;
+export function isRetiredClient(client: ClientLifecycle): boolean {
+  return classifyClientSection(client) === 'retired';
 }
 
 export function clientLifecycleStatus(client: ClientLifecycle): ClientStatus {
-  if (isRetiredClient(client)) return 'retired';
+  const section = classifyClientSection(client);
+  if (section === 'retired') return 'retired';
+  if (section === 'unfulfilled') return 'prospect';
   if (client.service_contracts.some((c) => c.status === 'active')) return 'active';
   if (client.service_contracts.some((c) => c.status === 'suspended')) return 'suspended';
-  if (client.installations.some((i) => OPEN_INSTALLATION_STATUSES.has(i.status))) return 'prospect';
-  return client.status;
+  if (section === 'pending_install') return 'prospect'; // Alta independiente, sin contrato vigente
+  return client.status; // ficha sin ningún contrato: se respeta el estado crudo
 }
 
 export function countClientLifecycles(clients: ClientLifecycle[]) {
