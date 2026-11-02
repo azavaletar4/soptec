@@ -87,6 +87,11 @@ const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 
 const canDeleteContracts = computed(() => auth.role === 'SUPERADMIN');
+// "Cancelar contratación no instalada" — solo SUPERADMIN, más estricto que
+// la baja normal (ADMIN/SUPERADMIN, ver inventoryAdmin). La RPC vuelve a
+// exigir SUPERADMIN del lado del servidor; esto es solo para no mostrar un
+// botón que el backend rechazaría.
+const canCancelUnfulfilled = computed(() => auth.role === 'SUPERADMIN');
 const inventoryAdmin = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? ''));
 function assertInventoryAdmin() {
   if (!inventoryAdmin.value) throw new Error('Estas operaciones de inventario requieren ADMIN o SUPERADMIN. Utiliza tu orden autorizada de Campo.');
@@ -495,6 +500,45 @@ async function handleAdministrativeCancellation() {
 
 function handleContractStatusSelection() {
   if (contractForm.value.status === 'cancelled') void handleAdministrativeCancellation();
+}
+
+// ---- Cancelar contratación no instalada (distinta de la baja de arriba:
+// solo para una línea que nunca llegó a recibir servicio) ----
+const showCancelUnfulfilledModal = ref(false);
+const cancelUnfulfilledReason = ref('');
+const cancelUnfulfilledSaving = ref(false);
+const cancelUnfulfilledError = ref<string | null>(null);
+
+function openCancelUnfulfilledModal() {
+  if (!contract.value || contract.value.status === 'cancelled') return;
+  cancelUnfulfilledReason.value = '';
+  cancelUnfulfilledError.value = null;
+  showCancelUnfulfilledModal.value = true;
+}
+
+async function handleCancelUnfulfilled() {
+  if (!contract.value) return;
+  const reason = cancelUnfulfilledReason.value.trim();
+  if (reason.length < 5) {
+    cancelUnfulfilledError.value = 'Ingresa un motivo (mínimo 5 caracteres).';
+    return;
+  }
+  if (!confirm(`Se cancelará la línea ${contract.value.contract_number} por no haberse instalado. El cliente volverá a Prospecto si no tiene otro servicio vigente. ¿Confirmar?`)) return;
+  cancelUnfulfilledSaving.value = true;
+  cancelUnfulfilledError.value = null;
+  try {
+    const { contract: saved } = await contractsStore.cancelContractUnfulfilled(contract.value.id, contract.value.updated_at, reason);
+    contract.value = { ...contract.value, ...saved };
+    emit('commercialCancelled', contract.value);
+    fillFormFromContract(contract.value);
+    showCancelUnfulfilledModal.value = false;
+    try { await clientsStore.fetchClients(); }
+    catch { cancelUnfulfilledError.value = 'Cancelación confirmada. No se pudo refrescar Clientes; recarga la vista. No repitas la acción.'; }
+  } catch (e) {
+    cancelUnfulfilledError.value = getErrorMessage(e, 'No se pudo cancelar esta contratación. Recarga la ficha antes de reintentar.');
+  } finally {
+    cancelUnfulfilledSaving.value = false;
+  }
 }
 
 async function handleSaveContract() {
@@ -1476,6 +1520,14 @@ onMounted(async () => {
         </div>
         <div class="flex items-center gap-2">
           <span class="badge" :class="STATUS_CLASS[contract.status]">{{ STATUS_LABEL[contract.status] }}</span>
+          <button
+            v-if="canCancelUnfulfilled && contract.status !== 'cancelled'"
+            type="button"
+            class="text-xs text-amber-700/90 hover:text-amber-800"
+            @click="openCancelUnfulfilledModal"
+          >
+            Cancelar contratación no instalada
+          </button>
           <button v-if="canDeleteContracts" type="button" class="text-xs text-red-500/80 hover:text-red-600" @click="handleDeleteContract">
             Eliminar
           </button>
@@ -2342,6 +2394,38 @@ onMounted(async () => {
             <button type="button" class="btn-ghost" @click="showReturnModal = false">Cancelar</button>
             <button type="submit" :disabled="returnSaving" class="btn-primary">
               {{ returnSaving ? 'Guardando...' : 'Registrar' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="showCancelUnfulfilledModal && contract" class="modal-overlay">
+        <form class="w-full max-w-sm modal-panel" @submit.prevent="handleCancelUnfulfilled">
+          <h2 class="text-lg font-semibold mb-1">Cancelar contratación no instalada</h2>
+          <p class="text-sm text-slate-600 mb-3">
+            Línea <span class="font-mono font-medium">{{ contract.contract_number }}</span> —
+            solo para una contratación que nunca llegó a recibir servicio. Si el cliente ya fue
+            instalado, usa en vez de esto el cambio de estado a Cancelado desde la pestaña Datos.
+          </p>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-600 mb-1">Motivo de la cancelación (obligatorio)</label>
+            <textarea
+              v-model="cancelUnfulfilledReason"
+              class="field-input"
+              rows="3"
+              placeholder="ej. Rechazó la instalación cuando llegó el técnico"
+            ></textarea>
+          </div>
+
+          <p v-if="cancelUnfulfilledError" class="text-sm text-red-600 mb-3">{{ cancelUnfulfilledError }}</p>
+
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn-ghost" @click="showCancelUnfulfilledModal = false">Cancelar</button>
+            <button type="submit" :disabled="cancelUnfulfilledSaving || cancelUnfulfilledReason.trim().length < 5" class="btn-primary">
+              {{ cancelUnfulfilledSaving ? 'Guardando...' : 'Confirmar cancelación' }}
             </button>
           </div>
         </form>

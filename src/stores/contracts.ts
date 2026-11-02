@@ -89,6 +89,25 @@ export const useContractsStore = defineStore('contracts', () => {
     return saved;
   }
 
+  // Fase: "Cancelar contratación no instalada" — distinta de la baja normal
+  // de arriba, solo para una línea que nunca llegó a recibir servicio (ver
+  // docs/sql/contract-cancel-unfulfilled-proposal.sql). La RPC ya valida
+  // SUPERADMIN, motivo y condiciones; este store solo la invoca y traduce
+  // el caso "todavía no instalada en Supabase" a un mensaje claro.
+  async function cancelContractUnfulfilled(id: string, updatedAt: string, reason: string) {
+    const { data, error: err } = await supabase.rpc('contract_cancel_unfulfilled', {
+      p_contract_id: id, p_updated_at: updatedAt, p_reason: reason, p_confirm: true,
+    });
+    if (err) {
+      if (err.code === 'PGRST202' || err.code === '42883') throw new Error('Esta acción todavía no está habilitada en el sistema. Avisa a soporte técnico antes de intentarlo de nuevo.');
+      throw err;
+    }
+    const saved = data.contract as ServiceContract;
+    const idx = contracts.value.findIndex(c => c.id === id);
+    if (idx !== -1) contracts.value[idx] = { ...contracts.value[idx], ...saved };
+    return { contract: saved, clientStatus: data.clientStatus as string | undefined, alreadyCancelled: Boolean(data.alreadyCancelled) };
+  }
+
   return {
     contracts,
     loading,
@@ -99,6 +118,7 @@ export const useContractsStore = defineStore('contracts', () => {
     updateContract,
     updateContractStatus,
     cancelContractAdministrative,
+    cancelContractUnfulfilled,
     deleteContract,
   };
 });
