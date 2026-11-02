@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "sourceCommit": "0787173119eeea962ba357c8f81dde4f3b07c34a",
+  "sourceCommit": "e31e260d35d3efc4b2663177a089852b746d49ea",
   "backendSources": [],
   "frontendSources": [
-    "src/stores/contracts.ts",
-    "src/views/clientes/ClientServiceDetailView.vue"
+    "src/lib/clientLifecycle.ts",
+    "src/views/clientes/ClientesView.vue"
   ],
-  "frontendAssets": ["assets/contracts.js", "assets/ClientServiceDetailView.js", "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js"]
+  "frontendAssets": ["assets/clientLifecycle.js", "assets/ClientesView.js"]
 }
