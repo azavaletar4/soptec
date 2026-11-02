@@ -17,7 +17,12 @@ const git=(...args)=>cp.execFileSync('git',args,{encoding:'utf8'});
 if(action==='prepare'){
  const archive=path.join(rt,'source.tar');
  cp.execFileSync('git',['archive',snapshot.commit,'--format=tar','--output='+archive,'src','index.html','vite.config.ts','package.json','package-lock.json','scripts/frontend-release-build.mjs','deploy/Dockerfile.frontend','deploy/frontend-release-policy.json']);
- cp.execFileSync('tar.exe',['-rf',archive,'release-source.json']);
+ // --force-local: GNU tar (resuelto antes que el bsdtar de System32 en este
+ // PATH) interpreta "D:\..." como host remoto ("D") + ruta por el ":" tras
+ // una sola letra -- confirmado reproduciendo el mismo error fuera de este
+ // script; la bandera es compatible con ambos tar y no cambia el contenido
+ // del archivo generado.
+ cp.execFileSync('tar.exe',['--force-local','-rf',archive,'release-source.json']);
  // Exclusivamente el commit declarado; nunca pendientes del checkout.
  const back=Object.fromEntries(scope.backendSources.map(f=>[f,git('show',snapshot.commit+':'+f)]));
  const input={stage,commit:snapshot.commit,scope,toolHash,snapshot,back};

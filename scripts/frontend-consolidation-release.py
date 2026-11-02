@@ -26,6 +26,22 @@ def tree(cid,root,raw=False):
   return {m.name.removeprefix('./'):hashlib.sha256(t.extractfile(m).read()).hexdigest()for m in t if m.isfile()}
 def backend_tree(cid):
  return {prefix+p:h for prefix,root in [('server/src/','/app/server/src'),('src/','/app/src')]for p,h in tree(cid,root).items()}
+def compose_file_list(c):return c['Config']['Labels']['com.docker.compose.project.config_files'].split(',')
+def resolve_compose_files(containers):
+ # Cada "docker compose up" solo actualiza la etiqueta de los servicios que
+ # de verdad recreo -- dos releases consecutivas de un solo servicio (ej.
+ # frontend dos veces seguidas, sin un release de backend entremedio) dejan
+ # la cadena del OTRO contenedor un paso atras, nunca al reves. Nunca se
+ # asume que concatenar alcanza (duplicaria u ordenaria mal los archivos):
+ # se exige que la cadena mas corta sea, en el mismo orden, un prefijo
+ # exacto de la mas larga -- es lo unico que certifica que ambas describen
+ # el mismo historial de releases y que la mas larga es sencillamente la
+ # mas al dia. Si divergen de cualquier otra forma, se detiene -- nunca se
+ # adivina cual lista es la correcta.
+ lists=[compose_file_list(c)for c in containers]
+ longest=max(lists,key=len)
+ for files in lists:assert longest[:len(files)]==files,'COMPOSE_FILE_CHAINS_DIVERGED'
+ return longest
 def compose(m,extras=[]):
  a=['docker','compose','-p','smartrayco','--project-directory',str(repo)]
  for f in m['composeFiles']+extras:a+=['-f',f]
@@ -82,7 +98,7 @@ def verify_rollback(m):
 if ACTION=='prepare':
  assert not(stage/'prepared.json').exists(),'ALREADY_PREPARED';before=states();b=current('backend');f=current('frontend')
  manifest=read_manifest(f['Id']);validate_frontend_sources(manifest['sourceFiles'],I['snapshot']['files'],scope)
- m={'before':before,'at':now(),'toolHash':TOOL_HASH,'services':services,'composeFiles':b['Config']['Labels']['com.docker.compose.project.config_files'].split(','),'backupFiles':{},'backupHashes':{},'sourceArchiveHash':hashfile(stage/'source.tar'),'inputHash':hashfile(stage/'input.json')}
+ m={'before':before,'at':now(),'toolHash':TOOL_HASH,'services':services,'composeFiles':resolve_compose_files([b,f]),'backupFiles':{},'backupHashes':{},'sourceArchiveHash':hashfile(stage/'source.tar'),'inputHash':hashfile(stage/'input.json')}
  for s in ['backend','frontend']:
   file=stage/(s+'-before.image.tar');m['backupFiles'][s]=str(file);m['backupHashes'][s]=save_image_archive(before[s]['image'],file)
   m[s+'RollbackTag']='smartrayco-consolidado-'+s+'-rollback:'+I['commit'][:7]+'-'+TOOL_HASH[:10]
