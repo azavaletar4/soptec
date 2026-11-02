@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "8f2da323b095dc182d6f0f0b7a5907a76a8280db",
+  "sourceCommit": "0787173119eeea962ba357c8f81dde4f3b07c34a",
   "backendSources": [],
   "frontendSources": [
     "src/stores/contracts.ts",
