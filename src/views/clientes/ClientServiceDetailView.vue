@@ -1523,7 +1523,7 @@ onMounted(async () => {
           <button
             v-if="canCancelUnfulfilled && contract.status !== 'cancelled'"
             type="button"
-            class="text-xs text-amber-700/90 hover:text-amber-800"
+            class="text-xs text-amber-600 hover:text-amber-700"
             @click="openCancelUnfulfilledModal"
           >
             Cancelar contratación no instalada
