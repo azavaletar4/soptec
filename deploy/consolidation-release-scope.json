@@ -4,6 +4,7 @@
   "backendSources": [],
   "frontendSources": [
     "src/lib/clientLifecycle.ts",
+    "src/lib/__tests__/clientLifecycle.test.ts",
     "src/views/clientes/ClientesView.vue"
   ],
   "frontendAssets": ["assets/clientLifecycle.js", "assets/ClientesView.js"]
