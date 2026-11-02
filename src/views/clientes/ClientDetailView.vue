@@ -203,11 +203,20 @@ onMounted(async () => {
   if (!clientsStore.clients.length) await clientsStore.fetchClients();
   await Promise.all([catalogs.fetchPlans(), loadContracts()]);
 });
+
+// Si se llegó navegando desde la lista (con filtros/orden/pestaña en la
+// URL), router.back() vuelve exactamente a esa URL -- es lo que conserva
+// esos filtros, no algo que se reconstruya aquí. Sin historial propio
+// (enlace directo a la ficha, nueva pestaña), cae al listado sin filtros.
+function goBackToClients() {
+  if (window.history.state?.back) router.back();
+  else router.push('/clientes');
+}
 </script>
 
 <template>
   <AppLayout>
-    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="router.push('/clientes')">
+    <button class="text-sm text-slate-600 hover:text-slate-900 mb-4" @click="goBackToClients">
       ← Volver a clientes
     </button>
 

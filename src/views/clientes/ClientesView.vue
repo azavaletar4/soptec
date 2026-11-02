@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientRetirementDialog from '@/components/clientes/ClientRetirementDialog.vue';
@@ -15,6 +15,10 @@ import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { classifyClientSection, isRetiredClient, countServicesByVigencia, formatServiceCounts, OPEN_INSTALLATION_STATUSES, type ClientSection } from '@/lib/clientLifecycle';
+import {
+  clientPriorityRank, matchesStatusFilter, matchesServiceFilter, sortClientRows, parseClientsListQuery, buildClientsListQuery,
+  type ClientStatusFilter, type ServiceFilter, type SortColumn, type SortDirection,
+} from '@/lib/clientsListFilters';
 import type { ClientWithLifecycle } from '@/stores/clients';
 import type { Client, ClientStatus, ContractPriority, DocumentType, Installation } from '@/types/domain';
 
@@ -60,8 +64,64 @@ const editing = ref<Client | null>(null);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const pendingPppoeHint = ref<string | null>(null);
-const searchQuery = ref('');
-const clientSection = ref<ClientSection>('current');
+// Filtros/orden/pestaña se leen una sola vez de la URL al montar (persisten
+// al abrir una ficha y volver — ver goBack() en ClientDetailView.vue, que
+// usa router.back() en vez de un push fijo a "/clientes" sin query — y se
+// reescriben en la URL con router.replace cada vez que el usuario los toca,
+// ver syncFiltersToUrl más abajo).
+const initialListQuery = parseClientsListQuery(route.query);
+const searchQuery = ref(initialListQuery.q);
+const clientSection = ref<ClientSection>(initialListQuery.section);
+const statusFilter = ref<ClientStatusFilter>(initialListQuery.status);
+const serviceFilter = ref<ServiceFilter>(initialListQuery.service);
+const sortColumn = ref<SortColumn | null>(initialListQuery.sort);
+const sortDirection = ref<SortDirection>(initialListQuery.dir);
+function syncFiltersToUrl() {
+  const query = buildClientsListQuery({
+    section: clientSection.value, q: searchQuery.value, status: statusFilter.value,
+    service: serviceFilter.value, sort: sortColumn.value, dir: sortDirection.value,
+  });
+  router.replace({ path: '/clientes', query }).catch(() => {});
+}
+let searchSyncTimer: ReturnType<typeof setTimeout> | undefined;
+watch(searchQuery, () => {
+  clearTimeout(searchSyncTimer);
+  searchSyncTimer = setTimeout(syncFiltersToUrl, 300);
+});
+watch([clientSection, statusFilter, serviceFilter, sortColumn, sortDirection], syncFiltersToUrl);
+// Si se navega a una ficha (goToDetail) con el debounce de busqueda todavia
+// pendiente, ese setTimeout sobrevive al desmontaje y dispararia un
+// router.replace sobre "/clientes" mientras el usuario ya esta viendo la
+// ficha -- lo saca de la pantalla a la que navego. Se cancela aqui.
+onBeforeUnmount(() => clearTimeout(searchSyncTimer));
+function toggleSort(column: SortColumn) {
+  if (sortColumn.value === column) sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+  else { sortColumn.value = column; sortDirection.value = 'asc'; }
+}
+function sortIndicator(column: SortColumn): string {
+  if (sortColumn.value !== column) return '';
+  return sortDirection.value === 'asc' ? ' ▲' : ' ▼';
+}
+function clearFilters() {
+  searchQuery.value = '';
+  statusFilter.value = 'all';
+  serviceFilter.value = 'all';
+  sortColumn.value = null;
+  sortDirection.value = 'asc';
+}
+const STATUS_FILTER_OPTIONS: { value: ClientStatusFilter; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'active', label: 'Activo' },
+  { value: 'suspended', label: 'Suspendido' },
+  { value: 'prospect', label: 'Prospecto' },
+  { value: 'retired', label: 'Baja' },
+];
+const SERVICE_FILTER_OPTIONS: { value: ServiceFilter; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'vigente', label: 'Con servicios vigentes' },
+  { value: 'historico', label: 'Con históricos' },
+  { value: 'multi', label: 'Múltiples servicios' },
+];
 const SECTION_TABS: { value: ClientSection; label: string }[] = [
   { value: 'current', label: 'Clientes vigentes' },
   { value: 'pending_install', label: 'Pendientes de instalación' },
@@ -239,36 +299,47 @@ function pendingInstallLabel(c: Client): string | null {
   return hasOpenInstallation(c.id) ? 'Alta pendiente' : null;
 }
 
-// Filtros rapidos (Fase 153) — un solo seleccionado a la vez, mismo patron
-// que TYPE_TABS en HistoricoAtendidosView.vue. Se combinan con la busqueda
-// de texto (el filtro acota la lista primero, la busqueda filtra sobre
-// ese subconjunto).
-// "Pendientes de instalación" ya es una sección propia (ver sectionBuckets);
-// se quitó de aquí porque, dentro de "vigentes", siempre daría vacío (una
-// ficha con Alta abierta ahora cae directo en esa sección, nunca en esta).
-type QuickFilter = 'all' | 'active' | 'suspended' | 'multi_service';
-const quickFilter = ref<QuickFilter>('all');
-const QUICK_FILTER_TABS: { value: QuickFilter; label: string }[] = [
-  { value: 'all', label: 'Todos' },
-  { value: 'active', label: 'Activos' },
-  { value: 'suspended', label: 'Suspendidos' },
-  { value: 'multi_service', label: 'Con múltiples servicios' },
-];
-
+// Filtros desplegables (Estado/Servicios) — se combinan entre si, con la
+// pestaña seleccionada (sectionClients, ya filtrada por sección) y con la
+// busqueda de texto, en ese orden. "Estado" usa clients.status tal cual
+// (los 4 estados reales, ver STATUS_LABEL); "Servicios" reutiliza el mismo
+// conteo vigentes/historicos de la columna "Servicios" (countServicesByVigencia),
+// sin ninguna consulta nueva.
 const filteredClientsList = computed(() => {
   if (!classificationReady.value) return [];
   let list = sectionClients.value;
-  if (quickFilter.value === 'active') list = list.filter((c) => c.service_contracts.some((ct) => ct.status === 'active') || (!c.service_contracts.length && c.status === 'active'));
-  else if (quickFilter.value === 'suspended') list = list.filter((c) => c.service_contracts.some((ct) => ct.status === 'suspended') || (!c.service_contracts.length && c.status === 'suspended'));
-  else if (quickFilter.value === 'multi_service') list = list.filter((c) => c.service_contracts.length >= 2);
+  if (statusFilter.value !== 'all') list = list.filter((c) => matchesStatusFilter(c.status, statusFilter.value));
+  if (serviceFilter.value !== 'all') {
+    list = list.filter((c) => {
+      const contracts = contractsByClient.value.get(c.id) ?? [];
+      const { vigentes, historicos } = countServicesByVigencia(contracts);
+      return matchesServiceFilter({ vigentes, historicos, total: contracts.length }, serviceFilter.value);
+    });
+  }
 
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return list;
-  return list.filter((c) =>
-    `${c.first_name} ${c.last_name} ${clientCodesOf(c.id)} ${c.document_number} ${c.phone ?? ''} ${c.phone_2 ?? ''} ${c.email ?? ''}`
-      .toLowerCase()
-      .includes(q),
-  );
+  if (q) {
+    list = list.filter((c) =>
+      `${c.first_name} ${c.last_name} ${clientCodesOf(c.id)} ${c.document_number} ${c.phone ?? ''} ${c.phone_2 ?? ''} ${c.email ?? ''}`
+        .toLowerCase()
+        .includes(q),
+    );
+  }
+  return list;
+});
+
+// Orden tipo Excel (Nombre/Estado/Prioridad/Cantidad de servicios) — se
+// aplica DESPUES de filtrar, nunca cambia que filas entran, solo su orden.
+const sortedFilteredClients = computed(() => {
+  const rows = filteredClientsList.value.map((c) => ({
+    client: c,
+    id: c.id,
+    name: `${c.first_name} ${c.last_name}`,
+    statusLabel: STATUS_LABEL[c.status],
+    priorityRank: clientPriorityRank(clientPrioritiesOf(c.id)),
+    serviceCount: contractsByClient.value.get(c.id)?.length ?? 0,
+  }));
+  return sortClientRows(rows, sortColumn.value, sortDirection.value).map((r) => r.client);
 });
 
 // Usuarios PPPoE (del router elegido) que no tienen NINGUN contrato en
@@ -541,19 +612,22 @@ function goToDetail(client: Client) {
       </button>
     </div>
     <p class="text-xs text-slate-500 mb-3">Vigentes incluye servicios suspendidos. Pendientes de instalación: contratación con una Alta todavía abierta. No instalados: la contratación se canceló antes de instalarse, nunca recibió servicio — vuelve a ser elegible para una nueva venta. Retirados: tuvo servicio instalado y ya no tiene ninguno vigente. El estado de la ficha se conserva siempre.</p>
-    <p v-if="classificationReady" class="text-sm text-slate-600 mb-3">{{ filteredClientsList.length }} de {{ sectionClients.length }} en esta sección</p>
+    <p v-if="classificationReady" class="text-sm text-slate-600 mb-3">{{ sortedFilteredClients.length }} resultados de {{ sectionClients.length }} clientes en esta sección</p>
 
-    <div class="flex flex-wrap gap-2 mb-3">
-      <button
-        v-for="tab in QUICK_FILTER_TABS"
-        :key="tab.value"
-        type="button"
-        class="px-3 py-1.5 rounded-lg text-xs font-medium"
-        :class="quickFilter === tab.value ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
-        @click="quickFilter = tab.value"
-      >
-        {{ tab.label }}
-      </button>
+    <div class="flex flex-wrap items-end gap-3 mb-3">
+      <div>
+        <label for="clients-status-filter" class="block text-xs text-slate-600 mb-1">Estado</label>
+        <select id="clients-status-filter" v-model="statusFilter" class="field-input text-sm">
+          <option v-for="opt in STATUS_FILTER_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </div>
+      <div>
+        <label for="clients-service-filter" class="block text-xs text-slate-600 mb-1">Servicios</label>
+        <select id="clients-service-filter" v-model="serviceFilter" class="field-input text-sm">
+          <option v-for="opt in SERVICE_FILTER_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </div>
+      <button type="button" class="btn-secondary text-xs" @click="clearFilters">Limpiar filtros</button>
     </div>
 
     <input
@@ -566,12 +640,20 @@ function goToDetail(client: Client) {
       <table class="w-full text-sm min-w-[720px]">
         <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
           <tr>
-            <th class="text-left px-4 py-3">Prioridad</th>
-            <th class="text-left px-4 py-3">Nombre</th>
+            <th class="text-left px-4 py-3">
+              <button type="button" class="font-semibold uppercase text-xs hover:text-slate-900" @click="toggleSort('priority')">Prioridad{{ sortIndicator('priority') }}</button>
+            </th>
+            <th class="text-left px-4 py-3">
+              <button type="button" class="font-semibold uppercase text-xs hover:text-slate-900" @click="toggleSort('name')">Nombre{{ sortIndicator('name') }}</button>
+            </th>
             <th class="text-left px-4 py-3">Documento</th>
             <th class="text-left px-4 py-3">Telefono</th>
-            <th class="text-left px-4 py-3">Servicios</th>
-            <th class="text-left px-4 py-3">Estado</th>
+            <th class="text-left px-4 py-3">
+              <button type="button" class="font-semibold uppercase text-xs hover:text-slate-900" @click="toggleSort('services')">Servicios{{ sortIndicator('services') }}</button>
+            </th>
+            <th class="text-left px-4 py-3">
+              <button type="button" class="font-semibold uppercase text-xs hover:text-slate-900" @click="toggleSort('status')">Estado{{ sortIndicator('status') }}</button>
+            </th>
             <th class="text-right px-4 py-3">Acciones</th>
           </tr>
         </thead>
@@ -582,12 +664,12 @@ function goToDetail(client: Client) {
           <tr v-else-if="clientsStore.loading || !classificationReady">
             <td colspan="7" class="px-4 py-6 text-center text-slate-500">Cargando...</td>
           </tr>
-          <tr v-else-if="!filteredClientsList.length">
+          <tr v-else-if="!sortedFilteredClients.length">
             <td colspan="7" class="px-4 py-6 text-center text-slate-500">
-              {{ searchQuery || quickFilter !== 'all' ? 'Sin resultados para ese filtro/búsqueda.' : 'No hay clientes en esta sección.' }}
+              {{ searchQuery || statusFilter !== 'all' || serviceFilter !== 'all' ? 'Sin resultados para ese filtro/búsqueda.' : 'No hay clientes en esta sección.' }}
             </td>
           </tr>
-          <tr v-for="c in filteredClientsList" :key="c.id" class="border-t border-slate-200 hover:bg-slate-50">
+          <tr v-for="c in sortedFilteredClients" :key="c.id" class="border-t border-slate-200 hover:bg-slate-50">
             <td class="px-4 py-3">
               <span v-if="!clientPrioritiesOf(c.id).length" class="text-slate-400 text-xs">—</span>
               <span
