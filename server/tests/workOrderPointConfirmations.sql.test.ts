@@ -47,6 +47,7 @@ test('Confirmación administrativa: tres órdenes, PostgreSQL sin red ni datos r
     sql(file('../../supabase/migrations/20261024180000_work_order_points.sql'));
     sql(file('../../supabase/migrations/20261024190000_field_order_points_readonly.sql'));
     sql(file('../../supabase/migrations/20261024200000_work_order_point_confirmations.sql'));
+    sql(file('../../supabase/migrations/20261102220000_technician_points_october_november_boundary.sql'));
     for(const [table,kind] of [['tickets','ticket'],['installations','installation'],['routines','routine']]) {
       await t.test(`${kind}: finalización técnica no acredita; confirmación explícita y única`,()=>{
         reset(table,kind);assert.deepEqual(totals(),[0,0]);
@@ -224,11 +225,28 @@ test('Confirmación administrativa: tres órdenes, PostgreSQL sin red ni datos r
       assert.equal(review('routine').historical,true);json(call('routine',review('routine').token));officialDate();assert.deepEqual(totals(),[0,0]);
       reset('routines','routine');sql("update routines set completed_at='2026-11-01 05:00:00Z';");
       assert.equal(review('routine').historical,false);json(call('routine',review('routine').token));officialDate();assert.deepEqual(totals(),[2,12]);
-      // Tampoco una orden creada en pruebas pasa a oficial por reabrirse.
+      // Caso real (RUT-2026-00118, confirmado en producción 02/11/2026): una
+      // orden CREADA antes del corte pero TERMINADA y CONFIRMADA después sí
+      // acredita -- la fecha de creación ya no excluye por sí sola (12
+      // órdenes/22 puntos reales de 4 técnicos quedaban atrapados por esto
+      // en producción, verificado con lectura directa antes de corregir).
+      // 'historical' (ver work_order_point_review) es un criterio aparte
+      // -- sigue en true porque created_at<corte, y eso está bien: no
+      // alimenta el conteo de puntos, solo es informativo/para la guarda
+      // de ajuste manual, que esta corrección no toca.
       reset('routines','routine');sql("update routines set created_at='2026-10-10';");
-      assert.equal(review('routine').historical,true);json(call('routine',review('routine').token));officialDate();assert.deepEqual(totals(),[0,0]);
+      assert.equal(review('routine').historical,true);
+      json(call('routine',review('routine').token));officialDate();assert.deepEqual(totals(),[2,12]);
+      // La protección contra reabrir una orden ya confirmada sigue intacta
+      // -- la da el trigger de cierre definitivo, nunca esta fecha.
       assert.throws(()=>sql("update routines set status='pending';"),/Cierre administrativo definitivo/);
-      officialDate();assert.deepEqual(totals(),[0,0]);
+      assert.deepEqual(totals(),[2,12]);
+    });
+    await t.test('orden creada en octubre, terminada y confirmada en noviembre: cuenta una sola vez, nunca en los dos períodos',()=>{
+      reset('routines','routine');sql("update routines set created_at='2026-10-31 23:30:00Z';"); // 31/10 ~18:30 Lima, patrón real
+      json(call('routine',review('routine').token));officialDate();
+      assert.deepEqual(totals('2026-11-01 05:00Z','2026-12-01 05:00Z'),[2,12]); // noviembre: sí cuenta
+      assert.deepEqual(totals('2026-10-01 05:00Z','2026-11-01 05:00Z'),[0,0]); // octubre: no se duplica
     });
     await t.test('reportes históricos conservan NULL/0, categorías y regla de líder previas',()=>{
       reset('tickets','ticket');
