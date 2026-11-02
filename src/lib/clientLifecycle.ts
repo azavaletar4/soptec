@@ -72,6 +72,24 @@ export function countClientLifecycles(clients: ClientLifecycle[]) {
   return counts;
 }
 
+// Columna "Servicios" de ClientesView.vue: separa, por contrato, lo vigente
+// (activo o suspendido — mismo criterio que `vigente` en classifyClientSection)
+// de lo histórico (cancelado). Es un conteo por contrato, independiente de la
+// sección/categoría de la ficha (current/pending_install/unfulfilled/retired).
+export function countServicesByVigencia(contracts: { status: ContractStatus }[]): { vigentes: number; historicos: number } {
+  const vigentes = contracts.filter((c) => c.status === 'active' || c.status === 'suspended').length;
+  return { vigentes, historicos: contracts.length - vigentes };
+}
+
+// "0 vigentes · 1 histórico" / "2 vigentes" / "1 vigente · 1 histórico" — el
+// histórico solo se omite cuando no hay ninguno; el vigente siempre se
+// muestra, incluso en 0, para que nunca se confunda con "sin datos".
+export function formatServiceCounts(vigentes: number, historicos: number): string {
+  const vigenteLabel = `${vigentes} vigente${vigentes === 1 ? '' : 's'}`;
+  if (historicos === 0) return vigenteLabel;
+  return `${vigenteLabel} · ${historicos} histórico${historicos === 1 ? '' : 's'}`;
+}
+
 // Avanza por filas recibidas: también funciona si PostgREST aplica un límite
 // menor al solicitado. Un error nunca devuelve un total parcial como válido.
 export async function readAllClientPages<T>(

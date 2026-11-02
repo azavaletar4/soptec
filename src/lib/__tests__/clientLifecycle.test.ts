@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyClientSection, clientLifecycleStatus, countClientLifecycles, isRetiredClient, readAllClientPages, type ClientLifecycle } from '../clientLifecycle';
+import { classifyClientSection, clientLifecycleStatus, countClientLifecycles, countServicesByVigencia, formatServiceCounts, isRetiredClient, readAllClientPages, type ClientLifecycle } from '../clientLifecycle';
+import type { ContractStatus } from '../../types/domain';
 
 const row = (status: ClientLifecycle['status'], contracts: ClientLifecycle['service_contracts'][number]['status'][] = [], installations: ClientLifecycle['installations'][number]['status'][] = []): ClientLifecycle => ({
   status, service_contracts: contracts.map((status) => ({ status })), installations: installations.map((status) => ({ status })),
@@ -145,6 +146,45 @@ test('contadores de las 4 secciones particionan exactamente las mismas fichas, s
   for (const c of clients) buckets[classifyClientSection(c)]++;
   assert.deepEqual(buckets, { current: 2, pending_install: 1, unfulfilled: 1, retired: 1 });
   assert.equal(Object.values(buckets).reduce((a, b) => a + b, 0), clients.length);
+});
+
+// ---- countServicesByVigencia / formatServiceCounts: columna "Servicios" de
+// ClientesView.vue -- distingue vigente (activo o suspendido) de histórico
+// (cancelado), por contrato, sin tocar classifyClientSection ni el Dashboard. ----
+
+const contractRow = (...statuses: ContractStatus[]) => statuses.map((status) => ({ status }));
+
+test('contador de servicios: suspendido cuenta como vigente, igual que classifyClientSection', () => {
+  assert.deepEqual(countServicesByVigencia(contractRow('active')), { vigentes: 1, historicos: 0 });
+  assert.deepEqual(countServicesByVigencia(contractRow('suspended')), { vigentes: 1, historicos: 0 });
+  assert.deepEqual(countServicesByVigencia(contractRow('cancelled')), { vigentes: 0, historicos: 1 });
+});
+
+test('contador de servicios: dos vigentes, ninguno histórico', () => {
+  assert.deepEqual(countServicesByVigencia(contractRow('active', 'suspended')), { vigentes: 2, historicos: 0 });
+});
+
+test('contador de servicios: un vigente y uno cancelado conviven sin ocultarse', () => {
+  assert.deepEqual(countServicesByVigencia(contractRow('active', 'cancelled')), { vigentes: 1, historicos: 1 });
+});
+
+test('contador de servicios: ficha sin ningún contrato', () => {
+  assert.deepEqual(countServicesByVigencia([]), { vigentes: 0, historicos: 0 });
+});
+
+// Casos reales exactos pedidos por el propietario (Jheraldin Vidal Cruz y
+// Daniel Gavidia Romero: único contrato cancelado, cero vigentes).
+test('formato: los 5 casos exactos pedidos por el propietario', () => {
+  assert.equal(formatServiceCounts(0, 1), '0 vigentes · 1 histórico'); // Jheraldin / Daniel
+  assert.equal(formatServiceCounts(2, 0), '2 vigentes');
+  assert.equal(formatServiceCounts(1, 1), '1 vigente · 1 histórico');
+  assert.equal(formatServiceCounts(1, 0), '1 vigente');
+});
+
+test('formato: plurales correctos y el histórico se omite solo cuando es cero', () => {
+  assert.equal(formatServiceCounts(0, 0), '0 vigentes');
+  assert.equal(formatServiceCounts(0, 2), '0 vigentes · 2 históricos');
+  assert.equal(formatServiceCounts(3, 2), '3 vigentes · 2 históricos');
 });
 
 test('lectura completa con límite del servidor menor al solicitado y error sin totales parciales', async () => {

@@ -14,7 +14,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
-import { classifyClientSection, isRetiredClient, OPEN_INSTALLATION_STATUSES, type ClientSection } from '@/lib/clientLifecycle';
+import { classifyClientSection, isRetiredClient, countServicesByVigencia, formatServiceCounts, OPEN_INSTALLATION_STATUSES, type ClientSection } from '@/lib/clientLifecycle';
 import type { ClientWithLifecycle } from '@/stores/clients';
 import type { Client, ClientStatus, ContractPriority, DocumentType, Installation } from '@/types/domain';
 
@@ -153,6 +153,14 @@ const contractsByClient = computed(() => {
   }
   return map;
 });
+
+// Columna "Servicios": "N vigentes · M históricos" (ver countServicesByVigencia
+// / formatServiceCounts en clientLifecycle.ts) — reutiliza contractsByClient,
+// sin ninguna consulta nueva.
+function serviceCountLabel(clientId: string): string {
+  const { vigentes, historicos } = countServicesByVigencia(contractsByClient.value.get(clientId) ?? []);
+  return formatServiceCounts(vigentes, historicos);
+}
 
 // El codigo de cliente ahora es por servicio (Fase 39, se edita desde la
 // pestaña "Contrato" de cada linea) — ya no se muestra aca, pero se sigue
@@ -604,9 +612,9 @@ function goToDetail(client: Client) {
                 class="badge bg-sky-500/15 text-sky-700 font-semibold"
                 title="Cliente con múltiples servicios"
               >
-                {{ contractsByClient.get(c.id)?.length }} servicios
+                {{ serviceCountLabel(c.id) }}
               </span>
-              <span v-else class="text-slate-600">{{ contractsByClient.get(c.id)?.length ?? 0 }}</span>
+              <span v-else class="text-slate-600">{{ serviceCountLabel(c.id) }}</span>
             </td>
             <td class="px-4 py-3">
               <div class="flex flex-wrap items-center gap-1.5">
