@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "e31e260d35d3efc4b2663177a089852b746d49ea",
+  "sourceCommit": "ec05ee5ea7b5c962bb6d817813ed73b51e762ab0",
   "backendSources": [],
   "frontendSources": [
     "src/lib/clientLifecycle.ts",
