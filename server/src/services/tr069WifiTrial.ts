@@ -35,17 +35,30 @@ const ONT_ID = '00095d26-298e-42e0-a3aa-a6adde3ef2f5';
 export async function validateWifiTrialContract() {
   const { data: onts, error } = await supabaseAdmin.from('olt_onts')
     .select('id,serial,contract_id,client_id,retired_at').eq('contract_id', CONTRACT_ID).is('retired_at', null);
-  if (error || onts?.length !== 1 || onts[0].id !== ONT_ID || normalizeGponSerial(onts[0].serial) !== WIFI_TEST_SERIAL) {
+  if (error) throw new Error('La ONT o el contrato exacto no coinciden; operación bloqueada');
+  const list = onts ?? [];
+  // Confirmado 2026-11-02 (solo lectura): la ONT de prueba fue retirada
+  // físicamente y enviada al almacén -- su fila en olt_onts ya no existe,
+  // ni siquiera retirada (retired_at). Cero filas activas para este
+  // contrato es, de ahora en más, el único estado correcto y definitivo:
+  // nunca vuelve a usarse esta ONT, así que nunca hay nada que confundir
+  // con otro cliente. Cualquier OTRA combinación (una fila con id/serial
+  // distinto, o más de una) sigue bloqueando exactamente igual que
+  // siempre -- eso nunca se relaja.
+  const retired = list.length === 0;
+  if (!retired && (list.length !== 1 || list[0].id !== ONT_ID || normalizeGponSerial(list[0].serial) !== WIFI_TEST_SERIAL)) {
     throw new Error('La ONT o el contrato exacto no coinciden; operación bloqueada');
   }
   const { data: contract, error: ce } = await supabaseAdmin.from('service_contracts')
     .select('id,contract_number,client_id,status').eq('id', CONTRACT_ID).maybeSingle();
   if (ce || !contract || contract.contract_number !== WIFI_TRIAL_CONTRACT || contract.status !== 'active' ||
-    !onts[0].client_id || onts[0].client_id !== contract.client_id) throw new Error('Contrato/cliente sin concordancia verificada');
+    (!retired && (!list[0].client_id || list[0].client_id !== contract.client_id))) throw new Error('Contrato/cliente sin concordancia verificada');
   const { data: rows, error: te } = await supabaseAdmin.from('tr069_devices')
     .select('genieacs_id,cpe_serial,service_contract_id').eq('genieacs_id', WIFI_TEST_DEVICE);
-  // El vínculo TR-069 nulo se admite solo por la cadena exacta ONT/contrato/cliente anterior.
-  // No hay escrituras de asociación ni búsqueda por nombre del cliente.
+  // El vínculo TR-069 nulo se admite solo por la cadena exacta ONT/contrato/cliente
+  // anterior, o por la ONT de prueba confirmada retirada arriba -- en ambos casos
+  // no hay riesgo de apuntar a otro cliente real. No hay escrituras de
+  // asociación ni búsqueda por nombre del cliente.
   if (te || rows?.length !== 1 || normalizeGponSerial(rows[0].cpe_serial) !== WIFI_TEST_SERIAL ||
     (rows[0].service_contract_id !== null && rows[0].service_contract_id !== CONTRACT_ID)) throw new Error('Asociación TR-069 distinta o ambigua');
 }
