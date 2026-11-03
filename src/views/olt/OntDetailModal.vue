@@ -16,7 +16,7 @@ const props = defineProps<{
   zoneName: string | null;
 }>();
 
-const emit = defineEmits<{ close: []; openTr069: [ont: OltOnt]; editZone: [ont: OltOnt] }>();
+const emit = defineEmits<{ close: []; openTr069: [ont: OltOnt]; editZone: [ont: OltOnt]; link: [ont: OltOnt] }>();
 
 const oltStore = useOltStore();
 const auth = useAuthStore();
@@ -29,6 +29,11 @@ const signalError = ref<string | null>(null);
 // requireRole(...TR069_ENABLE_ROLES)) es quien realmente lo exige; esto es
 // solo para no mostrar una accion que de todas formas el servidor rechazaria.
 const canEnableTr069Guided = computed(() => ['SUPERADMIN', 'ADMIN'].includes(auth.role ?? ''));
+// Vincular a cliente/contrato es una decision administrativa sensible —
+// misma restriccion que importar (2026-11-03, ver olt.ts ONT_IMPORT_ROLES).
+// El backend (POST .../link) vuelve a exigirlo; esto es solo para no
+// mostrar una accion que el servidor rechazaria.
+const canLinkOnt = computed(() => ['SUPERADMIN', 'ADMIN'].includes(auth.role ?? ''));
 
 const detectedVendor = computed(() => gponVendorFromSerial(props.ont.serial));
 const thirdPartyVendor = computed(() => isThirdPartyOnt(detectedVendor.value, props.device.brand));
@@ -327,6 +332,9 @@ async function toggleConfig() {
             {{ signalLoading ? 'Consultando...' : 'Consultar señal' }}
           </button>
           <button class="btn-secondary" @click="emit('editZone', ont)">Editar información</button>
+          <button v-if="!ont.client_id && canLinkOnt" class="btn-primary" @click="emit('link', ont)">
+            Vincular a cliente
+          </button>
           <button class="btn-secondary" @click="toggleConfig">
             {{ configOpen ? 'Ocultar running-config' : 'Ver running-config' }}
           </button>

@@ -46,6 +46,7 @@ import { matchTr069Device } from '../../../src/lib/gponSerial';
 import { createSingleFlightGuard } from '../services/singleFlightGuard';
 import { createSupabaseProvisioningStore } from '../services/oltProvisioningStore';
 import { classifyImportCandidates, type LinkedPosition } from '../services/oltImportDescriptionGuard';
+import { validateOntLinkRequest, ontLinkAuditRow } from '../services/oltOntLink';
 import {
   type ProvisionHandlerDeps,
   type ProvisionRequestBody,
@@ -61,6 +62,14 @@ const DEVICE_WRITE = ['SUPERADMIN', 'ADMIN'] as const;
 // Gestionar ONTs (activar/desactivar, eliminar, autorizar, TR-069) si es
 // trabajo del tecnico de campo con el equipo ya dado de alta.
 const ONT_WRITE = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED'] as const;
+// Importar ONTs externas (escaneo completo de la OLT) y vincularlas a un
+// cliente/contrato es una decision administrativa sensible (afecta
+// identidad del servicio/facturacion, no solo el equipo fisico) -- mas
+// angosta que ONT_WRITE, que SI incluye TECNICO_RED para el dia a dia de
+// campo (activar/desactivar/editar zona de una ONT YA vinculada). Pedido
+// explicito 2026-11-03: restringir importacion y vinculacion a
+// ADMIN/SUPERADMIN, en backend y frontend.
+const ONT_IMPORT_ROLES = ['SUPERADMIN', 'ADMIN'] as const;
 // Habilitacion GUIADA de TR-069 (boton individual, 2026-10-27): el propietario
 // pidio esta accion puntual SOLO para ADMIN/SUPERADMIN, mas angosta que
 // ONT_WRITE (que si incluye TECNICO_RED para el modal manual existente).
@@ -748,7 +757,7 @@ oltRoutes.get('/onts/status', requireRole(...STAFF_READ), async (c) => {
 });
 
 /** Explicit metadata import; telemetry is published only by the shared serial-verified reader. */
-oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), guardOltReadOperation, async (c) => {
+oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_IMPORT_ROLES), guardOltReadOperation, async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
 
@@ -827,8 +836,20 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_WRITE), guardOltR
       if (error || !data) return c.json({ error: 'Identidad o vínculo cambiado; importación detenida.', imported }, 409);
     } else {
       // Plain INSERT: a concurrently occupied position must fail, never take the UPDATE branch.
-      const { error } = await supabaseAdmin.from('olt_onts').insert(metadata).abortSignal(budget.signal);
+      const { data: insertedRow, error } = await supabaseAdmin.from('olt_onts').insert(metadata).select('id').abortSignal(budget.signal).maybeSingle();
       if (error) return c.json({ error: 'No se pudo insertar la identidad sin sobrescribir registros.', imported }, 409);
+      // Traza de identidades genuinamente nuevas (nunca de un refresco de
+      // metadata rutinario) — best-effort: un fallo aqui nunca debe tumbar
+      // la importacion real que ya se escribio.
+      if (insertedRow) {
+        const { error: auditError } = await supabaseAdmin.from('olt_ont_link_audit').insert(ontLinkAuditRow({
+          ontId: insertedRow.id, oltDeviceId: device.id, action: 'import',
+          clientId: null, contractId: null, previousClientId: null, previousContractId: null,
+          serial: metadata.serial, frame: metadata.frame, slot: metadata.slot, port: metadata.port, ontNumber: metadata.ont_id,
+          performedBy: c.get('user').id,
+        }));
+        if (auditError) console.error('[olt-import-audit]', auditError.message);
+      }
     }
     imported++;
   }
@@ -1127,6 +1148,15 @@ oltRoutes.post('/:id/onts/:ontDbId/wan-pppoe', requireRole(...ONT_WRITE), async 
  * de arriba). "client_id" vive aqui porque es la misma naturaleza: una
  * decision de esta app, nunca sincronizada desde la OLT (ver import-existing).
  */
+// client_id/contract_id se quitaron de aqui (2026-11-03): esta ruta nunca
+// validaba nada al escribirlos (ni que el contrato fuera del cliente, ni
+// que no estuviera ya vinculado a otra ONT, ni concurrencia) y era
+// alcanzable por TECNICO_RED (ONT_WRITE) — un vinculo cliente/contrato es
+// mas sensible que la topologia/contacto que esta ruta sí sigue editando.
+// Vincular una ONT pendiente ahora usa exclusivamente POST
+// /:id/onts/:ontDbId/link (ONT_IMPORT_ROLES, con la validacion completa).
+// Confirmado antes de este cambio: ningun llamador real enviaba estos 2
+// campos por esta ruta (grep de updateOntMeta en todo el frontend).
 const ONT_META_FIELDS = [
   'zone_id',
   'splitter',
@@ -1136,11 +1166,6 @@ const ONT_META_FIELDS = [
   'contact',
   'latitude',
   'longitude',
-  'client_id',
-  // A que servicio/linea del cliente pertenece este ONT (Fase 37) — mismo
-  // criterio que client_id: decision de esta app, nunca sincronizada desde
-  // la OLT.
-  'contract_id',
 ] as const;
 
 oltRoutes.put('/:id/onts/:ontDbId/meta', requireRole(...ONT_WRITE), async (c) => {
@@ -1162,6 +1187,90 @@ oltRoutes.put('/:id/onts/:ontDbId/meta', requireRole(...ONT_WRITE), async (c) =>
   if (error) return c.json({ error: error.message }, 400);
   oltEvents.emitOntChanged({ oltDeviceId: ont.olt_device_id, ont: data });
   return c.json(presentOntData(data));
+});
+
+/**
+ * Vincula una ONT ya existente en olt_onts (importada por import-existing
+ * o registrada antes) a un cliente y contrato — "ONTs pendientes de
+ * vincular" (ver oltConnectionStatus.ts/listUnlinkedOnts). Solo escribe en
+ * Supabase; nunca toca la OLT (sin VLAN/GEM/PPPoE/perfiles). Nunca
+ * transfiere un vinculo YA existente (eso es una operacion distinta, mas
+ * delicada, fuera de alcance aqui) — ver validateOntLinkRequest.
+ *
+ * Concurrencia: la condicion WHERE del UPDATE (client_id/contract_id
+ * todavia null, mismo serial) hace que una segunda solicitud simultanea
+ * sobre la MISMA ONT afecte 0 filas y se rechace, nunca pise la primera en
+ * silencio. El indice unico parcial olt_onts_contract_id_active_key
+ * (migracion 20261103000000, sin aplicar todavia) es la ultima linea de
+ * defensa contra 2 ONTs DISTINTAS reclamando el mismo contrato a la vez
+ * (la comprobacion `occupied` de abajo sola no alcanza para esa carrera).
+ */
+oltRoutes.post('/:id/onts/:ontDbId/link', requireRole(...ONT_IMPORT_ROLES), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+  const ont = await getOntOrNull(c.req.param('ontDbId'));
+  if (!ont || ont.olt_device_id !== device.id) {
+    return c.json({ error: 'La ONT no existe, está retirada o no pertenece a esta OLT.' }, 404);
+  }
+
+  const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
+  const request = {
+    clientId: typeof body.clientId === 'string' ? body.clientId : '',
+    contractId: typeof body.contractId === 'string' ? body.contractId : '',
+    expectedSerial: typeof body.expectedSerial === 'string' ? body.expectedSerial : '',
+  };
+
+  let contract: { id: string; client_id: string; status: string } | null = null;
+  if (request.contractId) {
+    const { data } = await supabaseAdmin
+      .from('service_contracts')
+      .select('id, client_id, status')
+      .eq('id', request.contractId)
+      .maybeSingle();
+    contract = data;
+  }
+  let occupied = false;
+  if (request.contractId) {
+    const { data } = await supabaseAdmin
+      .from('olt_onts')
+      .select('id')
+      .eq('contract_id', request.contractId)
+      .is('retired_at', null)
+      .neq('id', ont.id)
+      .maybeSingle();
+    occupied = !!data;
+  }
+
+  const decision = validateOntLinkRequest(ont, contract, request, occupied);
+  if (!decision.ok) return c.json({ error: decision.error }, decision.status);
+
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('olt_onts')
+    .update({ client_id: request.clientId, contract_id: request.contractId })
+    .eq('id', ont.id).is('retired_at', null).is('client_id', null).is('contract_id', null).eq('serial', ont.serial)
+    .select('*, clients(id, first_name, last_name, phone, address), zones(id, name), service_contracts(id, contract_number, client_code, status, zones(id, name))')
+    .maybeSingle();
+  if (updateError) {
+    if ((updateError as { code?: string }).code === '23505') {
+      return c.json({ error: 'Ese contrato ya está vinculado a otra ONT activa.' }, 409);
+    }
+    return c.json({ error: updateError.message }, 400);
+  }
+  if (!updated) {
+    return c.json({ error: 'La ONT cambió desde que se consultó; recarga e intenta de nuevo.' }, 409);
+  }
+
+  const { error: auditError } = await supabaseAdmin.from('olt_ont_link_audit').insert(ontLinkAuditRow({
+    ontId: ont.id, oltDeviceId: device.id, action: 'link',
+    clientId: request.clientId, contractId: request.contractId,
+    previousClientId: ont.client_id, previousContractId: ont.contract_id,
+    serial: ont.serial, frame: ont.frame, slot: ont.slot, port: ont.port, ontNumber: ont.ont_id,
+    performedBy: c.get('user').id,
+  }));
+  if (auditError) console.error('[olt-link-audit]', auditError.message);
+
+  oltEvents.emitOntChanged({ oltDeviceId: device.id, ont: updated });
+  return c.json(presentOntData(updated));
 });
 
 oltRoutes.delete('/:id/onts/:ontDbId', requireRole(...ONT_WRITE), async (c) => {

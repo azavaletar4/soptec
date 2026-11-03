@@ -39,6 +39,7 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
 import { getErrorMessage } from '@/lib/errors';
 import OntDetailModal from './OntDetailModal.vue';
+import OntLinkModal from './OntLinkModal.vue';
 import OntZoneEditModal from './OntZoneEditModal.vue';
 import UnconfiguredOntsTab from './UnconfiguredOntsTab.vue';
 import ReconnectOntsTab from './ReconnectOntsTab.vue';
@@ -80,6 +81,22 @@ function openZoneEdit(ont: OltOnt) {
 function handleEditZoneFromDetail(ont: OltOnt) {
   detailOntId.value = null;
   openZoneEdit(ont);
+}
+
+// Vincular una ONT pendiente a cliente/contrato (2026-11-03) — mismo patron
+// que detailOnt/zoneEditOnt arriba (id por separado para encontrar la fila
+// SIEMPRE actualizada de oltStore.onts, nunca una copia vieja).
+const linkOntId = ref<string | null>(null);
+const linkOnt = computed(() => oltStore.onts.find((o) => o.id === linkOntId.value) ?? null);
+function openLinkOnt(ont: OltOnt) {
+  linkOntId.value = ont.id;
+}
+function handleLinkFromDetail(ont: OltOnt) {
+  detailOntId.value = null;
+  openLinkOnt(ont);
+}
+function handleOntLinked() {
+  linkOntId.value = null;
 }
 
 const slot = ref(1);
@@ -1703,9 +1720,22 @@ const gauges = computed(() => {
                       : 'Sin ningún cliente vinculado.' }}
                   </div>
                 </div>
-                <button type="button" class="text-sky-700 hover:underline text-xs whitespace-nowrap" @click="openOntDetail(o)">
-                  Ver detalle
-                </button>
+                <div class="flex flex-col items-end gap-1 shrink-0">
+                  <button type="button" class="text-sky-700 hover:underline text-xs whitespace-nowrap" @click="openOntDetail(o)">
+                    Ver detalle
+                  </button>
+                  <button
+                    v-if="o.unlinkedReason === 'no_client' && canAuthorizeOnt"
+                    type="button"
+                    class="text-emerald-700 hover:underline text-xs whitespace-nowrap"
+                    @click="openLinkOnt(o)"
+                  >
+                    Vincular a cliente
+                  </button>
+                  <span v-else-if="o.unlinkedReason === 'client_without_contract'" class="text-[11px] text-slate-400 text-right">
+                    Ya tiene cliente asignado — corregir manualmente
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -2017,9 +2047,10 @@ const gauges = computed(() => {
             Rx/Tx de todas. Esto solo lee la OLT (sin cambiar nada) y puede tardar varios minutos con
             cientos de ONTs — se puede repetir cuando quieras para refrescar todo.
           </p>
-          <button :disabled="oltWriteBusy" class="btn-secondary" @click="handleImportExisting">
+          <button v-if="canAuthorizeOnt" :disabled="oltWriteBusy" class="btn-secondary" @click="handleImportExisting">
             {{ importing ? 'Importando...' : 'Importar / actualizar ONTs desde la OLT' }}
           </button>
+          <p v-else class="text-xs text-slate-500">Solo ADMIN/SUPERADMIN puede importar ONTs desde la OLT.</p>
           <p v-if="importMessage" class="text-xs text-slate-600 mt-3">{{ importMessage }}</p>
         </div>
       </div>
@@ -2126,6 +2157,15 @@ const gauges = computed(() => {
       @close="detailOntId = null"
       @open-tr069="handleOpenTr069FromDetail"
       @edit-zone="handleEditZoneFromDetail"
+      @link="handleLinkFromDetail"
+    />
+
+    <OntLinkModal
+      v-if="linkOnt && device"
+      :ont="linkOnt"
+      :device="device"
+      @close="linkOntId = null"
+      @linked="handleOntLinked"
     />
 
     <OntZoneEditModal

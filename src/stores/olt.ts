@@ -96,6 +96,9 @@ export interface OntPlanChange {
   planId?: string | null;
 }
 
+// client_id/contract_id se quitaron de aqui (2026-11-03) -- vincular una
+// ONT a cliente/contrato ahora exige la validacion completa de linkOntToContract
+// (POST /:id/onts/:ontDbId/link), nunca este PUT generico sin validar.
 export interface OntMetaUpdate {
   zone_id?: string | null;
   splitter?: string | null;
@@ -105,8 +108,12 @@ export interface OntMetaUpdate {
   contact?: string | null;
   latitude?: number | null;
   longitude?: number | null;
-  client_id?: string | null;
-  contract_id?: string | null;
+}
+
+export interface OntLinkRequest {
+  clientId: string;
+  contractId: string;
+  expectedSerial: string;
 }
 
 // ---- Aprovisionamiento confiable (Fase 2) — ver server/src/services/
@@ -712,6 +719,22 @@ export const useOltStore = defineStore('olt', () => {
     return updated;
   }
 
+  // Vincula una ONT "pendiente de vincular" (importada por import-existing
+  // o registrada antes, sin cliente/contrato) al cliente/contrato elegido
+  // administrativamente. Nunca toca la OLT. El backend valida todo de
+  // nuevo (contrato del cliente correcto, elegible, sin doble vinculo,
+  // ONT no retirada/no ya vinculada, serial sin cambios) -- esta funcion
+  // solo transporta la solicitud y refresca el estado local si tuvo exito.
+  async function linkOntToContract(deviceId: string, ontDbId: string, payload: OntLinkRequest) {
+    const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/link`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const idx = onts.value.findIndex((o) => o.id === ontDbId);
+    if (idx !== -1) onts.value[idx] = enforceOntEvidence({ ...onts.value[idx]!, ...updated });
+    return updated;
+  }
+
   async function removeTr069(deviceId: string, ontDbId: string, veip = 1) {
     const updated = await apiFetch<OltOnt>(`/api/olt-devices/${deviceId}/onts/${ontDbId}/tr069?veip=${veip}`, {
       method: 'DELETE',
@@ -777,6 +800,7 @@ export const useOltStore = defineStore('olt', () => {
     fetchTr069EnableStatus,
     fetchRunningConfig,
     updateOntMeta,
+    linkOntToContract,
     fetchOntsByClient,
     changeOntPlan,
     searchUnlinkedOnts,
