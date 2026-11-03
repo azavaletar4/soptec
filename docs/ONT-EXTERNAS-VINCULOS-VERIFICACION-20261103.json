@@ -1,0 +1,227 @@
+{
+  "checkedAt": "2026-11-03T03:12:32.031Z",
+  "source": "mzupdnjegfwmpajywckd.supabase.co",
+  "readOnly": true,
+  "requests": [
+    {
+      "method": "GET",
+      "table": "olt_onts"
+    },
+    {
+      "method": "GET",
+      "table": "olt_onts"
+    },
+    {
+      "method": "GET",
+      "table": "olt_onts"
+    },
+    {
+      "method": "GET",
+      "table": "olt_sync_cache"
+    }
+  ],
+  "activeOntCount": 738,
+  "cacheCheckedAt": "2026-11-03T03:01:04.562+00:00",
+  "newDetectedRawCount": 0,
+  "newDetectedVisibleCount": 0,
+  "results": [
+    {
+      "serial": "ZTEGD4FE1386",
+      "expectedPosition": "1/2/8:26",
+      "expectedName": "Gustavo Reyes Sandoval",
+      "activeSerialMatches": 1,
+      "historicalSerialMatches": 1,
+      "row": {
+        "id": "abed7231-7ad5-4c5f-b0b6-54112bd44f4e",
+        "olt_device_id": "700d31b5-679e-4dda-9eeb-53bf3aaf87e0",
+        "serial": "ZTEGD4FE1386",
+        "frame": 1,
+        "slot": 2,
+        "port": 8,
+        "ont_id": 26,
+        "client_id": "b7525f0c-1ada-4419-b69b-f79db215aca2",
+        "contract_id": "b9704df4-f465-4ce9-a83e-43d415eeacf5",
+        "retired_at": null,
+        "clients": {
+          "id": "b7525f0c-1ada-4419-b69b-f79db215aca2",
+          "last_name": "Reyes Sandoval",
+          "first_name": "Gustavo"
+        },
+        "service_contracts": {
+          "id": "b9704df4-f465-4ce9-a83e-43d415eeacf5",
+          "status": "active",
+          "client_id": "b7525f0c-1ada-4419-b69b-f79db215aca2",
+          "contract_number": "CTR-2026-00764"
+        }
+      },
+      "nameMatches": true,
+      "contractOwnerMatches": true,
+      "contractMatchesReference": true,
+      "activePositionMatches": 1,
+      "activeContractMatches": 1,
+      "inNewDetectedRawCache": false,
+      "inNewDetectedVisible": false,
+      "pendingLink": false
+    },
+    {
+      "serial": "ASKY00934183",
+      "expectedPosition": "1/2/5:38",
+      "expectedName": "Lourdes García Rojas",
+      "activeSerialMatches": 1,
+      "historicalSerialMatches": 1,
+      "row": {
+        "id": "1e40aa46-ecc9-4d1e-b070-527678f6166d",
+        "olt_device_id": "700d31b5-679e-4dda-9eeb-53bf3aaf87e0",
+        "serial": "ASKY00934183",
+        "frame": 1,
+        "slot": 2,
+        "port": 5,
+        "ont_id": 38,
+        "client_id": "48915cc0-2b82-4709-9b67-138b140060f7",
+        "contract_id": "e8743774-a69b-42c6-bec5-da1afe6561e4",
+        "retired_at": null,
+        "clients": {
+          "id": "48915cc0-2b82-4709-9b67-138b140060f7",
+          "last_name": "Garcia Rojas",
+          "first_name": "Lourdes"
+        },
+        "service_contracts": {
+          "id": "e8743774-a69b-42c6-bec5-da1afe6561e4",
+          "status": "active",
+          "client_id": "48915cc0-2b82-4709-9b67-138b140060f7",
+          "contract_number": "CTR-2026-00446"
+        }
+      },
+      "nameMatches": true,
+      "contractOwnerMatches": true,
+      "contractMatchesReference": null,
+      "activePositionMatches": 1,
+      "activeContractMatches": 1,
+      "inNewDetectedRawCache": false,
+      "inNewDetectedVisible": false,
+      "pendingLink": false
+    },
+    {
+      "serial": "ZTEGD776E66D",
+      "expectedPosition": "1/2/12:50",
+      "expectedName": "Jorge López Boado",
+      "activeSerialMatches": 1,
+      "historicalSerialMatches": 1,
+      "row": {
+        "id": "004f5d38-882b-494e-b13e-bcac86c659fe",
+        "olt_device_id": "700d31b5-679e-4dda-9eeb-53bf3aaf87e0",
+        "serial": "ZTEGD776E66D",
+        "frame": 1,
+        "slot": 2,
+        "port": 12,
+        "ont_id": 50,
+        "client_id": "fd2bf457-9918-43f1-b073-bc04011ca4b8",
+        "contract_id": "6b601818-945a-457a-b2e8-c89f24222eda",
+        "retired_at": null,
+        "clients": {
+          "id": "fd2bf457-9918-43f1-b073-bc04011ca4b8",
+          "last_name": "Lopez Boado",
+          "first_name": "Jorge"
+        },
+        "service_contracts": {
+          "id": "6b601818-945a-457a-b2e8-c89f24222eda",
+          "status": "active",
+          "client_id": "fd2bf457-9918-43f1-b073-bc04011ca4b8",
+          "contract_number": "CTR-2026-00750"
+        }
+      },
+      "nameMatches": true,
+      "contractOwnerMatches": true,
+      "contractMatchesReference": null,
+      "activePositionMatches": 1,
+      "activeContractMatches": 1,
+      "inNewDetectedRawCache": false,
+      "inNewDetectedVisible": false,
+      "pendingLink": false
+    },
+    {
+      "serial": "HWTCDEB9F6B6",
+      "expectedPosition": "1/3/4:8",
+      "expectedName": "Ángel Larenas Miguel",
+      "activeSerialMatches": 1,
+      "historicalSerialMatches": 1,
+      "row": {
+        "id": "983a6208-cb40-4ce0-9a9e-842350f16de7",
+        "olt_device_id": "700d31b5-679e-4dda-9eeb-53bf3aaf87e0",
+        "serial": "HWTCDEB9F6B6",
+        "frame": 1,
+        "slot": 3,
+        "port": 4,
+        "ont_id": 8,
+        "client_id": "be2945e6-3e90-4e6c-b67a-cd92eca16cf6",
+        "contract_id": "9a1378b6-de9f-4fc8-b8c4-7bcb0251c603",
+        "retired_at": null,
+        "clients": {
+          "id": "be2945e6-3e90-4e6c-b67a-cd92eca16cf6",
+          "last_name": "Larenas Miguel",
+          "first_name": "Angel"
+        },
+        "service_contracts": {
+          "id": "9a1378b6-de9f-4fc8-b8c4-7bcb0251c603",
+          "status": "active",
+          "client_id": "be2945e6-3e90-4e6c-b67a-cd92eca16cf6",
+          "contract_number": "CTR-2026-00543"
+        }
+      },
+      "nameMatches": true,
+      "contractOwnerMatches": true,
+      "contractMatchesReference": null,
+      "activePositionMatches": 1,
+      "activeContractMatches": 1,
+      "inNewDetectedRawCache": false,
+      "inNewDetectedVisible": false,
+      "pendingLink": false
+    },
+    {
+      "serial": "HWTC5C1F6CB4",
+      "expectedPosition": "1/3/4:13",
+      "expectedName": "David Saona Sánchez",
+      "activeSerialMatches": 1,
+      "historicalSerialMatches": 1,
+      "row": {
+        "id": "584287a6-a0c8-4477-bd1a-5dcda207a214",
+        "olt_device_id": "700d31b5-679e-4dda-9eeb-53bf3aaf87e0",
+        "serial": "HWTC5C1F6CB4",
+        "frame": 1,
+        "slot": 3,
+        "port": 4,
+        "ont_id": 13,
+        "client_id": "bb69b54b-a892-4417-b6d8-b7a8448c5909",
+        "contract_id": "37aa6802-1690-4a81-9707-02a7c4c38b68",
+        "retired_at": null,
+        "clients": {
+          "id": "bb69b54b-a892-4417-b6d8-b7a8448c5909",
+          "last_name": "Saona Sanchez",
+          "first_name": "David"
+        },
+        "service_contracts": {
+          "id": "37aa6802-1690-4a81-9707-02a7c4c38b68",
+          "status": "active",
+          "client_id": "bb69b54b-a892-4417-b6d8-b7a8448c5909",
+          "contract_number": "CTR-2026-00757"
+        }
+      },
+      "nameMatches": true,
+      "contractOwnerMatches": true,
+      "contractMatchesReference": null,
+      "activePositionMatches": 1,
+      "activeContractMatches": 1,
+      "inNewDetectedRawCache": false,
+      "inNewDetectedVisible": false,
+      "pendingLink": false
+    }
+  ],
+  "indicatorVerification": {
+    "pendingLinkFunction": "src/lib/oltConnectionStatus.ts:listUnlinkedOnts",
+    "pendingTargets": 0,
+    "newDetected": "Cache vacia; resultado de GET new-detected reconstruido con la logica actual, sin llamada HTTP a la aplicacion",
+    "browserChecked": false,
+    "physicalOltChecked": false
+  },
+  "validationPassed": true
+}

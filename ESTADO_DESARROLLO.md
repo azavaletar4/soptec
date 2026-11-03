@@ -16,8 +16,8 @@ la sección histórica correspondiente, no hace falta repetirlo.
 **Detección automática de ONT autorizadas externamente — DESPLEGADA y
 verificada en vivo (03/11/2026, autorizado expresamente):** supera el
 punto "Pendiente real" de Gustavo Reyes Sandoval en el párrafo siguiente —
-ya no requiere revisión manual para saber que existe. GitHub: `main` local
-y `origin/main` coinciden en `40e43c1` (incluye `96663a0`, la
+ya no requiere revisión manual para saber que existe. En aquella sesión,
+`main` local y `origin/main` coincidían en `40e43c1` (incluye `96663a0`, la
 implementación, más `40e43c1`, una corrección cosmética de CSS — mismo
 patrón ya visto con `f99299a`: una clase Tailwind nueva sin uso previo
 disparó `HISTORICAL_ASSETS_CHANGED`, corregida reutilizando
@@ -33,21 +33,35 @@ tocar. **Confirmado con evidencia real, 100% pasiva:** el primer ciclo
 automático del scheduler (30s después del arranque del backend, el mismo
 mecanismo de siempre — no se disparó ningún sync manual) detectó 5 ONT
 reales nunca vistas por SmartRayco, **incluida exactamente la de Gustavo
-Reyes Sandoval** (`ZTEGD4FE1386`, `1/2/8:26`, `online`).
-**ACTUALIZACION (03/11/2026, sesion posterior, cierre/traspaso a Codex):**
-el propietario probo el boton "Importar y vincular" sobre Gustavo —
-**termino bien, sin duplicados ni conflictos**, pero el boton llama al
-importador MASIVO (reescanea las ~738 posiciones de toda la OLT, varios
-minutos) y el modal de vinculacion nunca se abrio en el navegador.
-Gustavo (y otras 4 ONT reales del mismo lote: Lourdes Garcia Rojas, Jorge
-Lopez Boado, Angel Larenas Miguel, David Saona Sanchez) **ya tienen fila
-en `olt_onts` (738 filas, antes 733) pero siguen SIN client_id/contract_id**
-— nunca reimportarlas, solo falta vincularlas manualmente o esperar la
-correccion pendiente. **Tarea siguiente para Codex, sin autorizacion de
-despliegue todavia:** importacion individual (sin recorrer toda la OLT) +
-abrir el modal directo si la ONT ya existe — detalle completo y pasos
-exactos en `docs/CONTINUIDAD-CLAUDE-CODEX-20261103.md` (version
-actualizada en este cierre de sesion).
+Reyes Sandoval** (`ZTEGD4FE1386`, `1/2/8:26`, `online`). **Estado actual
+verificado por Codex el 03/11/2026 a las 03:12:32 UTC (02/11 22:12 Lima):**
+el propietario ya importó y vinculó manualmente las cinco ONT. Consultas
+exclusivamente GET a Supabase confirman cliente, contrato activo y titular
+coincidente: Gustavo `CTR-2026-00764`, Lourdes `CTR-2026-00446`, Jorge
+`CTR-2026-00750`, Ángel `CTR-2026-00543`, David `CTR-2026-00757`.
+Inventario activo: 738 ONT; para estas cinco, un único serial, posición y
+contrato activo, sin duplicados ni conflictos administrativos detectados.
+Las cinco quedan fuera de `listUnlinkedOnts` (función real ejecutada con
+los datos consultados). Caché de nuevas detectadas vacía (último ciclo
+03:01:04 UTC): resultado de la ruta reconstruido según su lógica, 0 nuevas.
+No se verificó el navegador ni la identidad física actual en la OLT.
+Evidencia: `docs/ONT-EXTERNAS-VINCULOS-VERIFICACION-20261103.json`.
+Base del cierre `02ad1be`; `git fetch origin` completado, sin divergencia
+antes del commit documental. No se reverificó el despliegue. Los hashes anteriores describen
+la sesión histórica de despliegue. **Importación individual: mejora genérica
+pendiente para futuras ONT**, porque el botón sigue llamando al importador
+masivo; ya no resuelve ningún pendiente de Gustavo ni de este lote. Para
+una ONT existente y sin vincular, deberá abrir el modal sin reimportar;
+para una ya vinculada, no ofrecer una nueva vinculación. Lectura acotada
+de identidad todavía requiere validación antes de su uso real; conservar
+el importador masivo. Cierre autorizado: commit exclusivamente documental
+y push normal a `origin/main` si es fast-forward; identificar el commit
+que contiene este bloque mediante `git log -1` y comprobar el remoto
+al retomar. Los bloques locales Samsung/TR-069 de otras fases se conservan
+en el archivo de trabajo y se excluyen del commit de este cierre.
+Sin cambios de código, importaciones, vínculos, migraciones, operaciones
+OLT ni despliegue. Detalle del alcance futuro y pruebas focalizadas:
+`docs/CONTINUIDAD-CLAUDE-CODEX-20261103.md`.
 
 **Sincronización Clientes/Puntos/OLT — verificado real (02-03/11/2026,
 autorizado expresamente):** GitHub: `main` local y `origin/main` coinciden
@@ -65,19 +79,17 @@ octubre/noviembre aplicada y verificada en Supabase producción**
 registrada en `supabase_migrations.schema_migrations`, hash de la función
 en vivo coincide con el código versionado): incrementos exactos
 confirmados Jairo Bernabe +10, Ruber Pizango +5, Jhordanno Zavaleta +5,
-Jadir Zavaleta +2, sin duplicar octubre. **Pendiente real, documentado,
-sin ejecutar:** ONT de Gustavo Reyes Sandoval (CTR-2026-00764, serial
-`ZTEGD4FE1386`, posición `gpon-onu_1/2/8:26`, online, VLAN 120, autorizada
-directamente en SmartOLT el 30/10) existe y funciona en la OLT real pero
-no tiene fila en `olt_onts` — requiere ejecutar el importador ya existente
-(`POST /:id/onts/import-existing`, sin duplicarlo) y vincularla
-manualmente al contrato, **sin reprovisionar**; procedimiento completo en
-`docs/OLT-IMPORTADOR-EXTERNAS-PENDIENTE-20261102.md`. Del indicador "ONTs
+Jadir Zavaleta +2, sin duplicar octubre. **Pendiente de Gustavo resuelto:**
+importación y vinculación manual realizadas por el propietario y verificadas
+por GET el 03/11 03:12 UTC, junto con las otras cuatro ONT (detalle arriba).
+El procedimiento de `docs/OLT-IMPORTADOR-EXTERNAS-PENDIENTE-20261102.md`
+es un antecedente, no una instrucción vigente para este lote. Del indicador "ONTs
 pendientes de vincular" (antes solo mostraba el número, ahora con detalle
 clicable): de las 4 originales, 1 (Luis Plasencia Flores) se vinculó por
 una acción administrativa real ajena a esta sesión, quedando 3 reales
-(Jerry Cruz Luna ×2, Janet Armas Asto) — Gustavo nunca apareció ahí porque
-el indicador solo puede listar filas que ya existen en `olt_onts`. **VM de
+(Jerry Cruz Luna ×2, Janet Armas Asto), conteo histórico no reverificado
+en esta revisión. Gustavo ahora tiene fila y vínculo completo, por lo que
+queda fuera de pendientes. **VM de
 producción:** los contenedores corren exactamente las imágenes arriba
 (confirmado por `docker inspect`, no por su checkout git); el checkout git
 propio de la VM (`/opt/smartrayco`) está en la rama local `preview-fase174`

@@ -16,22 +16,23 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
-**Detección automática de ONT externas — DESPLEGADA; traspaso a Codex
-pendiente de importación individual (cierre de sesión Claude, 03/11/2026):**
-`main`/`origin/main` en `cb26e42`; migración `20261104000000_olt_sync_new_onts_detected`
-aplicada en Supabase producción; backend/frontend `...40e43c155b51`.
-La ONT de Gustavo Reyes Sandoval (`ZTEGD4FE1386`, `1/2/8:26`,
-`CTR-2026-00764`) **ya está importada en `olt_onts`** (junto con otras 4
-ONT reales del mismo lote) **pero sin cliente/contrato vinculado** —
-**no volver a importarla**. Causa: el botón "Importar y vincular" llama
-al importador masivo (reescanea toda la OLT, varios minutos) en vez de
-uno individual. **Para Codex:** leer primero
-`docs/CONTINUIDAD-CLAUDE-CODEX-20261103.md` (pasos exactos de la
-corrección pendiente) y la sección "Detección automática..."/"Pendiente
-real #2" al inicio de `ESTADO_DESARROLLO.md` antes de tocar el módulo
-OLT. No desplegar ni migrar sin autorización explícita en ese mismo turno
-(regla 16 de este archivo, abajo) — implementar y probar localmente
-primero.
+**ONT externas — cinco vínculos manuales verificados (03/11/2026 03:12 UTC):**
+Gustavo Reyes Sandoval (`ZTEGD4FE1386`, `1/2/8:26`, `CTR-2026-00764`) y
+las otras cuatro ONT del lote ya tienen cliente y contrato activo correctos,
+sin duplicados ni conflictos administrativos detectados mediante GET a
+Supabase. Ninguna aparece en nuevas detectadas (caché vacía) ni satisface
+el filtro de pendientes. **No reimportar ni revincular este lote.** HEAD
+base local `02ad1be`; despliegue no reverificado en esta revisión.
+La importación individual sigue sin implementar: mejora genérica para
+futuras ONT, no una corrección de Gustavo. Leer `ESTADO_DESARROLLO.md` y
+`docs/CONTINUIDAD-CLAUDE-CODEX-20261103.md`. Último alcance autorizado:
+solo documentación y respaldo mediante commit documental y push normal
+a `origin/main` si es fast-forward, sin modificar código ni equipos.
+El commit de cierre es el que contiene esta actualización; comprobar
+`git log -1` y `git ls-remote origin refs/heads/main` al retomar. Preservar
+los pendientes locales de otras fases, incluso los bloques ajenos de
+`ESTADO_DESARROLLO.md`, excluidos del commit. Evidencia:
+`docs/ONT-EXTERNAS-VINCULOS-VERIFICACION-20261103.json`.
 
 **SINCRONIZACIÓN GITHUB COMPLETADA (30/10/2026):** los 4 commits locales
 de TR-069/Hosts (`644e456`, `7cc47d7`, `9e0e355`, `f648290`) ya están en

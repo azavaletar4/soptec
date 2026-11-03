@@ -1,17 +1,21 @@
-# Continuidad Claude Code / Codex — 03/11/2026 (cierre de sesión Claude, traspaso a Codex)
+# Continuidad Claude Code / Codex — 03/11/2026 (vínculos manuales verificados)
 
 **Esta nota es un puntero rápido, no la fuente de verdad.** La fuente única
 real sigue siendo la sección **"ESTADO DE CONTINUIDAD"** al inicio de
 `ESTADO_DESARROLLO.md` (regla ya establecida en `CLAUDE.md`) — léela
 primero siempre, por completo, antes de tocar código. Este documento
-reemplaza la versión anterior (describía el estado previo a esta sesión:
-sin detección automática, sin la ONT de Gustavo importada).
+actualiza el traspaso: las cinco ONT ya están importadas y vinculadas por
+el propietario; no requieren otra importación ni vinculación.
 
 ## Repositorio
 
-- `main` local y `origin/main` coinciden en **`cb26e42`** (verificado con
-  `git fetch` + comparación directa de hashes). Push normal, fast-forward,
-  sin force/rebase/reset en toda la sesión.
+- Base del cierre documental: **`02ad1be`**, `main`. `git fetch origin`
+  completado en el cierre: HEAD y `origin/main` idénticos, 0 adelante/0
+  atrás antes del nuevo commit. El propietario autoriza commit documental
+  y push normal si es fast-forward. El commit de cierre es el que contiene
+  esta actualización; al retomar comprobar `git log -1` y
+  `git ls-remote origin refs/heads/main`. No asumir que los hashes históricos
+  de despliegue representan la punta actual del repositorio.
 - Commits de esta sesión, en orden: `56254bf` (vinculación externa) →
   `467b637` (registro deploy) → `96663a0` (detección automática) →
   `40e43c1` (fix cosmético CSS, mismo patrón que `f99299a`) → `cb26e42`
@@ -26,7 +30,14 @@ sin detección automática, sin la ONT de Gustavo importada).
   `scripts/tr069-release-preflight.cjs`,
   `server/src/services/__tests__/trafficAnalyticsCounterStates.test.ts`.
   También `docs/INVENTARIO-PRODUCCION-IMAGENES.json` (modificado, ajeno).
-  **Ninguno de estos se incluyó en los commits de esta sesión.**
+  **Ninguno de estos se incluye en el commit de cierre.** Los dos bloques
+  locales Samsung Hosts/TR-069 de `ESTADO_DESARROLLO.md` se preservan
+  exclusivamente en el archivo de trabajo mediante selección del contenido
+  del índice; no se publican como parte del cierre ONT. Estos pendientes
+  quedan guardados en disco, sin respaldo nuevo en GitHub en este cierre.
+  Archivos documentales propios: `CLAUDE.md`, `ESTADO_DESARROLLO.md`
+  (solo cambios ONT/cierre), este documento y la evidencia JSON de los cinco
+  vínculos. No se incluyen código funcional ni archivos de otras fases.
 
 ## Producción (verificado por manifiesto/imagen, no solo por commit)
 
@@ -35,7 +46,8 @@ sin detección automática, sin la ONT de Gustavo importada).
 | Frontend | `40e43c1` | `GET /release-manifest.json` + `docker exec` grep del bundle real |
 | Backend | `40e43c1` | `docker inspect`/`docker ps` → etiqueta `...wifitrial:40e43c155b51` |
 
-Confirmado en vivo 03/11/2026. Caddy/Mongo/GenieACS sin tocar desde
+Confirmado en la sesión histórica de despliegue del 03/11/2026, no
+reverificado en esta revisión de vínculos. Caddy/Mongo/GenieACS sin tocar desde
 30/10. `prepare`→`build`→`deploy`→`verify` todos PASS (126 artefactos,
 reproducible, 11 rutas, `401` sin autenticación, `ssidTasksSent:0`).
 
@@ -63,39 +75,54 @@ reproducible, 11 rutas, `401` sin autenticación, `ssidTasksSent:0`).
    en vivo con un ciclo 100% pasivo del scheduler: detectó 5 ONT reales
    (ver abajo), sin tocar la OLT ni GenieACS.
 3. **Importación individual tras un clic en "Importar y vincular"** — **NO
-   implementado todavía, es la tarea pendiente** (sección siguiente). El
-   botón hoy llama al importador masivo existente.
+   implementada todavía**. Mejora genérica para futuras ONT: el botón
+   continúa llamando al importador masivo. Ninguna de estas cinco ONT la
+   necesita. Último alcance autorizado: documentación, commit y push normal
+   de este cierre; sin cambios de código, importaciones, vínculos ni
+   operaciones de equipos.
 
-## Pendiente real #1 — ONT de Gustavo Reyes Sandoval: YA IMPORTADA, falta vincular
+## Cinco ONT importadas y vinculadas — verificación de lectura completada
 
-Ya **no** está pendiente de importar (a diferencia de lo que decía la
-versión anterior de este documento). Estado verificado en `olt_onts`
-(solo lectura, 03/11/2026 ~02:45 UTC):
+El propietario confirmó la vinculación manual. Verificación independiente
+mediante cuatro GET a Supabase, finalizada el **03/11/2026 03:12:32 UTC
+(02/11 22:12:32 Lima)**, proyecto `mzupdnjegfwmpajywckd`:
 
-```
-id: abed7231-7ad5-4c5f-b0b6-54112bd44f4e
-serial: ZTEGD4FE1386, posición 1/2/8:26, olt_device_id: 700d31b5-679e-4dda-9eeb-53bf3aaf87e0
-client_id: null, contract_id: null   ← falta vincular
-created_at: 2026-11-03T02:42:11.556Z (import-existing, audit action="import")
-```
+| Cliente | Serial | Posición | Contrato activo |
+|---|---|---|---|
+| Gustavo Reyes Sandoval | `ZTEGD4FE1386` | `1/2/8:26` | `CTR-2026-00764` |
+| Lourdes García Rojas | `ASKY00934183` | `1/2/5:38` | `CTR-2026-00446` |
+| Jorge López Boado | `ZTEGD776E66D` | `1/2/12:50` | `CTR-2026-00750` |
+| Ángel Larenas Miguel | `HWTCDEB9F6B6` | `1/3/4:8` | `CTR-2026-00543` |
+| David Saona Sánchez | `HWTC5C1F6CB4` | `1/3/4:13` | `CTR-2026-00757` |
 
-Contrato objetivo: `CTR-2026-00764`. **No volver a importarla** — ya existe
-la fila, un segundo `import-existing`/registro manual sobre esa posición
-es innecesario y redundante. Solo falta el paso de vinculación
-(`PATCH`/`POST .../link` ya existente, vía `OntLinkModal.vue`), que se
-puede hacer manualmente desde el panel ("ONTs pendientes de vincular")
-**ahora mismo, sin esperar la corrección de abajo**, o automáticamente una
-vez corregido el flujo del botón.
+Para cada ONT: `client_id` y `contract_id` presentes; cliente resuelto y
+nombre coincidente con el traspaso (normalizando tildes); contrato resuelto,
+activo y perteneciente exactamente a ese `client_id`. Gustavo conserva
+la fila `abed7231-7ad5-4c5f-b0b6-54112bd44f4e` y el contrato solicitado.
+Consulta paginada del inventario activo completo: 738 ONT. Para cada serial
+del lote hay una sola ONT activa, una sola fila en la consulta histórica
+por esos seriales, una sola ocupación activa de la posición dentro de esta
+OLT y un solo uso activo del contrato en el inventario. No se detectaron
+duplicados ni conflictos administrativos en estas cinco identidades.
+Esto valida las relaciones registradas; no es una nueva comprobación física
+de seriales/servicios en la OLT ni una auditoría de todo el inventario.
 
-Junto con Gustavo, ese mismo clic de "Importar y vincular" importó otras
-**4 ONT reales** (mismo lote, mismo timestamp, todas sin cliente/contrato
-todavía): Lourdes García Rojas (`ASKY00934183`, `1/2/5:38`), Jorge López
-Boado (`ZTEGD776E66D`, `1/2/12:50`), Ángel Larenas Miguel
-(`HWTCDEB9F6B6`, `1/3/4:8`), David Saona Sánchez (`HWTC5C1F6CB4`,
-`1/3/4:13`). Las 5 son reales y deben vincularse manualmente cuando
-corresponda — ninguna se vinculó automáticamente, ninguna se duplicó.
+**Indicadores:** caché `new_onts_detected=[]`, último ciclo
+`2026-11-03T03:01:04.562+00:00`; la lógica de `GET /:id/onts/new-detected`
+produce 0 elementos. Este indicador excluye ONT ya importadas, aunque
+todavía no estén vinculadas. `listUnlinkedOnts` real ejecutada localmente
+con las cinco filas consultadas devuelve 0: todas tienen cliente, contrato
+y relación contractual resuelta. No se llamó a la aplicación ni se verificó
+el navegador; se comprobaron los datos de producción y los filtros actuales.
+No se recontaron otros pendientes ajenos a este lote.
 
-## Pendiente real #2 — Tarea para Codex: corrección de importación individual
+Evidencia local: `docs/ONT-EXTERNAS-VINCULOS-VERIFICACION-20261103.json`.
+La comprobación local de las cinco identidades y ambos criterios pasó.
+La verificación previa no hizo importaciones, vinculaciones, Telnet,
+cambios de OLT, migraciones ni despliegues. El cierre posterior autoriza
+exclusivamente commit y push documental. **No volver a importar ni vincular estas cinco ONT.**
+
+## Mejora futura — importación individual genérica, sin implementación autorizada ahora
 
 **Diagnóstico confirmado (ver `docs/` — este mismo documento resume lo
 esencial, no hace falta repetir el diagnóstico):**
@@ -114,14 +141,14 @@ esencial, no hace falta repetir el diagnóstico):**
   explícito (a diferencia de `provisionOnt`/`getSignal`, que sí lo tienen)
   y el botón no muestra ningún aviso de duración esperada.
 
-**Qué implementar (Codex, con autorización explícita previa del
-propietario antes de cualquier escritura/despliegue real):**
+**Alcance propuesto para una futura implementación, fuera de este turno:**
 1. Importación **individual**: una ruta/flujo que traiga/verifique SOLO
    la ONT elegida (por posición+serial), sin recorrer ni reescribir las
    demás ~737 posiciones.
-2. Si la ONT ya tiene fila en `olt_onts` (como Gustavo ahora mismo):
+2. Si la ONT ya tiene fila en `olt_onts` y sigue sin vincular:
    **saltar la importación y abrir directamente el modal de vinculación**
-   (`OntLinkModal.vue`) — nunca reimportar algo que ya existe.
+   (`OntLinkModal.vue`) — nunca reimportar algo que ya existe. Si ya está
+   vinculada, no ofrecer una nueva vinculación ni transferir su contrato.
 3. Si es genuinamente nueva: importarla individualmente y **después**
    abrir el modal — nunca ambos pasos en una sola operación sin
    confirmación intermedia si eso complica el manejo de errores.
@@ -140,9 +167,45 @@ propietario antes de cualquier escritura/despliegue real):**
 6. Probar localmente (pruebas aisladas, Docker/fakes, sin tocar la OLT ni
    Supabase de producción) **antes** de pedir autorización para
    desplegar.
-7. **No volver a importar la ONT de Gustavo** — ya existe, úsala como
-   caso de prueba de la rama "ya existe → abrir modal directo", nunca
-   como caso de "importar" en las pruebas contra producción.
+7. **No volver a importar ni vincular la ONT de Gustavo ni las otras cuatro.**
+   Gustavo sirve como referencia de identidad ya vinculada, que no admite
+   otro vínculo. La rama existente-sin-vincular debe probarse con fixtures.
+
+Sigue existiendo una necesidad funcional para futuras altas externas: un
+clic sobre una ONT continúa ejecutando el importador masivo y procesando
+todo el inventario. El importador masivo y el vínculo manual permiten
+operar hoy; la mejora reduce alcance, espera y posibilidad de confusión.
+No es necesaria para corregir este lote. Antes de usar una lectura acotada
+de identidad en producción debe validarse su salida: `portRunningConfigCommand`
+está marcado en `zteCommands.ts` como no confirmado y no utilizable para
+decisiones reales; no basta asumir que incluye bloques de servicio ONT.
+
+**Próxima tarea exacta para retomar con un nuevo pedido de implementación:**
+reutilizar el clasificador y la evidencia existentes para el flujo individual
+en ruta backend, store OLT y `handleImportAndLink`, con modal posterior y
+timeout explícito. Primero resolver cómo verificar identidad acotada sin
+usar comandos no validados; cualquier validación contra la OLT real requiere
+su autorización específica. No repetir la auditoría del lote ya resuelto.
+
+**Pruebas necesarias antes de un commit funcional:** fixtures aislados para
+ONT existente sin vincular (cero importaciones, modal correcto), existente
+ya vinculada (rechazar nuevo vínculo), nueva (una sola inserción y modal),
+serial en otra posición, posición ocupada por otro serial, lectura incompleta
+o identidad cambiante, dos clics/dos administradores, timeout o respuesta
+perdida tras inserción (reintento sin duplicado), vínculo concurrente y
+contrato de otro cliente. Verificar importador masivo intacto, permisos
+ADMIN/SUPERADMIN y ausencia de comandos de configuración/escrituras a
+equipos. Ejecutar pruebas focalizadas existentes de identidad/importación/
+vinculación y chequeos TypeScript backend/frontend acordes a lo modificado.
+Nunca usar estas cinco ONT reales como fixtures de escritura ni aplicar
+migraciones, push funcional o deploy sin autorización explícita.
+
+**Estados al cierre:** detección y vinculación existentes implementadas y
+desplegadas según evidencia histórica `40e43c1`; cinco relaciones verificadas
+por Codex en Supabase y filtros locales PASS; navegador y OLT física no
+reverificados; importación individual no implementada ni desplegada.
+No se ejecutan pruebas de aplicación adicionales en el cierre exclusivamente
+documental; se revisan diff, JSON de evidencia y alcance exacto del índice.
 
 ## Riesgos conocidos
 
@@ -150,13 +213,12 @@ propietario antes de cualquier escritura/despliegue real):**
   documentado, no es un bug nuevo; la corrección de arriba lo evita para
   el caso de 1 ONT, pero el botón masivo en sí no se modifica en esta
   tarea.
-- Las 5 ONT recién importadas (Gustavo + 4 más) están sin vincular — no es
-  un riesgo de datos (no hay duplicados ni vínculos erróneos), solo trabajo
-  administrativo pendiente.
+- Las cinco ONT del lote ya están vinculadas y verificadas en Supabase;
+  no queda trabajo administrativo pendiente para ellas en estos indicadores.
 - Conflicto de identidad preexistente y ajeno detectado por el sync
   automático: posición `1/2/8:3`, serial esperado `MSTC8CCE647E` vs
-  observado `HWTCE5C94DB6` — no relacionado con esta sesión, requiere
-  revisión manual aparte (no tocar sin diagnóstico propio).
+  observado `HWTCE5C94DB6` — antecedente ajeno a este lote, no reverificado
+  en esta revisión; no tocar sin diagnóstico propio.
 
 ## Restricciones de producción (vigentes, repetir en cada sesión)
 
