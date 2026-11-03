@@ -1752,7 +1752,7 @@ const gauges = computed(() => {
             </div>
             <button
               type="button"
-              class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-left hover:bg-sky-100"
+              class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-left hover:bg-sky-50"
               :disabled="!newOnts.length"
               :aria-expanded="showNewOnts"
               @click="showNewOnts = !showNewOnts"
