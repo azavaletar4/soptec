@@ -13,6 +13,48 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
+**Sincronización Clientes/Puntos/OLT — verificado real (02-03/11/2026,
+autorizado expresamente):** GitHub: `main` local y `origin/main` coinciden
+en `f99299a` (push fast-forward normal, sin force/rebase/reset). Frontend
+en producción confirmado por su propio manifiesto (`GET
+/release-manifest.json`), no solo por `git log`: `f99299a` — incluye el
+contador de servicios vigentes/históricos (`ec05ee5`), los filtros
+desplegables/orden de Clientes (`fcdf694`) y el detalle del indicador
+"ONTs pendientes de vincular" (`025a495`+`f99299a`). Backend confirmado
+por la etiqueta de imagen del contenedor (`docker inspect`): `0787173`,
+sin cambios recientes pendientes de desplegar. **Corrección de puntos
+octubre/noviembre aplicada y verificada en Supabase producción**
+(`technician_point_contributions`, migración
+`20261102220000_technician_points_october_november_boundary.sql` —
+registrada en `supabase_migrations.schema_migrations`, hash de la función
+en vivo coincide con el código versionado): incrementos exactos
+confirmados Jairo Bernabe +10, Ruber Pizango +5, Jhordanno Zavaleta +5,
+Jadir Zavaleta +2, sin duplicar octubre. **Pendiente real, documentado,
+sin ejecutar:** ONT de Gustavo Reyes Sandoval (CTR-2026-00764, serial
+`ZTEGD4FE1386`, posición `gpon-onu_1/2/8:26`, online, VLAN 120, autorizada
+directamente en SmartOLT el 30/10) existe y funciona en la OLT real pero
+no tiene fila en `olt_onts` — requiere ejecutar el importador ya existente
+(`POST /:id/onts/import-existing`, sin duplicarlo) y vincularla
+manualmente al contrato, **sin reprovisionar**; procedimiento completo en
+`docs/OLT-IMPORTADOR-EXTERNAS-PENDIENTE-20261102.md`. Del indicador "ONTs
+pendientes de vincular" (antes solo mostraba el número, ahora con detalle
+clicable): de las 4 originales, 1 (Luis Plasencia Flores) se vinculó por
+una acción administrativa real ajena a esta sesión, quedando 3 reales
+(Jerry Cruz Luna ×2, Janet Armas Asto) — Gustavo nunca apareció ahí porque
+el indicador solo puede listar filas que ya existen en `olt_onts`. **VM de
+producción:** los contenedores corren exactamente las imágenes arriba
+(confirmado por `docker inspect`, no por su checkout git); el checkout git
+propio de la VM (`/opt/smartrayco`) está en la rama local `preview-fase174`
+(Fase 174b, MikroTik, ajena a este trabajo) y su ref de `main` está
+simplemente atrasado respecto a `origin/main` (sin commits exclusivos,
+sin riesgo) — ese checkout **no es la fuente de los despliegues** (las
+imágenes se construyen empacando el commit exacto desde el repositorio
+local vía `git archive`, nunca desde ese checkout); no se le hizo `pull`
+ni se tocó. **Para Codex:** partir de `origin/main` en `f99299a`; los
+archivos de otras fases listados en las secciones de abajo (Samsung Hosts,
+TR-069/WiFi, Fase 175, Puntos de activación, Oficina XUI) siguen solo
+locales en este equipo, sin tocar ni perder.
+
 **SINCRONIZACIÓN GITHUB COMPLETADA (30/10/2026, repositorio — sin tocar
 producción/OLT/GenieACS/MikroTik/PPPoE):** `main` local estaba 4 commits
 adelante de `origin/main` y 0 atrás (sin divergencia, confirmado con
