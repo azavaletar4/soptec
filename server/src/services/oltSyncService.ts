@@ -20,6 +20,8 @@ import {
   parseProcessorLoad,
   type GlobalOnt,
 } from '../ssh/zteParsers';
+import { buildScannedCandidates } from './oltScanCandidates';
+import { classifyImportCandidates, type LinkedPosition } from './oltImportDescriptionGuard';
 
 // Rango de senal optica GPON aceptable segun el glosario del curso: -8 a -27 dBm.
 export const LOW_SIGNAL_THRESHOLD_DBM = -27;
@@ -42,6 +44,25 @@ export interface OltFullSyncResult {
   portsScanned: number;
   failedPorts: string[];
   updatedOnts: number;
+  newOntsDetected: number;
+}
+
+/**
+ * ONT con onu-id YA autorizado en la OLT real (no es "sin configurar" — ver
+ * CachedUnconfiguredOnt arriba) pero SIN ninguna fila en `olt_onts` todavia
+ * -- el caso real de una ONT autorizada directamente en la OLT/SmartOLT que
+ * SmartRayco nunca vio (2026-11-04, deteccion automatica). Construida con
+ * `classifyImportCandidates(...).newlyDetected` -- mismo clasificador que ya
+ * usa `import-existing`, nunca un criterio paralelo.
+ */
+export interface NewOntDetected {
+  serial: string;
+  frame: number;
+  slot: number;
+  port: number;
+  ontId: number;
+  name: string | null;
+  status: 'online' | 'offline' | 'unknown';
 }
 
 // El escaneo global ("show gpon onu uncfg"/"show gpon onu state") ya trae
@@ -191,6 +212,31 @@ async function performFullSync(
   // Fase 4 OLT — historial de alertas: mapa por id para resolver el
   // snapshot de vinculo de cada alerta sin volver a consultar nada.
   const knownById = new Map(known.map((r) => [r.id, r]));
+
+  // 2) Deteccion automatica de ONT autorizadas externamente (2026-11-04):
+  // reutiliza el MISMO escaneo (scan.states/scan.after) que ya se pidio
+  // arriba para la telemetria -- cero Telnet adicional, cero sesion nueva.
+  // `newOntsDetected` queda `undefined` (en vez de []) cuando el escaneo no
+  // se completo, para que mas abajo el upsert NUNCA reemplace un resultado
+  // valido anterior por una lista vacia solo porque este ciclo fallo (igual
+  // criterio que unconfigured_onts ya no sigue, pero aqui si se exige
+  // explicitamente — ver nota de "no reemplazar por vacio" en el pedido).
+  let newOntsDetected: NewOntDetected[] | undefined;
+  if (scanComplete) {
+    const linkedPositions: LinkedPosition[] = known.map((r) => ({
+      frame: r.frame, slot: r.slot, port: r.port, ontId: r.ont_id, serial: r.serial, clientId: r.client_id,
+    }));
+    const scanned = buildScannedCandidates(device.id, scan.states!, scan.after!, scan);
+    const candidates = scanned.map((c) => ({
+      frame: c.frame, slot: c.slot, port: c.port, ontId: c.ontId, serial: c.serial,
+      name: c.binding.name, runState: c.state.runState,
+    }));
+    const { newlyDetected } = classifyImportCandidates(candidates, linkedPositions);
+    newOntsDetected = newlyDetected.map((c) => ({
+      serial: c.serial, frame: c.frame, slot: c.slot, port: c.port, ontId: c.ontId, name: c.name,
+      status: c.runState === 'working' ? 'online' : ['offline', 'los', 'dyinggasp'].includes(c.runState.toLowerCase()) ? 'offline' : 'unknown',
+    }));
+  }
   const updatesById = new Map<string, PendingUpdate>();
   // Fase 3 comercial OLT: alertas proactivas, ver oltAlerts.ts — antes de
   // cada "row" se sobreescriba abajo todavia representa lo YA persistido,
@@ -307,6 +353,13 @@ async function performFullSync(
     load,
     unconfigured_onts: unconfiguredList,
     checked_at: now,
+    // Omitidas a proposito cuando el escaneo de este ciclo fallo
+    // (newOntsDetected queda undefined): el upsert de PostgREST solo
+    // sobreescribe las columnas presentes en este objeto, asi que el ultimo
+    // resultado valido de new_onts_detected/new_onts_checked_at queda
+    // intacto -- nunca se reemplaza por una lista vacia solo porque la OLT
+    // no respondio esta vez.
+    ...(newOntsDetected !== undefined ? { new_onts_detected: newOntsDetected, new_onts_checked_at: now } : {}),
   });
 
   oltEvents.emitSummaryChanged({ oltDeviceId: device.id });
@@ -321,5 +374,6 @@ async function performFullSync(
     portsScanned: includeSignal ? ports.length : 0,
     failedPorts,
     updatedOnts: updates.length,
+    newOntsDetected: newOntsDetected?.length ?? 0,
   };
 }

@@ -33,7 +33,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import RetiredOntsPanel from '@/components/olt/RetiredOntsPanel.vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
-import { useOltStore, type OltOnt, type OltHealth, type UnconfiguredOnt, type DisabledOnt } from '@/stores/olt';
+import { useOltStore, type OltOnt, type OltHealth, type UnconfiguredOnt, type DisabledOnt, type NewOntDetected } from '@/stores/olt';
 import { useTr069Store } from '@/stores/tr069';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
@@ -234,6 +234,70 @@ async function loadUnconfigured(opts: { live?: boolean } = {}) {
     unconfiguredError.value = getErrorMessage(e, 'Error al consultar ONUs sin autorizar');
   } finally {
     unconfiguredLoading.value = false;
+  }
+}
+
+// ONT con onu-id YA autorizado en la OLT real (ej. directo en SmartOLT) pero
+// SIN ninguna fila en olt_onts todavia -- deteccion automatica (2026-11-04),
+// llenada por el sync periodico de 20 min (performFullSync), nunca por esta
+// llamada (100% cache, igual que loadUnconfigured sin live). Distinta de
+// unlinkedOnts (esas YA tienen fila, solo falta cliente/contrato).
+const newOnts = ref<NewOntDetected[]>([]);
+const newOntsLoading = ref(false);
+const newOntsError = ref<string | null>(null);
+const newOntsCheckedAt = ref<string | null>(null);
+const showNewOnts = ref(false);
+const newOntsImportingKey = ref<string | null>(null);
+
+function newOntKey(o: Pick<NewOntDetected, 'frame' | 'slot' | 'port' | 'ontId'>) {
+  return `${o.frame}/${o.slot}/${o.port}:${o.ontId}`;
+}
+
+async function loadNewOnts() {
+  newOntsLoading.value = true;
+  newOntsError.value = null;
+  try {
+    const res = await oltStore.fetchNewOnts(deviceId.value);
+    newOnts.value = res.items;
+    newOntsCheckedAt.value = res.checkedAt;
+  } catch (e) {
+    newOntsError.value = getErrorMessage(e, 'Error al consultar ONT nuevas detectadas');
+  } finally {
+    newOntsLoading.value = false;
+  }
+}
+
+// Mismo criterio de frescura que el resto del panel (evaluateSyncFreshness) —
+// checkedAt aqui es SOLO el ultimo ciclo que de verdad completo la
+// deteccion (nunca el de un intento fallido), asi que "scanComplete: true"
+// es correcto: si hay fecha, ese ciclo si tuvo exito; si no hay fecha,
+// cae en la rama de "sin ninguna sincronizacion registrada todavia".
+const newOntsFreshness = computed(() => evaluateSyncFreshness(
+  newOntsCheckedAt.value ? { checkedAt: newOntsCheckedAt.value, scanComplete: true } : null, Date.now(), 60,
+));
+
+/**
+ * Importar y vincular: encadena las DOS rutas de escritura que ya existen
+ * (import-existing, luego el mismo OntLinkModal que usa "ONTs pendientes de
+ * vincular") -- nunca un segundo importador. Tras importar, la fila recien
+ * creada aparece en oltStore.onts con el mismo frame/slot/port/ont_id; se
+ * busca por ahi (nunca por id, que todavia no se conocia) para abrir el
+ * modal de vinculo directamente.
+ */
+async function handleImportAndLink(item: NewOntDetected) {
+  newOntsError.value = null;
+  newOntsImportingKey.value = newOntKey(item);
+  try {
+    await oltStore.importExistingOnts(deviceId.value);
+    await oltStore.fetchOnts(deviceId.value);
+    await loadNewOnts();
+    const imported = oltStore.onts.find((o) => o.olt_device_id === deviceId.value && o.frame === item.frame && o.slot === item.slot && o.port === item.port && o.ont_id === item.ontId);
+    if (imported) openLinkOnt(imported);
+    else newOntsError.value = 'La ONT se importó, pero no se pudo ubicar automáticamente. Recarga la página y vincúlala desde "ONTs pendientes de vincular".';
+  } catch (e) {
+    newOntsError.value = getErrorMessage(e, 'No se pudo importar la ONT detectada.');
+  } finally {
+    newOntsImportingKey.value = null;
   }
 }
 
@@ -645,7 +709,7 @@ async function handleTriggerFullSync() {
           clearInterval(syncStatusPoll);
           fullSyncing.value = false;
           fullSyncMessage.value = null;
-          await Promise.all([loadSummary(), loadHealth(), oltStore.fetchOnts(deviceId.value), loadUnconfigured(), loadDisabled()]);
+          await Promise.all([loadSummary(), loadHealth(), oltStore.fetchOnts(deviceId.value), loadUnconfigured(), loadNewOnts(), loadDisabled()]);
         }
       } catch {
         // se reintenta en el proximo tick; si el SSE sigue vivo, tambien se
@@ -667,7 +731,7 @@ onMounted(async () => {
   }
 
   if (!oltStore.devices.length) await oltStore.fetchDevices();
-  // Los 4 son lecturas de cache (Fase 40) — ya no hacen Telnet en vivo, por
+  // Los 5 son lecturas de cache (Fase 40) — ya no hacen Telnet en vivo, por
   // eso si pueden ir en paralelo sin riesgo de chocar contra la OLT.
   await Promise.all([
     oltStore.fetchOnts(deviceId.value),
@@ -675,6 +739,7 @@ onMounted(async () => {
     loadHealth(),
     catalogsStore.fetchZones(),
     loadUnconfigured(),
+    loadNewOnts(),
     loadDisabled(),
     loadDisconnectDetectionTimes(),
   ]);
@@ -729,7 +794,7 @@ async function handleImportExisting() {
             .join('; ')}.`
         : ''
     }`;
-    await oltStore.fetchOnts(deviceId.value);
+    await Promise.all([oltStore.fetchOnts(deviceId.value), loadNewOnts()]);
   } catch (e) {
     importMessage.value = getErrorMessage(e, 'Error al importar las ONTs existentes');
   } finally {
@@ -1685,6 +1750,19 @@ const gauges = computed(() => {
               <div class="text-xl font-bold text-slate-500">{{ connectionCounts.linkedUnknown }}</div>
               <div class="text-[11px] text-slate-500">Estado desconocido (sin verificar todavía)</div>
             </div>
+            <button
+              type="button"
+              class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-left hover:bg-sky-100"
+              :disabled="!newOnts.length"
+              :aria-expanded="showNewOnts"
+              @click="showNewOnts = !showNewOnts"
+            >
+              <div class="text-xl font-bold text-sky-700">{{ newOnts.length }}</div>
+              <div class="text-[11px] text-sky-700">
+                Nuevas ONT detectadas
+                <span v-if="newOnts.length">{{ showNewOnts ? '▲' : '▼ ver cuáles' }}</span>
+              </div>
+            </button>
           </div>
 
           <!-- Detalle del indicador "ONTs pendientes de vincular" (2026-11-02):
@@ -1694,9 +1772,8 @@ const gauges = computed(() => {
             <h3 class="text-sm font-semibold mb-1">ONTs pendientes de vincular</h3>
             <p class="text-xs text-slate-500 mb-3">
               Solo incluye ONTs que ya están registradas en SmartRayco (<code>olt_onts</code>) sin cliente o sin
-              contrato completo. <strong>No incluye</strong> ONTs que existen y están autorizadas en la OLT real pero
-              nunca se importaron a SmartRayco (por ejemplo, autorizadas directamente en SmartOLT) — esas no tienen
-              fila que mostrar aquí; usa «Importar ONTs desde la OLT» para traerlas.
+              contrato completo. Una ONT autorizada directamente en la OLT (por ejemplo desde SmartOLT) que
+              SmartRayco nunca importó aparece aparte, en «Nuevas ONT detectadas» más abajo.
             </p>
             <div class="space-y-2">
               <div
@@ -1735,6 +1812,61 @@ const gauges = computed(() => {
                   <span v-else-if="o.unlinkedReason === 'client_without_contract'" class="text-[11px] text-slate-400 text-right">
                     Ya tiene cliente asignado — corregir manualmente
                   </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- "Nuevas ONT detectadas" (2026-11-04): ONT con onu-id YA autorizado
+               en la OLT real (ej. directo en SmartOLT) pero SIN ninguna fila en
+               olt_onts todavia -- separada a propósito de "ONTs pendientes de
+               vincular" (esas YA tienen fila). Llenada por el sync periodico de
+               20 min, nunca por esta pantalla. -->
+          <div v-if="showNewOnts" class="rounded-xl border border-sky-200 bg-white p-4 mb-4">
+            <h3 class="text-sm font-semibold mb-1">Nuevas ONT detectadas</h3>
+            <p class="text-xs text-slate-500 mb-3">
+              ONT ya autorizadas en la OLT real (por ejemplo, directamente en SmartOLT) que SmartRayco detectó solo
+              ahora — todavía no tienen ninguna fila registrada. Se actualiza cada 20 minutos junto con el resto de la
+              sincronización; nunca hace una consulta nueva a la OLT solo por abrir esta sección.
+            </p>
+            <div
+              v-if="!newOntsFreshness.scanComplete || newOntsFreshness.stale"
+              class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 mb-3"
+            >
+              <span v-if="!newOntsFreshness.checkedAtIso">⚠ Todavía no se completó ninguna detección de ONT nuevas para esta OLT.</span>
+              <span v-else>
+                ⚠ La última detección exitosa fue hace más de una hora ({{ relativeTime(newOntsFreshness.checkedAtIso) }}) — puede
+                haber ONT autorizadas más recientemente que todavía no aparecen aquí.
+              </span>
+            </div>
+            <p v-else class="text-xs text-slate-500 mb-3">
+              Última detección: <strong>{{ relativeTime(newOntsFreshness.checkedAtIso!) }} · {{ formatPeruDateTime(newOntsFreshness.checkedAtIso!) }} (Perú)</strong>
+            </p>
+            <p v-if="newOntsError" class="text-xs text-red-600 mb-3">{{ newOntsError }}</p>
+            <p v-if="!newOnts.length" class="text-xs text-slate-500">No hay ninguna ONT nueva detectada en este momento.</p>
+            <div v-else class="space-y-2">
+              <div v-for="o in newOnts" :key="newOntKey(o)" class="flex items-start justify-between gap-3 rounded-lg border border-sky-200 px-3 py-2 text-sm">
+                <div>
+                  <div class="font-medium">
+                    {{ o.name || 'Sin nombre configurado' }}
+                    <span class="font-mono text-xs text-slate-500">· {{ o.serial }}</span>
+                  </div>
+                  <div class="text-xs text-slate-500">
+                    {{ o.frame }}/{{ o.slot }}/{{ o.port }}:{{ o.ontId }} ·
+                    {{ o.status === 'online' ? 'En línea' : o.status === 'offline' ? 'Sin conexión' : 'Estado desconocido' }}
+                  </div>
+                </div>
+                <div class="flex flex-col items-end gap-1 shrink-0">
+                  <button
+                    v-if="canAuthorizeOnt"
+                    type="button"
+                    class="text-emerald-700 hover:underline text-xs whitespace-nowrap disabled:opacity-50"
+                    :disabled="newOntsImportingKey === newOntKey(o)"
+                    @click="handleImportAndLink(o)"
+                  >
+                    {{ newOntsImportingKey === newOntKey(o) ? 'Importando...' : 'Importar y vincular' }}
+                  </button>
+                  <span v-else class="text-[11px] text-slate-400 text-right">Solo ADMIN/SUPERADMIN puede importar.</span>
                 </div>
               </div>
             </div>

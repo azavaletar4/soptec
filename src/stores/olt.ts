@@ -250,6 +250,31 @@ export interface UnconfiguredOntsResult {
   live: boolean;
 }
 
+/**
+ * ONT con onu-id YA autorizado en la OLT real (ej. directo en SmartOLT)
+ * pero SIN ninguna fila en `olt_onts` todavia -- "nueva detectada, aun no
+ * importada" (2026-11-04, deteccion automatica durante el sync periodico de
+ * 20 min, ver NewOntDetected en server/src/services/oltSyncService.ts).
+ * Distinta de UnconfiguredOnt (esa SI aparece en "show gpon onu uncfg" --
+ * ni siquiera tiene onu-id asignado todavia) y de las "ONTs pendientes de
+ * vincular" (esas YA tienen fila en `olt_onts`, solo falta cliente/contrato).
+ */
+export interface NewOntDetected {
+  serial: string;
+  frame: number;
+  slot: number;
+  port: number;
+  ontId: number;
+  name: string | null;
+  status: 'online' | 'offline' | 'unknown';
+}
+
+export interface NewOntsDetectedResult {
+  items: NewOntDetected[];
+  /** Momento del ultimo sync que SI completo la deteccion -- null si nunca tuvo exito todavia. */
+  checkedAt: string | null;
+}
+
 export interface OltSyncStatus {
   running: boolean;
   lastFullSyncAt: string | null;
@@ -510,6 +535,12 @@ export const useOltStore = defineStore('olt', () => {
   function fetchUnconfiguredOnts(deviceId: string, opts: { live?: boolean } = {}) {
     const query = opts.live ? '?live=1' : '';
     return apiFetch<UnconfiguredOntsResult>(`/api/olt-devices/${deviceId}/onts/unconfigured${query}`);
+  }
+
+  // 100% cache (igual que fetchUnconfiguredOnts sin live) -- se llena en
+  // segundo plano por el sync periodico, nunca por esta llamada.
+  function fetchNewOnts(deviceId: string) {
+    return apiFetch<NewOntsDetectedResult>(`/api/olt-devices/${deviceId}/onts/new-detected`);
   }
 
   // ONTs deshabilitadas/cortadas (admin-state=disable y/o corte por mora) —
@@ -788,6 +819,7 @@ export const useOltStore = defineStore('olt', () => {
     fetchHealth,
     fetchProfiles,
     fetchUnconfiguredOnts,
+    fetchNewOnts,
     fetchDisabledOnts,
     fetchAlertLog,
     triggerFullSync,

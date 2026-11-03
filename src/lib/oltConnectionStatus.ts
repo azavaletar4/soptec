@@ -59,7 +59,10 @@ function isLinked(o: ConnectionStatusOnt): boolean {
  *     cliente", hay que revisar o crear el contrato correcto.
  * Nunca una tercera categoría aquí: una ONT que existe en la OLT real pero
  * JAMÁS se importó a `olt_onts` no tiene fila que mostrar -- no aparece en
- * este listado en absoluto (ver nota de limitación en OltDetailView.vue).
+ * este listado en absoluto. Ese caso (ONT autorizada externamente, ej.
+ * directo en SmartOLT) se detecta aparte desde 2026-11-04 -- ver "Nuevas
+ * ONT detectadas" en OltDetailView.vue / NewOntDetected en
+ * server/src/services/oltSyncService.ts -- nunca se mezcla con esta lista.
  */
 export type UnlinkedOntReason = 'no_client' | 'client_without_contract';
 

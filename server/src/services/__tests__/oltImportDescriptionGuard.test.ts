@@ -133,5 +133,53 @@ test('caso real mixto: Violeta/Clara/Mayco vinculadas (mismo serial) + 1 sin vin
 });
 
 test('lista vacia no rompe', () => {
-  assert.deepEqual(classifyImportCandidates([], []), { fullRefresh: [], keepDescription: [], conflicts: [] });
+  assert.deepEqual(classifyImportCandidates([], []), { fullRefresh: [], keepDescription: [], conflicts: [], newlyDetected: [] });
+});
+
+// ---- newlyDetected (2026-11-04): subconjunto estricto de fullRefresh,
+// solo posiciones SIN ninguna fila previa (ver deteccion automatica en
+// oltSyncService.ts) ----
+
+test('newlyDetected: posicion totalmente nueva (Situacion A, caso Gustavo Reyes Sandoval) cae en fullRefresh Y en newlyDetected', () => {
+  const candidates = [{ frame: 1, slot: 2, port: 8, ontId: 26, serial: 'ZTEGD4FE1386' }];
+  const r = classifyImportCandidates(candidates, []);
+  assert.deepEqual(r.fullRefresh, candidates);
+  assert.deepEqual(r.newlyDetected, candidates);
+});
+
+test('newlyDetected: fila YA importada pero sin vincular (client_id null) NO es "nueva" -- esa es listUnlinkedOnts, no deteccion automatica', () => {
+  const candidates = [{ frame: 1, slot: 2, port: 4, ontId: 26, serial: 'HWTCABD21CB4' }];
+  const r = classifyImportCandidates(candidates, [linked({ clientId: null })]);
+  assert.deepEqual(r.fullRefresh, candidates); // sigue siendo fullRefresh (refresca metadatos)
+  assert.deepEqual(r.newlyDetected, []); // pero NO nueva: ya existia la fila
+});
+
+test('newlyDetected: fila vinculada (keepDescription) nunca aparece como nueva', () => {
+  const candidates = [{ frame: 1, slot: 2, port: 4, ontId: 26, serial: 'HWTCABD21CB4' }];
+  const r = classifyImportCandidates(candidates, [linked()]);
+  assert.deepEqual(r.keepDescription, candidates);
+  assert.deepEqual(r.newlyDetected, []);
+});
+
+test('newlyDetected: serial trasladado (conflicto) nunca aparece como nueva -- requiere revision manual, no auto-deteccion', () => {
+  const candidates = [{ frame: 1, slot: 2, port: 9, ontId: 4, serial: 'HWTCABD21CB4' }];
+  const r = classifyImportCandidates(candidates, [linked({ frame: 1, slot: 2, port: 4, ontId: 26 })]);
+  assert.equal(r.conflicts.length, 1);
+  assert.deepEqual(r.newlyDetected, []);
+});
+
+test('newlyDetected: ONT retirada en esa posicion no bloquea la deteccion de una ONT nueva real ahi', () => {
+  const candidates = [{ frame: 1, slot: 2, port: 8, ontId: 26, serial: 'ZTEGD4FE1386' }];
+  const retired = linked({ frame: 1, slot: 2, port: 8, ontId: 26, serial: 'SERIALRETIRADOVIEJO', retiredAt: '2026-10-01T00:00:00Z' });
+  const r = classifyImportCandidates(candidates, [retired]);
+  assert.deepEqual(r.newlyDetected, candidates);
+});
+
+test('newlyDetected: varias ONT nuevas en la misma corrida, ninguna se pierde ni se duplica', () => {
+  const candidates = [
+    { frame: 1, slot: 2, port: 8, ontId: 26, serial: 'ZTEGD4FE1386' },
+    { frame: 1, slot: 2, port: 9, ontId: 5, serial: 'ZTEOTRASERIAL02' },
+  ];
+  const r = classifyImportCandidates(candidates, [linked()]); // vinculo ajeno, otra posicion
+  assert.deepEqual(r.newlyDetected, candidates);
 });

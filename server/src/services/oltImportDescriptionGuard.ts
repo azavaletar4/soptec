@@ -48,6 +48,14 @@ export interface ImportConflict {
  *    física cambió; NO se toca client_id/contract_id/description/historial
  *    ni ningún campo técnico de esa fila. Se reporta aparte, con los datos
  *    necesarios para que un administrador lo revise manualmente.
+ *  - `newlyDetected`: subconjunto ESTRICTO de `fullRefresh` — solo las posiciones
+ *    que no tienen NINGUNA fila en `linkedPositions` (ni vinculada ni
+ *    importada-sin-vincular). Es la identidad real detectada por
+ *    `oltSyncService.ts` (2026-11-04, deteccion automatica de ONT
+ *    autorizadas externamente) para poblar `olt_sync_cache.new_onts_detected`
+ *    sin crear un segundo clasificador — una posicion ya importada (tiene
+ *    fila, aunque sin cliente) NUNCA cae aqui, eso es "pendiente de vincular"
+ *    (ver listUnlinkedOnts en src/lib/oltConnectionStatus.ts), no "nueva".
  *
  * Comparación de serial case-insensitive (mismo criterio ya usado en
  * oltProvisioningStore.ts/upsertOnt para detectar conflictos de posición).
@@ -55,7 +63,7 @@ export interface ImportConflict {
 export function classifyImportCandidates<T extends ImportCandidate>(
   candidates: readonly T[],
   linkedPositions: readonly LinkedPosition[],
-): { fullRefresh: T[]; keepDescription: T[]; conflicts: ImportConflict[] } {
+): { fullRefresh: T[]; keepDescription: T[]; conflicts: ImportConflict[]; newlyDetected: T[] } {
   linkedPositions = linkedPositions.filter(p => !p.retiredAt);
   const linkedByPosition = new Map(
     linkedPositions.map((p) => [positionKey(p.frame, p.slot, p.port, p.ontId), p]),
@@ -65,6 +73,7 @@ export function classifyImportCandidates<T extends ImportCandidate>(
   const fullRefresh: T[] = [];
   const keepDescription: T[] = [];
   const conflicts: ImportConflict[] = [];
+  const newlyDetected: T[] = [];
 
   for (const c of candidates) {
     const key = positionKey(c.frame, c.slot, c.port, c.ontId);
@@ -76,6 +85,7 @@ export function classifyImportCandidates<T extends ImportCandidate>(
         continue;
       }
       fullRefresh.push(c);
+      newlyDetected.push(c);
       continue;
     }
     if (existing.serial.toUpperCase() === c.serial.toUpperCase()) {
@@ -93,5 +103,5 @@ export function classifyImportCandidates<T extends ImportCandidate>(
     });
   }
 
-  return { fullRefresh, keepDescription, conflicts };
+  return { fullRefresh, keepDescription, conflicts, newlyDetected };
 }

@@ -16,6 +16,7 @@ import {
   isOltSyncRunning,
   LOW_SIGNAL_THRESHOLD_DBM,
   type CachedUnconfiguredOnt,
+  type NewOntDetected,
 } from '../services/oltSyncService';
 import { oltEvents, type OntChangedEvent, type SummaryChangedEvent, type OltAlertEvent } from '../services/oltEvents';
 import { presentAlertHistoryOnt, type AlertHistoryOnt } from '../services/oltAlertHistoryOnt';
@@ -46,6 +47,7 @@ import { matchTr069Device } from '../../../src/lib/gponSerial';
 import { createSingleFlightGuard } from '../services/singleFlightGuard';
 import { createSupabaseProvisioningStore } from '../services/oltProvisioningStore';
 import { classifyImportCandidates, type LinkedPosition } from '../services/oltImportDescriptionGuard';
+import { buildScannedCandidates } from '../services/oltScanCandidates';
 import { validateOntLinkRequest, ontLinkAuditRow } from '../services/oltOntLink';
 import {
   type ProvisionHandlerDeps,
@@ -619,6 +621,48 @@ oltRoutes.get('/:id/onts/unconfigured', requireRole(...STAFF_READ), async (c) =>
 });
 
 /**
+ * ONT con onu-id YA autorizado en la OLT real pero SIN ninguna fila en
+ * `olt_onts` todavia -- "ONT nueva detectada, aun no importada" (ver
+ * NewOntDetected en oltSyncService.ts, caso real validado: Gustavo Reyes
+ * Sandoval, ZTEGD4FE1386, 1/2/8:26, autorizada en SmartOLT y nunca
+ * registrada en SmartRayco). 100% cache (igual que /onts/unconfigured sin
+ * `live`) -- se llena en segundo plano por el sync periodico de 20 min
+ * (performFullSync), nunca por una llamada Telnet de esta ruta.
+ *
+ * Filtra en el momento de leer contra `olt_onts` (consulta liviana, sin
+ * Telnet) para nunca mostrar una posicion que YA se importo o vinculo
+ * entre el ultimo sync y este GET -- evita el elemento obsoleto que
+ * quedaria si solo se sirviera la cache tal cual (requisito explicito:
+ * "evitando elementos obsoletos").
+ */
+oltRoutes.get('/:id/onts/new-detected', requireRole(...STAFF_READ), async (c) => {
+  const device = await getDeviceOrNull(c.req.param('id'));
+  if (!device) return c.json({ error: 'OLT no encontrada' }, 404);
+
+  const { data: cache } = await supabaseAdmin
+    .from('olt_sync_cache')
+    .select('new_onts_detected, new_onts_checked_at')
+    .eq('olt_device_id', device.id)
+    .maybeSingle();
+
+  const cached = (cache?.new_onts_detected as NewOntDetected[] | null) ?? [];
+  let items = cached;
+  if (cached.length) {
+    const serials = [...new Set(cached.map((i) => i.serial))];
+    const { data: alreadyPresent } = await supabaseAdmin
+      .from('olt_onts')
+      .select('frame, slot, port, ont_id')
+      .eq('olt_device_id', device.id)
+      .is('retired_at', null)
+      .in('serial', serials);
+    const presentKeys = new Set((alreadyPresent ?? []).map((r) => `${r.frame}/${r.slot}/${r.port}:${r.ont_id}`));
+    items = cached.filter((i) => !presentKeys.has(`${i.frame}/${i.slot}/${i.port}:${i.ontId}`));
+  }
+
+  return c.json({ items, checkedAt: cache?.new_onts_checked_at ?? null });
+});
+
+/**
  * ONTs deshabilitadas/cortadas — estilo "Disabled ONUs" de SmartOLT. Combina
  * DOS motivos que en este sistema son mecanismos separados y no se unifican
  * (decision tomada explicitamente): (a) admin-state=disable real en la OLT
@@ -785,36 +829,27 @@ oltRoutes.post('/:id/onts/import-existing', requireRole(...ONT_IMPORT_ROLES), gu
     frame: r.frame, slot: r.slot, port: r.port, ontId: r.ont_id, serial: r.serial, clientId: r.client_id as string | null,
   }));
 
-  const candidates = globalOnts
-    .map((o) => {
-      const key = `${o.frame}/${o.slot}/${o.port}`;
-      const b = fullConfig.get(`${key}:${o.onuId}`);
-      if (!b || !b.serial) return null;
-      const evidence = evaluateOntEvidence({ id: "candidate", olt_device_id: device.id, frame: o.frame, slot: o.slot, port: o.port, ont_id: o.onuId, serial: b.serial }, scan);
-      if (evidence.outcome !== 'valid') return null;
-      return {
-        frame: o.frame,
-        slot: o.slot,
-        port: o.port,
-        ontId: o.onuId,
-        serial: b.serial,
-        base: {
-          olt_device_id: device.id,
-          frame: o.frame,
-          slot: o.slot,
-          port: o.port,
-          ont_id: o.onuId,
-          serial: b.serial,
-          onu_type: b.onuType,
-          tcont_profile: b.tcontProfile,
-          traffic_profile: b.trafficProfile,
-          vlan: b.vlan,
-          // No telemetry fields: import cannot make a historical value appear current.
-        },
-        name: b.name,
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const candidates = buildScannedCandidates(device.id, globalOnts, fullConfig, scan).map((c) => ({
+    frame: c.frame,
+    slot: c.slot,
+    port: c.port,
+    ontId: c.ontId,
+    serial: c.serial,
+    base: {
+      olt_device_id: device.id,
+      frame: c.frame,
+      slot: c.slot,
+      port: c.port,
+      ont_id: c.ontId,
+      serial: c.serial,
+      onu_type: c.binding.onuType,
+      tcont_profile: c.binding.tcontProfile,
+      traffic_profile: c.binding.trafficProfile,
+      vlan: c.binding.vlan,
+      // No telemetry fields: import cannot make a historical value appear current.
+    },
+    name: c.binding.name,
+  }));
 
   const { fullRefresh, keepDescription, conflicts } = classifyImportCandidates(candidates, linkedPositions);
   // Linked descriptions remain application-owned. Conflicts never reach a write.
