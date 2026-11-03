@@ -1,38 +1,11 @@
 {
   "version": 1,
-  "sourceCommit": "fcdf69453aef3920a5d4f07c425ca420a374fd3a",
+  "sourceCommit": "f99299ab296bc40ce827cb45b91fc0c6da2b8747",
   "backendSources": [],
   "frontendSources": [
-    "src/lib/clientsListFilters.ts",
-    "src/lib/__tests__/clientsListFilters.test.ts",
-    "src/views/clientes/ClientDetailView.vue",
-    "src/views/clientes/ClientesView.vue"
+    "src/lib/oltConnectionStatus.ts",
+    "src/lib/__tests__/oltConnectionStatus.test.ts",
+    "src/views/olt/OltDetailView.vue"
   ],
-  "frontendAssets": [
-    "assets/ClientesView.js", "assets/ClientDetailView.js",
-    "assets/ActivosFijosView.js", "assets/AnaliticaView.js",
-    "assets/AppLayout.vue_vue_type_script_setup_true_lang.js",
-    "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang.js",
-    "assets/AsistenciaView.js", "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang.js",
-    "assets/CajaChicaView.js", "assets/CampoDashboardView.js", "assets/CampoTrabajoDetailView.js",
-    "assets/ClientRetirementDialog.vue_vue_type_script_setup_true_lang.js",
-    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
-    "assets/ClientesMapView.js", "assets/CrewAssignEditor.vue_vue_type_script_setup_true_lang.js",
-    "assets/DevolucionesView.js", "assets/DispatchBoardView.js", "assets/FacturacionView.js",
-    "assets/FlotaView.js", "assets/HistoricoAtendidosView.js", "assets/ImportMapView.js",
-    "assets/InstalacionDetailView.js", "assets/InstalacionesView.js", "assets/InventarioAlbumView.js",
-    "assets/InventarioConciliacionView.js", "assets/InventarioCustodiaView.js",
-    "assets/InventarioProductoView.js", "assets/InventarioView.js",
-    "assets/InventorySearchResults.vue_vue_type_script_setup_true_lang.js",
-    "assets/MikrotikDetailView.js", "assets/MikrotikDevicesView.js", "assets/OltDetailView.js",
-    "assets/OltDevicesView.js", "assets/OperacionesHoyView.js", "assets/PlanesView.js",
-    "assets/ProspectosView.js", "assets/RankingTecnicosView.js",
-    "assets/RecoveryModal.vue_vue_type_script_setup_true_lang.js", "assets/RedMapView.js",
-    "assets/RoutineDetailView.js", "assets/RutinasView.js", "assets/ServidoresView.js",
-    "assets/SpliceDiagramModal.vue_vue_type_script_setup_true_lang.js", "assets/TicketDetailView.js",
-    "assets/Tr069View.js", "assets/UsuariosView.js", "assets/ZonasView.js",
-    "assets/equipmentPhotoType.js", "assets/index.js", "assets/nativeApp.js",
-    "assets/routineTraslado.js", "assets/usePersonalRead.js", "assets/useToast.js",
-    "assets/useUnifiedJobs.js", "assets/vue3-apexcharts.js"
-  ]
+  "frontendAssets": ["assets/OltDetailView.js"]
 }
