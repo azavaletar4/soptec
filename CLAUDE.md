@@ -16,6 +16,16 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**Detección automática de ONT externas — DESPLEGADA (03/11/2026):**
+`main`/`origin/main` en `40e43c1`; migración `20261104000000_olt_sync_new_onts_detected`
+aplicada en Supabase producción; backend/frontend `...40e43c155b51`.
+Confirmado en vivo con datos reales (ciclo pasivo del scheduler, sin
+disparar nada manual): detecta la ONT de Gustavo Reyes Sandoval
+(`ZTEGD4FE1386`, `1/2/8:26`) y 4 más, todas sin fila en `olt_onts` todavía
+— sin importar ni vincular nada. Detalle completo: sección "Detección
+automática de ONT autorizadas externamente" al inicio de
+`ESTADO_DESARROLLO.md`.
+
 **SINCRONIZACIÓN GITHUB COMPLETADA (30/10/2026):** los 4 commits locales
 de TR-069/Hosts (`644e456`, `7cc47d7`, `9e0e355`, `f648290`) ya están en
 `origin/main` — push normal, sin force/rebase/merge, confirmado por la

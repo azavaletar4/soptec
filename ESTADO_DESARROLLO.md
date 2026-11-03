@@ -13,6 +13,32 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
+**Detección automática de ONT autorizadas externamente — DESPLEGADA y
+verificada en vivo (03/11/2026, autorizado expresamente):** supera el
+punto "Pendiente real" de Gustavo Reyes Sandoval en el párrafo siguiente —
+ya no requiere revisión manual para saber que existe. GitHub: `main` local
+y `origin/main` coinciden en `40e43c1` (incluye `96663a0`, la
+implementación, más `40e43c1`, una corrección cosmética de CSS — mismo
+patrón ya visto con `f99299a`: una clase Tailwind nueva sin uso previo
+disparó `HISTORICAL_ASSETS_CHANGED`, corregida reutilizando
+`hover:bg-sky-50` ya existente). Migración `20261104000000_olt_sync_new_onts_detected`
+aplicada en Supabase producción (2 columnas aditivas en `olt_sync_cache`,
+verificadas: `new_onts_detected jsonb not null default '[]'`,
+`new_onts_checked_at timestamptz` nullable; RLS sin cambios, 0 policies,
+igual que antes). Backend/frontend desplegados:
+`...wifitrial:40e43c155b51` / `...consolidado:40e43c155b51` (antes
+`...56254bf91c6f`), build completo reproducible, 126 artefactos, 11 rutas
+PASS, `401` sin autenticación, `ssidTasksSent:0`; Caddy/Mongo/GenieACS sin
+tocar. **Confirmado con evidencia real, 100% pasiva:** el primer ciclo
+automático del scheduler (30s después del arranque del backend, el mismo
+mecanismo de siempre — no se disparó ningún sync manual) detectó 5 ONT
+reales nunca vistas por SmartRayco, **incluida exactamente la de Gustavo
+Reyes Sandoval** (`ZTEGD4FE1386`, `1/2/8:26`, `online`) — sigue sin fila en
+`olt_onts` (confirmado por consulta, `[]`), sin importar ni vincular nada;
+`olt_onts` (733 filas) y `olt_ont_link_audit` (0 filas) sin cambios.
+Detalle completo de diseño/pruebas: ver sección correspondiente en el
+historial de esta sesión (commits `96663a0`/`40e43c1`).
+
 **Sincronización Clientes/Puntos/OLT — verificado real (02-03/11/2026,
 autorizado expresamente):** GitHub: `main` local y `origin/main` coinciden
 en `f99299a` (push fast-forward normal, sin force/rebase/reset). Frontend

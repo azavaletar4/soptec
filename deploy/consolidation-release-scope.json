@@ -1,15 +1,16 @@
 {
   "version": 1,
-  "sourceCommit": "56254bf91c6f1b74972a1555462266011f2dec95",
+  "sourceCommit": "40e43c155b51d9fa847caf665c81b32ecd59c64a",
   "backendSources": [
     "server/src/routes/olt.ts",
-    "server/src/services/oltOntLink.ts"
+    "server/src/services/oltImportDescriptionGuard.ts",
+    "server/src/services/oltScanCandidates.ts",
+    "server/src/services/oltSyncService.ts"
   ],
   "frontendSources": [
+    "src/lib/oltConnectionStatus.ts",
     "src/stores/olt.ts",
-    "src/views/olt/OltDetailView.vue",
-    "src/views/olt/OntDetailModal.vue",
-    "src/views/olt/OntLinkModal.vue"
+    "src/views/olt/OltDetailView.vue"
   ],
   "frontendAssets": ["assets/OltDetailView.js", "assets/olt.js"]
 }
