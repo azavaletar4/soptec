@@ -33,11 +33,21 @@ tocar. **Confirmado con evidencia real, 100% pasiva:** el primer ciclo
 automático del scheduler (30s después del arranque del backend, el mismo
 mecanismo de siempre — no se disparó ningún sync manual) detectó 5 ONT
 reales nunca vistas por SmartRayco, **incluida exactamente la de Gustavo
-Reyes Sandoval** (`ZTEGD4FE1386`, `1/2/8:26`, `online`) — sigue sin fila en
-`olt_onts` (confirmado por consulta, `[]`), sin importar ni vincular nada;
-`olt_onts` (733 filas) y `olt_ont_link_audit` (0 filas) sin cambios.
-Detalle completo de diseño/pruebas: ver sección correspondiente en el
-historial de esta sesión (commits `96663a0`/`40e43c1`).
+Reyes Sandoval** (`ZTEGD4FE1386`, `1/2/8:26`, `online`).
+**ACTUALIZACION (03/11/2026, sesion posterior, cierre/traspaso a Codex):**
+el propietario probo el boton "Importar y vincular" sobre Gustavo —
+**termino bien, sin duplicados ni conflictos**, pero el boton llama al
+importador MASIVO (reescanea las ~738 posiciones de toda la OLT, varios
+minutos) y el modal de vinculacion nunca se abrio en el navegador.
+Gustavo (y otras 4 ONT reales del mismo lote: Lourdes Garcia Rojas, Jorge
+Lopez Boado, Angel Larenas Miguel, David Saona Sanchez) **ya tienen fila
+en `olt_onts` (738 filas, antes 733) pero siguen SIN client_id/contract_id**
+— nunca reimportarlas, solo falta vincularlas manualmente o esperar la
+correccion pendiente. **Tarea siguiente para Codex, sin autorizacion de
+despliegue todavia:** importacion individual (sin recorrer toda la OLT) +
+abrir el modal directo si la ONT ya existe — detalle completo y pasos
+exactos en `docs/CONTINUIDAD-CLAUDE-CODEX-20261103.md` (version
+actualizada en este cierre de sesion).
 
 **Sincronización Clientes/Puntos/OLT — verificado real (02-03/11/2026,
 autorizado expresamente):** GitHub: `main` local y `origin/main` coinciden
