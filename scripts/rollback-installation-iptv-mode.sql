@@ -4,7 +4,7 @@ begin;
 set local lock_timeout='5s';
 do $$ begin
  if not exists(select 1 from pg_proc where oid=to_regprocedure('public.validate_installation_completion()')
- and md5(regexp_replace(regexp_replace(replace(prosrc,chr(13),''),'--[^' || chr(10) || ']*','','g'),'[[:space:]]','','g'))='beedf7fbcddf9bba41642fe3c086958d') then
+ and md5(regexp_replace(regexp_replace(replace(prosrc,chr(13),''),'--[^' || chr(10) || ']*','','g'),'[[:space:]]','','g'))='aefea82d144a6c6f3218d0f81b43816f') then
  raise exception 'El trigger de cierre difiere del revisado; detener y comparar';
  end if;
 end $$;
@@ -84,8 +84,11 @@ $function$
 ;
 drop trigger b_installation_iptv_insert on public.installations;
 alter table public.installations alter column iptv_policy_version drop default;
-drop function public.installation_iptv_preflight(uuid,uuid,text);
+drop function public.installation_iptv_preflight(uuid,uuid,text,uuid,text);
 drop function public.assert_installation_iptv_mode(uuid,uuid,uuid,text);
+drop function public.assert_material_closure_ready(text,uuid);
+alter function public.assert_material_closure_ready_iptv_legacy(text,uuid) rename to assert_material_closure_ready;
+grant execute on function public.assert_material_closure_ready(text,uuid) to authenticated,service_role;
 -- Conservar columnas, restricciones y guarda UPDATE: historial inmutable.
 notify pgrst,'reload schema';
 commit;

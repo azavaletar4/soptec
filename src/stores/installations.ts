@@ -70,11 +70,11 @@ export const useInstallationsStore = defineStore('installations', () => {
     return updateInstallation(id, { status });
   }
 
-  async function prepareIptvClosure(id: string, clientId: string | null, contractId: string | null, mode?: IptvInstallationMode | null) {
+  async function prepareIptvClosure(id: string, clientId: string | null, contractId: string | null, mode?: IptvInstallationMode | null, submission?: { operationId: string; hash: string }) {
     const { data, error: err } = await supabase.from('installations').select('*').eq('id', id).single();
     if (err) throw err;
     if (!data) throw new Error('Instalación no encontrada.');
-    return prepareInstallationIptv((name, args) => supabase.rpc(name, args), data as Installation, clientId, contractId, mode);
+    return prepareInstallationIptv((name, args) => supabase.rpc(name, args), data as Installation, clientId, contractId, mode, submission);
   }
 
   async function deleteInstallation(id: string) {

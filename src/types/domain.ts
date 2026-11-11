@@ -343,6 +343,8 @@ export interface Installation {
   iptv_account_note: string | null;
   /** Ausente antes de migrar; NULL en órdenes anteriores, sin backfill. */
   iptv_policy_version?: 1 | null;
+  closure_operation_id?: string | null;
+  closure_payload_hash?: string | null;
   iptv_installation_mode?: import('@/lib/installationIptv').IptvInstallationMode | null;
   completed_at: string | null;
   created_by: string | null;

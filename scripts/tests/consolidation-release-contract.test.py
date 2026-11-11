@@ -22,6 +22,49 @@ def frontend(version=1):
 
 
 class ReleaseContractTests(unittest.TestCase):
+    def graph_pair(self):
+        before = self.metadata_fixture(frontend())
+        after = dict(before)
+        after['assets/Tr069View-AAAAAAAA.js'] = b'import "./closureSubmission-CCCCCCCC.js";export const hosts=2'
+        after['assets/closureSubmission-CCCCCCCC.js'] = b'export const closure=true'
+        after = self.metadata_fixture(after)
+        digest = lambda files: hashlib.sha256(json.dumps(validate_vite_manifest(files, set()), sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+        scope = sample_scope(frontend=True)
+        scope['frontendAssets'].append('assets/closureSubmission.js')
+        scope['frontendGraphTransition'] = {'before': digest(before), 'after': digest(after), 'added': ['assets/closureSubmission.js']}
+        return before, after, scope
+
+    def test_explicit_graph_addition_validates_both_graphs(self):
+        before, after, scope = self.graph_pair()
+        validate_scope(scope)
+        self.assertEqual(validate_frontend(before, after, scope), sorted(scope['frontendAssets']))
+        for key in ['before', 'after']:
+            bad = copy.deepcopy(scope)
+            bad['frontendGraphTransition'][key] = '0'*64
+            with self.subTest(key=key), self.assertRaisesRegex(AssertionError, 'GRAPH_TRANSITION_DIGEST_MISMATCH'):
+                validate_frontend(before, after, bad)
+
+    def test_graph_proof_never_hides_unrelated_code_or_orphans(self):
+        before, after, scope = self.graph_pair()
+        for path in ['assets/Asistencia-AAAAAAAA.js', 'assets/old-orphan-AAAAAAAA.js', 'logo.png']:
+            bad = self.metadata_fixture({**after, path: b'unexpected'})
+            with self.subTest(path=path), self.assertRaises(AssertionError):
+                validate_frontend(before, bad, scope)
+
+    def test_graph_proof_cannot_remove_chunks_or_change_identity(self):
+        before, after, scope = self.graph_pair()
+        bad = dict(after)
+        bad['assets/index-AAAAAAAA.js'] = b'import "./Tr069View-AAAAAAAA.js"'
+        with self.assertRaisesRegex(AssertionError, 'HISTORICAL_ASSETS_STRUCTURE_CHANGED'):
+            validate_frontend(before, self.metadata_fixture(bad), scope)
+        bad = copy.deepcopy(scope)
+        bad['frontendGraphTransition']['added'] = []
+        with self.assertRaisesRegex(AssertionError, 'INVALID_GRAPH_ADDITIONS'):
+            validate_scope(bad)
+        bad['frontendGraphTransition']['added'] = ['assets/unlisted.js']
+        with self.assertRaisesRegex(AssertionError, 'UNDECLARED_GRAPH_ADDITION'):
+            validate_scope(bad)
+
     def metadata_fixture(self, files):
         files = dict(files)
         reach = reachable(files)

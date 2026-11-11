@@ -27,7 +27,7 @@ if(args.includes('--snapshot')){
 }
 if(source.files['package-lock.json']!==digestFile('package-lock.json'))throw Error('LOCKFILE_MISMATCH');
 for(const file of policy.requiredSources)if(!source.files[file])throw Error('PRODUCTIVE_COMPONENT_MISSING: '+file);
-if(args.includes('--export-snapshot')){fs.writeFileSync('release-source.json',JSON.stringify(source,null,2)+'\n');console.log(JSON.stringify({commit:source.commit,sourceFiles:Object.keys(source.files).length,snapshot:'release-source.json'}));process.exit(0);}
+if(args.includes('--export-snapshot')){const snapshotPath=option('--snapshot-output','release-source.json');fs.writeFileSync(snapshotPath,JSON.stringify(source,null,2)+'\n');console.log(JSON.stringify({commit:source.commit,sourceFiles:Object.keys(source.files).length,snapshot:snapshotPath}));process.exit(0);}
 const lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
 const require=createRequire(import.meta.url);
 for(const n of ['vite','vue','pinia','vue-router','@vitejs/plugin-vue','@tailwindcss/vite']){

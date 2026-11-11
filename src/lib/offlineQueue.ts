@@ -1,4 +1,7 @@
-import { createStore, get, set, del, keys } from 'idb-keyval';
+import { get, set, del, keys } from 'idb-keyval';
+import { campoStore } from '@/lib/campoDatabase';
+import { withClosureLock } from '@/lib/closureSubmission';
+import { getErrorMessage } from '@/lib/errors';
 import type { EquipmentPhotoType, JobType } from '@/types/domain';
 
 /**
@@ -21,6 +24,8 @@ export interface QueuedEquipmentPhoto {
 }
 
 export interface QueuedClosure {
+  actorId?: string | null;
+  closureOperationId?: string;
   localId: string;
   createdAt: number;
   jobType: JobType;
@@ -59,7 +64,7 @@ export interface QueuedClosure {
   lastError?: string;
 }
 
-const store = createStore('smartrayco-campo', 'closures');
+const store = campoStore('closures');
 
 export function isOnline() {
   return typeof navigator === 'undefined' || navigator.onLine;
@@ -71,6 +76,7 @@ export async function enqueueClosure(item: Omit<QueuedClosure, 'localId' | 'crea
     localId: crypto.randomUUID(),
     createdAt: Date.now(),
   };
+  if (queued.jobType === 'installation' && !queued.closureOperationId) queued.closureOperationId = queued.localId;
   await set(queued.localId, queued, store);
   return queued;
 }
@@ -86,28 +92,62 @@ export async function removeQueuedClosure(localId: string) {
 }
 
 export async function markQueuedError(item: QueuedClosure, message: string) {
-  await set(item.localId, { ...item, lastError: message }, store);
+  await changeQueued(item.localId, current => ({ ...current, lastError: message }));
+}
+
+function changeQueued(id: string, change: (current: QueuedClosure) => QueuedClosure): Promise<void> {
+  return store('readwrite', objectStore => new Promise<void>((resolve, reject) => {
+    const transaction = objectStore.transaction, request = objectStore.get(id);
+    request.onsuccess = () => {
+      try { if (request.result) objectStore.put(change(request.result), id); }
+      catch (error) { transaction.abort(); reject(error); }
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = transaction.onerror = () => reject(transaction.error ?? new Error('No se pudo guardar el pendiente.'));
+  }));
+}
+
+/** Corrección explícita de modalidad: conserva el resto del envío y sus Blobs. */
+export async function setQueuedIptvMode(id: string, mode: import('@/lib/installationIptv').IptvInstallationMode, actorId?: string | null) {
+  if (!['smart_tv_app','customer_device','rayco_tv_box'].includes(mode)) throw new Error('Modalidad IPTV inválida.');
+  await withClosureLock('queue', () => changeQueued(id, item => {
+    if (item.jobType !== 'installation' || (item.actorId && item.actorId !== actorId)) throw new Error('Este pendiente no corresponde a tu sesión.');
+    return { ...item, iptvInstallationMode: mode, lastError: undefined };
+  }));
+}
+
+function pauseAll(error: unknown) {
+  const e = error as { code?: string; status?: number; name?: string; message?: string };
+  return !isOnline() || e?.status === 401 || ['PGRST301','PGRST302'].includes(e?.code ?? '') ||
+    e?.name === 'AbortError' || /failed to fetch|fetch failed|networkerror|network request failed|jwt expired/i.test(e?.message ?? '');
 }
 
 /**
  * Reintenta todos los cierres pendientes con la funcion de envio real
  * (inyectada para evitar un ciclo de importacion con el store de Pinia).
- * Se detiene ante el primer fallo de un item para no perder el orden ni
- * generar reintentos en cascada contra un backend que sigue caido.
+ * Un fallo retiene ese envío y bloquea solo las intenciones posteriores de
+ * la MISMA orden. Red/sesión fallidas detienen el lote; otras órdenes siguen.
  */
-export async function flushQueue(submit: (item: QueuedClosure) => Promise<void>) {
+export async function flushQueue(submit: (item: QueuedClosure) => Promise<void>, actorId?: string | null) {
+  return withClosureLock('queue', async () => {
   if (!isOnline()) return { synced: 0, remaining: (await listQueuedClosures()).length };
   const pending = await listQueuedClosures();
+  const blocked = new Set<string>();
   let synced = 0;
   for (const item of pending) {
+    const job = item.jobType + ':' + item.jobId;
+    if (blocked.has(job)) continue;
+    if (item.actorId && item.actorId !== actorId) { blocked.add(job); continue; }
     try {
       await submit(item);
       await removeQueuedClosure(item.localId);
       synced++;
     } catch (e) {
-      await markQueuedError(item, e instanceof Error ? e.message : 'Error al sincronizar');
-      break;
+      await markQueuedError(item, getErrorMessage(e, 'Error al sincronizar'));
+      blocked.add(job);
+      if (pauseAll(e)) break;
     }
   }
   return { synced, remaining: (await listQueuedClosures()).length };
+  });
 }

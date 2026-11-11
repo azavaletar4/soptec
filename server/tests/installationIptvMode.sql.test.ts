@@ -8,6 +8,8 @@ const file = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const migration = file('../../supabase/migrations/20261111140000_installation_iptv_mode.sql');
 const rollback = file('../../scripts/rollback-installation-iptv-mode.sql');
 const live = JSON.parse(file('../../docs/ALTAS-IPTV-TRIGGER-LECTURA-20261111.json'));
+const materialLive = JSON.parse(file('../../docs/ALTAS-IPTV-COMPAT-PREFLIGHT-20261111.json'));
+const payloadHash = 'a'.repeat(64);
 const client = '30000000-0000-0000-0000-000000000001';
 const tech = '00000000-0000-0000-0000-000000000003', admin = '00000000-0000-0000-0000-000000000002';
 const ont = '50000000-0000-0000-0000-000000000001', tv = '50000000-0000-0000-0000-000000000013';
@@ -42,8 +44,8 @@ test('modalidad IPTV: migración real, custodia real, cierres y concurrencia ais
     as(op(o, unit));
     return unit;
   };
-  const closeSql = (o: { id: string }, mode: string | null) => `update installations set status='completed',iptv_installation_mode=${mode === null ? 'null' : `'${mode}'`} where id='${o.id}';`;
-  const preflight = (o: { id: string; contract: string }, mode: string | null) => `select installation_iptv_preflight('${o.id}','${o.contract}',${mode === null ? 'null' : `'${mode}'`});`;
+  const closeSql = (o: { id: string }, mode: string | null) => `update installations set status='completed',iptv_installation_mode=${mode === null ? 'null' : `'${mode}'`},closure_operation_id='${o.id}',closure_payload_hash='${payloadHash}' where id='${o.id}';`;
+  const preflight = (o: { id: string; contract: string }, mode: string | null) => `select installation_iptv_preflight('${o.id}','${o.contract}',${mode === null ? 'null' : `'${mode}'`},'${o.id}','${payloadHash}');`;
   const reject = (o: { id: string; contract: string }, mode: string | null, message: RegExp, early = true) => {
     const before = orderState(o.id), inv = immutable();
     if (early) assert.throws(() => as(preflight(o, mode)), message);
@@ -101,6 +103,11 @@ test('modalidad IPTV: migración real, custodia real, cierres y concurrencia ais
     const custodyBase = file('../../scripts/rollback-campo-installation-custody-only.sql');
     sql(custodyBase.slice(custodyBase.indexOf('CREATE OR REPLACE FUNCTION'), custodyBase.lastIndexOf('COMMIT;')));
     sql(file('../../scripts/prepare-campo-installation-custody-only.sql'));
+    const materialSource = file('../../supabase/migrations/20261019170000_fase165_cierre_consumos_rechazados.sql');
+    sql(materialSource.match(/create function public\.lock_material_inventory_job\([\s\S]*?end \$\$;/)![0]);
+    sql(file('../../supabase/migrations/20261021190000_fase166_materiales_no_bloquean_cierre.sql').match(/create or replace function public\.assert_no_rejected_materials\([\s\S]*?end \$\$;/)![0]);
+    sql(materialLive.definition);
+    sql('revoke all on function assert_material_closure_ready(text,uuid) from public,anon;grant execute on function assert_material_closure_ready(text,uuid) to authenticated,service_role;');
     sql(live.completionFunction);
     sql('create trigger trg_installations_validate_completion before update on installations for each row execute function validate_installation_completion();');
     const old = make();
@@ -113,7 +120,7 @@ test('modalidad IPTV: migración real, custodia real, cierres y concurrencia ais
 
     await t.test('migración no cambia filas previas, equipos, movimientos ni custodia', () => {
       for (const [id, before] of [[old.id, beforeOld], [historical, beforeHistorical], [cancelled, beforeCancelled]]) {
-        assert.equal(sql(`select to_jsonb(i)-'iptv_policy_version'-'iptv_installation_mode' from installations i where id='${id}';`), sql(`select '${before.replaceAll("'", "''")}'::jsonb;`));
+        assert.equal(sql(`select to_jsonb(i)-'iptv_policy_version'-'iptv_installation_mode'-'closure_operation_id'-'closure_payload_hash' from installations i where id='${id}';`), sql(`select '${before.replaceAll("'", "''")}'::jsonb;`));
         assert.equal(sql(`select iptv_policy_version is null and iptv_installation_mode is null from installations where id='${id}';`), 't');
       }
       assert.equal(immutable(), beforeInventory);
@@ -165,9 +172,20 @@ test('modalidad IPTV: migración real, custodia real, cierres y concurrencia ais
     await t.test('publicación: sesión anterior no cierra una Alta nueva, aun con TV Box válido', () => {
       const o = make(); assign(o); assign(o, tv);
       const before = orderState(o.id), inventory = immutable();
+      assert.throws(() => as(`select assert_material_closure_ready('installation','${o.id}');`), /Actualiza Campo/);
+      assert.throws(() => as(`select assert_material_closure_ready_iptv_legacy('installation','${o.id}');`), /permission denied/);
       // UPDATE exacto de la aplicación anterior: nunca envía modalidad.
       assert.throws(() => as(`update installations set status='completed' where id='${o.id}';`), /Selecciona cómo/);
       assert.equal(orderState(o.id), before); assert.equal(immutable(), inventory);
+    });
+    await t.test('recibo de cierre y modalidad se guardan juntos, son inmutables y no duplican inventario', () => {
+      const o=make(); assign(o); const before=immutable();
+      const checked=JSON.parse(as(preflight(o,'smart_tv_app')));
+      assert.equal(checked.materialChecked,true); assert.equal(checked.operationId,o.id); assert.equal(checked.payloadHash,payloadHash);
+      as(closeSql(o,'smart_tv_app'));
+      const saved=JSON.parse(orderState(o.id)); assert.equal(saved.closure_operation_id,o.id);assert.equal(saved.closure_payload_hash,payloadHash);
+      assert.equal(immutable(),before);
+      assert.throws(()=>as(`update installations set closure_payload_hash=repeat('b',64) where id='${o.id}';`,admin),/orden cerrada/);
     });
     await t.test('Smart TV/dispositivo propio no ocultan TV Box ya vinculado', () => {
       const o = make(); assign(o); assign(o, tv);
@@ -241,7 +259,7 @@ test('modalidad IPTV: migración real, custodia real, cierres y concurrencia ais
       const snapshot = sql('select jsonb_agg(i order by id) from installations i;'), inventory = immutable();
       sql(rollback);
       assert.equal(sql('select jsonb_agg(i order by id) from installations i;'), snapshot); assert.equal(immutable(), inventory);
-      assert.equal(sql(`select to_regprocedure('installation_iptv_preflight(uuid,uuid,text)') is null;`), 't');
+      assert.equal(sql(`select to_regprocedure('installation_iptv_preflight(uuid,uuid,text,uuid,text)') is null;`), 't');
       // Rollback preserva datos, pero no garantiza continuidad del Alta por app:
       // el cliente anterior vuelve a necesitar TV Box y el nuevo pierde la RPC.
       assert.throws(() => as(`update installations set status='completed' where id='${appOpen.id}';`), /incluye IPTV/);
