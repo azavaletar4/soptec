@@ -13,6 +13,14 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
+**Altas Dúo / modalidad IPTV — diseño, detenido antes de migración
+(11/11/2026):** Fase 167 exige TV Box por tener línea IPTV, sin distinguir
+Smart TV/dispositivo propio. Se propone modalidad en la orden y validación
+condicional solo para nuevas Altas; ONT y custodia siguen obligatorias.
+42 pruebas existentes PASS con datos sintéticos; no acreditan corrección.
+Diseño: `docs/ALTAS-DUO-MODALIDAD-IPTV-DISENO-20261111.md`.
+Rosita y todo histórico intactos; sin implementar, SQL nuevo, producción,
+push ni despliegue. Pendiente autorización por requerir migración.
 **Detección automática de ONT autorizadas externamente — DESPLEGADA y
 verificada en vivo (03/11/2026, autorizado expresamente):** supera el
 punto "Pendiente real" de Gustavo Reyes Sandoval en el párrafo siguiente —
