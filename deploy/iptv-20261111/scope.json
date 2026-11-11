@@ -33,8 +33,8 @@
     "assets/usePersonalRead.js"
   ],
   "frontendGraphTransition": {
-    "before": "5039dc8ba3921aa006732b9d3cb8a57a94ac0139b0e305fe9d2c3438cfa3cbdf",
-    "after": "a43814f1d78f17dc281e5f1b947f1d01933b7c9e99b5d5692788046b9a3348f3",
+    "before": "9eb77acbce666602b36517385bb6904a18b0d71a43f3b6b8560eb43c9e5a995e",
+    "after": "3158cf1eb40fa8af0ae8d7436cae1617a0e7918c5f47e1ca9cd06009d686aea4",
     "added": [
       "assets/IptvInstallationModeField.vue_vue_type_script_setup_true_lang.js",
       "assets/closureSubmission.js"
