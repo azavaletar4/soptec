@@ -24,7 +24,7 @@ run(process.execPath,['scripts/frontend-release-build.mjs','--export-snapshot','
 const env={...process.env,...loadEnv('production',root,'VITE_'),VITE_MATERIAL_CUSTODY_LIVE_SINCE:''};
 const baseline=path.join(rt,'baseline');fs.mkdirSync(baseline);
 const archive=path.join(rt,'baseline.tar');run('git',['archive',base,'--format=tar','--output='+archive,...paths]);
-run('tar.exe',['--force-local','-xf',archive,'-C',baseline]);
+run('tar.exe',['-xf','baseline.tar','-C',baseline],rt);
 fs.symlinkSync(path.join(root,'node_modules'),path.join(baseline,'node_modules'),'junction');
 const baselineFiles=Object.fromEntries(git('ls-tree','-r','--name-only',base,'--',...paths).split('\n').filter(Boolean).sort().map(f=>[f,createHash('sha256').update(fs.readFileSync(path.join(baseline,f),'utf8').replaceAll('\r\n','\n')).digest('hex')]));
 const baselineSnapshot={commit:base,tree:git('rev-parse',base+'^{tree}'),consolidatedBase:JSON.parse(fs.readFileSync(path.join(baseline,'deploy/frontend-release-policy.json'),'utf8')).minimumConsolidatedCommit,files:baselineFiles};
