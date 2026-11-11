@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
 import CampoJobPoints from '@/components/campo/CampoJobPoints.vue';
+import IptvInstallationModeField from '@/components/campo/IptvInstallationModeField.vue';
+import { requiresIptvMode, iptvModeLabel, type IptvInstallationMode } from '@/lib/installationIptv';
 import RoutineInventory from '@/components/inventario/RoutineInventory.vue';
 import AuthorizeOnuModal from '@/views/olt/AuthorizeOnuModal.vue';
 import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
@@ -217,6 +219,8 @@ const legacyGps = computed(() => {
 // puede cambiar en esta pantalla es el GPS/fotos, y eso vive en el cierre. ----
 const clientDetail = ref<Client | null>(null);
 const activeContract = ref<ServiceContract | null>(null);
+const iptvInstallation = computed(() => jobType === 'installation' ? trabajo.value?.raw as Installation | undefined : undefined);
+const showIptvMode = computed(() => requiresIptvMode(iptvInstallation.value, activeContract.value));
 const loadingClientInfo = ref(false);
 // Solo la ficha visible y la navegación: conservar el contexto técnico existente.
 const displayContract = computed(() => trabajo.value?.contractId
@@ -1435,6 +1439,7 @@ const installSummary = computed(() => {
   );
   return [
     { step: 2, label: 'Zona y Caja NAP', ok: !!closureForm.value.zoneId && !!closureForm.value.napElementoId },
+    ...(showIptvMode.value ? [{ step: 5, label: 'Modalidad IPTV', ok: !!closureForm.value.iptvInstallationMode, detail: iptvModeLabel(closureForm.value.iptvInstallationMode) }] : []),
     { step: 2, label: 'Código de cliente / Cintillo Drop', ok: !!closureForm.value.clientCode.trim() },
     {
       step: 4,
@@ -1446,6 +1451,7 @@ const installSummary = computed(() => {
 });
 
 const closureForm = ref({
+  iptvInstallationMode: null as IptvInstallationMode | null,
   latitude: null as number | null,
   longitude: null as number | null,
   closureNotes: '',
@@ -1469,6 +1475,9 @@ const closureForm = ref({
   // Fase 39). Obligatorio al completar una instalacion; opcional en tickets.
   clientCode: '',
 });
+watch(() => iptvInstallation.value?.iptv_installation_mode, (mode) => {
+  if (!closureForm.value.iptvInstallationMode) closureForm.value.iptvInstallationMode = mode ?? null;
+}, { immediate: true });
 // Causa preliminar (Fase 103): si admin/soporte dejo una sospecha al crear
 // el ticket, se pre-carga aca apenas se conoce el ticket — el tecnico la ve
 // ya seleccionada pero puede cambiarla libremente antes de cerrar.
@@ -1666,6 +1675,10 @@ function openLightbox(photos: LightboxPhoto[], startId: string) {
 
 async function handleCloseSubmit() {
   if (!trabajo.value) return;
+  if (showIptvMode.value && !closureForm.value.iptvInstallationMode) {
+    closeError.value = 'Selecciona cómo se instaló IPTV antes de completar el Alta.';
+    return;
+  }
 
   // Una operación de inventario sin confirmar (p.ej. material registrado sin
   // conexión, nunca respondido por el servidor) es distinta de un rechazo real
@@ -1787,6 +1800,7 @@ async function handleCloseSubmit() {
       clientId: trabajo.value.clientId,
       contractId: trabajo.value.contractId,
       targetStatus: jobType === 'ticket' ? 'resolved' : 'completed',
+      iptvInstallationMode: jobType === 'installation' ? closureForm.value.iptvInstallationMode : null,
       latitude: closureForm.value.latitude,
       longitude: closureForm.value.longitude,
       ontSerial: isTrasladoRoutine.value && closureForm.value.ontAction === 'replaced' ? closureForm.value.ontSerialNuevo.trim() || null : null,
@@ -2603,6 +2617,12 @@ async function handleCloseSubmit() {
         <!-- Cierre de trabajo -->
         <section class="surface p-3.5 mb-3">
           <h2 v-show="jobType !== 'installation' || installStep === 5" class="text-sm font-semibold mb-2">Cierre de trabajo</h2>
+          <IptvInstallationModeField
+            v-if="showIptvMode && installStep === 5 && iptvInstallation?.status !== 'completed' && iptvInstallation?.status !== 'cancelled'"
+            v-model="closureForm.iptvInstallationMode"
+            :disabled="closing"
+          />
+          <p v-if="iptvInstallation?.iptv_installation_mode" class="text-sm mb-3">Modalidad IPTV: {{ iptvModeLabel(iptvInstallation.iptv_installation_mode) }}</p>
 
           <button v-show="showStep(4)" type="button" :disabled="gettingLocation" class="text-xs text-sky-700 mb-2.5 block" @click="useCurrentLocation">
             {{ gettingLocation ? 'Obteniendo ubicación...' : `📍 ${closureForm.latitude ? 'Ubicación capturada' : 'Usar mi ubicación actual'}` }}

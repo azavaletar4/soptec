@@ -13,14 +13,15 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
-**Altas Dúo / modalidad IPTV — diseño, detenido antes de migración
-(11/11/2026):** Fase 167 exige TV Box por tener línea IPTV, sin distinguir
-Smart TV/dispositivo propio. Se propone modalidad en la orden y validación
-condicional solo para nuevas Altas; ONT y custodia siguen obligatorias.
-42 pruebas existentes PASS con datos sintéticos; no acreditan corrección.
-Diseño: `docs/ALTAS-DUO-MODALIDAD-IPTV-DISENO-20261111.md`.
-Rosita y todo histórico intactos; sin implementar, SQL nuevo, producción,
-push ni despliegue. Pendiente autorización por requerir migración.
+**Altas Dúo / modalidad IPTV — IMPLEMENTADO LOCAL (11/11/2026):** modalidad
+Smart TV/dispositivo propio/TV Box Rayco solo para nuevas Altas. Preflight
+y trigger comparten regla; ONT y controles existentes conservados, Rayco
+exige serie/MAC y constancia de custodia. SQL `20261111140000` y rollback
+preparados, sin aplicar. 20 SQL + 63 módulo + 14 navegador = 97 PASS con
+datos sintéticos; tipos y build local PASS. Rosita e históricos intactos.
+Detalle y pasos de publicación: `docs/ALTAS-DUO-IPTV-IMPLEMENTACION-20261111.md`.
+Commit de esta actualización solo local; sin push/deploy. Manifiestos de
+release OLT anteriores intactos: preparar alcance IPTV antes de publicar.
 
 **Cancelación no instalada — diagnóstico/diseño, detenido antes de migración
 (11/11/2026):** Carlos `CTR-2026-00400` tiene ONT y PPPoE, sin Alta histórica;

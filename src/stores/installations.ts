@@ -5,6 +5,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import type { Installation, InstallationStatus } from '@/types/domain';
 import { readAllClientPages } from '@/lib/clientLifecycle';
+import { prepareInstallationIptv, type IptvInstallationMode } from '@/lib/installationIptv';
 
 // Fase 152: se agrega phone_2 (telefono alternativo) al join de clients —
 // ya lo capturaba la conversion de prospecto (13k) pero esta vista no lo
@@ -69,6 +70,13 @@ export const useInstallationsStore = defineStore('installations', () => {
     return updateInstallation(id, { status });
   }
 
+  async function prepareIptvClosure(id: string, clientId: string | null, contractId: string | null, mode?: IptvInstallationMode | null) {
+    const { data, error: err } = await supabase.from('installations').select('*').eq('id', id).single();
+    if (err) throw err;
+    if (!data) throw new Error('Instalación no encontrada.');
+    return prepareInstallationIptv((name, args) => supabase.rpc(name, args), data as Installation, clientId, contractId, mode);
+  }
+
   async function deleteInstallation(id: string) {
     await assertWorkOrderMutable('installation', id);
     const { error: err } = await supabase.from('installations').delete().eq('id', id);
@@ -84,6 +92,7 @@ export const useInstallationsStore = defineStore('installations', () => {
     createInstallation,
     updateInstallation,
     updateStatus,
+    prepareIptvClosure,
     deleteInstallation,
   };
 });

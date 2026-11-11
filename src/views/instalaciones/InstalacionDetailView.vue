@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import IptvInstallationModeField from '@/components/campo/IptvInstallationModeField.vue';
+import { requiresIptvMode, iptvModeLabel, type IptvInstallationMode } from '@/lib/installationIptv';
 import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
 import { useWorkOrderFinality } from '@/composables/useWorkOrderFinality';
 import { computed, onMounted, ref, watch } from 'vue';
@@ -64,6 +66,10 @@ const toast = useToast();
 const installationId = computed(() => route.params.id as string);
 const { locked: administrativelyClosed, error: finalityError, loading: finalityLoading, markClosed } = useWorkOrderFinality('installation', installationId);
 const installation = ref<Installation | null>(null);
+const iptvMode = ref<IptvInstallationMode | null>(null);
+const iptvContract = computed(() => contractsStore.contracts.find(c => c.id === installation.value?.contract_id));
+const showIptvMode = computed(() => requiresIptvMode(installation.value, iptvContract.value));
+watch(() => installation.value?.id, () => { iptvMode.value = installation.value?.iptv_installation_mode ?? null; });
 const loading = ref(true);
 const notFound = ref(false);
 
@@ -481,7 +487,11 @@ async function handleStatusChange(status: InstallationStatus) {
 async function applyStatusChange(status: InstallationStatus) {
   if (!installation.value) return;
   try {
-    installation.value = await installationsStore.updateStatus(installation.value.id, status);
+    const iptv = status === 'completed'
+      ? await installationsStore.prepareIptvClosure(installation.value.id, installation.value.client_id, installation.value.contract_id, iptvMode.value)
+      : { patch: {}, alreadyCompleted: false };
+    if (iptv.alreadyCompleted) { installation.value.status = 'completed'; return; }
+    installation.value = await installationsStore.updateInstallation(installation.value.id, { status, ...iptv.patch });
   } catch (e) {
     alert(getErrorMessage(e, 'Error al cambiar el estado'));
   }
@@ -595,6 +605,8 @@ async function handleCompleteSubmit() {
   completeSaving.value = true;
   completeError.value = null;
   try {
+    const iptv = await installationsStore.prepareIptvClosure(installation.value.id, installation.value.client_id, installation.value.contract_id, iptvMode.value);
+    if (iptv.alreadyCompleted) { installation.value.status = 'completed'; return; }
     const svcType = installation.value.contracts?.service_type ?? 'internet_combo';
     if (svcType === 'internet_combo') {
       const units = await inventoryUnitsStore.fetchUnitsByInstallation(installation.value.id);
@@ -631,7 +643,7 @@ async function handleCompleteSubmit() {
       const file = completePhotos.value[cat];
       if (file && contractId) await clientPhotosStore.uploadPhoto(clientId, contractId, cat, file);
     }
-    installation.value = await installationsStore.updateStatus(installation.value.id, 'completed');
+    installation.value = await installationsStore.updateInstallation(installation.value.id, { status: 'completed', ...iptv.patch });
     toast.success('Instalación completada correctamente');
   } catch (e) {
     completeError.value = getErrorMessage(e, 'Error al completar la instalación');
@@ -1026,6 +1038,10 @@ onMounted(async () => {
             </template>
           </div>
 
+          <div v-if="showIptvMode || installation.iptv_installation_mode" class="surface p-4 text-sm">
+            <IptvInstallationModeField v-if="showIptvMode && !isClosedOrder && canEditStatus" v-model="iptvMode" />
+            <p v-else>Modalidad IPTV: {{ iptvModeLabel(installation.iptv_installation_mode) }}</p>
+          </div>
           <div v-if="materialsServiceType === 'solo_iptv' && canEditMaterials(installation)" class="surface p-4 text-sm">
             <label class="block text-xs text-slate-600 mb-1">Cuenta / usuario IPTV asignado (opcional)</label>
             <textarea v-model="iptvNoteDraft" rows="2" class="field-input" placeholder="ej. Usuario X en Smart TV Samsung del cliente"></textarea>
