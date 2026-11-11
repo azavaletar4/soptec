@@ -13,7 +13,7 @@ if(usable.length===1){
  report.android={manufacturer:device('shell','getprop','ro.product.manufacturer'),model:device('shell','getprop','ro.product.model'),release:device('shell','getprop','ro.build.version.release'),sdk:device('shell','getprop','ro.build.version.sdk'),abis:device('shell','getprop','ro.product.cpu.abilist')};
  report.webviewUpdate=device('shell','dumpsys','webviewupdate');
  report.raycoPackages=device('shell','pm','list','packages','com.smartrayco').split(/\r?\n/).filter(Boolean);
- report.next='Dispositivo identificado; aún no ejecutó pruebas de aplicación.';
+ report.next='Metadatos leídos; consultar el informe de pruebas físicas por separado.';
 }else report.next=usable.length>1?'Seleccionar un solo celular físico para evitar actuar sobre otro equipo.':'Conectar por USB, desbloquear y autorizar depuración USB. No abrir ni borrar Campo.';
 if(process.argv[2])fs.writeFileSync(path.resolve(process.argv[2]),JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report));

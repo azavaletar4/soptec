@@ -12,6 +12,9 @@ export function startLab(preparedFile,port=4176){
  const event=data=>fs.appendFileSync(eventsFile,JSON.stringify({at:new Date().toISOString(),...data})+'\n');
  const server=http.createServer(async(req,res)=>{
   res.setHeader('Content-Security-Policy',csp);res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');
+  // Cada petición LAB termina su conexión: quitar adb reverse debe cortar
+  // realmente el siguiente envío, sin túneles keep-alive todavía abiertos.
+  res.setHeader('Connection','close');
   const reply=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data))};
   try{
    if(!/^127\.0\.0\.1(?::\d+)?$/.test(req.headers.host??''))return reply(403,{error:'LOOPBACK_HOST_ONLY'});

@@ -1,12 +1,16 @@
 # Altas Dúo IPTV — corrección de bloqueos y paquete local
 
-> Preparación posterior de certificación física: [Android/WebView](ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md).
-> APK de laboratorio compilada; ADB aún sin celular y cero pruebas físicas aprobadas.
+> Certificación física posterior: [Android/WebView](ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md).
+> 26/26 comprobaciones físicas PASS en OPPO/Android 15/WebView 156. Aprobación
+> modular para solicitar publicación controlada, con el alcance del informe.
 
-**Estado: NO APTO para autorizar la publicación a técnicos hasta certificar
-Android/System WebView real.** Los bloqueos de código identificados están
-corregidos y el paquete local está preparado. Las pruebas de escritorio no
-certifican la APK instalada. No se aplicó SQL, hizo push ni desplegó.
+**Estado actual: APTO para solicitar autorización de publicación controlada.**
+Los bloqueos de código están corregidos, el paquete está preparado y la fase
+de plataforma Android se certificó mediante la APK independiente de laboratorio.
+El informe Android distingue las 26 pruebas físicas de sus transportes simulados
+y del SQL previo; no declara E2E de toda la vista Campo contra PostgreSQL.
+Preflight/respaldos remotos y primer uso controlado siguen sin ejecutar.
+No se aplicó SQL, hizo push ni desplegó.
 
 Base solicitada: `8688bfc`. Corrección: `36cc6b9`. Portabilidad del paquete:
 `bcb3ec4`. **Candidato de aplicación/SQL empaquetado:
@@ -96,7 +100,11 @@ heredado de configuración local; el resultado final usa `production` y
 fuentes extraídas, sin incorporar documentos/pendientes locales a Tailwind.
 Los avisos de tamaño de chunks Vite siguen presentes.
 
-### Pendiente que requiere Android/WebView real
+### Certificación física completada — procedimiento de referencia
+
+Resultado y alcance de las **26 pruebas físicas** en el informe Android
+enlazado arriba. La lista siguiente conserva el procedimiento preparado;
+no sustituye sus evidencias ni atribuye SQL/custodia real al fixture HTTP.
 
 En un entorno aislado con datos sintéticos y el APK instalado:
 
@@ -141,7 +149,7 @@ un release de backend/TR069. El stage remoto aún no se creó.
 
 **Comandos siguientes preparados; ninguno ejecutado contra el servidor:**
 
-1. Completar la certificación Android anterior. Obtener autorización explícita
+1. Revisar el alcance y las evidencias de la certificación Android. Obtener autorización explícita
    para publicación y SQL. Mantener Campo detenido sin cerrar/borrar las 9
    órdenes, sesiones huérfanas ni almacenamientos locales. Repetir lectura de
    mantenimiento y metadatos; detener ante ejecución, operación incompleta o
