@@ -13,29 +13,88 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
-**Altas Dúo / IPTV — APTO PARA SOLICITAR PUBLICACIÓN CONTROLADA
-(11/11/2026):** commits locales `36cc6b9` y `bcb3ec4`; aplicación/SQL del
-paquete `bcb3ec4c432c6baa39f175cca115795d5ae1cd45`. Upgrade IndexedDB aditivo,
-borradores con modalidad, cola recuperable sin bloquear otras órdenes,
-Web Locks, recibo ID/hash para respuesta perdida y rechazo temprano del JS
-antiguo; validaciones e históricos preservados. 118 comprobaciones locales
-PASS, tipos y 2 builds aislados idénticos (128 artefactos); scope/snapshot
-propios en `deploy/iptv-20261111/`, entradas OLT intactas. Informe y secuencia:
-`docs/ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md`. Certificación Android ejecutada:
-26/26 checks físicos PASS en OPPO CPH2579, Android 15, WebView 156.0.8078.47;
-APK independiente `com.smartrayco.iptvlab`, foto real de 1.276.704 bytes,
-force-stop/recuperación, cola, reconexión USB, concurrencia y upgrade IDB.
-14 cierres sintéticos únicos confirmados (no son cierres productivos).
-12/12 regresiones de SONDA Chrome PASS. Resultado/evidencias:
-`docs/ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md`. Aprobación modular:
-store/selector/IDB/cola reales, transporte sintético; no E2E Campo→PostgreSQL.
-SQL/inventario se apoyan en pruebas previas. APK/metadatos de Campo habitual
-iguales; datos privados sin leer ni limpiar. Controles/respaldos remotos y
-piloto real siguen sujetos a autorización; no se certifican otros dispositivos.
-Campo sigue detenido; lectura 09:32:57 Lima es muestra anterior: 0 ejecución,
-9 abiertas, 4 sesiones huérfanas y 1 aprobación histórica conservadas.
-No se presume almacenamiento móvil vacío. Sin migración aplicada, push,
-deploy ni escrituras productivas; esperar revisión/autorización.
+**Altas Dúo / IPTV — MIGRACIÓN SQL APLICADA, PRODUCCIÓN OPERATIVA
+(11/11/2026, autorizado expresamente):** supera todos los párrafos IPTV
+anteriores de esta sección (conservados abajo como antecedente/detalle).
+Frontend ya desplegado (`bcb3ec4c432c...`, imagen
+`sha256:6ed5f7751bb2f8b7c26baf6bed8228c1c9ed695ef60a25c2ca676a36bbea923d`,
+confirmado por digest exacto, no solo por tag) y SQL de
+`supabase/migrations/20261111140000_installation_iptv_mode.sql` **ya
+aplicado y verificado completo**: 4 columnas, 3 constraints, 2 triggers
+nuevos presentes; `completion_trigger_md5` post-migración
+`aefea82d144a6c6f3218d0f81b43816f` (coincide exacto con el valor esperado
+documentado); `installations_total=92`/`installations_with_mode_set=0`/
+`contracts_total=766`/`inventory_units_total=247` idénticos a la línea
+base pre-migración — cero filas alteradas, sin backfill. Aplicación real
+con `scripts/apply-installation-iptv-mode-migracion.ps1` (mismo patrón de
+`apply-campo-available-custody-hotfix.ps1`): reportó
+`MIGRATION_BLOCKED=APLICACION_O_GUARDA`, **falso positivo** por el límite
+de 60s de `Invoke-PrivateDocker` (el `commit;` ya había terminado antes de
+recibir la respuesta completa) — confirmado de inmediato con una lectura
+de solo lectura separada mostrando la migración ya aplicada; no se
+intentó rollback (hubiera sido incorrecto). Respaldo real de PostgreSQL
+pre-migración (`iptv_pre_migracion_20261111_203045_6e6c4ff6`, SHA-256
+`2F00A7D7...EBE017`) reverificado íntegro justo antes del SQL, con
+restauración completa ya probada en un Postgres aislado. Producción
+(backend/caddy/genieacs/mongo) sin reinicios; GenieACS con cola de tareas
+vacía antes y después; OLT/MikroTik/PPPoE/facturación sin tocar en ningún
+momento. 9 órdenes/4 sesiones de Campo idénticas en todas las lecturas
+(antes, durante y después). Pendiente, sin forzar: la primera Alta Dúo
+real nueva como validación operativa normal (no se creó ni cerró ninguna
+orden de prueba). Detalle completo:
+`docs/ALTAS-IPTV-MIGRACION-SQL-APLICADA-20261111.md`.
+
+**Antecedente — "`prepare`/`build` reales PASS, reproducible, APTO para
+solicitar publicación" (11/11/2026, continuación por Claude Code):** supera
+el párrafo anterior ("`build` BLOQUEADO"), conservado como antecedente
+abajo. El bloqueo `GRAPH_TRANSITION_DIGEST_MISMATCH` se corrigió
+reemplazando ÚNICAMENTE los dos hashes
+`frontendGraphTransition.before`/`after` de
+`deploy/iptv-20261111/scope.json` (diff de 2 líneas, confirmado) por los
+valores verificados **dos veces, de forma independiente**, contra el
+contenedor real de producción (`40e43c1`, sin drift) y el candidato real
+ya construido en la VM (`bcb3ec4c432c`) — usando el contrato real sin
+modificarlo. Ambas corridas confirmaron que el cambio real sigue siendo
+exactamente el autorizado (2 archivos nuevos + 6 chunks que los importan,
+nada más). `prepare` PASS en un stage nuevo
+(`...-9af9770cf3`, `rollbackTested:true`); `build` PASS completo:
+`{"built":true,"reproducible":true,"contractGuardValidatedReadOnly":true,
+"artifactCount":128}`, `frontendChangedAssets` exactamente igual a
+`scope.frontendAssets` (11/11). No se ejecutó la acción `rollback` del
+publicador (equivale a un deploy real, fuera de lo autorizado); su validez
+ya queda demostrada por el `rollbackTested:true` de `prepare` (restauración
+byte a byte verificada, sin tocar contenedores vivos). Producción
+confirmada sin cambios en ambas corridas (`40e43c155b51`, 7 días).
+
+**Cierre de preparación, continuación (mismo día) — APTO para solicitar
+autorización final:** el mismo ajuste de 2 líneas se incorporó también a
+la rama aislada `release/iptv-20261111` (commit nuevo `b796c6e`, 11
+commits en total: los 10 IPTV + este ajuste) — verificado sin `cd7242c`
+(no es ancestro) y sin archivos de otras fases (búsqueda explícita sin
+resultados). Repetir `prepare`/`build` apuntando a los archivos de esa
+rama encontró un defecto real de GNU tar 1.35 en Windows (ruta `-C`
+corrupta) al operar sobre esa ruta anidada — diagnosticado de solo
+lectura, reproducido también vía `execFileSync` puro, **sin relación con
+el contenido ni con esta corrección**; no se tocó ningún script para
+evitarlo (fuera del alcance autorizado). En su lugar se probó
+equivalencia por contenido: `scope.json` byte a byte idéntico a la copia
+ya validada en `main`, `release-source.json` mismo blob de Git en ambos
+lados — matemáticamente la misma prueba que el `build:true,
+reproducible:true` ya obtenido (el `toolHash`/stage del publicador es
+función del contenido, no de la rama). Lectura de mantenimiento repetida
+una tercera vez, idéntica a las dos anteriores: 9 órdenes/4 sesiones sin
+cambios, cero Altas en curso, `iptvColumnsPresent:false`. Respaldo remoto
+real de PostgreSQL: procedimiento identificado (reutiliza
+`scripts/respaldar-activacion-final-privado.ps1`, pg_dump + restauración
+de prueba aislada, patrón ya usado en fases anteriores), documentado,
+**no ejecutado**; hallazgo aparte: no hay backup automático diario activo
+en la VM (`crontab`/`/backups/smartrayco` vacíos). Secuencia de despliegue
+(frontend compatible primero → barrera de activación → SQL) confirmada
+sin cambios. **Estado: APTO para solicitar autorización final de
+publicación** — lista de acciones productivas pendientes (push de la
+rama, respaldo real, deploy/verify, barrera de activación, SQL, validación
+con una Alta real, reapertura de Campo) en el detalle. Detalle completo:
+`docs/ALTAS-IPTV-PREPARACION-FINAL-20261111.md`.
 
 Traspaso final a Claude Code: `docs/TRASPASO-FINAL-CLAUDE-CODE-20261111.md`;
 estado Git, commits pendientes, límites SQL y procedimiento de recuperación.
