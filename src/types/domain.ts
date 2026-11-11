@@ -341,6 +341,9 @@ export interface Installation {
   notes: string | null;
   /** Nota libre del tecnico para instalaciones "Solo IPTV" (Fase 45) — cuenta/usuario IPTV en el Smart TV del cliente. */
   iptv_account_note: string | null;
+  /** Ausente antes de migrar; NULL en órdenes anteriores, sin backfill. */
+  iptv_policy_version?: 1 | null;
+  iptv_installation_mode?: import('@/lib/installationIptv').IptvInstallationMode | null;
   completed_at: string | null;
   created_by: string | null;
   created_at: string;

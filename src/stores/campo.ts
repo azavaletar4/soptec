@@ -225,6 +225,7 @@ export interface ClosureInput {
   installationAddress: string | null;
   /** Fase 139 — codigo de cliente / cintillo Drop, reusa contracts.client_code (Fase 39). Obligatorio al completar una instalacion, opcional en tickets/reconexiones. Null/vacio = no tocar (evita sobrescribir con blanco). */
   clientCode: string | null;
+  iptvInstallationMode?: import('@/lib/installationIptv').IptvInstallationMode | null;
 }
 
 /**
@@ -477,6 +478,11 @@ export const useCampoStore = defineStore('campo', () => {
   }
 
   async function performClosureSubmitInner(input: ClosureInput): Promise<{ ontZoneWarning: string | null }> {
+    // Primero validar IPTV, antes de contratos, fotos, firma o evidencia parcial.
+    const iptv = input.jobType === 'installation'
+      ? await installationsStore.prepareIptvClosure(input.jobId, input.clientId, input.contractId, input.iptvInstallationMode)
+      : { patch: {}, alreadyCompleted: false };
+    if (iptv.alreadyCompleted) return { ontZoneWarning: null };
     await assertWorkOrderMutable(input.jobType, input.jobId);
     await checkMaterialClosure(() => supabase.rpc('assert_material_closure_ready', { p_job_type: input.jobType, p_job_id: input.jobId }));
     // Codigo de cliente / cintillo Drop (Fase 139) — PRIMERO, antes de subir
@@ -718,7 +724,7 @@ export const useCampoStore = defineStore('campo', () => {
       : describeOntZoneSyncOutcome(ontZoneSyncOutcome);
 
     if (input.jobType === 'installation') {
-      await installationsStore.updateStatus(input.jobId, 'completed');
+      await installationsStore.updateInstallation(input.jobId, { status: 'completed', ...iptv.patch });
     } else if (input.jobType === 'routine') {
       await routinesStore.updateRoutine(input.jobId, {
         status: 'completed',
@@ -789,6 +795,7 @@ export const useCampoStore = defineStore('campo', () => {
       ontReplaced: item.ontReplaced,
       installationAddress: item.installationAddress,
       clientCode: item.clientCode,
+      iptvInstallationMode: item.iptvInstallationMode,
     });
     if (ontZoneWarning) {
       // eslint-disable-next-line no-console
@@ -822,6 +829,7 @@ export const useCampoStore = defineStore('campo', () => {
         ontReplaced: input.ontReplaced,
         installationAddress: input.installationAddress,
         clientCode: input.clientCode,
+        iptvInstallationMode: input.iptvInstallationMode,
       });
       await refreshQueuedCount();
       return { queued: true };
@@ -856,6 +864,7 @@ export const useCampoStore = defineStore('campo', () => {
           ontReplaced: input.ontReplaced,
           installationAddress: input.installationAddress,
           clientCode: input.clientCode,
+          iptvInstallationMode: input.iptvInstallationMode,
         });
         await refreshQueuedCount();
         return { queued: true };

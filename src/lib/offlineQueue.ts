@@ -54,6 +54,8 @@ export interface QueuedClosure {
   installationAddress: string | null;
   /** Código de cliente / cintillo Drop (reusa service_contracts.client_code, Fase 39) — obligatorio al completar una instalación, opcional en tickets. */
   clientCode: string | null;
+  /** Opcional para conservar colas anteriores; el servidor nunca deduce modalidad. */
+  iptvInstallationMode?: import('@/lib/installationIptv').IptvInstallationMode | null;
   lastError?: string;
 }
 

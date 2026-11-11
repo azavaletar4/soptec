@@ -1,9 +1,10 @@
 # Altas Dúo: modalidad IPTV — diseño previo a migración
 
-11/11/2026. **Diseño local, sin implementar corrección ni crear/aplicar
-migración.** El usuario exige detenerse si hace falta migración. Sin
-consultas ni escrituras productivas, push o despliegue. Rosita Ferrel Rivera
-y todas las órdenes cerradas quedan fuera del alcance.
+11/11/2026. Diseño inicial de `6170a83`; **implementación local autorizada
+posteriormente**, migración y rollback preparados y probados, sin aplicar
+SQL ni publicar/desplegar. Estado, pruebas y publicación futura en
+`ALTAS-DUO-IPTV-IMPLEMENTACION-20261111.md`. Este documento conserva el
+diseño aprobado. Rosita Ferrel Rivera y órdenes históricas fuera del alcance.
 
 ## Causa raíz y rutas revisadas
 
@@ -98,5 +99,5 @@ modalidades registradas, inventario ni custodia.
 
 Archivos modificados en esta entrega: este diseño, el bloque propio de
 `ESTADO_DESARROLLO.md` y la entrada de `docs/ERRORES-CAMPO.md`.
-Pendiente: autorización para implementar el diseño; aplicar la migración
-y desplegar requieren autorización expresa, separada.
+Implementación posterior autorizada y preparada localmente; aplicar la
+migración y desplegar siguen requiriendo autorización expresa, separada.
