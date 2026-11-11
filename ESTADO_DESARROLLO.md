@@ -13,6 +13,15 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
+**Cancelación no instalada — diagnóstico/diseño, detenido antes de migración
+(11/11/2026):** Carlos `CTR-2026-00400` tiene ONT y PPPoE, sin Alta histórica;
+el botón solo filtra rol/estado contractual. RPC vigente protege este caso
+por ONT, pero permite casos ambiguos sin historial o con cierre mal vinculado.
+21 pruebas previas + 12 de caracterización PASS, solo datos sintéticos.
+Diseño: `docs/CLIENTES-CANCELACION-VISIBILIDAD-DISENO-20261111.md`.
+Requiere migración de funciones; por instrucción del usuario, sin implementar
+corrección ni crear/aplicar migración, sin push/deploy. Pendiente autorización.
+
 **Detección automática de ONT autorizadas externamente — DESPLEGADA y
 verificada en vivo (03/11/2026, autorizado expresamente):** supera el
 punto "Pendiente real" de Gustavo Reyes Sandoval en el párrafo siguiente —
