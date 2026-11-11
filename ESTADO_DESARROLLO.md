@@ -25,6 +25,7 @@ propios en `deploy/iptv-20261111/`, entradas OLT intactas. Informe y secuencia:
 26/26 checks físicos PASS en OPPO CPH2579, Android 15, WebView 156.0.8078.47;
 APK independiente `com.smartrayco.iptvlab`, foto real de 1.276.704 bytes,
 force-stop/recuperación, cola, reconexión USB, concurrencia y upgrade IDB.
+14 cierres sintéticos únicos confirmados (no son cierres productivos).
 12/12 regresiones de SONDA Chrome PASS. Resultado/evidencias:
 `docs/ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md`. Aprobación modular:
 store/selector/IDB/cola reales, transporte sintético; no E2E Campo→PostgreSQL.
@@ -35,6 +36,10 @@ Campo sigue detenido; lectura 09:32:57 Lima es muestra anterior: 0 ejecución,
 9 abiertas, 4 sesiones huérfanas y 1 aprobación histórica conservadas.
 No se presume almacenamiento móvil vacío. Sin migración aplicada, push,
 deploy ni escrituras productivas; esperar revisión/autorización.
+
+Traspaso final a Claude Code: `docs/TRASPASO-FINAL-CLAUDE-CODE-20261111.md`;
+estado Git, commits pendientes, límites SQL y procedimiento de recuperación.
+Este cierre autoriza solo documentación; no ejecutar SQL, despliegues ni push.
 
 **Cancelación no instalada — diagnóstico/diseño, detenido antes de migración
 (11/11/2026):** Carlos `CTR-2026-00400` tiene ONT y PPPoE, sin Alta histórica;
