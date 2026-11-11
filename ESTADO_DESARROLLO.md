@@ -21,8 +21,12 @@ Web Locks, recibo ID/hash para respuesta perdida y rechazo temprano del JS
 antiguo; validaciones e históricos preservados. 118 comprobaciones locales
 PASS, tipos y 2 builds aislados idénticos (128 artefactos); scope/snapshot
 propios en `deploy/iptv-20261111/`, entradas OLT intactas. Informe y secuencia:
-`docs/ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md`. Falta certificación del APK/
-WebView real y controles/respaldos del publicador en VM tras autorización.
+`docs/ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md`. Certificación Android preparada:
+APK separada `com.smartrayco.iptvlab` compilada/verificada y 12 checks de SONDA
+Chrome PASS; ADB sin celular, cero pruebas físicas. Procedimiento/evidencia:
+`docs/ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md`. Sonda con transporte
+sintético, no certifica todo Campo→SQL. Falta conectar/autorizar USB y probar
+Android/WebView real; después controles/respaldos del publicador en VM autorizado.
 Campo sigue detenido; lectura 09:32:57 Lima es muestra anterior: 0 ejecución,
 9 abiertas, 4 sesiones huérfanas y 1 aprobación histórica conservadas.
 No se presume almacenamiento móvil vacío. Sin migración aplicada, push,

@@ -1,5 +1,8 @@
 # Altas Dúo IPTV — corrección de bloqueos y paquete local
 
+> Preparación posterior de certificación física: [Android/WebView](ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md).
+> APK de laboratorio compilada; ADB aún sin celular y cero pruebas físicas aprobadas.
+
 **Estado: NO APTO para autorizar la publicación a técnicos hasta certificar
 Android/System WebView real.** Los bloqueos de código identificados están
 corregidos y el paquete local está preparado. Las pruebas de escritorio no
