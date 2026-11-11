@@ -1,0 +1,118 @@
+{
+  "at": "2026-11-11T18:02:29.537Z",
+  "status": "NO_APTO_ANDROID_NOT_EXECUTED",
+  "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+  "lab": {
+    "packageId": "com.smartrayco.iptvlab",
+    "productionPackageId": "com.smartrayco.app",
+    "apk": "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/mobile_app/build/app/outputs/apk/debug/app-debug.apk",
+    "apkSha256": "e057299c84f8eaff756f6a17254523fe13806ae327b5579de9100b0fce5aa28f",
+    "apkMetadata": {
+      "packageId": "com.smartrayco.iptvlab",
+      "minSdk": "24",
+      "targetSdk": "36",
+      "activity": "com.smartrayco.app.MainActivity",
+      "nativeCode": "'arm64-v8a' 'armeabi-v7a' 'x86_64'"
+    },
+    "flutterVersion": "3.47.5",
+    "dartVersion": "3.13.4",
+    "flutterLockfileUnchanged": true,
+    "productionFlutterUnchanged": true,
+    "nativeChanges": [
+      "URL/host loopback",
+      "ID y etiqueta separados",
+      "navegación externa bloqueada",
+      "depuración WebView",
+      "HTTP permitido solo en 127.0.0.1"
+    ],
+    "httpLoopbackOnly": true,
+    "CSPConnectSelfOnly": true,
+    "transport": "synthetic; actual installation store/selector/storage libraries; not full Campo UI or PostgreSQL E2E",
+    "apkSignedV2Verified": true,
+    "buildResult": "BUILD SUCCESSFUL",
+    "gradleOfflineAttempt": "missing cached Kotlin dependencies",
+    "gradleFinalBuild": "resolved fixed dependencies and built locally; no project upgrade",
+    "prepared": "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/prepared.json",
+    "phoneSession": "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/prepared.json",
+    "webTreeSha256": "3b945af75646b4974906f7d6aa7f58a36291c5c951f564b640821026deb4dca3",
+    "webFiles": {
+      "assets/lab-CakMzRMZ.js": "6176eea9d4af71e1f1fbfbbe382284ad1a8117f5c8f752b0ed78784d5f8e698c",
+      "scripts/android-iptv-lab/lab.html": "81843373ffc0ccb8610cec9267666fd93a39b6b617175485b13bb16a6563f2ed"
+    },
+    "serverReady": {
+      "host": "127.0.0.1",
+      "port": 4176,
+      "session": "phone",
+      "productionConnections": false,
+      "initialState": {
+        "orders": {},
+        "events": [],
+        "writes": 0,
+        "lostResponses": 0
+      },
+      "running": true
+    }
+  },
+  "desktopProbe": {
+    "at": "2026-11-11T16:09:08.787Z",
+    "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+    "desktopOnly": true,
+    "physicalAndroidExecuted": false,
+    "passed": 12,
+    "checks": [
+      "sonda cargada en origen seguro y selector real",
+      "guardado confirmado de modalidad, nota y Blob",
+      "recarga conserva bytes de foto, modalidad y nota",
+      "fallo de red conserva cierre y fotos",
+      "respuesta perdida conserva pendiente aunque servidor confirmó",
+      "recuperación tras recarga reconoce recibo sin duplicar cierre",
+      "incompatible retenido no bloquea orden independiente",
+      "corrección explícita de modalidad recupera pendiente",
+      "WebView recibirá mensaje Rayco del transporte sintético",
+      "envío Rayco aprobado por fixture transporta modalidad/recibo",
+      "servidor rechaza identificadores ajenos al laboratorio",
+      "sin excepciones JavaScript"
+    ],
+    "productionWrites": 0,
+    "externalNetworkBlocked": true,
+    "serverStateFile": "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/synthetic-server.json"
+  },
+  "deviceDetection": {
+    "at": "2026-11-11T18:01:59.060Z",
+    "adbVersion": [
+      "Android Debug Bridge version 1.0.41",
+      "Version 37.0.1-15733141"
+    ],
+    "devices": [],
+    "physicalAndroidExecuted": false,
+    "productionAppOpened": false,
+    "productionStorageRead": false,
+    "productionWrites": 0,
+    "next": "Conectar por USB, desbloquear y autorizar depuración USB. No abrir ni borrar Campo."
+  },
+  "physicalCertification": {
+    "deviceConnected": false,
+    "manufacturer": null,
+    "model": null,
+    "androidVersion": null,
+    "webviewProvider": null,
+    "webviewVersion": null,
+    "userAgent": null,
+    "testsExecuted": [],
+    "certified": false,
+    "fullCampoToPostgreSQLExecuted": false
+  },
+  "production": {
+    "queriesExecuted": false,
+    "writes": 0,
+    "migrationsApplied": false,
+    "push": false,
+    "deployed": false,
+    "appOpened": false,
+    "appStorageRead": false,
+    "appStorageCleared": false,
+    "appUninstalled": false
+  },
+  "nextUserAction": "Connect an unlocked Android phone by USB, enable USB debugging and accept the computer fingerprint; keep production Campo closed.",
+  "baseDocumentationCommit": "8b6f1af"
+}
