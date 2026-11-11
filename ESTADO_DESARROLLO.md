@@ -13,15 +13,16 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
-**Altas Dúo / modalidad IPTV — IMPLEMENTADO LOCAL (11/11/2026):** modalidad
-Smart TV/dispositivo propio/TV Box Rayco solo para nuevas Altas. Preflight
-y trigger comparten regla; ONT y controles existentes conservados, Rayco
-exige serie/MAC y constancia de custodia. SQL `20261111140000` y rollback
-preparados, sin aplicar. 20 SQL + 63 módulo + 14 navegador = 97 PASS con
-datos sintéticos; tipos y build local PASS. Rosita e históricos intactos.
-Detalle y pasos de publicación: `docs/ALTAS-DUO-IPTV-IMPLEMENTACION-20261111.md`.
-Commit de esta actualización solo local; sin push/deploy. Manifiestos de
-release OLT anteriores intactos: preparar alcance IPTV antes de publicar.
+**Altas Dúo / IPTV — REVISIÓN FINAL: NO APTO (11/11/2026), fuente `8086fba`:**
+regla nueva y custodia validadas, pero sesiones antiguas fallan al cerrar nuevas
+Altas; modalidad sola se elimina del borrador; stores IndexedDB previos pueden
+fallar con NotFoundError y una cola incompatible bloquea trabajos siguientes.
+21 SQL + 25 diagnóstico/módulo + 22 navegador = 68 PASS de caracterización,
+no aprobación. Rollback conserva datos pero puede bloquear cierres por app.
+Detalle y secuencia condicionada: `docs/ALTAS-IPTV-REVISION-PUBLICACION-20261111.md`.
+Solo pruebas/documentación; sin cambiar implementación, SQL o Flutter, sin
+producción/push/deploy. Rosita no utilizada. Corregir bloqueos con nueva
+autorización y certificar WebView antes de publicar; manifiesto OLT ajeno intacto.
 
 **Cancelación no instalada — diagnóstico/diseño, detenido antes de migración
 (11/11/2026):** Carlos `CTR-2026-00400` tiene ONT y PPPoE, sin Alta histórica;

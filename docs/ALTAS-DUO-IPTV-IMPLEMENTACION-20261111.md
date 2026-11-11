@@ -3,6 +3,13 @@
 Base `6170a83`. **Implementado localmente; no migrado, publicado ni
 desplegado.** Solo consultas de metadatos READ ONLY en producción.
 
+**Revisión final posterior de `8086fba`: NO APTO para publicar sin interrumpir
+Campo.** Se reprodujeron incompatibilidad de sesiones antiguas, pérdida de
+modalidad en borrador vacío, defecto previo de stores IndexedDB y bloqueo
+de cola. No ejecutar el procedimiento siguiente sin resolver las condiciones
+de `ALTAS-IPTV-REVISION-PUBLICACION-20261111.md`. Los PASS originales que se
+conservan abajo no cubrían estos escenarios ni certificaban Android real.
+
 ## Comportamiento y causa
 
 El trigger vigente, leído el 11/11/2026 a las 12:45:30 UTC, exige TV Box
