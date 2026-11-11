@@ -1,5 +1,9 @@
 # Altas Dúo: implementación local y publicación pendiente
 
+> Actualización posterior de persistencia, cola, sesiones antiguas y paquete:
+> [resolución de bloqueos](ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md).
+> Candidato `bcb3ec4`; sin publicar. Falta certificar Android/WebView real.
+
 Base `6170a83`. **Implementado localmente; no migrado, publicado ni
 desplegado.** Solo consultas de metadatos READ ONLY en producción.
 

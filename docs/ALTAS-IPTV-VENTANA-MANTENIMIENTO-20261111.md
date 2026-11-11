@@ -1,5 +1,11 @@
 # Modalidad IPTV con Campo detenido — preparación de ventana
 
+> Actualización posterior: persistencia, cola y compatibilidad mínima corregidas;
+> paquete local preparado. Sigue NO APTO hasta Android/WebView real. Procedimiento
+> vigente: [resolución de bloqueos](ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md).
+> La posibilidad de omitir compatibilidad descrita abajo fue reemplazada por
+> rechazo temprano recuperable del cliente antiguo. Se conserva el antecedente.
+
 **Estado: NO APTO todavía para ejecutar la publicación.** Se preparó la
 secuencia; no se aplicó SQL, hizo push, desplegó ni modificó datos reales.
 Fuentes: implementación `8086fba` y revisión `127fa37`. La ventana aceptada
