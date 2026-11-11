@@ -13,16 +13,17 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
-**Altas Dúo / IPTV — REVISIÓN FINAL: NO APTO (11/11/2026), fuente `8086fba`:**
-regla nueva y custodia validadas, pero sesiones antiguas fallan al cerrar nuevas
-Altas; modalidad sola se elimina del borrador; stores IndexedDB previos pueden
-fallar con NotFoundError y una cola incompatible bloquea trabajos siguientes.
-21 SQL + 25 diagnóstico/módulo + 22 navegador = 68 PASS de caracterización,
-no aprobación. Rollback conserva datos pero puede bloquear cierres por app.
-Detalle y secuencia condicionada: `docs/ALTAS-IPTV-REVISION-PUBLICACION-20261111.md`.
-Solo pruebas/documentación; sin cambiar implementación, SQL o Flutter, sin
-producción/push/deploy. Rosita no utilizada. Corregir bloqueos con nueva
-autorización y certificar WebView antes de publicar; manifiesto OLT ajeno intacto.
+**Altas Dúo / IPTV — VENTANA PREPARADA, NO APTO AÚN (11/11/2026):** Campo
+detenido por instrucción del propietario, quien confirma celulares verificados
+sin pendientes. Lectura 09:32:57 Lima: 0 in_progress, recibos incompletos,
+transacciones/locks de Campo y rechazos; 9 órdenes abiertas, 4 sesiones huérfanas y 1 aprobación
+de equipo en ticket resuelto, preservadas. Hash SQL esperado, sin migrar.
+Recarga completa coordinada puede evitar compatibilidad adicional con JS
+antiguo; no resuelve borradores/IndexedDB. Detalle, piloto y recuperación:
+`docs/ALTAS-IPTV-VENTANA-MANTENIMIENTO-20261111.md`. 5 checks nuevos PASS y
+68 previos verificados sin cambios de implementación/Flutter/SQL. Sin push,
+deploy, escrituras productivas ni piloto real. Esperar autorización;
+persistencia, certificación WebView y alcance de release siguen pendientes.
 **Detección automática de ONT autorizadas externamente — DESPLEGADA y
 verificada en vivo (03/11/2026, autorizado expresamente):** supera el
 punto "Pendiente real" de Gustavo Reyes Sandoval en el párrafo siguiente —
