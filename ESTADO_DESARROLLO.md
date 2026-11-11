@@ -13,7 +13,7 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
-**Altas Dúo / IPTV — BLOQUEOS CORREGIDOS, NO APTO HASTA ANDROID REAL
+**Altas Dúo / IPTV — APTO PARA SOLICITAR PUBLICACIÓN CONTROLADA
 (11/11/2026):** commits locales `36cc6b9` y `bcb3ec4`; aplicación/SQL del
 paquete `bcb3ec4c432c6baa39f175cca115795d5ae1cd45`. Upgrade IndexedDB aditivo,
 borradores con modalidad, cola recuperable sin bloquear otras órdenes,
@@ -21,12 +21,16 @@ Web Locks, recibo ID/hash para respuesta perdida y rechazo temprano del JS
 antiguo; validaciones e históricos preservados. 118 comprobaciones locales
 PASS, tipos y 2 builds aislados idénticos (128 artefactos); scope/snapshot
 propios en `deploy/iptv-20261111/`, entradas OLT intactas. Informe y secuencia:
-`docs/ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md`. Certificación Android preparada:
-APK separada `com.smartrayco.iptvlab` compilada/verificada y 12 checks de SONDA
-Chrome PASS; ADB sin celular, cero pruebas físicas. Procedimiento/evidencia:
-`docs/ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md`. Sonda con transporte
-sintético, no certifica todo Campo→SQL. Falta conectar/autorizar USB y probar
-Android/WebView real; después controles/respaldos del publicador en VM autorizado.
+`docs/ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md`. Certificación Android ejecutada:
+26/26 checks físicos PASS en OPPO CPH2579, Android 15, WebView 156.0.8078.47;
+APK independiente `com.smartrayco.iptvlab`, foto real de 1.276.704 bytes,
+force-stop/recuperación, cola, reconexión USB, concurrencia y upgrade IDB.
+12/12 regresiones de SONDA Chrome PASS. Resultado/evidencias:
+`docs/ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md`. Aprobación modular:
+store/selector/IDB/cola reales, transporte sintético; no E2E Campo→PostgreSQL.
+SQL/inventario se apoyan en pruebas previas. APK/metadatos de Campo habitual
+iguales; datos privados sin leer ni limpiar. Controles/respaldos remotos y
+piloto real siguen sujetos a autorización; no se certifican otros dispositivos.
 Campo sigue detenido; lectura 09:32:57 Lima es muestra anterior: 0 ejecución,
 9 abiertas, 4 sesiones huérfanas y 1 aprobación histórica conservadas.
 No se presume almacenamiento móvil vacío. Sin migración aplicada, push,

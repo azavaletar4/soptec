@@ -1,10 +1,15 @@
-# Certificación Android/WebView IPTV — preparada, pendiente de celular
+# Certificación Android/WebView IPTV — resultado físico
 
-**NO APTO para publicación. Cero pruebas físicas ejecutadas.** ADB no detecta
-un celular conectado/autorizado. Modelo, versión Android, proveedor/versión
-WebView y UA del dispositivo siguen sin evidencia; no se completan por inferencia.
+**APTO para solicitar autorización de publicación controlada del candidato
+`bcb3ec4`.** Se completaron **26/26 comprobaciones físicas** en un OPPO CPH2579,
+Android 15 / API 35, `com.google.android.webview` **156.0.8078.47**. El APK
+independiente se instaló y ejecutó sin abrir ni modificar Campo habitual.
+Esta aprobación combina la certificación de plataforma con las pruebas
+frontend/SQL previas; **no declara un E2E de toda la vista Campo contra
+PostgreSQL**, ni certifica otros celulares/versiones. Publicar sigue requiriendo
+autorización explícita y el preflight/respaldos remotos ya documentados.
 
-Base documental `8b6f1af`; candidato de aplicación conservado:
+Preparación `1f9474e`, base documental `8b6f1af`; candidato conservado:
 `bcb3ec4c432c6baa39f175cca115795d5ae1cd45`. No se repitieron auditorías ni
 consultas productivas. Evidencia actual:
 `ALTAS-IPTV-ANDROID-EVIDENCIA-20261111.json`.
@@ -22,7 +27,7 @@ consultas productivas. Evidencia actual:
   de última URL, UA y plugins reutilizan la implementación original.
 - Nueva APK **`com.smartrayco.iptvlab`**, etiqueta **IPTV LAB - NO PRODUCCION**.
   La aplicación habitual `com.smartrayco.app` conserva su almacenamiento por
-  separado. La APK de laboratorio aún no se instaló en ningún celular.
+  separado. La instalación LAB fue nueva, sin `-r`, sin desinstalar ni borrar.
 - Compilación Gradle local **BUILD SUCCESSFUL**; el primer intento offline
   encontró dependencias Kotlin ausentes. Se resolvieron las versiones fijadas
   desde sus repositorios de compilación, sin actualizar dependencias.
@@ -43,8 +48,8 @@ consultas productivas. Evidencia actual:
   continuación de otra orden, corrección explícita de modalidad, mensajes y
   envío Rayco sintéticos, rechazo de IDs reales y ausencia de excepciones JS.
 
-Estas doce pruebas certifican la preparación de la sonda; **no se suman a
-pruebas físicas Android ni sustituyen las 118 previas**. El receptor HTTP
+Las doce pruebas se repitieron después de ajustar la sonda y pasaron **12/12**;
+**se cuentan aparte de las 26 físicas y de las 118 previas**. El receptor HTTP
 persiste cierres sintéticos para simular respuesta perdida después del commit.
 La sesión destinada al celular tiene archivos de datos separados de la sesión
 Chrome; no se borraron los datos de ninguna de las dos.
@@ -59,12 +64,29 @@ directorio. SHA-256:
 `e057299c84f8eaff756f6a17254523fe13806ae327b5579de9100b0fce5aa28f`.
 
 - `prepared.json`: ruta/hash APK y metadatos verificados.
-- `desktop-check.json`: doce resultados, marcados `desktopOnly: true`.
-- `device-readonly.json`: muestra ADB sin dispositivos, sin abrir aplicaciones.
+- `desktop-check.json`: regresión actual de doce resultados, `desktopOnly: true`.
+- `device-readonly.json`: Android/WebView autorizados, ambas APK presentes.
 - `apk-badging.txt` y `apk-network-security.txt`: inspección del APK compilado.
 - `synthetic-server.json` / `events.jsonl`: datos y eventos solo de escritorio.
 - `phone/prepared.json`: configuración para la sesión física; sus estados y
-  eventos se guardarán en `phone/`, sin sobrescribir los de escritorio.
+  eventos se guardan en `phone/`, separados de escritorio.
+- `phone/physical-check.json`: 26 comprobaciones, evidencias y notas de herramienta.
+- `phone/production-before.json`: metadatos/hash de la APK habitual; comparados
+  sin cambios después de las pruebas. No se leyó su almacenamiento privado.
+- `phone/camera-recovery.png`, `flows-completed.png`, `legacy-upgrade.png`:
+  capturas del WebView LAB. Permanecen en runtime privado, fuera de Git.
+
+La foto real tiene **1.276.704 bytes**. Su hash de evidencia, que incluye sus
+bytes y metadatos, fue idéntico antes/después de detener el proceso:
+véase JSON, `physicalCertification.realPhoto`. Al finalizar hay **14 cierres
+sintéticos y 14 órdenes completadas únicas** (incluye casos de ajuste de la
+sonda), una respuesta perdida y cero pendientes en la cola principal tras
+confirmación. La BD separada de legado conserva **un pendiente sintético**,
+sus Blobs y un store adicional: no se eliminó para fabricar un cero.
+
+UA real: `Mozilla/5.0 (Linux; Android 15; CPH2579 Build/AP3A.240617.008; wv)`
+`AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/156.0.8078.47`
+`Mobile Safari/537.36 SmartRaycoApp/1.0`.
 
 Servidor iniciado en esta preparación: `127.0.0.1:4176`. Si ya no está activo
 al retomar, iniciar **solo si el puerto no pertenece a otro proceso**:
@@ -82,6 +104,7 @@ C:/flutter/bin/flutter.bat pub get --offline
 # Ejecutar pub get dentro de <runtime>/mobile_app, no en mobile_app productivo.
 # Dentro de <runtime>/mobile_app/android, con JAVA_HOME del JBR instalado:
 ./gradlew.bat --offline --no-daemon --max-workers=2 assembleDebug -Ptarget-platform=android-arm64
+node scripts/android-iptv-lab/build-web.mjs <runtime>/prepared.json
 node scripts/android-iptv-lab/audit-apk.mjs <runtime>/prepared.json
 node scripts/android-iptv-lab/desktop-check.mjs <runtime>/prepared.json
 node scripts/android-iptv-lab/device-readonly.mjs <runtime>/device-readonly.json
@@ -90,7 +113,13 @@ node scripts/android-iptv-lab/device-readonly.mjs <runtime>/device-readonly.json
 Si falta caché, no cambiar versiones para compilar. La compilación de esta
 entrega tuvo que permitir descarga de artefactos fijados; quedó documentado.
 
-## Intervención necesaria ahora
+## Intervención física realizada
+
+El teléfono primero apareció como `unauthorized`; tras refrescar la conexión
+quedó autorizado. El usuario proporcionó la foto mediante el selector nativo.
+Los reinicios, lectura de evidencias, cola y reintentos se automatizaron.
+**No se necesita otra acción física para cerrar esta fase.** Los pasos
+siguientes quedan como procedimiento reproducible, no como pedido pendiente.
 
 1. Conectar un celular Android de prueba por **USB de datos** y desbloquearlo.
 2. En Opciones de desarrollador activar **Depuración USB**. Si no aparecen esas
@@ -139,20 +168,41 @@ No pedir al usuario que realice manualmente lo que pueda ejecutar ADB/CDP.
    tamaño/hash de fotos y recibos del receptor sintético. Cada ejecución debe
    llevar versión Android/WebView, commit fuente y hash APK.
 
-### Matriz pendiente de ejecución física
+### Matriz de resultados físicos
 
 | Caso | Acción y evidencia necesaria | Estado actual |
 |---|---|---|
-| Modalidad sola | Guardar una selección sin otros campos; esperar confirmación IDB; cerrar/reabrir APK y verificar selección idéntica. | PENDIENTE |
-| Cámara/galería | Elegir Tomar foto con el selector nativo, aceptar permiso si se pide y fotografiar papel; guardar foto y nota. | PENDIENTE |
-| Proceso Android detenido | Con guardado confirmado, llevar LAB a segundo plano, ejecutar `am force-stop com.smartrayco.iptvlab`, abrirla de nuevo y comparar hash/tamaño/nota/modalidad. Solo LAB. | PENDIENTE |
-| Cola tras reinicio | Encolar sin red simulada, guardar evidencia, detener/reabrir LAB; verificar mismos IDs/Blobs, sin borrar ni duplicar filas. | PENDIENTE |
-| Reconexión/reintento | Restablecer transporte, sincronizar y releer recibo. Probar también cambio real de conectividad Android, diferenciándolo del fallo simulado y de CDP offline; USB reverse puede mantener accesible loopback aunque se apaguen radios. | PENDIENTE |
-| Respuesta perdida | Confirmación sintética seguida de corte de respuesta, reinicio y reintento; mismo recibo, contador de escrituras no aumenta por segunda vez. | PENDIENTE |
-| Incompatible seguido de otro | Primera orden sin modalidad conservada; segunda independiente se confirma; corrección humana de primera conserva notas/fotos. | PENDIENTE |
-| Smart TV / dispositivo propio | Selecciones reales se guardan/envían sin introducir un TV Box. Evidencia de UI/cola/transporte, separada de pruebas SQL. | PENDIENTE |
-| Rayco | Propagar rechazo de preflight por serie/MAC/custodia y aceptar respuesta válida con modalidad/recibo, sin crear movimientos ficticios. El receptor es un fixture, no inventario real. | PENDIENTE |
-| Upgrade con conexión antigua | Reproducir store legado y conexión retenida en **otro perfil LAB nuevo**, preservando registros/Blobs; comprobar bloqueo y recuperación al cerrar esa vista. No destruir la BD de esta sesión ni la habitual para fabricar la condición. | PENDIENTE |
+| Modalidad sola | Selección sin nota/foto, guardado confirmado y force-stop/reapertura; selección idéntica. | PASS |
+| Selector nativo/foto | Foto real recibida por el puente nativo y guardada en IndexedDB. No se distingue aquí una certificación separada de cámara y galería. | PASS |
+| Proceso Android detenido | Force-stop solo LAB; foto de 1.276.704 bytes, hash, nota y modalidad idénticos al reabrir. | PASS |
+| Cola tras reinicio | Mismos IDs, modalidad y foto después de force-stop, sin pérdida ni duplicación. | PASS |
+| Reconexión real | Retirada/restauración de `adb reverse`, con conexiones HTTP cerradas: error real de fetch, cola retenida y una confirmación al reconectar. No se tocaron radios. | PASS |
+| Offline WebView | CDP fuerza `navigator.onLine=false`, cola conservada; al volver online confirma una vez. Es emulación CDP, no cambio de Wi‑Fi/datos. | PASS |
+| Respuesta perdida | Corte de respuesta después de confirmar, reinicio y reintento; recibo reconocido y ninguna segunda escritura. | PASS |
+| Incompatible seguido de otro | Se conserva el primero sin modalidad; el segundo independiente confirma; corrección explícita recupera el primero. | PASS |
+| Smart TV / dispositivo propio | Modalidades transmitidas sin introducir TV Box. Alcance físico: selector/cola/store/transporte; reglas SQL en pruebas previas. | PASS |
+| Rayco | Mensaje de rechazo serie/MAC/custodia visible y pendiente retenido; respuesta válida sintética transmite modalidad/recibo. No certifica inventario real desde el celular. | PASS |
+| Concurrencia | Dos sincronizaciones simultáneas y reintento vacío: un envío confirmado y sin incremento duplicado. | PASS |
+| Upgrade con conexión antigua | 8 comprobaciones en **BD LAB de nombre separado**, redirigiendo solo el nombre pedido por las librerías reales. Bloqueo recuperable; versión 1→2 aditiva, Blobs/store extra preservados, lectura antigua compatible. BD principal sin cambios. No se borró ninguna BD ni se creó otro perfil productivo. | PASS |
+
+### Ajustes de la herramienta durante la ejecución
+
+- El borrador ya persistía en IDB, pero el marcador auxiliar LAB en
+  `localStorage` podía perderse con un force-stop inmediato. Se guardó también
+  en IDB y se repitió la prueba; los dos borradores iniciales quedaron intactos.
+  **No es un cambio de `src/lib/formDrafts.ts` ni de la aplicación candidata.**
+- Se corrigieron esperas de arranque Android y de finalización del guardado de
+  nuevas órdenes sintéticas en el driver. Se restablecen flags del fixture
+  al repetir un caso; las filas anteriores se conservan.
+- Quitar el túnel USB no cerraba conexiones HTTP keep-alive existentes. La
+  primera tentativa llegó a confirmar exactamente una vez; no fue pérdida de
+  cola. Se ajustó solo el servidor LAB a `Connection: close` y se probó el
+  corte efectivo. El archivo de datos del receptor se conservó al reiniciarlo.
+- El probe legado se compiló dentro de función async por el target Vite.
+  El preparador conserva assets anteriores y sustituye solo tras build válido;
+  nunca borra bases de datos del teléfono. Una lectura CDP final auxiliar se
+  interrumpió al no responder; no invalida las 26 aserciones terminadas ni
+  las comparaciones previas de metadatos/APK.
 
 ## Límites y criterio de salida
 
@@ -172,14 +222,20 @@ por producción a partir de la sonda. La información del servidor no prueba
 que esos celulares carezcan de pendientes. Si aparecen trabajos locales,
 conservarlos y reconciliarlos antes de actualizar o reenviar.
 
-**Se mantiene NO APTO:** faltan dispositivo, pruebas físicas y cierre de sus
-evidencias. Para solicitar publicación deben quedar claros el alcance físico
-realmente aprobado y cualquier verificación integrada pendiente; después
-siguen las guardas y respaldos del procedimiento de publicación autorizado.
+**Resultado de esta fase: APTO para solicitar publicación controlada**, con
+el alcance modular y dispositivo descritos. Supera el bloqueo de certificación
+de plataforma pendiente; no convierte el transporte ficticio en un E2E ni
+autoriza un despliegue. Quedan sin ejecutar: toda la vista Campo→PostgreSQL
+en un entorno integrado, radios Wi‑Fi/datos, otros modelos/versiones y piloto
+real autorizado. Las reglas contractuales/de inventario dependen de las
+pruebas SQL previas, no de simular custodia en esta sonda. Mantener las guardas,
+respaldos y primer uso controlado del procedimiento publicado.
 No se ejecutaron migraciones, consultas/escrituras productivas, push ni deploy;
 Rosita, las 9 órdenes y 4 sesiones históricas permanecen fuera de esta prueba.
 
 Archivos nuevos de preparación: `scripts/android-iptv-lab/prepare.mjs`,
 `server.mjs`, `lab.html`, `lab.js`, `desktop-check.mjs`, `device-readonly.mjs`,
-`audit-apk.mjs`, este informe y la evidencia JSON. Código/producto y paquete
+`audit-apk.mjs`; se añadieron `physical-device.mjs`, `physical-check.mjs`,
+`build-web.mjs`, `legacy.html` y `legacy.js`. Este informe/evidencia actualizan
+el resultado. Código/producto y paquete
 IPTV anterior permanecen iguales. Cambios ajenos conservados sin incluirlos.

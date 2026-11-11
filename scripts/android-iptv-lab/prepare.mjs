@@ -33,7 +33,7 @@ await build({configFile:false,root,plugins:[vue()],resolve:{alias:{'@':path.join
  'import.meta.env.VITE_SUPABASE_URL':JSON.stringify('https://iptv-lab.invalid'),
  'import.meta.env.VITE_SUPABASE_ANON_KEY':JSON.stringify('synthetic-only'),
  '__LAB_SOURCE_COMMIT__':JSON.stringify(sourceCommit),
-},logLevel:'error',build:{outDir:path.join(runtime,'web'),rollupOptions:{input:path.join(root,'scripts/android-iptv-lab/lab.html')}}});
+},logLevel:'error',build:{outDir:path.join(runtime,'web'),rollupOptions:{input:[path.join(root,'scripts/android-iptv-lab/lab.html'),path.join(root,'scripts/android-iptv-lab/legacy.html')]}}});
 const sha=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const result={sourceCommit,runtime,mobile,web:path.join(runtime,'web'),packageId:'com.smartrayco.iptvlab',productionPackageId:'com.smartrayco.app',url:'http://127.0.0.1:4176/scripts/android-iptv-lab/lab.html',originalFlutterSha256:sha('mobile_app/lib/main.dart'),labFlutterSha256:sha(mainFile),nativeChanges:['URL/host loopback','ID y etiqueta separados','navegación externa bloqueada','depuración WebView','HTTP permitido solo en 127.0.0.1'],apkBuilt:false,physicalTestsExecuted:false,productionWrites:0};
 fs.writeFileSync(path.join(runtime,'prepared.json'),JSON.stringify(result,null,2)+'\n');

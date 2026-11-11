@@ -1,6 +1,6 @@
 {
-  "at": "2026-11-11T18:02:29.537Z",
-  "status": "NO_APTO_ANDROID_NOT_EXECUTED",
+  "at": "2026-11-11T19:01:31.351Z",
+  "status": "APTO_PARA_SOLICITAR_PUBLICACION_CONTROLADA",
   "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
   "lab": {
     "packageId": "com.smartrayco.iptvlab",
@@ -34,10 +34,13 @@
     "gradleFinalBuild": "resolved fixed dependencies and built locally; no project upgrade",
     "prepared": "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/prepared.json",
     "phoneSession": "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/prepared.json",
-    "webTreeSha256": "3b945af75646b4974906f7d6aa7f58a36291c5c951f564b640821026deb4dca3",
+    "webTreeSha256": "b4a625730b62498a5c340eab3b3372ef257c789799ad3c4edb80c9e85330c1cb",
     "webFiles": {
-      "assets/lab-CakMzRMZ.js": "6176eea9d4af71e1f1fbfbbe382284ad1a8117f5c8f752b0ed78784d5f8e698c",
-      "scripts/android-iptv-lab/lab.html": "81843373ffc0ccb8610cec9267666fd93a39b6b617175485b13bb16a6563f2ed"
+      "assets/lab-DyEjZnup.js": "7a5b1bcbd21f328c67a2641cac97a3e00df44b3c4890a26864aaa4b0739f0522",
+      "assets/legacy-BOwju1Ld.js": "08bc842c334af9f432b2b42386d4b912626d1fdab304134f91c08471795a8b23",
+      "assets/offlineQueue-BESTQ9HG.js": "f2c0489413835f5a99ff823f58070c59ccb38791a04838d6e11cf0dbf2f44d03",
+      "scripts/android-iptv-lab/lab.html": "4f05065e86a489b3a4bc3400d04fbf625acacf9dbdeb5f2a04f003d96b88717d",
+      "scripts/android-iptv-lab/legacy.html": "aaebffef87447fde8ab187cd0f72c16b11114391bc379ebea04447ebd53783ca"
     },
     "serverReady": {
       "host": "127.0.0.1",
@@ -51,10 +54,12 @@
         "lostResponses": 0
       },
       "running": true
-    }
+    },
+    "installed": true,
+    "serverConnectionClose": true
   },
   "desktopProbe": {
-    "at": "2026-11-11T16:09:08.787Z",
+    "at": "2026-11-11T18:55:40.590Z",
     "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
     "desktopOnly": true,
     "physicalAndroidExecuted": false,
@@ -75,32 +80,456 @@
     ],
     "productionWrites": 0,
     "externalNetworkBlocked": true,
-    "serverStateFile": "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/synthetic-server.json"
+    "serverStateFile": "scripts\\inventory-auth-lab\\runtime\\android-iptv-1794411550984\\synthetic-server.json"
   },
   "deviceDetection": {
-    "at": "2026-11-11T18:01:59.060Z",
+    "at": "2026-11-11T18:57:16.948Z",
     "adbVersion": [
       "Android Debug Bridge version 1.0.41",
       "Version 37.0.1-15733141"
     ],
-    "devices": [],
+    "devices": [
+      {
+        "serialSha256": "1e80a9912a4b89e98253e1f98397bd08c8d8aeeb648f59ed8d13eca8c6ae3bec",
+        "status": "device",
+        "detail": "product:CPH2579 model:CPH2579 device:OP5759L1 transport_id:3"
+      }
+    ],
     "physicalAndroidExecuted": false,
     "productionAppOpened": false,
     "productionStorageRead": false,
     "productionWrites": 0,
-    "next": "Conectar por USB, desbloquear y autorizar depuración USB. No abrir ni borrar Campo."
+    "android": {
+      "manufacturer": "OPPO",
+      "model": "CPH2579",
+      "release": "15",
+      "sdk": "35",
+      "abis": "arm64-v8a,armeabi-v7a,armeabi"
+    },
+    "webviewUpdate": "Current WebView Update Service state\r\n  Current WebView package (name, version): (com.google.android.webview, 156.0.8078.47)\r\n  Minimum targetSdkVersion: 33\r\n  Minimum WebView version code: 715111531\r\n  Number of relros started: 2\r\n  Number of relros finished: 2\r\n  WebView package dirty: false\r\n  Any WebView package installed: true\r\n  Preferred WebView package (name, version): (com.google.android.webview, 156.0.8078.47)\r\n  WebView packages:\r\n    Valid package com.google.android.webview (versionName: 156.0.8078.47, versionCode: 807804703, targetSdkVersion: 36) is  installed/enabled for all users\r\n    com.google.android.webview.beta is NOT installed.\r\n    com.google.android.webview.dev is NOT installed.\r\n    com.google.android.webview.canary is NOT installed.\r\n    com.google.android.webview.debug is NOT installed.\r\n    com.android.webview is NOT installed.",
+    "raycoPackages": [
+      "package:com.smartrayco.iptvlab",
+      "package:com.smartrayco.app"
+    ],
+    "next": "Metadata snapshot; physical results below."
   },
   "physicalCertification": {
-    "deviceConnected": false,
-    "manufacturer": null,
-    "model": null,
-    "androidVersion": null,
-    "webviewProvider": null,
-    "webviewVersion": null,
-    "userAgent": null,
-    "testsExecuted": [],
-    "certified": false,
-    "fullCampoToPostgreSQLExecuted": false
+    "deviceConnected": true,
+    "manufacturer": "OPPO",
+    "model": "CPH2579",
+    "androidVersion": "15",
+    "androidSdk": "35",
+    "webviewProvider": "com.google.android.webview",
+    "webviewVersion": "156.0.8078.47",
+    "userAgent": "Mozilla/5.0 (Linux; Android 15; CPH2579 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/156.0.8078.47 Mobile Safari/537.36 SmartRaycoApp/1.0",
+    "certified": true,
+    "passed": 26,
+    "failed": 0,
+    "testsExecuted": [
+      {
+        "name": "wrapper físico, origen seguro, Web Locks/IDB/Web Crypto y perfil LAB nuevo",
+        "passed": true,
+        "at": "2026-11-11T18:21:18.859Z",
+        "evidence": {
+          "ua": "Mozilla/5.0 (Linux; Android 15; CPH2579 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/156.0.8078.47 Mobile Safari/537.36 SmartRaycoApp/1.0",
+          "url": "http://127.0.0.1:4176/scripts/android-iptv-lab/lab.html",
+          "secure": true,
+          "indexedDB": true,
+          "locks": true,
+          "crypto": true,
+          "blob": "function",
+          "file": "function"
+        }
+      },
+      {
+        "name": "modalidad sola conservada después de force-stop y reapertura Android",
+        "passed": true,
+        "at": "2026-11-11T18:21:24.608Z",
+        "evidence": {
+          "before": {
+            "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+            "at": "2026-11-11T18:21:17.699Z",
+            "ua": "Mozilla/5.0 (Linux; Android 15; CPH2579 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/156.0.8078.47 Mobile Safari/537.36 SmartRaycoApp/1.0",
+            "secureContext": true,
+            "indexedDB": true,
+            "webLocks": true,
+            "webCrypto": true,
+            "mode": "smart_tv_app",
+            "note": "",
+            "photoBytes": 0,
+            "photoHash": null,
+            "queue": []
+          },
+          "after": {
+            "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+            "at": "2026-11-11T18:21:23.319Z",
+            "ua": "Mozilla/5.0 (Linux; Android 15; CPH2579 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/156.0.8078.47 Mobile Safari/537.36 SmartRaycoApp/1.0",
+            "secureContext": true,
+            "indexedDB": true,
+            "webLocks": true,
+            "webCrypto": true,
+            "mode": "smart_tv_app",
+            "note": "",
+            "photoBytes": 0,
+            "photoHash": null,
+            "queue": []
+          }
+        }
+      },
+      {
+        "name": "selector de archivos nativo invocado desde WebView",
+        "passed": true,
+        "at": "2026-11-11T18:21:24.635Z",
+        "evidence": {
+          "cameraPhotoRequired": true
+        }
+      },
+      {
+        "name": "fotografía real entregada por selector nativo y guardada en IDB",
+        "passed": true,
+        "at": "2026-11-11T18:25:06.264Z",
+        "evidence": {
+          "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+          "at": "2026-11-11T18:25:04.963Z",
+          "ua": "Mozilla/5.0 (Linux; Android 15; CPH2579 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/156.0.8078.47 Mobile Safari/537.36 SmartRaycoApp/1.0",
+          "secureContext": true,
+          "indexedDB": true,
+          "webLocks": true,
+          "webCrypto": true,
+          "mode": "smart_tv_app",
+          "note": "NOTA-ANDROID-CAMARA",
+          "photoBytes": 1276704,
+          "photoHash": "9aaf8c666ee4078fbe42b7017c324fb081737d935e4e85773db648015fcb2d4f",
+          "queue": []
+        }
+      },
+      {
+        "name": "foto, nota y modalidad recuperadas tras force-stop Android",
+        "passed": true,
+        "at": "2026-11-11T18:25:12.581Z",
+        "evidence": {
+          "before": {
+            "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+            "at": "2026-11-11T18:25:04.963Z",
+            "ua": "Mozilla/5.0 (Linux; Android 15; CPH2579 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/156.0.8078.47 Mobile Safari/537.36 SmartRaycoApp/1.0",
+            "secureContext": true,
+            "indexedDB": true,
+            "webLocks": true,
+            "webCrypto": true,
+            "mode": "smart_tv_app",
+            "note": "NOTA-ANDROID-CAMARA",
+            "photoBytes": 1276704,
+            "photoHash": "9aaf8c666ee4078fbe42b7017c324fb081737d935e4e85773db648015fcb2d4f",
+            "queue": []
+          },
+          "after": {
+            "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+            "at": "2026-11-11T18:25:11.217Z",
+            "ua": "Mozilla/5.0 (Linux; Android 15; CPH2579 Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/156.0.8078.47 Mobile Safari/537.36 SmartRaycoApp/1.0",
+            "secureContext": true,
+            "indexedDB": true,
+            "webLocks": true,
+            "webCrypto": true,
+            "mode": "smart_tv_app",
+            "note": "NOTA-ANDROID-CAMARA",
+            "photoBytes": 1276704,
+            "photoHash": "9aaf8c666ee4078fbe42b7017c324fb081737d935e4e85773db648015fcb2d4f",
+            "queue": []
+          }
+        }
+      },
+      {
+        "name": "cola offline conserva IDs y foto real tras cierre/reapertura Android",
+        "passed": true,
+        "at": "2026-11-11T18:25:17.979Z",
+        "evidence": [
+          {
+            "id": "09bcb9bf-f5cf-4fd6-a565-aa150c196df9",
+            "operationId": "f08c7737-5f6f-44e5-9e2c-2818ede9552d",
+            "mode": "smart_tv_app",
+            "photoBytes": 1276704
+          }
+        ]
+      },
+      {
+        "name": "respuesta perdida después de confirmación sintética conserva el pendiente",
+        "passed": true,
+        "at": "2026-11-11T18:25:18.317Z",
+        "evidence": {
+          "writes": 1,
+          "remaining": 1
+        }
+      },
+      {
+        "name": "recibo reconocido tras reinicio: reintento sin duplicar cierre",
+        "passed": true,
+        "at": "2026-11-11T18:25:23.822Z",
+        "evidence": {
+          "writes": 1,
+          "remaining": 0
+        }
+      },
+      {
+        "name": "APK y metadatos de Campo habitual iguales; aplicación/datos no abiertos",
+        "passed": true,
+        "at": "2026-11-11T18:25:24.973Z",
+        "evidence": {
+          "package": "com.smartrayco.app",
+          "metadata": [
+            "versionCode=1 minSdk=24 targetSdk=36",
+            "versionName=1.0.0",
+            "lastUpdateTime=2026-11-11 13:13:22",
+            "firstInstallTime=2026-11-11 13:13:22"
+          ],
+          "apkSha256": "02e1f74f7423aa034eda916688dfc01e698d6b033daf989bd9a729bbd426f95e",
+          "applicationDataRead": false
+        }
+      },
+      {
+        "name": "Android: incompatible conservado y dispositivo propio independiente confirmado",
+        "passed": true,
+        "at": "2026-11-11T18:29:05.701Z",
+        "evidence": {
+          "writes": 9,
+          "pending": [
+            {
+              "id": "d1df5ec0-fdd1-4d75-8443-dd6beddc8c66",
+              "error": "Selecciona modalidad IPTV (fixture sintético)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "Android: corrección explícita de modalidad conserva y recupera el envío",
+        "passed": true,
+        "at": "2026-11-11T18:29:06.107Z",
+        "evidence": {
+          "writes": 10
+        }
+      },
+      {
+        "name": "Android: rechazo Rayco de preflight mostrado y retenido (transporte sintético)",
+        "passed": true,
+        "at": "2026-11-11T18:29:06.565Z",
+        "evidence": {
+          "error": "TV Box Rayco exige serie/MAC y custodia (respuesta sintética)",
+          "writes": 10
+        }
+      },
+      {
+        "name": "Android: modalidad Rayco y recibo enviados tras aprobación sintética",
+        "passed": true,
+        "at": "2026-11-11T18:29:06.809Z",
+        "evidence": {
+          "writes": 11
+        }
+      },
+      {
+        "name": "Android: corte real del transporte USB/HTTP conserva cola",
+        "passed": true,
+        "at": "2026-11-11T18:29:07.367Z",
+        "evidence": {
+          "queue": [
+            {
+              "id": "3547e399-5d54-4a70-b7ba-ba7ab4f3a0ae",
+              "mode": "customer_device"
+            }
+          ],
+          "error": "Failed to fetch"
+        }
+      },
+      {
+        "name": "Android: reconexión real USB/HTTP sincroniza una sola vez",
+        "passed": true,
+        "at": "2026-11-11T18:29:07.707Z",
+        "evidence": {
+          "writes": 12
+        }
+      },
+      {
+        "name": "Android: sincronizaciones concurrentes y reintento vacío sin duplicados",
+        "passed": true,
+        "at": "2026-11-11T18:29:08.293Z",
+        "evidence": {
+          "results": [
+            {
+              "synced": 1,
+              "remaining": 0
+            },
+            {
+              "synced": 0,
+              "remaining": 0
+            }
+          ],
+          "writes": 13
+        }
+      },
+      {
+        "name": "Android legado: conexión antigua bloquea upgrade con mensaje recuperable",
+        "passed": true,
+        "at": "2026-11-11T18:31:07.447Z",
+        "evidence": {
+          "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+          "version": 2,
+          "databaseNameRedirected": true
+        }
+      },
+      {
+        "name": "Android legado: bloqueo conserva Blob legado",
+        "passed": true,
+        "at": "2026-11-11T18:31:07.448Z",
+        "evidence": {
+          "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+          "version": 2,
+          "databaseNameRedirected": true
+        }
+      },
+      {
+        "name": "Android legado: upgrade recupera modalidad, nota y bytes originales",
+        "passed": true,
+        "at": "2026-11-11T18:31:07.448Z",
+        "evidence": {
+          "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+          "version": 2,
+          "databaseNameRedirected": true
+        }
+      },
+      {
+        "name": "Android legado: store closures nuevo permite guardar pendiente sin borrar drafts",
+        "passed": true,
+        "at": "2026-11-11T18:31:07.448Z",
+        "evidence": {
+          "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+          "version": 2,
+          "databaseNameRedirected": true
+        }
+      },
+      {
+        "name": "Android legado: store adicional preservado",
+        "passed": true,
+        "at": "2026-11-11T18:31:07.448Z",
+        "evidence": {
+          "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+          "version": 2,
+          "databaseNameRedirected": true
+        }
+      },
+      {
+        "name": "Android legado: biblioteca antigua sigue leyendo el store tras upgrade",
+        "passed": true,
+        "at": "2026-11-11T18:31:07.448Z",
+        "evidence": {
+          "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+          "version": 2,
+          "databaseNameRedirected": true
+        }
+      },
+      {
+        "name": "Android legado: esquema aditivo contiene ambos stores y versión incrementada",
+        "passed": true,
+        "at": "2026-11-11T18:31:07.449Z",
+        "evidence": {
+          "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+          "version": 2,
+          "databaseNameRedirected": true
+        }
+      },
+      {
+        "name": "Android legado: BD principal LAB y sus fotos/borradores permanecen intactos",
+        "passed": true,
+        "at": "2026-11-11T18:31:07.449Z",
+        "evidence": {
+          "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+          "version": 2,
+          "databaseNameRedirected": true
+        }
+      },
+      {
+        "name": "Android WebView: navigator.onLine=false (CDP) conserva cola sin transmitir",
+        "passed": true,
+        "at": "2026-11-11T18:33:26.609Z",
+        "evidence": {
+          "ids": [
+            "ad14ffd8-3b99-4ebb-8eb9-4ae59a086bc8"
+          ],
+          "radioSettingsChanged": false
+        }
+      },
+      {
+        "name": "Android WebView: retorno online tras CDP sincroniza una vez",
+        "passed": true,
+        "at": "2026-11-11T18:33:26.875Z",
+        "evidence": {
+          "writes": 14
+        }
+      }
+    ],
+    "realPhoto": {
+      "bytes": 1276704,
+      "evidenceHashBefore": "9aaf8c666ee4078fbe42b7017c324fb081737d935e4e85773db648015fcb2d4f",
+      "evidenceHashAfter": "9aaf8c666ee4078fbe42b7017c324fb081737d935e4e85773db648015fcb2d4f",
+      "hashIncludesBytesAndMetadata": true
+    },
+    "legacy": {
+      "passed": 8,
+      "checks": [
+        "conexión antigua bloquea upgrade con mensaje recuperable",
+        "bloqueo conserva Blob legado",
+        "upgrade recupera modalidad, nota y bytes originales",
+        "store closures nuevo permite guardar pendiente sin borrar drafts",
+        "store adicional preservado",
+        "biblioteca antigua sigue leyendo el store tras upgrade",
+        "esquema aditivo contiene ambos stores y versión incrementada",
+        "BD principal LAB y sus fotos/borradores permanecen intactos"
+      ],
+      "namespace": "LAB-legacy-95e363da-2f81-4a94-8ba9-347e92acb9d6",
+      "version": 2,
+      "stores": [
+        "closures",
+        "drafts",
+        "extra-preservado"
+      ],
+      "blocked": "Otra vista de Campo mantiene abierto el almacenamiento. Guarda tu trabajo y cierra las otras vistas antes de reintentar. No borres los datos de la aplicación.",
+      "databaseNameRedirected": true,
+      "productionWrites": 0,
+      "recordsDeleted": 0,
+      "pendingPreserved": 1
+    },
+    "fullCampoToPostgreSQLExecuted": false,
+    "productionDataProfileTested": false,
+    "radioSettingsChanged": false,
+    "networkTests": [
+      "Real USB/HTTP connection cut and restore",
+      "CDP offline and online inside LAB WebView"
+    ],
+    "productionMetadataBefore": {
+      "package": "com.smartrayco.app",
+      "metadata": [
+        "versionCode=1 minSdk=24 targetSdk=36",
+        "versionName=1.0.0",
+        "lastUpdateTime=2026-11-11 13:13:22",
+        "firstInstallTime=2026-11-11 13:13:22"
+      ],
+      "apkSha256": "02e1f74f7423aa034eda916688dfc01e698d6b033daf989bd9a729bbd426f95e",
+      "applicationDataRead": false
+    },
+    "productionMetadataAfter": {
+      "package": "com.smartrayco.app",
+      "metadata": [
+        "versionCode=1 minSdk=24 targetSdk=36",
+        "versionName=1.0.0",
+        "lastUpdateTime=2026-11-11 13:13:22",
+        "firstInstallTime=2026-11-11 13:13:22"
+      ],
+      "apkSha256": "02e1f74f7423aa034eda916688dfc01e698d6b033daf989bd9a729bbd426f95e",
+      "applicationDataRead": false
+    },
+    "productionMetadataUnchanged": true,
+    "finalLabQueueCount": 0,
+    "syntheticClosures": 14,
+    "uniqueCompletedSyntheticOrders": 14,
+    "simulatedLostResponses": 1,
+    "labRecordsDeleted": 0
   },
   "production": {
     "queriesExecuted": false,
@@ -113,6 +542,30 @@
     "appStorageCleared": false,
     "appUninstalled": false
   },
-  "nextUserAction": "Connect an unlocked Android phone by USB, enable USB debugging and accept the computer fingerprint; keep production Campo closed.",
-  "baseDocumentationCommit": "8b6f1af"
+  "nextUserAction": "Review results; production publication still requires explicit authorization and the documented remote preflight/backups.",
+  "baseDocumentationCommit": "8b6f1af",
+  "approvalScope": "Android WebView platform and local persistence/queue/installation-mode components on tested device; SQL rules rely on prior isolated PostgreSQL tests; not full Campo-to-PostgreSQL E2E.",
+  "evidenceFiles": {
+    "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/physical-check.json": "7a7fd0d543a7cc4e436bb87fa0a37d6bcd52e81980b98db56c8a85760dadb613",
+    "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/production-before.json": "27cd396f2398897b71bd0d57b18e9b82b0329cf4c38cbda8955f726b7126d5af",
+    "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/events.jsonl": "88b4935e53b376198028e089fa00b94c5b49e18e11afb8e709ff97bd5384ca25",
+    "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/camera-recovery.png": "820cb460d6625ff4159f9051554e70f7cef261a9058240a2b0c6779bee0bc289",
+    "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/flows-completed.png": "75f8e3843d9243d5945459b422502bdb8eaad160b1c7003e7be7efd73283fa9b",
+    "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/legacy-upgrade.png": "85ec1da9f9b12894d2b484205c662405ea8f808bdc5ebbb4f58da58e408a1fa3",
+    "scripts/inventory-auth-lab/runtime/android-iptv-1794411550984/phone/idb-after-immediate-stop.json": "37900f4324362f88886e44ad005c4123f4cf9acc85e701be278622204fbee066"
+  },
+  "harnessAdjustments": [
+    "LAB draft pointer moved from localStorage to IndexedDB; actual draft records survived before fix",
+    "Wait for Android process start before CDP attach",
+    "Close HTTP connections so removing USB reverse actually interrupts the next request",
+    "Wait for new synthetic-order IDB save before desktop test proceeds",
+    "Legacy probe compiled as async function; failed web build replaced without deleting stored records",
+    "Partial final CDP read was interrupted; completed physical assertions and prior production-metadata comparisons retained"
+  ],
+  "notExecuted": [
+    "Full production Campo view to isolated PostgreSQL E2E",
+    "Real customer-order closure",
+    "Physical Wi-Fi/mobile-data radio toggling",
+    "Certification on other manufacturers/Android/WebView versions"
+  ]
 }

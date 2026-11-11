@@ -1,7 +1,7 @@
 # Modalidad IPTV con Campo detenido — preparación de ventana
 
 > Actualización posterior: persistencia, cola y compatibilidad mínima corregidas;
-> paquete local preparado. Sigue NO APTO hasta Android/WebView real. Procedimiento
+> paquete local preparado y certificación física modular Android 26/26 PASS. Procedimiento
 > vigente: [resolución de bloqueos](ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md).
 > La posibilidad de omitir compatibilidad descrita abajo fue reemplazada por
 > rechazo temprano recuperable del cliente antiguo. Se conserva el antecedente.

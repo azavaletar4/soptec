@@ -13,6 +13,7 @@ assert.match(badging,/application-label:'IPTV LAB - NO PRODUCCION'/);
 assert.match(network,/C: "127\.0\.0\.1"/);
 assert.equal((network.match(/E: domain \(/g)??[]).length,1);
 const sha=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+assert.ok(fs.existsSync(path.join(config.web,'scripts/android-iptv-lab/lab.html')),'LAB_WEB_BUILD_INCOMPLETE');
 assert.equal(sha('mobile_app/lib/main.dart'),config.originalFlutterSha256);
 const normalized=p=>fs.readFileSync(p,'utf8').replaceAll('\r\n','\n');
 assert.equal(normalized('mobile_app/pubspec.lock'),normalized(path.join(config.mobile,'pubspec.lock')));

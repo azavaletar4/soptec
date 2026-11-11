@@ -2,7 +2,8 @@
 
 > Actualización posterior de persistencia, cola, sesiones antiguas y paquete:
 > [resolución de bloqueos](ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md).
-> Candidato `bcb3ec4`; sin publicar. Falta certificar Android/WebView real.
+> Candidato `bcb3ec4`; sin publicar. [Android/WebView](ALTAS-IPTV-ANDROID-CERTIFICACION-20261111.md)
+> certificado modularmente: 26/26 controles físicos PASS, con alcance explícito.
 
 Base `6170a83`. **Implementado localmente; no migrado, publicado ni
 desplegado.** Solo consultas de metadatos READ ONLY en producción.
