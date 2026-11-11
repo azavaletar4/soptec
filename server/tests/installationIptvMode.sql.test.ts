@@ -20,7 +20,7 @@ test('modalidad IPTV: migración real, custodia real, cierres y concurrencia ais
   const sql = (s: string) => docker(psql, s).trim();
   const session = (s: string, uid = tech) => `set role authenticated;set request.jwt.claim.sub='${uid}';${s}`;
   const as = (s: string, uid = tech) => sql(session(s, uid));
-  const immutable = () => sql(`select jsonb_build_object('units',(select jsonb_agg(u order by id) from inventory_units u),'events',(select jsonb_agg(e order by id) from inventory_unit_events e),'moves',(select jsonb_agg(m order by id) from inventory_movements m),'custody',(select jsonb_agg(c order by technician_id,product_id) from technician_material_custody c));`);
+  const immutable = () => sql(`select jsonb_build_object('products',(select jsonb_agg(p order by id) from inventory_products p),'units',(select jsonb_agg(u order by id) from inventory_units u),'events',(select jsonb_agg(e order by id) from inventory_unit_events e),'moves',(select jsonb_agg(m order by id) from inventory_movements m),'custody',(select jsonb_agg(c order by technician_id,product_id) from technician_material_custody c));`);
   const orderState = (id: string) => sql(`select row_to_json(i) from installations i where id='${id}';`);
   const make = (xui: number | null = 55, service = 'internet_combo') => {
     const id = randomUUID(), contract = randomUUID();
@@ -162,6 +162,13 @@ test('modalidad IPTV: migración real, custodia real, cierres y concurrencia ais
       const o = make(); assign(o);
       reject(o, null, /Selecciona cómo/); reject(o, 'inventada', /Selecciona cómo/);
     });
+    await t.test('publicación: sesión anterior no cierra una Alta nueva, aun con TV Box válido', () => {
+      const o = make(); assign(o); assign(o, tv);
+      const before = orderState(o.id), inventory = immutable();
+      // UPDATE exacto de la aplicación anterior: nunca envía modalidad.
+      assert.throws(() => as(`update installations set status='completed' where id='${o.id}';`), /Selecciona cómo/);
+      assert.equal(orderState(o.id), before); assert.equal(immutable(), inventory);
+    });
     await t.test('Smart TV/dispositivo propio no ocultan TV Box ya vinculado', () => {
       const o = make(); assign(o); assign(o, tv);
       reject(o, 'smart_tv_app', /TV Box Rayco vinculado/); reject(o, 'customer_device', /TV Box Rayco vinculado/);
@@ -229,10 +236,17 @@ test('modalidad IPTV: migración real, custodia real, cierres y concurrencia ais
       await done; assert.equal(JSON.parse(orderState(o.id)).iptv_installation_mode, 'smart_tv_app');
     });
     await t.test('rollback y reaplicación sin borrar modalidades, historial ni inventario', () => {
+      const appOpen = make(); assign(appOpen);
+      as(preflight(appOpen, 'smart_tv_app'));
       const snapshot = sql('select jsonb_agg(i order by id) from installations i;'), inventory = immutable();
       sql(rollback);
       assert.equal(sql('select jsonb_agg(i order by id) from installations i;'), snapshot); assert.equal(immutable(), inventory);
       assert.equal(sql(`select to_regprocedure('installation_iptv_preflight(uuid,uuid,text)') is null;`), 't');
+      // Rollback preserva datos, pero no garantiza continuidad del Alta por app:
+      // el cliente anterior vuelve a necesitar TV Box y el nuevo pierde la RPC.
+      assert.throws(() => as(`update installations set status='completed' where id='${appOpen.id}';`), /incluye IPTV/);
+      assert.throws(() => as(preflight(appOpen, 'smart_tv_app')), /does not exist/);
+      assert.equal(sql('select jsonb_agg(i order by id) from installations i;'), snapshot); assert.equal(immutable(), inventory);
       sql(migration);
       assert.equal(sql('select jsonb_agg(i order by id) from installations i;'), snapshot); assert.equal(immutable(), inventory);
     });

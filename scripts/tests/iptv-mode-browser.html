@@ -5,6 +5,8 @@ import { createPinia } from 'pinia';
 import Field from '/src/components/campo/IptvInstallationModeField.vue';
 import { useInstallationsStore } from '/src/stores/installations.ts';
 import { supabase } from '/src/lib/supabase.ts';
+import { saveDraft, loadDraft, clearDraft } from '/src/lib/formDrafts.ts';
+import { enqueueClosure, listQueuedClosures, flushQueue, removeQueuedClosure } from '/src/lib/offlineQueue.ts';
 const calls=[]; let row;
 function reset(){row={id:'synthetic-installation',client_id:'synthetic-client',contract_id:'synthetic-contract',status:'in_progress',iptv_policy_version:1,iptv_installation_mode:null};}
 reset();
@@ -25,7 +27,7 @@ supabase.from=table=>{
 const app=createApp({components:{Field},setup(){
   const store=useInstallationsStore(),mode=ref(null),error=ref(''),disabled=ref(false);
   async function close(){error.value='';try{const result=await store.prepareIptvClosure(row.id,row.client_id,row.contract_id,mode.value);if(!result.alreadyCompleted)await store.updateInstallation(row.id,{status:'completed',...result.patch});}catch(e){error.value=e.message}}
-  window.harness={store,mode,error,disabled,calls,reset,get row(){return row},nextTick};
+  window.harness={store,mode,error,disabled,calls,reset,get row(){return row},nextTick,saveDraft,loadDraft,clearDraft,enqueueClosure,listQueuedClosures,flushQueue,removeQueuedClosure};
   return ()=>h('div',[h(Field,{modelValue:mode.value,disabled:disabled.value,'onUpdate:modelValue':value=>{mode.value=value}}),h('button',{onClick:close},'Completar'),h('p',{role:'alert'},error.value)]);
 }});
 app.use(createPinia());app.mount('#app');window.ready=true;

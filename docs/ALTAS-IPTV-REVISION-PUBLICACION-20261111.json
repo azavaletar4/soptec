@@ -1,0 +1,38 @@
+{
+  "reviewedCommit": "8086fba460b587a0560bad5c360c59c48e29eb03",
+  "verdict": "NO_APTO",
+  "objective": "Publicación sin interrumpir el trabajo de los técnicos",
+  "productionQueriesThisReview": 0,
+  "productionWrites": 0,
+  "migrationApplied": false,
+  "pushed": false,
+  "deployed": false,
+  "applicationSourceChanged": false,
+  "migrationOrRollbackChanged": false,
+  "reviewedCommitFiles": 22,
+  "foreignPhaseFilesInReviewedCommit": false,
+  "tests": [
+    { "command": "node --import tsx --test server/tests/installationIptvMode.sql.test.ts", "passed": 21, "failed": 0, "environment": "PostgreSQL 17 temporal --network none, datos sintéticos" },
+    { "command": "node --import tsx --test server/tests/installationIptvPublication.diagnostic.test.mjs src/lib/__tests__/installationIptv.test.ts server/tests/installationIptv.ui.test.mjs", "passed": 25, "failed": 0, "environment": "Funciones reales por AST y transporte simulado, sin red" },
+    { "command": "node scripts/tests/iptv-mode-browser.mjs", "passed": 22, "failed": 0, "environment": "Chrome oculto, perfil efímero, origen loopback, IndexedDB real, proxy remoto cerrado, HTTPS bloqueado" }
+  ],
+  "diagnosticPassesAreReleaseApproval": false,
+  "observations": {
+    "oldClientNewOrderWithoutModeRejectedEvenWithValidTvBox": true,
+    "oldClientMayWriteEvidenceBeforeLateRejection": true,
+    "modeOnlyDraftIsCleared": true,
+    "draftsFirstThenQueueNotFoundError": true,
+    "queueFirstThenDraftsNotFoundError": true,
+    "indexedDbSchemaDefectPredates8086fba": true,
+    "coherentSyntheticSchemaPreservesBlobsOnReload": true,
+    "incompatibleHeadStopsSubsequentQueueItems": true,
+    "smartTvAndOwnDeviceDoNotChangeStockUnitsEventsMovementsOrCustodyAtClosure": true,
+    "raycoRequiresSerialOrMacAndCustodyAssignmentEvent": true,
+    "syntheticHistoricalRowsUnchanged": true,
+    "rollbackPreservesDataButCanBlockAppOnlyPendingOrders": true,
+    "physicalAndroidWebViewTested": false,
+    "productionRositaOrderReadOrWritten": false,
+    "releaseScopeStillReferencesPreviousOltPhase": true
+  },
+  "report": "docs/ALTAS-IPTV-REVISION-PUBLICACION-20261111.md"
+}
