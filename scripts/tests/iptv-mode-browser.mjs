@@ -8,6 +8,7 @@ import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
+import { offlineCases } from './iptv-offline-browser-cases.mjs';
 process.env.VITE_SUPABASE_URL='https://iptv-test.invalid';process.env.VITE_SUPABASE_ANON_KEY='synthetic';
 const root=realpathSync.native(process.cwd()),outDir='dist/iptv-browser-'+process.pid;
 await build({configFile:false,root,plugins:[vue()],resolve:{alias:{'@':join(root,'src')}},define:{'import.meta.env.VITE_SUPABASE_URL':JSON.stringify('https://iptv-test.invalid'),'import.meta.env.VITE_SUPABASE_ANON_KEY':JSON.stringify('synthetic')},logLevel:'error',build:{outDir,rollupOptions:{input:join(root,'scripts/tests/iptv-mode-browser.html')}}});
@@ -36,56 +37,25 @@ try {
   await evaluate(`(async()=>{harness.reset();harness.mode.value=null;harness.calls.length=0;await harness.nextTick();const select=document.querySelector('select');select.value=${JSON.stringify(mode)};select.dispatchEvent(new Event('change',{bubbles:true}));await harness.nextTick();document.querySelector('button').click()})()`);
   await until('harness.row.status==="completed"');
   assert.equal(await evaluate('harness.row.iptv_installation_mode'),mode);checks++;
-  assert.deepEqual(await evaluate('harness.calls.filter(c=>c.update).map(c=>c.update)'),[{status:'completed',iptv_installation_mode:mode}]);checks++;
+  const writes=await evaluate('harness.calls.filter(c=>c.update).map(c=>c.update)');
+  assert.equal(writes.length,1);assert.equal(writes[0].status,'completed');assert.equal(writes[0].iptv_installation_mode,mode);
+  assert.match(writes[0].closure_operation_id,/^[a-f0-9-]{36}$/);assert.match(writes[0].closure_payload_hash,/^[a-f0-9]{64}$/);checks++;
   await evaluate('harness.calls.length=0;document.querySelector("button").click()');await new Promise(r=>setTimeout(r,100));
   assert.equal(await evaluate('harness.calls.length'),0);checks++;
  }
  await evaluate('(async()=>{harness.disabled.value=true;await harness.nextTick()})()');assert.equal(await evaluate('document.querySelector("select").disabled'),true);checks++;
- // Caracteriza el esquema REAL: dos createStore con el mismo DB y sin
- // upgrade no crean automáticamente el segundo object store (riesgo previo).
- const fresh=await evaluate(`(async()=>{
-  const photo=new File(['synthetic-photo'],'evidence.txt',{type:'text/plain'});
-  await harness.saveDraft('publication-synthetic',{closureForm:{closureNotes:'Borrador anterior'},closurePhotos:{facade:photo},equipmentEntries:[],signatureBlob:null});
-  try{await harness.enqueueClosure({jobType:'installation',jobId:'fresh-synthetic',photos:[],equipmentPhotos:[]});return 'unexpected-success'}catch(e){return e.name}
- })()`);
- assert.equal(fresh,'NotFoundError');checks++;
- await evaluate('window.ready=false');await c('Page.reload');await until('window.ready===true');
- assert.equal(await evaluate('(async()=>{const d=await harness.loadDraft("publication-synthetic");return d.closurePhotos.facade.size})()'),15);checks++;
- // Solo se reinicia la base sintética del perfil efímero y origen loopback.
- // Recargar primero cierra conexiones previas; nunca borrar datos del técnico.
- await evaluate('window.ready=false');await c('Page.reload');await until('window.ready===true');
- const reverse=await evaluate(`(async()=>{
-  await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase('smartrayco-campo');r.onsuccess=resolve;r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('Fixture bloqueada'))});
-  await harness.enqueueClosure({jobType:'installation',jobId:'queue-first-synthetic',photos:[],equipmentPhotos:[]});
-  try{await harness.saveDraft('publication-synthetic',{closureForm:{closureNotes:'Prueba'}});return 'unexpected-success'}catch(e){return e.name}
- })()`);
- assert.equal(reverse,'NotFoundError');checks++;
- await evaluate('window.ready=false');await c('Page.reload');await until('window.ready===true');
- assert.equal(await evaluate('(async()=>{return (await harness.listQueuedClosures())[0].jobId})()'),'queue-first-synthetic');checks++;
- await evaluate('window.ready=false');await c('Page.reload');await until('window.ready===true');
- // Perfil coherente de prueba con ambos stores: prepara el fixture, no
- // modifica el inicializador de aplicación ni oculta el fallo anterior.
- await evaluate(`(async()=>{
-  await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase('smartrayco-campo');r.onsuccess=resolve;r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('Fixture bloqueada'))});
-  await new Promise((resolve,reject)=>{const r=indexedDB.open('smartrayco-campo',1);r.onupgradeneeded=()=>{r.result.createObjectStore('drafts');r.result.createObjectStore('closures')};r.onsuccess=()=>{r.result.close();resolve()};r.onerror=()=>reject(r.error)});
- })()`);
- // Persistencia real con esquema coherente, conservada al recargar.
- await evaluate(`(async()=>{
-  const photo=new File(['synthetic-photo'],'evidence.txt',{type:'text/plain'});
-  await harness.saveDraft('publication-synthetic',{closureForm:{closureNotes:'Borrador anterior',clientCode:'TEST'},closurePhotos:{facade:photo},equipmentEntries:[],signatureBlob:null});
-  await harness.enqueueClosure({jobType:'installation',jobId:'old-synthetic',clientId:'c',contractId:'k',photos:[{category:'facade',blob:photo,fileName:photo.name}],equipmentPhotos:[]});
-  await new Promise(r=>setTimeout(r,25));
-  await harness.enqueueClosure({jobType:'installation',jobId:'new-synthetic',clientId:'c',contractId:'k2',iptvInstallationMode:'customer_device',photos:[],equipmentPhotos:[]});
-  window.ready=false;
- })()`);
- await c('Page.reload');await until('window.ready===true');
- const persisted=await evaluate(`(async()=>{const d=await harness.loadDraft('publication-synthetic');const q=await harness.listQueuedClosures();return {note:d.closureForm.closureNotes,code:d.closureForm.clientCode,photo:d.closurePhotos.facade.size,draftHasMode:'iptvInstallationMode' in d.closureForm,jobs:q.map(i=>i.jobId),oldHasMode:'iptvInstallationMode' in q[0],oldPhoto:q[0].photos[0].blob.size,newMode:q[1].iptvInstallationMode}})()`);
- assert.equal(persisted.note,'Borrador anterior');assert.equal(persisted.code,'TEST');checks++;
- assert.equal(persisted.photo,15);assert.equal(persisted.draftHasMode,false);checks++;
- assert.deepEqual(persisted.jobs,['old-synthetic','new-synthetic']);assert.equal(persisted.oldHasMode,false);assert.equal(persisted.oldPhoto,15);assert.equal(persisted.newMode,'customer_device');checks++;
- const blocked=await evaluate(`(async()=>{const visited=[];const result=await harness.flushQueue(async item=>{visited.push(item.jobId);if(!item.iptvInstallationMode)throw new Error('Falta modalidad IPTV')});return {result,visited,errors:(await harness.listQueuedClosures()).map(i=>i.lastError??null)}})()`);
- assert.deepEqual(blocked.result,{synced:0,remaining:2});assert.deepEqual(blocked.visited,['old-synthetic']);assert.equal(blocked.errors[0],'Falta modalidad IPTV');assert.equal(blocked.errors[1],null);checks++;
- await evaluate(`(async()=>{await harness.clearDraft('publication-synthetic');for(const i of await harness.listQueuedClosures())await harness.removeQueuedClosure(i.localId)})()`);
+ const reload=async()=>{await evaluate('window.ready=false');await c('Page.reload');await until('window.ready===true')};
+ const anotherPage=async()=>{
+  const {targetId:otherId}=await send('Target.createTarget',{url:'about:blank'});
+  const {sessionId:otherSession}=await send('Target.attachToTarget',{targetId:otherId,flatten:true});
+  const call=(method,params={})=>send(method,params,otherSession);
+  await call('Page.enable');await call('Runtime.enable');await call('Network.enable');await call('Network.setBlockedURLs',{urls:['https://*']});
+  const evalOther=async expression=>{const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value};
+  await call('Page.navigate',{url:base+'scripts/tests/iptv-mode-browser.html'});
+  for(let n=0;n<100;n++){if(await evalOther('window.ready===true'))break;await new Promise(r=>setTimeout(r,50))}
+  return {evaluate:evalOther,close:()=>send('Target.closeTarget',{targetId:otherId})};
+ };
+ checks+=await offlineCases({evaluate,reload,anotherPage});
  assert.equal(errors.length,0);checks++;
  console.log(JSON.stringify({passed:checks,synthetic:true,externalNetworkBlocked:true,productionWrites:0}));
 } catch(e){console.error('IPTV_BROWSER_FAIL: '+e.message+'; paso='+lastStep+'; errores='+JSON.stringify(errors));process.exitCode=1}

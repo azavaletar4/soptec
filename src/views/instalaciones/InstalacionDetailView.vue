@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import IptvInstallationModeField from '@/components/campo/IptvInstallationModeField.vue';
+import { closurePayloadHash } from '@/lib/closureSubmission';
 import { requiresIptvMode, iptvModeLabel, type IptvInstallationMode } from '@/lib/installationIptv';
 import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
 import { useWorkOrderFinality } from '@/composables/useWorkOrderFinality';
@@ -67,6 +68,16 @@ const installationId = computed(() => route.params.id as string);
 const { locked: administrativelyClosed, error: finalityError, loading: finalityLoading, markClosed } = useWorkOrderFinality('installation', installationId);
 const installation = ref<Installation | null>(null);
 const iptvMode = ref<IptvInstallationMode | null>(null);
+const iptvOperationId = ref(crypto.randomUUID());
+async function prepareIptvSubmission() {
+  const i = installation.value;
+  if (!i) throw new Error('Instalación no encontrada');
+  const hash = await closurePayloadHash({ jobType: 'installation', jobId: i.id, clientId: i.client_id, contractId: i.contract_id,
+    targetStatus: 'completed', iptvInstallationMode: iptvMode.value, latitude: completeGps.value.latitude,
+    longitude: completeGps.value.longitude, zoneId: completeZoneId.value, napElementoId: completeNapId.value,
+    photos: Object.entries(completePhotos.value).filter((entry): entry is [string, File] => !!entry[1]).map(([category, file]) => ({ category, file })) });
+  return installationsStore.prepareIptvClosure(i.id, i.client_id, i.contract_id, iptvMode.value, { operationId: iptvOperationId.value, hash });
+}
 const iptvContract = computed(() => contractsStore.contracts.find(c => c.id === installation.value?.contract_id));
 const showIptvMode = computed(() => requiresIptvMode(installation.value, iptvContract.value));
 watch(() => installation.value?.id, () => { iptvMode.value = installation.value?.iptv_installation_mode ?? null; });
@@ -488,7 +499,7 @@ async function applyStatusChange(status: InstallationStatus) {
   if (!installation.value) return;
   try {
     const iptv = status === 'completed'
-      ? await installationsStore.prepareIptvClosure(installation.value.id, installation.value.client_id, installation.value.contract_id, iptvMode.value)
+      ? await prepareIptvSubmission()
       : { patch: {}, alreadyCompleted: false };
     if (iptv.alreadyCompleted) { installation.value.status = 'completed'; return; }
     installation.value = await installationsStore.updateInstallation(installation.value.id, { status, ...iptv.patch });
@@ -605,7 +616,7 @@ async function handleCompleteSubmit() {
   completeSaving.value = true;
   completeError.value = null;
   try {
-    const iptv = await installationsStore.prepareIptvClosure(installation.value.id, installation.value.client_id, installation.value.contract_id, iptvMode.value);
+    const iptv = await prepareIptvSubmission();
     if (iptv.alreadyCompleted) { installation.value.status = 'completed'; return; }
     const svcType = installation.value.contracts?.service_type ?? 'internet_combo';
     if (svcType === 'internet_combo') {

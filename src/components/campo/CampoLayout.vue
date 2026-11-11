@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useCampoStore } from '@/stores/campo';
 import ToastHost from '@/components/ToastHost.vue';
+import ClosureQueuePanel from '@/components/campo/ClosureQueuePanel.vue';
 import ConfirmHost from '@/components/ConfirmHost.vue';
 import logoIcon from '@/assets/logo-icon.png';
 import { homePath } from '@/lib/navigation';
@@ -95,6 +96,7 @@ onBeforeUnmount(() => {
         <span v-else>{{ campoStore.syncing ? 'Sincronizando…' : campoStore.queuedCount + ' por sincronizar' }}</span>
       </div>
     </header>
+    <ClosureQueuePanel />
 
     <!-- pb-32 (no pb-8): deja espacio de sobra para que el boton principal
          ("Completar instalación"/"Resolver avería"...) nunca quede tapado

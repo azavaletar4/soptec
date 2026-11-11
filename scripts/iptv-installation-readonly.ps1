@@ -1,7 +1,7 @@
 # Diagnóstico acotado de modalidad IPTV: SQL fijo READ ONLY; TLS verify-full;
 # credencial DPAPI por stdin. Reutiliza la librería privada existente.
 [CmdletBinding()]
-param()
+param([switch]$ClosureCompat)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 [Console]::InputEncoding=New-Object Text.UTF8Encoding($false)
@@ -42,7 +42,8 @@ try {
     if([string]::IsNullOrEmpty($password) -or $password -match '[\r\n]') { throw 'SAFE:CREDENCIAL_INVALIDA' }
     $stage='CA'
     $ca=Get-TrustedCa $settings.PGSSLROOTCERT
-    $query=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'diagnostics/iptv-installation-readonly.sql'))
+    $queryFile=if($ClosureCompat){'diagnostics/iptv-closure-compat-readonly.sql'}else{'diagnostics/iptv-installation-readonly.sql'}
+    $query=[IO.File]::ReadAllText((Join-Path $PSScriptRoot $queryFile))
     $shell='IFS= read -r CERT; CERT=${CERT#$(printf ''\357\273\277'')}; printf %s "$CERT" | base64 -d > /tmp/smartrayco-ca.pem; IFS= read -r PGHOST; IFS= read -r PGPORT; IFS= read -r PGDATABASE; IFS= read -r PGUSER; IFS= read -r PGPASSWORD; export PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD; export PGSSLMODE=verify-full PGSSLROOTCERT=/tmp/smartrayco-ca.pem PGCONNECT_TIMEOUT=10 PGCLIENTENCODING=UTF8; export PGOPTIONS=' + "'-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=2000'" + '; exec psql -X -q -A -t --no-password -v ON_ERROR_STOP=1'
     $payload=$ca+"`n"+$settings.PGHOST+"`n5432`npostgres`n"+$settings.PGUSER+"`n"+$password+"`n"+$query+"`n"
     $stage='DOCKER_SQL'
@@ -50,7 +51,8 @@ try {
     if($response.Code -ne 0) {
         throw ('SAFE:'+ (Get-FailureCategory $response.Error $response.Code))
     }
-    $destination=(Join-Path $PSScriptRoot '../docs/ALTAS-IPTV-TRIGGER-LECTURA-20261111.json')
+    $outputFile=if($ClosureCompat){'../docs/ALTAS-IPTV-COMPAT-PREFLIGHT-20261111.json'}else{'../docs/ALTAS-IPTV-TRIGGER-LECTURA-20261111.json'}
+    $destination=(Join-Path $PSScriptRoot $outputFile)
     [IO.File]::WriteAllText($destination,$response.Output,[Text.UTF8Encoding]::new($false))
     Write-Output 'IPTV_INSTALLATION_READ_ONLY_OK; metadata saved; no secrets printed'
 } catch {

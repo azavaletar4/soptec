@@ -22,6 +22,7 @@ for (const mode of ['smart_tv_app', 'customer_device', 'rayco_tv_box']) {
     let queued, submitted;
     const input = { jobType: 'installation', jobId: 'i', clientId: 'c', contractId: 'k', targetStatus: 'completed', iptvInstallationMode: mode, photos: [], equipmentPhotos: [] };
     const enqueue = api(campo, 'submitClosure', {
+      auth: { user: { id: 'actor' } }, crypto: { randomUUID: () => 'operation' },
       isOnline: () => false, enqueueClosure: async data => { queued = data; }, refreshQueuedCount: async () => {},
     });
     assert.equal((await enqueue(input)).queued, true);
@@ -36,6 +37,7 @@ for (const mode of ['smart_tv_app', 'customer_device', 'rayco_tv_box']) {
     const installation = { value: { id: 'i', client_id: 'c', contract_id: 'k', status: 'in_progress' } };
     const close = api(admin, 'applyStatusChange', {
       installation, iptvMode: { value: mode },
+      prepareIptvSubmission: async () => { calls.push(['preflight','i','c','k',mode]); return { patch: { iptv_installation_mode: mode }, alreadyCompleted: false }; },
       installationsStore: {
         async prepareIptvClosure(...args) { calls.push(['preflight', ...args]); return { patch: { iptv_installation_mode: mode }, alreadyCompleted: false }; },
         async updateInstallation(id, patch) { calls.push(['update', id, patch]); return { ...installation.value, ...patch }; },
@@ -49,6 +51,7 @@ for (const mode of ['smart_tv_app', 'customer_device', 'rayco_tv_box']) {
 test('rechazo IPTV aborta Campo antes de contratos, evidencias y cierre', async () => {
   const calls = [];
   const close = api(campo, 'performClosureSubmitInner', {
+    closurePayloadHash: async () => 'hash',
     installationsStore: { async prepareIptvClosure() { calls.push('preflight'); throw new Error('Falta modalidad'); } },
     assertWorkOrderMutable: async () => { calls.push('otra operación'); },
   });
@@ -57,6 +60,7 @@ test('rechazo IPTV aborta Campo antes de contratos, evidencias y cierre', async 
 });
 test('respuesta perdida: Campo no vuelve a subir evidencia ni modifica una orden cerrada', async () => {
   const close = api(campo, 'performClosureSubmitInner', {
+    closurePayloadHash: async () => 'hash',
     installationsStore: { async prepareIptvClosure() { return { patch: {}, alreadyCompleted: true }; } },
     assertWorkOrderMutable: () => { throw new Error('No debe mutar ni consultar otros módulos'); },
   });
@@ -65,6 +69,7 @@ test('respuesta perdida: Campo no vuelve a subir evidencia ni modifica una orden
 test('preflight aprobado no omite la validación existente de materiales', async () => {
   const calls = [];
   const close = api(campo, 'performClosureSubmitInner', {
+    closurePayloadHash: async () => 'hash',
     installationsStore: { async prepareIptvClosure() { calls.push('iptv'); return { patch: {}, alreadyCompleted: false }; } },
     assertWorkOrderMutable: async () => { calls.push('finality'); },
     checkMaterialClosure: async check => { await check(); throw new Error('Material pendiente'); },
@@ -76,6 +81,7 @@ test('preflight aprobado no omite la validación existente de materiales', async
 test('fallo de red al enviar también conserva modalidad en la cola', async () => {
   let queued;
   const close = api(campo, 'submitClosure', {
+    auth: { user: { id: 'actor' } }, crypto: { randomUUID: () => 'operation' },
     isOnline: () => true, performClosureSubmit: async () => { throw new Error('sin red'); }, isNetworkError: () => true,
     enqueueClosure: async value => { queued = value; }, refreshQueuedCount: async () => {},
   });

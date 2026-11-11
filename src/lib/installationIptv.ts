@@ -21,18 +21,20 @@ export function requiresIptvMode(
 /** Consulta la MISMA función de validación que usa el trigger. Sin escrituras. */
 export async function prepareInstallationIptv(
   rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>,
-  installation: Pick<Installation, 'id' | 'client_id' | 'contract_id' | 'iptv_policy_version' | 'iptv_installation_mode' | 'status'>,
+  installation: Pick<Installation, 'id' | 'client_id' | 'contract_id' | 'iptv_policy_version' | 'iptv_installation_mode' | 'status' | 'closure_operation_id' | 'closure_payload_hash'>,
   clientId: string | null, contractId: string | null, mode: unknown,
-): Promise<{ patch: { iptv_installation_mode?: IptvInstallationMode | null }; alreadyCompleted: boolean }> {
+  submission?: { operationId: string; hash: string },
+): Promise<{ patch: { iptv_installation_mode?: IptvInstallationMode | null; closure_operation_id?: string; closure_payload_hash?: string }; alreadyCompleted: boolean; materialChecked?: boolean }> {
   if (installation.client_id !== clientId || installation.contract_id !== contractId) {
     throw new Error('El cliente o contrato de la orden cambió. Recarga antes de cerrar.');
   }
   if (installation.status === 'completed' && installation.iptv_policy_version === 1 &&
-      (installation.iptv_installation_mode ?? null) === (mode || null)) {
+      (installation.iptv_installation_mode ?? null) === (mode || null) && submission &&
+      installation.closure_operation_id === submission.operationId && installation.closure_payload_hash === submission.hash) {
     return { patch: {}, alreadyCompleted: true }; // Respuesta perdida: solo lectura.
   }
   if (installation.status === 'completed' || installation.status === 'cancelled') {
-    throw new Error('La orden ya está cerrada; no se modificará su modalidad IPTV.');
+    throw new Error('La orden ya está cerrada. Este envío se conserva para revisión; no se repetirá el cierre.');
   }
   // Frontend compatible antes de migrar: SELECT * no exige las columnas nuevas.
   if (installation.iptv_policy_version == null) return { patch: {}, alreadyCompleted: false };
@@ -41,14 +43,20 @@ export async function prepareInstallationIptv(
   if (selected !== null && !IPTV_INSTALLATION_OPTIONS.some(o => o.value === selected)) {
     throw new Error('Selecciona una modalidad IPTV válida.');
   }
+  if (!submission || !/^[a-f0-9-]{36}$/i.test(submission.operationId) || !/^[a-f0-9]{64}$/.test(submission.hash)) {
+    throw new Error('Actualiza Campo para identificar este envío de cierre. Los datos guardados se conservan.');
+  }
   const { data, error } = await rpc('installation_iptv_preflight', {
     p_installation_id: installation.id, p_contract_id: contractId, p_mode: selected,
+    p_operation_id: submission.operationId, p_payload_hash: submission.hash,
   });
   if (error) throw error;
   const result = data as Record<string, unknown> | null;
   if (!result || result.installationId !== installation.id || result.contractId !== contractId ||
-      result.clientId !== clientId || result.mode !== selected || result.valid !== true) {
+      result.clientId !== clientId || result.mode !== selected || result.valid !== true || result.materialChecked !== true ||
+      result.operationId !== submission.operationId || result.payloadHash !== submission.hash) {
     throw new Error('No se pudo verificar la modalidad IPTV de esta orden. Recarga antes de cerrar.');
   }
-  return { patch: { iptv_installation_mode: selected as IptvInstallationMode | null }, alreadyCompleted: false };
+  return { patch: { iptv_installation_mode: selected as IptvInstallationMode | null,
+    closure_operation_id: submission.operationId, closure_payload_hash: submission.hash }, alreadyCompleted: false, materialChecked: true };
 }

@@ -1573,6 +1573,8 @@ interface ClosureDraft {
   signatureBlob: Blob | null;
 }
 let restoringDraft = false;
+let draftLoaded = false;
+const draftStorageError = ref<string | null>(null);
 let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 function buildDraftSnapshot(): ClosureDraft {
@@ -1593,6 +1595,8 @@ function buildDraftSnapshot(): ClosureDraft {
 function draftHasContent(draft: ClosureDraft): boolean {
   const f = draft.closureForm;
   return (
+    !!f.iptvInstallationMode ||
+    !!f.clientCode || !!f.zoneId || f.latitude != null || f.longitude != null ||
     !!f.closureNotes ||
     !!f.motivoAveria ||
     !!f.motivoAveriaDetalle ||
@@ -1606,13 +1610,11 @@ function draftHasContent(draft: ClosureDraft): boolean {
 }
 
 async function persistDraft() {
-  if (restoringDraft || isLockedForTecnico.value || ticketFrozen.value) return;
+  if (!draftLoaded || restoringDraft || isLockedForTecnico.value || ticketFrozen.value) return;
   const snapshot = buildDraftSnapshot();
-  if (!draftHasContent(snapshot)) {
-    await clearDraft(draftKey);
-    return;
-  }
-  await saveDraft(draftKey, snapshot);
+  if (!draftHasContent(snapshot)) return;
+  try { await saveDraft(draftKey, snapshot); draftStorageError.value = null; }
+  catch (error) { draftStorageError.value = getErrorMessage(error, 'No se pudo guardar el borrador. No cierres esta vista ni borres los datos.'); }
 }
 
 function scheduleDraftSave() {
@@ -1637,10 +1639,11 @@ watch([closureForm, closurePhotos, equipmentEntries, signatureBlob], scheduleDra
 
 async function restoreDraft() {
   if (isLockedForTecnico.value || ticketFrozen.value) return;
-  const draft = await loadDraft<ClosureDraft>(draftKey);
-  if (!draft) return;
   restoringDraft = true;
   try {
+    const draft = await loadDraft<ClosureDraft>(draftKey);
+    draftStorageError.value = null;
+    if (!draft) { draftLoaded = true; return; }
     // Merge selectivo (no Object.assign liso): closureForm ya puede traer un
     // motivo_preliminar precargado por el watcher de arriba cuando se abrio
     // el ticket (Fase 103) — si el borrador nunca llego a tocar ese campo
@@ -1658,9 +1661,19 @@ async function restoreDraft() {
       signatureBlob.value = draft.signatureBlob;
     }
     toast.info('Se recuperó un borrador guardado de este cierre de trabajo.');
+    draftLoaded = true;
+  } catch (error) {
+    draftStorageError.value = getErrorMessage(error, 'No se pudo recuperar el borrador. No borres los datos de la aplicación.');
   } finally {
     restoringDraft = false;
   }
+}
+
+async function retryDraftStorage() {
+  // Tras un fallo de guardado, conservar la edición en memoria: releer un
+  // snapshot anterior sobrescribiría fotos/notas todavía no persistidas.
+  if (draftLoaded) await persistDraft();
+  else await restoreDraft();
 }
 
 // ---- Lightbox (Fase 105): visor a pantalla completa para cualquier galeria
@@ -1675,6 +1688,10 @@ function openLightbox(photos: LightboxPhoto[], startId: string) {
 
 async function handleCloseSubmit() {
   if (!trabajo.value) return;
+  if (!draftLoaded || draftStorageError.value) {
+    closeError.value = draftStorageError.value ?? 'Espera a recuperar el borrador antes de cerrar.';
+    return;
+  }
   if (showIptvMode.value && !closureForm.value.iptvInstallationMode) {
     closeError.value = 'Selecciona cómo se instaló IPTV antes de completar el Alta.';
     return;
@@ -1794,6 +1811,7 @@ async function handleCloseSubmit() {
       : null;
     const finalClosureNotes = [trasladoNota, closureForm.value.closureNotes.trim() || null].filter(Boolean).join(' — ') || null;
 
+    const submittedAt = Date.now();
     const result = await campoStore.submitClosure({
       jobType,
       jobId,
@@ -1829,7 +1847,7 @@ async function handleCloseSubmit() {
     // si quedo en la cola offline sigue siendo el unico respaldo de fotos/
     // firma/notas hasta que haya señal y sincronice (Fase 116).
     if (!result.queued) {
-      await clearDraft(draftKey);
+      await clearDraft(draftKey, submittedAt);
       // El snapshot "anterior" del traslado (punto 1) ya cumplio su proposito
       // una vez que el cierre llego de verdad a Supabase — se borra para que
       // una FUTURA rutina de traslado de este mismo job (no deberia pasar,
@@ -2617,6 +2635,10 @@ async function handleCloseSubmit() {
         <!-- Cierre de trabajo -->
         <section class="surface p-3.5 mb-3">
           <h2 v-show="jobType !== 'installation' || installStep === 5" class="text-sm font-semibold mb-2">Cierre de trabajo</h2>
+          <p v-if="draftStorageError" class="text-sm text-red-600 mb-3" role="alert">
+            {{ draftStorageError }}
+            <button type="button" class="underline" @click="retryDraftStorage">Reintentar almacenamiento</button>
+          </p>
           <IptvInstallationModeField
             v-if="showIptvMode && installStep === 5 && iptvInstallation?.status !== 'completed' && iptvInstallation?.status !== 'cancelled'"
             v-model="closureForm.iptvInstallationMode"

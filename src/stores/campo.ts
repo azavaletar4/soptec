@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
 import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
+import { closurePayloadHash, withClosureLock } from '@/lib/closureSubmission';
+import { getErrorMessage } from '@/lib/errors';
 import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
@@ -226,6 +228,7 @@ export interface ClosureInput {
   /** Fase 139 — codigo de cliente / cintillo Drop, reusa contracts.client_code (Fase 39). Obligatorio al completar una instalacion, opcional en tickets/reconexiones. Null/vacio = no tocar (evita sobrescribir con blanco). */
   clientCode: string | null;
   iptvInstallationMode?: import('@/lib/installationIptv').IptvInstallationMode | null;
+  closureOperationId?: string;
 }
 
 /**
@@ -266,6 +269,7 @@ export const useCampoStore = defineStore('campo', () => {
 
   const loading = ref(false);
   const queuedCount = ref(0);
+  const queueError = ref<string | null>(null);
   const syncing = ref(false);
 
   // Fase 121: job_assignees.assigned_to solo refleja al LIDER (ver trigger
@@ -378,7 +382,8 @@ export const useCampoStore = defineStore('campo', () => {
   }
 
   async function refreshQueuedCount() {
-    queuedCount.value = (await listQueuedClosures()).length;
+    try { queuedCount.value = (await listQueuedClosures()).length; }
+    catch (error) { queueError.value = getErrorMessage(error, 'No se pudieron leer los cierres guardados.'); }
   }
 
   // ---- Diagnostico express: combina OLT (Rx/Tx), MikroTik (sesion PPPoE) y
@@ -471,7 +476,7 @@ export const useCampoStore = defineStore('campo', () => {
       throw new Error('Ya hay un cierre en curso para este trabajo — espera a que termine antes de reintentar.');
     }
     try {
-      return await performClosureSubmitInner(input);
+      return await withClosureLock('job:' + input.jobType + ':' + input.jobId, () => performClosureSubmitInner(input));
     } finally {
       closureGuard.exit(input.jobType, input.jobId);
     }
@@ -480,11 +485,12 @@ export const useCampoStore = defineStore('campo', () => {
   async function performClosureSubmitInner(input: ClosureInput): Promise<{ ontZoneWarning: string | null }> {
     // Primero validar IPTV, antes de contratos, fotos, firma o evidencia parcial.
     const iptv = input.jobType === 'installation'
-      ? await installationsStore.prepareIptvClosure(input.jobId, input.clientId, input.contractId, input.iptvInstallationMode)
+      ? await installationsStore.prepareIptvClosure(input.jobId, input.clientId, input.contractId, input.iptvInstallationMode,
+        { operationId: input.closureOperationId ?? '', hash: await closurePayloadHash(input as unknown as Record<string, unknown>) })
       : { patch: {}, alreadyCompleted: false };
     if (iptv.alreadyCompleted) return { ontZoneWarning: null };
     await assertWorkOrderMutable(input.jobType, input.jobId);
-    await checkMaterialClosure(() => supabase.rpc('assert_material_closure_ready', { p_job_type: input.jobType, p_job_id: input.jobId }));
+    if (!iptv.materialChecked) await checkMaterialClosure(() => supabase.rpc('assert_material_closure_ready', { p_job_type: input.jobType, p_job_id: input.jobId }));
     // Codigo de cliente / cintillo Drop (Fase 139) — PRIMERO, antes de subir
     // cualquier foto/firma: si el codigo ya pertenece a OTRO contrato (UNIQUE
     // real en service_contracts.client_code, Fase 39 — nunca se toca), que
@@ -796,6 +802,7 @@ export const useCampoStore = defineStore('campo', () => {
       installationAddress: item.installationAddress,
       clientCode: item.clientCode,
       iptvInstallationMode: item.iptvInstallationMode,
+      closureOperationId: item.closureOperationId ?? item.localId,
     });
     if (ontZoneWarning) {
       // eslint-disable-next-line no-console
@@ -804,6 +811,7 @@ export const useCampoStore = defineStore('campo', () => {
   }
 
   async function submitClosure(input: ClosureInput): Promise<{ queued: boolean; ontZoneWarning?: string | null }> {
+    if (input.jobType === 'installation' && !input.closureOperationId) input = { ...input, closureOperationId: crypto.randomUUID() };
     if (!isOnline()) {
       await enqueueClosure({
         jobType: input.jobType,
@@ -830,6 +838,8 @@ export const useCampoStore = defineStore('campo', () => {
         installationAddress: input.installationAddress,
         clientCode: input.clientCode,
         iptvInstallationMode: input.iptvInstallationMode,
+        closureOperationId: input.closureOperationId,
+        actorId: auth.user?.id,
       });
       await refreshQueuedCount();
       return { queued: true };
@@ -865,6 +875,8 @@ export const useCampoStore = defineStore('campo', () => {
           installationAddress: input.installationAddress,
           clientCode: input.clientCode,
           iptvInstallationMode: input.iptvInstallationMode,
+          closureOperationId: input.closureOperationId,
+          actorId: auth.user?.id,
         });
         await refreshQueuedCount();
         return { queued: true };
@@ -875,10 +887,14 @@ export const useCampoStore = defineStore('campo', () => {
 
   async function syncQueued() {
     syncing.value = true;
+    queueError.value = null;
     try {
-      const result = await flushQueue(submitFromQueued);
+      const result = await flushQueue(submitFromQueued, auth.user?.id);
       await fetchAll();
       return result;
+    } catch (error) {
+      queueError.value = getErrorMessage(error, 'No se pudieron sincronizar los cierres guardados.');
+      return { synced: 0, remaining: queuedCount.value };
     } finally {
       syncing.value = false;
     }
@@ -888,6 +904,7 @@ export const useCampoStore = defineStore('campo', () => {
     loading,
     syncing,
     queuedCount,
+    queueError,
     trabajos,
     myActiveJob,
     availableTickets,

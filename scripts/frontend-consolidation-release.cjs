@@ -1,9 +1,13 @@
 // Solo empaqueta/promueve software; nunca llama endpoints de tareas GenieACS.
 const fs=require('node:fs'),cp=require('node:child_process'),path=require('node:path'),crypto=require('node:crypto');
 const action=process.argv[2];
-if(!['prepare','build','deploy','verify','rollback'].includes(action))throw Error('INVALID_ACTION');
-const scope=JSON.parse(fs.readFileSync('deploy/consolidation-release-scope.json','utf8'));
-const snapshot=JSON.parse(fs.readFileSync('release-source.json','utf8'));
+if(!['package','prepare','build','deploy','verify','rollback'].includes(action))throw Error('INVALID_ACTION');
+const option=(name,fallback)=>process.argv.includes(name)?process.argv[process.argv.indexOf(name)+1]:fallback;
+const scopePath=option('--scope','deploy/consolidation-release-scope.json');
+const snapshotPath=path.resolve(option('--snapshot','release-source.json'));
+if(path.basename(snapshotPath)!=='release-source.json')throw Error('INVALID_SNAPSHOT_BASENAME');
+const scope=JSON.parse(fs.readFileSync(scopePath,'utf8'));
+const snapshot=JSON.parse(fs.readFileSync(snapshotPath,'utf8'));
 if(snapshot.commit!==scope.sourceCommit)throw Error('SCOPE_SNAPSHOT_COMMIT_MISMATCH');
 const contract=fs.readFileSync('scripts/consolidation-release-contract.py','utf8');
 const py=fs.readFileSync('scripts/frontend-consolidation-release.py','utf8');
@@ -14,7 +18,7 @@ const rt=path.resolve('scripts/inventory-auth-lab/runtime/consolidation-release'
 fs.mkdirSync(rt,{recursive:true});
 const ssh=['-o','BatchMode=yes','-o','ConnectTimeout=10','-i',path.join(process.env.USERPROFILE,'.ssh','smartrayco-deploy'),'root@192.168.55.201'];
 const git=(...args)=>cp.execFileSync('git',args,{encoding:'utf8'});
-if(action==='prepare'){
+if(action==='prepare'||action==='package'){
  const archive=path.join(rt,'source.tar');
  cp.execFileSync('git',['archive',snapshot.commit,'--format=tar','--output='+archive,'src','index.html','vite.config.ts','package.json','package-lock.json','scripts/frontend-release-build.mjs','deploy/Dockerfile.frontend','deploy/frontend-release-policy.json']);
  // --force-local: GNU tar (resuelto antes que el bsdtar de System32 en este
@@ -22,11 +26,26 @@ if(action==='prepare'){
  // una sola letra -- confirmado reproduciendo el mismo error fuera de este
  // script; la bandera es compatible con ambos tar y no cambia el contenido
  // del archivo generado.
- cp.execFileSync('tar.exe',['--force-local','-rf',archive,'release-source.json']);
+ cp.execFileSync('tar.exe',['--force-local','-rf',archive,'-C',path.dirname(snapshotPath),'release-source.json']);
  // Exclusivamente el commit declarado; nunca pendientes del checkout.
  const back=Object.fromEntries(scope.backendSources.map(f=>[f,git('show',snapshot.commit+':'+f)]));
  const input={stage,commit:snapshot.commit,scope,toolHash,snapshot,back};
  const file=path.join(rt,'input.json');fs.writeFileSync(file,JSON.stringify(input));
+ // Preparación local revisable: no abre SSH, no crea staging en la VM.
+ if(action==='package'){
+  const migration=option('--migration',null),rollback=option('--sql-rollback',null);
+  if(!!migration!==!!rollback)throw Error('INCOMPLETE_SQL_PACKAGE');
+  const names=['source.tar','input.json'];
+  for(const source of [migration,rollback].filter(Boolean)){
+   if(!/^[a-zA-Z0-9_./-]+\.sql$/.test(source)||source.startsWith('/')||source.split('/').includes('..'))throw Error('INVALID_SQL_PACKAGE_PATH');
+   const name=path.basename(source);if(names.includes(name))throw Error('DUPLICATE_PACKAGE_FILE');names.push(name);
+   fs.writeFileSync(path.join(rt,name),git('show',snapshot.commit+':'+source));
+  }
+  const files=Object.fromEntries(names.map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(path.join(rt,name))).digest('hex')]));
+  const report={localOnly:true,sourceCommit:snapshot.commit,toolHash,scope,stage,files,productionWrites:0};
+  fs.writeFileSync(path.join(rt,'package.json'),JSON.stringify(report,null,2)+'\n');
+  console.log(JSON.stringify({localOnly:true,sourceCommit:snapshot.commit,package:path.join(rt,'package.json'),productionWrites:0}));process.exit(0);
+ }
  cp.execFileSync('ssh',[...ssh,'python3 -'],{input:'import pathlib\np=pathlib.Path('+JSON.stringify(stage)+');assert not p.exists(),"STAGE_ALREADY_EXISTS";p.mkdir(mode=0o700)\n',stdio:['pipe','pipe','pipe'],windowsHide:true});
  for(const[local,name]of[[archive,'source.tar'],[file,'input.json']])cp.execFileSync('scp',['-q','-i',path.join(process.env.USERPROFILE,'.ssh','smartrayco-deploy'),local,'root@192.168.55.201:'+stage+'/'+name],{stdio:['ignore','pipe','pipe'],windowsHide:true});
 }

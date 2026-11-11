@@ -7,14 +7,18 @@ import { useInstallationsStore } from '/src/stores/installations.ts';
 import { supabase } from '/src/lib/supabase.ts';
 import { saveDraft, loadDraft, clearDraft } from '/src/lib/formDrafts.ts';
 import { enqueueClosure, listQueuedClosures, flushQueue, removeQueuedClosure } from '/src/lib/offlineQueue.ts';
-const calls=[]; let row;
-function reset(){row={id:'synthetic-installation',client_id:'synthetic-client',contract_id:'synthetic-contract',status:'in_progress',iptv_policy_version:1,iptv_installation_mode:null};}
+import { setQueuedIptvMode } from '/src/lib/offlineQueue.ts';
+import { closeCampoDatabase } from '/src/lib/campoDatabase.ts';
+import { closurePayloadHash, withClosureLock } from '/src/lib/closureSubmission.ts';
+import { createStore as legacyCreateStore, get as legacyGet } from 'idb-keyval';
+const calls=[]; let row,operationId;
+function reset(){operationId=crypto.randomUUID();row={id:'synthetic-installation',client_id:'synthetic-client',contract_id:'synthetic-contract',status:'in_progress',iptv_policy_version:1,iptv_installation_mode:null};}
 reset();
 supabase.rpc=async(name,args)=>{
   calls.push({name,args});
   if(name==='work_order_is_final') return {data:false,error:null};
   if(name==='installation_iptv_preflight') return args.p_mode
-    ? {data:{valid:true,installationId:row.id,clientId:row.client_id,contractId:row.contract_id,mode:args.p_mode},error:null}
+    ? {data:{valid:true,installationId:row.id,clientId:row.client_id,contractId:row.contract_id,mode:args.p_mode,operationId:args.p_operation_id,payloadHash:args.p_payload_hash,materialChecked:true},error:null}
     : {data:null,error:{message:'Selecciona cómo se instaló IPTV'}};
   throw Error('RPC inesperada: '+name);
 };
@@ -26,8 +30,8 @@ supabase.from=table=>{
 };
 const app=createApp({components:{Field},setup(){
   const store=useInstallationsStore(),mode=ref(null),error=ref(''),disabled=ref(false);
-  async function close(){error.value='';try{const result=await store.prepareIptvClosure(row.id,row.client_id,row.contract_id,mode.value);if(!result.alreadyCompleted)await store.updateInstallation(row.id,{status:'completed',...result.patch});}catch(e){error.value=e.message}}
-  window.harness={store,mode,error,disabled,calls,reset,get row(){return row},nextTick,saveDraft,loadDraft,clearDraft,enqueueClosure,listQueuedClosures,flushQueue,removeQueuedClosure};
+  async function close(){error.value='';try{const hash=await closurePayloadHash({jobType:'installation',jobId:row.id,clientId:row.client_id,contractId:row.contract_id,iptvInstallationMode:mode.value});const result=await store.prepareIptvClosure(row.id,row.client_id,row.contract_id,mode.value,{operationId,hash});if(!result.alreadyCompleted)await store.updateInstallation(row.id,{status:'completed',...result.patch});}catch(e){error.value=e.message}}
+  window.harness={store,mode,error,disabled,calls,reset,get row(){return row},nextTick,saveDraft,loadDraft,clearDraft,enqueueClosure,listQueuedClosures,flushQueue,removeQueuedClosure,setQueuedIptvMode,closeCampoDatabase,closurePayloadHash,withClosureLock,legacyCreateStore,legacyGet};
   return ()=>h('div',[h(Field,{modelValue:mode.value,disabled:disabled.value,'onUpdate:modelValue':value=>{mode.value=value}}),h('button',{onClick:close},'Completar'),h('p',{role:'alert'},error.value)]);
 }});
 app.use(createPinia());app.mount('#app');window.ready=true;
