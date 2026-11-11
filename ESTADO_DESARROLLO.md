@@ -13,17 +13,20 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
-**Altas Dúo / IPTV — VENTANA PREPARADA, NO APTO AÚN (11/11/2026):** Campo
-detenido por instrucción del propietario, quien confirma celulares verificados
-sin pendientes. Lectura 09:32:57 Lima: 0 in_progress, recibos incompletos,
-transacciones/locks de Campo y rechazos; 9 órdenes abiertas, 4 sesiones huérfanas y 1 aprobación
-de equipo en ticket resuelto, preservadas. Hash SQL esperado, sin migrar.
-Recarga completa coordinada puede evitar compatibilidad adicional con JS
-antiguo; no resuelve borradores/IndexedDB. Detalle, piloto y recuperación:
-`docs/ALTAS-IPTV-VENTANA-MANTENIMIENTO-20261111.md`. 5 checks nuevos PASS y
-68 previos verificados sin cambios de implementación/Flutter/SQL. Sin push,
-deploy, escrituras productivas ni piloto real. Esperar autorización;
-persistencia, certificación WebView y alcance de release siguen pendientes.
+**Altas Dúo / IPTV — BLOQUEOS CORREGIDOS, NO APTO HASTA ANDROID REAL
+(11/11/2026):** commits locales `36cc6b9` y `bcb3ec4`; aplicación/SQL del
+paquete `bcb3ec4c432c6baa39f175cca115795d5ae1cd45`. Upgrade IndexedDB aditivo,
+borradores con modalidad, cola recuperable sin bloquear otras órdenes,
+Web Locks, recibo ID/hash para respuesta perdida y rechazo temprano del JS
+antiguo; validaciones e históricos preservados. 118 comprobaciones locales
+PASS, tipos y 2 builds aislados idénticos (128 artefactos); scope/snapshot
+propios en `deploy/iptv-20261111/`, entradas OLT intactas. Informe y secuencia:
+`docs/ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md`. Falta certificación del APK/
+WebView real y controles/respaldos del publicador en VM tras autorización.
+Campo sigue detenido; lectura 09:32:57 Lima es muestra anterior: 0 ejecución,
+9 abiertas, 4 sesiones huérfanas y 1 aprobación histórica conservadas.
+No se presume almacenamiento móvil vacío. Sin migración aplicada, push,
+deploy ni escrituras productivas; esperar revisión/autorización.
 **Detección automática de ONT autorizadas externamente — DESPLEGADA y
 verificada en vivo (03/11/2026, autorizado expresamente):** supera el
 punto "Pendiente real" de Gustavo Reyes Sandoval en el párrafo siguiente —

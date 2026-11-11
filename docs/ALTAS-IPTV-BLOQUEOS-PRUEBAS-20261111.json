@@ -1,0 +1,97 @@
+{
+  "baselineCommit": "40e43c155b51d9fa847caf665c81b32ecd59c64a",
+  "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+  "changedAssets": [
+    "assets/CampoCustodiaView.js",
+    "assets/CampoDashboardView.js",
+    "assets/CampoMiCustodiaView.js",
+    "assets/CampoTrabajoDetailView.js",
+    "assets/InstalacionDetailView.js",
+    "assets/IptvInstallationModeField.vue_vue_type_script_setup_true_lang.js",
+    "assets/closureSubmission.js",
+    "assets/index.css",
+    "assets/index.js",
+    "assets/installations.js",
+    "assets/usePersonalRead.js"
+  ],
+  "sourceCount": 15,
+  "graphAdditions": [
+    "assets/IptvInstallationModeField.vue_vue_type_script_setup_true_lang.js",
+    "assets/closureSubmission.js"
+  ],
+  "contractPassed": true,
+  "canonical": "scripts/inventory-auth-lab/runtime/iptv-bcb3ec4c432c-1794410564161/canonical/dist",
+  "repro": "scripts/inventory-auth-lab/runtime/iptv-bcb3ec4c432c-1794410564161/repro/dist",
+  "snapshot": "deploy/iptv-20261111/release-source.json",
+  "scope": "deploy/iptv-20261111/scope.json",
+  "package": "scripts/inventory-auth-lab/runtime/consolidation-release/frontend-consolidado-tr069-bcb3ec4-640f166b34/package.json",
+  "migrationSha256": "ecdc672773f7520cfa9e7678def3ccedfe302eeddc6257d96f306b68dd592ee8",
+  "rollbackSha256": "93496354f0bca9eccb07cb53019733cb4744371da5c44dc06d01f54c076ddeb9",
+  "releaseManifestSha256": "e0bbb6ed7ee7e791e06773975a24128e37581517b4fcaf73eb7fe770345f15d1",
+  "reproducible": true,
+  "previousReleaseInputsPreserved": true,
+  "productionWrites": 0,
+  "remoteActions": 0,
+  "toolHash": "640f166b34419135d1c2982241a582691ebae74d7789999fd79a2d5e6723e528",
+  "packageFiles": {
+    "source.tar": "377af8012012480572d7361e90dec63c7f6d5a0a3c49e8b8b1e9d1c00f10f854",
+    "input.json": "d08ec8a0ba6feb7c29eea7dc56dc5d53911f4afa64127ac2c04fe7bac2e1cbb2",
+    "20261111140000_installation_iptv_mode.sql": "ecdc672773f7520cfa9e7678def3ccedfe302eeddc6257d96f306b68dd592ee8",
+    "rollback-installation-iptv-mode.sql": "93496354f0bca9eccb07cb53019733cb4744371da5c44dc06d01f54c076ddeb9"
+  },
+  "artifactCount": 128,
+  "configurationHashes": {
+    "VITE_SUPABASE_URL": "8a5d3912b98e28af19fc194c4895fdd1173b60c8be31b05a82f737b078bb98cf",
+    "VITE_SUPABASE_ANON_KEY": "5cddb7a05579a11af2a99c497c9f739e54855e485040054dfe1000965175a18c",
+    "VITE_MATERIAL_CUSTODY_LIVE_SINCE": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "tests": {
+    "postgresql": {
+      "passed": 22,
+      "failed": 0,
+      "synthetic": true,
+      "network": "none"
+    },
+    "frontendAndRegression": {
+      "passed": 27,
+      "failed": 0
+    },
+    "chromeIndexedDBQueue": {
+      "passed": 30,
+      "failed": 0,
+      "synthetic": true,
+      "remoteNetworkBlocked": true
+    },
+    "releaseContract": {
+      "passed": 34,
+      "failed": 0,
+      "python": "local"
+    },
+    "maintenanceSnapshotIntegrity": {
+      "passed": 5,
+      "failed": 0,
+      "liveCheck": false
+    },
+    "vueTypecheck": {
+      "passed": true
+    },
+    "canonicalBuilds": {
+      "count": 2,
+      "identical": true,
+      "isolatedGitArchives": true,
+      "NODE_ENV": "production"
+    }
+  },
+  "androidWebView": {
+    "certified": false,
+    "pending": [
+      "proceso Android detenido y recuperaci?n de fotos/borrador",
+      "actualizaci?n WebView/sesi?n JS antigua y upgrade IndexedDB bloqueado",
+      "reconexi?n y reintento tras respuesta perdida con aplicaci?n instalada"
+    ]
+  },
+  "status": "NO_APTO_HASTA_CERTIFICAR_ANDROID_WEBVIEW",
+  "migrationApplied": false,
+  "push": false,
+  "deployed": false
+}

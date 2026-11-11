@@ -1,5 +1,9 @@
 # Revisión final IPTV: NO APTO para publicar sin interrumpir Campo
 
+> Actualización posterior: los bloqueos de código se corrigieron en `36cc6b9`/
+> `bcb3ec4`. Véase [resolución y paquete local](ALTAS-IPTV-BLOQUEOS-RESUELTOS-20261111.md).
+> Android/WebView real sigue pendiente; este informe conserva la revisión original.
+
 **Fuente revisada: `8086fba460b587a0560bad5c360c59c48e29eb03`.** Solo
 diagnóstico, pruebas locales y documentación. Sin cambios de aplicación,
 SQL candidato, Flutter o rollback; sin consultas/escrituras productivas,

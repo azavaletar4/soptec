@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "sourceCommit": "bcb3ec4c432c6baa39f175cca115795d5ae1cd45",
+  "backendSources": [],
+  "frontendSources": [
+    "scripts/frontend-release-build.mjs",
+    "src/components/campo/CampoLayout.vue",
+    "src/components/campo/ClosureQueuePanel.vue",
+    "src/components/campo/IptvInstallationModeField.vue",
+    "src/lib/__tests__/installationIptv.test.ts",
+    "src/lib/campoDatabase.ts",
+    "src/lib/closureSubmission.ts",
+    "src/lib/formDrafts.ts",
+    "src/lib/installationIptv.ts",
+    "src/lib/offlineQueue.ts",
+    "src/stores/campo.ts",
+    "src/stores/installations.ts",
+    "src/types/domain.ts",
+    "src/views/campo/CampoTrabajoDetailView.vue",
+    "src/views/instalaciones/InstalacionDetailView.vue"
+  ],
+  "frontendAssets": [
+    "assets/CampoCustodiaView.js",
+    "assets/CampoDashboardView.js",
+    "assets/CampoMiCustodiaView.js",
+    "assets/CampoTrabajoDetailView.js",
+    "assets/InstalacionDetailView.js",
+    "assets/IptvInstallationModeField.vue_vue_type_script_setup_true_lang.js",
+    "assets/closureSubmission.js",
+    "assets/index.css",
+    "assets/index.js",
+    "assets/installations.js",
+    "assets/usePersonalRead.js"
+  ],
+  "frontendGraphTransition": {
+    "before": "5039dc8ba3921aa006732b9d3cb8a57a94ac0139b0e305fe9d2c3438cfa3cbdf",
+    "after": "a43814f1d78f17dc281e5f1b947f1d01933b7c9e99b5d5692788046b9a3348f3",
+    "added": [
+      "assets/IptvInstallationModeField.vue_vue_type_script_setup_true_lang.js",
+      "assets/closureSubmission.js"
+    ]
+  }
+}
