@@ -13,6 +13,15 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
+**Altas Dúo / modalidad IPTV — diseño, detenido antes de migración
+(11/11/2026):** Fase 167 exige TV Box por tener línea IPTV, sin distinguir
+Smart TV/dispositivo propio. Se propone modalidad en la orden y validación
+condicional solo para nuevas Altas; ONT y custodia siguen obligatorias.
+42 pruebas existentes PASS con datos sintéticos; no acreditan corrección.
+Diseño: `docs/ALTAS-DUO-MODALIDAD-IPTV-DISENO-20261111.md`.
+Rosita y todo histórico intactos; sin implementar, SQL nuevo, producción,
+push ni despliegue. Pendiente autorización por requerir migración.
+
 **Cancelación no instalada — diagnóstico/diseño, detenido antes de migración
 (11/11/2026):** Carlos `CTR-2026-00400` tiene ONT y PPPoE, sin Alta histórica;
 el botón solo filtra rol/estado contractual. RPC vigente protege este caso
