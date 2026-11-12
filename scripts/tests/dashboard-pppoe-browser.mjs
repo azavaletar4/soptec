@@ -9,6 +9,7 @@ const chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', [
   '--headless=new','--no-first-run','--disable-background-networking','--remote-debugging-port=0',
   '--user-data-dir='+profile,'about:blank'], {windowsHide:true,stdio:['ignore','ignore','pipe']});
 let ws; const checks=[]; const exceptions=[];
+const staticBuild=process.argv.includes('--static');
 try {
   const endpoint=await new Promise((resolve,reject)=>{
     let log='';const timer=setTimeout(()=>reject(Error('CHROME_TIMEOUT')),20000);
@@ -56,7 +57,7 @@ try {
       if(url.pathname==='/api/dashboard/olt-summary')return response({unconfigured:0,online:8,offline:2,lowSignal:1,deviceCount:1,scanComplete:true,checkedAt:'2026-11-12T18:00:00Z'});
       const table=url.pathname.split('/').at(-1);
       if(table==='user')return response(user);
-      if(table==='profiles')return response({id:uid,full_name:'Admin de prueba',role:'ADMIN',active:true,must_change_password:false});
+      if(table==='profiles')return response({id:uid,full_name:'Admin de prueba',role:sessionStorage.getItem('pppoe-test-role')||'ADMIN',active:true,must_change_password:false});
       if(table==='company_settings')return response({id:1,lunes_hora_ingreso:'07:30:00',resto_hora_ingreso:'08:00:00',tolerancia_minutos:10});
       if(table==='asistencia_registros')return response(null);
       return response([]);
@@ -88,21 +89,30 @@ try {
   await evaluate('window.__mode="unavailable";window.__tickPpp()');await until('document.body.innerText.includes("Sin lectura exitosa")');
   assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-testid=pppoe-connected]")].map(el=>el.innerText)'),['—','—','—','—']);checks.push('NO_DATA_NEVER_FAKE_ZERO');
   await evaluate('window.__mode="partial";window.__tickPpp()');await until('document.body.innerText.includes("Lectura parcial")');checks.push('PARTIAL_READING_VISIBLE');
+  if(!staticBuild){
   await evaluate('(async()=>{const m=await import("/src/stores/auth.ts");m.useAuthStore().role="FACTURACION";})()');
   await until('document.querySelector("[data-testid=pppoe-section]")===null');
   assert.equal(await evaluate('window.__pppTimers.size'),0);checks.push('ROLE_REVOCATION_STOPS_POLLING');
   await evaluate('(async()=>{window.__mode="fresh";const m=await import("/src/stores/auth.ts");m.useAuthStore().role="ADMIN";})()');
   await until('document.body.innerText.includes("Lectura actual")');
+  }
   await evaluate('window.__mode="slow";window.__pendingPoll=window.__tickPpp();void 0');
   await until('document.querySelector("[data-testid=pppoe-section] button").disabled');
   const inFlightCalls=await evaluate('window.__pppCalls');
   await evaluate('document.querySelector("[data-testid=pppoe-section] button").click()');
   assert.equal(await evaluate('window.__pppCalls'),inFlightCalls);checks.push('NO_OVERLAPPING_REFRESH');
-  await evaluate('document.querySelector("#app").__vue_app__.config.globalProperties.$router.push("/clientes")');
+  await evaluate('[...document.querySelectorAll("button")].find(el=>el.innerText.includes("Nuevo cliente")).click()');
   await until('location.pathname==="/clientes" && document.querySelector("[data-testid=pppoe-section]")===null');
   await evaluate('window.__pendingPoll');assert.equal(await evaluate('window.__pppTimers.size'),0);checks.push('UNMOUNT_ABORTS_AND_CLEARS_TIMER');
   assert.equal(await evaluate('window.__writes'),0);checks.push('NO_BUSINESS_WRITES');
+  if(staticBuild){
+    await evaluate('sessionStorage.setItem("pppoe-test-role","FACTURACION")');
+    await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});
+    await until('document.body.innerText.includes("Tickets abiertos")');
+    assert.equal(await evaluate('document.querySelector("[data-testid=pppoe-section]")'),null);
+    assert.equal(await evaluate('window.__pppCalls'),0);checks.push('STATIC_BUILD_PERMISSION_RETAINED');
+  }
   assert.equal(exceptions.length,0,JSON.stringify(exceptions));
-  console.log(JSON.stringify({synthetic:true,productionAccess:false,checks,exceptions:0}));
+  console.log(JSON.stringify({synthetic:true,productionAccess:false,staticBuild,checks,exceptions:0}));
   await send('Browser.close');
 } finally {ws?.close();chrome.kill();}

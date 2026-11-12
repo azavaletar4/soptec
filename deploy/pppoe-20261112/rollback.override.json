@@ -1,0 +1,10 @@
+{
+  "services": {
+    "backend": {
+      "image": "sha256:87e442e9bdcf17fcd192dbe401fa533c5746e8fd96658b50e0fe24b175162001"
+    },
+    "frontend": {
+      "image": "sha256:6ed5f7751bb2f8b7c26baf6bed8228c1c9ed695ef60a25c2ca676a36bbea923d"
+    }
+  }
+}

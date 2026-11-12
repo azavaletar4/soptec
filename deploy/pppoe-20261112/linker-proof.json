@@ -1,0 +1,344 @@
+{
+  "mainBodyIdentical": true,
+  "sameExportSymbols": 56,
+  "scopeResolvedAlphaEquivalence": true,
+  "protectedModules": [
+    {
+      "module": "assets/ActivosFijosView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/AnaliticaView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/AppLayout.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/AsistenciaView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/AuthorizeOnuModal.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/CajaChicaView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/CampoCustodiaView.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/CampoDashboardView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/CampoMiCustodiaView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/CampoTrabajoDetailView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ClientDetailView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ClientRetirementDialog.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ClientesMapView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ClientesView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/CortesView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/CrewAssignEditor.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/DateRangeFilter.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/DevolucionesView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/DispatchBoardView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/FacturacionView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/FlotaView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/HistoricoAtendidosView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ImportMapView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/InstalacionDetailView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/InstalacionesView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/InventarioAlbumView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/InventarioConciliacionView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/InventarioCustodiaView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/InventarioProductoView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/InventarioView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/InventorySearchResults.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/IptvInstallationModeField.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/MikrotikDetailView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/MikrotikDevicesView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/MoveAlbumMenu.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/OltDetailView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/OltDevicesView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/OperacionesHoyView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/PlanesView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ProspectosView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/RankingTecnicosView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/RecoveryModal.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/RedMapView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ReportesView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/RoutineDetailView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/RutinasView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ServidoresView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/SpliceDiagramModal.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/TicketDetailView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/Tr069View.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/UsuariosView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/WorkOrderPointsEditor.vue_vue_type_script_setup_true_lang.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ZonasView.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/catalogs.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/clientEquipmentPhotos.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/clientPhotos.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/clients.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/contracts.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/descuentosCompensacion.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/equipmentPhotoType.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/foFibra.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/infraElementos.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/installations.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/inventory.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/inventoryUnits.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/jobAssignees.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/mikrotik.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/nativeApp.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/olt.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/prospects.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/routineTraslado.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/routines.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/technicianCustody.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/ticketApprovals.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/tickets.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/tr069.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/usePersonalRead.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/useUnifiedJobs.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/useWorkOrderFinality.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/vehiculos.js",
+      "onlyGeneratedBindingsChanged": true
+    },
+    {
+      "module": "assets/vue3-apexcharts.js",
+      "onlyGeneratedBindingsChanged": true
+    }
+  ],
+  "functionalAssets": [
+    "assets/DashboardView.js",
+    "assets/index.css"
+  ],
+  "artifactsModifiedByProof": false
+}
