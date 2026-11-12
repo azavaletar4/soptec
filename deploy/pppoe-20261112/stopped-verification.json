@@ -1,0 +1,63 @@
+{
+  "status": "STOPPED_BEFORE_BUILD_AND_DEPLOY",
+  "verifiedAt": "2026-11-12T19:17:30.140Z",
+  "sourceCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+  "preparationCommit": "8875af009b3bdad9857b4278a6967616c53989ab",
+  "reason": "PACKAGE_DRIFT:source.tar",
+  "expectedArchiveSha256": "9a31e1482afe364cdb74d4bab6fec5f54787583aa16133937164ce4a30c81965",
+  "actualArchiveSha256": "ec1fdf08e6627346328900fa1c015deb625be1584fe23634b5e7c97b8926c8d0",
+  "archiveFilesMatchIsolatedCommit": true,
+  "archiveFileCount": 317,
+  "inputAndSnapshotUnchanged": true,
+  "originalArchiveRetained": false,
+  "appendedSnapshotMetadata": [
+    {
+      "header": "PaxHeader/release-source.json",
+      "attributes": {
+        "ctime": "1794506868.0620424",
+        "atime": "1794510781.8265191",
+        "LIBARCHIVE.creationtime": "1794506868.0620424",
+        "mtime": "1794508826.9899978"
+      }
+    }
+  ],
+  "localBackups": {
+    "backend": {
+      "image": "sha256:87e442e9bdcf17fcd192dbe401fa533c5746e8fd96658b50e0fe24b175162001",
+      "sha256": "a31bddd8534f361e8391a387a9134ec8b905a72aaa0351e7803f5d5da1b2cc55",
+      "verified": true
+    },
+    "frontend": {
+      "image": "sha256:6ed5f7751bb2f8b7c26baf6bed8228c1c9ed695ef60a25c2ca676a36bbea923d",
+      "sha256": "2bf22e1c0524ba7fea591e37be53980f5fac9179eac2aa3405b514257220f28f",
+      "verified": true
+    }
+  },
+  "remote": {
+    "health": "ok",
+    "servicesUnchanged": true,
+    "buildStarted": false,
+    "deploymentAttempted": false,
+    "stagedSourceArchiveSha256": "ec1fdf08e6627346328900fa1c015deb625be1584fe23634b5e7c97b8926c8d0",
+    "rollbackTested": true,
+    "rollbackOverride": "/opt/smartrayco-staging/frontend-consolidado-tr069-b3cdef6-d4ff4b8e1d/release.rollback.json",
+    "backups": {
+      "backend": {
+        "path": "/opt/smartrayco-staging/frontend-consolidado-tr069-b3cdef6-d4ff4b8e1d/backend-before.image.tar",
+        "sha256": "1396e3209f95005ce317935ec4febebcb4b607fc2d513f696a324be644ca749f",
+        "image": "sha256:87e442e9bdcf17fcd192dbe401fa533c5746e8fd96658b50e0fe24b175162001",
+        "verified": true
+      },
+      "frontend": {
+        "path": "/opt/smartrayco-staging/frontend-consolidado-tr069-b3cdef6-d4ff4b8e1d/frontend-before.image.tar",
+        "sha256": "5ac75dab0dd2d5be3b698a8bc4dbb761bb977fe5fb011576bf80338d2a192c98",
+        "image": "sha256:6ed5f7751bb2f8b7c26baf6bed8228c1c9ed695ef60a25c2ca676a36bbea923d",
+        "verified": true
+      }
+    }
+  },
+  "rollbackExecuted": false,
+  "supabaseWritesByThisProcedure": 0,
+  "mikrotikRequestsByThisProcedure": 0,
+  "servicesDeployed": []
+}
