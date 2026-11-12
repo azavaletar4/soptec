@@ -1,0 +1,79 @@
+{
+  "status": "APLICADO_Y_VERIFICADO",
+  "appliedAt": "2026-11-12T17:18:09.0839806Z",
+  "verifiedAt": "2026-11-12T17:18:27.502992+00:00",
+  "preparationCommit": "37cf0ec5d97c42d98835b5fa09aa3f928de8032d",
+  "function": "public.technician_ranking_between(timestamp with time zone,timestamp with time zone)",
+  "definitionMd5Before": "01290877f59ae43101b55a1a09d56691",
+  "definitionMd5After": "95d53cc0d5275132dae320fcf127a5fc",
+  "applySha256": "8e2dfeb15ff2debd6ecf28d8077751daca6926ec29cc5b0a21bbefdd621b6990",
+  "backupSha256": "904979865db3078ba75ab17d716f8ac638c7126968ca26e1f6270cfdb7502464",
+  "metadataPreserved": true,
+  "dependenciesPreserved": true,
+  "otherFunctionsUnchanged": true,
+  "pointsPenaltiesInstallationsAndRanksUnchanged": true,
+  "duplicateWorkContributions": 0,
+  "countersMatchDistinctJobs": true,
+  "dayWeekMonthAndLegacyVerified": true,
+  "ticket": {
+    "reference": "TCK-2026-00104",
+    "technician": "Jadir Zavaleta",
+    "category": "other",
+    "status": "resolved",
+    "points": 2,
+    "workContributions": 1,
+    "countedAsAveria": true
+  },
+  "ranking": [
+    {
+      "technician": "Jadir Zavaleta",
+      "averiasBefore": 0,
+      "averiasAfter": 10,
+      "routines": 11,
+      "installations": 17,
+      "points": 156.6,
+      "rank": 1
+    },
+    {
+      "technician": "Ruber Pizango",
+      "averiasBefore": 1,
+      "averiasAfter": 9,
+      "routines": 33,
+      "installations": 5,
+      "points": 148.1,
+      "rank": 2
+    },
+    {
+      "technician": "Jairo Bernabe",
+      "averiasBefore": 3,
+      "averiasAfter": 9,
+      "routines": 39,
+      "installations": 3,
+      "points": 132.8,
+      "rank": 3
+    },
+    {
+      "technician": "Jhordanno Zavaleta",
+      "averiasBefore": 1,
+      "averiasAfter": 8,
+      "routines": 20,
+      "installations": 6,
+      "points": 85.8,
+      "rank": 4
+    },
+    {
+      "technician": "Vicente Valdez",
+      "averiasBefore": 0,
+      "averiasAfter": 0,
+      "routines": 1,
+      "installations": 3,
+      "points": 15.8,
+      "rank": 5
+    }
+  ],
+  "backup": "deploy/ranking-counters-20261112/backup.sql",
+  "rollback": "deploy/ranking-counters-20261112/rollback.sql",
+  "rollbackExecuted": false,
+  "frontendBackendDeployed": false,
+  "businessDataModified": false
+}
