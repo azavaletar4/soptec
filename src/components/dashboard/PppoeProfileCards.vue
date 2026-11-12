@@ -61,31 +61,90 @@ onUnmounted(() => { mounted = false; stop(); });
 </script>
 
 <template>
-  <section v-if="allowed" class="mb-8" aria-labelledby="pppoe-heading" data-testid="pppoe-section">
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-      <div>
-        <h2 id="pppoe-heading" class="text-sm font-semibold text-slate-800">Clientes PPPoE por perfil</h2>
-        <p class="text-xs text-slate-500 mt-0.5">MikroTik Administrador CCR2116 · actualización cada 60 s</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <span class="text-xs rounded-full px-2.5 py-1" :class="stale || reading?.partial ? 'bg-amber-50 text-amber-800' : reading?.status === 'fresh' ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'" role="status">{{ stateLabel }}</span>
-        <button class="text-xs font-medium text-sky-700 disabled:text-slate-400" :disabled="loading" @click="refresh">Actualizar</button>
-      </div>
+  <section v-if="allowed" class="pppoe-section" :class="{ 'is-stale': stale }" aria-labelledby="pppoe-heading" data-testid="pppoe-section" :aria-busy="loading">
+    <div class="pppoe-heading">
+      <h2 id="pppoe-heading">PPPoE</h2>
+      <span class="pppoe-source">Administrador · CCR2116</span>
+      <button :disabled="loading" @click="refresh" aria-label="Actualizar PPPoE" title="Actualizar PPPoE" class="pppoe-refresh"><span :class="{ spinning: loading }" aria-hidden="true">↻</span></button>
     </div>
-    <p v-if="networkError || reading?.message" class="text-xs text-amber-800 mb-3" role="status">
-      {{ networkError ? (reading?.lastSuccessAt ? 'No se pudo actualizar. Se conserva la última lectura exitosa.' : 'No se pudo consultar el administrador. Sin datos disponibles.') : reading?.message }}
-    </p>
-    <div class="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4 gap-3">
-      <article v-for="card in cards" :key="card.profile" class="surface min-w-0 p-4 border-t-2" :class="stale ? 'border-t-amber-400' : 'border-t-sky-500'" data-testid="pppoe-card">
-        <h3 class="text-sm font-semibold text-slate-700">{{ card.label }}</h3>
-        <div class="flex items-baseline gap-2 mt-2">
-          <strong class="text-3xl font-semibold tracking-tight tabular-nums text-slate-900" data-testid="pppoe-connected">{{ card.connected ?? '—' }}</strong>
-          <span class="text-xs text-slate-500">conectados</span>
-        </div>
-        <p class="text-sm text-slate-600 mt-1"><span class="font-medium tabular-nums">{{ card.registered ?? '—' }}</span> registrados</p>
-        <p class="text-[11px] text-slate-500 mt-3 leading-relaxed">Última lectura exitosa:<br><span class="tabular-nums">{{ lastRead }}{{ reading?.lastSuccessAt ? ' · Perú' : '' }}</span></p>
-        <p v-if="stale" class="text-xs font-medium text-amber-800 mt-1">Datos desactualizados</p>
+    <div class="pppoe-columns" aria-hidden="true"><span>Perfil</span><span>Conectados</span><span>Registrados</span></div>
+    <div class="pppoe-grid">
+      <article v-for="card in cards" :key="card.profile" class="pppoe-profile" data-testid="pppoe-card" :data-profile="card.profile">
+        <h3>{{ card.label }}</h3>
+        <p class="pppoe-value"><span class="sr-only">Conectados: </span><strong data-testid="pppoe-connected">{{ card.connected ?? '—' }}</strong></p>
+        <span class="pppoe-label" aria-hidden="true">conectados</span>
+        <p class="pppoe-registered"><span class="sr-only">Registrados: </span><strong data-testid="pppoe-registered">{{ card.registered ?? '—' }}</strong><span class="pppoe-label-inline" aria-hidden="true"> registrados</span></p>
+        <div class="pppoe-track" aria-hidden="true"><span :style="{ width: card.connected !== null && card.registered ? Math.min(100, card.connected / card.registered * 100) + '%' : '0%' }"></span></div>
       </article>
     </div>
+    <div class="pppoe-reading">
+      <span role="status" :class="{ warning: stale || reading?.partial }"><i :class="{ fresh: reading?.status === 'fresh' && !stale && !reading.partial }"></i>{{ stateLabel }}</span>
+      <span class="pppoe-date"><span class="sr-only">Última lectura exitosa: </span>{{ lastRead }}{{ reading?.lastSuccessAt ? ' · Perú' : '' }}</span>
+    </div>
+    <p v-if="stale" class="pppoe-stale">Datos desactualizados</p>
+    <p v-if="networkError || reading?.message" class="pppoe-message" role="status">
+      {{ networkError ? (reading?.lastSuccessAt ? 'No se pudo actualizar. Se conserva la última lectura exitosa.' : 'No se pudo consultar el administrador. Sin datos disponibles.') : reading?.message }}
+    </p>
   </section>
 </template>
+
+<style scoped>
+.pppoe-section { color:var(--dv-ink,#172e40); }
+.pppoe-heading { display:flex; align-items:center; gap:8px; padding:6px 16px; min-height:43px; position:relative; }
+.pppoe-heading:before { content:''; position:absolute; left:-1px; height:16px; width:3px; background:var(--dv-brand,#087caa); }
+h2 { font-size:13px; font-weight:600; }
+.pppoe-source { margin-left:auto; font-size:10px; color:var(--dv-muted,#617585); }
+.pppoe-refresh { width:34px; height:34px; border-radius:5px; color:var(--dv-muted,#617585); font-size:22px; }
+.pppoe-refresh:hover { background:#f2f6f8; color:var(--dv-brand,#087caa); }
+.pppoe-refresh:disabled { opacity:.5; cursor:wait; }
+.pppoe-refresh span { display:inline-block; }
+.pppoe-columns { display:none; }
+.pppoe-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding:7px 16px 12px; }
+.pppoe-profile { min-width:0; border-left:1px solid var(--dv-line,#dfe7ec); padding:0 14px; }
+.pppoe-profile:first-child { padding-left:0; border-left:0; }
+.pppoe-profile:last-child { padding-right:0; }
+h3 { font-size:12px; font-weight:550; margin-bottom:5px; }
+.pppoe-value strong { font-size:40px; line-height:1.1; font-weight:550; letter-spacing:-1.2px; font-variant-numeric:tabular-nums; }
+.pppoe-label,.pppoe-registered { font-size:11px; color:var(--dv-muted,#617585); }
+.pppoe-label { display:block; margin:1px 0 6px; }
+.pppoe-registered strong { font-weight:600; color:var(--dv-ink,#172e40); font-size:13px; font-variant-numeric:tabular-nums; }
+.pppoe-track { height:3px; background:#e5edf2; margin-top:10px; overflow:hidden; }
+.pppoe-track span { display:block; height:100%; background:var(--dv-brand,#087caa); }
+.is-stale .pppoe-track span { background:#956013; }
+.pppoe-reading { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 16px 12px; font-size:10px; color:var(--dv-muted,#617585); }
+.pppoe-reading>span:first-child { display:flex; align-items:center; gap:5px; white-space:nowrap; }
+.pppoe-reading i { height:5px; width:5px; border-radius:50%; background:#617585; }
+.pppoe-reading i.fresh { background:#26785c; }
+.pppoe-reading .warning { color:#956013; }
+.pppoe-date { text-align:right; font-variant-numeric:tabular-nums; }
+.pppoe-message { margin:0 16px 12px; padding:7px 9px; border-radius:4px; background:#fbf5e9; color:#956013; font-size:11px; }
+.pppoe-stale { color:#956013; font-size:10px; margin:-6px 16px 8px; }
+button:focus-visible { outline:2px solid #087caa; outline-offset:2px; }
+@media(max-width:700px) {
+  .pppoe-heading { padding:4px 12px; min-height:39px; }
+  .pppoe-source { font-size:9px; }
+  .pppoe-columns { display:grid; grid-template-columns:1fr 78px 80px; gap:6px; padding:0 12px 5px; font-size:10px; color:#617585; }
+  .pppoe-columns span:not(:first-child) { text-align:right; }
+  .pppoe-grid { display:block; padding:0 12px 5px; }
+  .pppoe-profile,.pppoe-profile:first-child,.pppoe-profile:last-child { display:grid; grid-template-columns:1fr 78px 80px; align-items:center; gap:6px; padding:5px 0; min-height:40px; border:0; border-top:1px solid #dfe7ec; }
+  h3 { margin:0; font-size:12px; }
+  .pppoe-value { text-align:right; }
+  .pppoe-value strong { font-size:26px; line-height:1.1; letter-spacing:-.5px; }
+  .pppoe-label,.pppoe-label-inline,.pppoe-track { display:none; }
+  .pppoe-registered { text-align:right; }
+  .pppoe-registered strong { font-size:18px; font-weight:400; color:#617585; }
+  .pppoe-reading { padding:4px 12px 9px; font-size:9px; }
+  .pppoe-message { margin:0 12px 10px; font-size:11px; }
+}
+@media(max-width:359px) {
+  .pppoe-columns,.pppoe-profile,.pppoe-profile:first-child,.pppoe-profile:last-child { grid-template-columns:1fr 65px 67px; gap:4px; }
+  .pppoe-columns { font-size:9px; }
+  h3 { font-size:11px; }
+  .pppoe-reading { flex-wrap:wrap; }
+  .pppoe-date { margin-left:auto; }
+}
+@media(prefers-reduced-motion:no-preference) {
+  .spinning { animation:pppoe-spin 1s linear infinite; }
+  @keyframes pppoe-spin { to { transform:rotate(360deg); } }
+}
+</style>

@@ -24,7 +24,7 @@ try {
   const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
   const c=(method,params={})=>send(method,params,sessionId);
   await c('Page.enable');await c('Runtime.enable');await c('Network.enable');
-  await c('Network.setBlockedURLs',{urls:['*supabase.co/*','*/api/*']});
+  await c('Network.setBlockedURLs',{urls:['*supabase.co/*','*/api/*','*fonts.googleapis.com/*','*fonts.gstatic.com/*']});
   const evaluate=async expression=>{const result=await c('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw Error(JSON.stringify(result.exceptionDetails));return result.result.value;};
   const until=async expression=>{for(let i=0;i<200;i++){if(await evaluate(expression))return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('UI_TIMEOUT '+expression+' DIAGNOSTIC '+await evaluate('JSON.stringify({url:location.href,body:document.body.innerText.slice(0,1800),calls:window.__pppCalls})')+' EXCEPTIONS '+JSON.stringify(exceptions));};
   function fixture(){
@@ -71,13 +71,13 @@ try {
   assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-testid=pppoe-connected]")].map(el=>el.innerText)'),['40','80','6','7']);
   const section=()=>evaluate('document.querySelector("[data-testid=pppoe-section]").innerText');
   assert.match(await section(),/13:04:05/);assert.doesNotMatch(await section(),/Morosos/);
-  assert.match(await evaluate('document.body.innerText'),/Tickets abiertos/);
+  assert.match(await evaluate('document.body.innerText'),/Soporte/);
   checks.push('FOUR_EXACT_PROFILES','CONNECTED_PRIMARY','PERU_TIME_IN_TOKYO_BROWSER','OTHER_DASHBOARD_INDICATORS_RETAINED');
   for(const width of [1440,375,320]){
     await c('Emulation.setDeviceMetricsOverride',{width,height:1100,deviceScaleFactor:1,mobile:width<500});
     assert.equal(await evaluate('(()=>{const el=document.querySelector("[data-testid=pppoe-section]");return el.scrollWidth<=el.clientWidth+1;})()'),true);
     const columns=await evaluate('new Set([...document.querySelectorAll("[data-testid=pppoe-card]")].map(el=>Math.round(el.getBoundingClientRect().left))).size');
-    assert.equal(columns,width===1440?4:width===375?2:1);
+    assert.equal(columns,width===1440?4:1);
     checks.push('LAYOUT_'+width);
   }
   const prior=await evaluate('window.__pppCalls');await evaluate('window.__tickPpp()');
@@ -101,14 +101,14 @@ try {
   const inFlightCalls=await evaluate('window.__pppCalls');
   await evaluate('document.querySelector("[data-testid=pppoe-section] button").click()');
   assert.equal(await evaluate('window.__pppCalls'),inFlightCalls);checks.push('NO_OVERLAPPING_REFRESH');
-  await evaluate('[...document.querySelectorAll("button")].find(el=>el.innerText.includes("Nuevo cliente")).click()');
+  await evaluate('document.querySelector(".dv-shortcuts").open=true;[...document.querySelectorAll("button")].find(el=>el.innerText.includes("Nuevo cliente")).click()');
   await until('location.pathname==="/clientes" && document.querySelector("[data-testid=pppoe-section]")===null');
   await evaluate('window.__pendingPoll');assert.equal(await evaluate('window.__pppTimers.size'),0);checks.push('UNMOUNT_ABORTS_AND_CLEARS_TIMER');
   assert.equal(await evaluate('window.__writes'),0);checks.push('NO_BUSINESS_WRITES');
   if(staticBuild){
     await evaluate('sessionStorage.setItem("pppoe-test-role","FACTURACION")');
     await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});
-    await until('document.body.innerText.includes("Tickets abiertos")');
+    await until('document.body.innerText.includes("Soporte")');
     assert.equal(await evaluate('document.querySelector("[data-testid=pppoe-section]")'),null);
     assert.equal(await evaluate('window.__pppCalls'),0);checks.push('STATIC_BUILD_PERMISSION_RETAINED');
   }
