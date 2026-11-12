@@ -1,12 +1,16 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { getDashboardPppoeProfiles } from '../services/dashboardPppoeProfiles';
+import { createDashboardPppoeHandler } from '../services/dashboardPppoeHandler';
 
 export const dashboardRoutes = new Hono();
 
 const STAFF_READ = ['SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE'] as const;
 
 dashboardRoutes.use('*', requireAuth, requireRole(...STAFF_READ));
+
+dashboardRoutes.get('/pppoe-profiles', createDashboardPppoeHandler(getDashboardPppoeProfiles));
 
 interface DeviceStatusRow {
   name: string;

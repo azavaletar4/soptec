@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
+import PppoeProfileCards from '@/components/dashboard/PppoeProfileCards.vue';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useOltStore } from '@/stores/olt';
 
@@ -135,6 +136,8 @@ const hasChartData = computed(() => chartBars.value.some((b) => b.billed > 0 || 
     </div>
 
     <p v-if="dashboard.error" class="mb-4 text-sm text-red-600">{{ dashboard.error }}</p>
+
+    <PppoeProfileCards />
 
     <template v-if="dashboard.summary">
       <!-- Estado de la red: encabezado del dashboard -->
