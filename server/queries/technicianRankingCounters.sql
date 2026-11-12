@@ -1,7 +1,7 @@
 -- Consulta candidata LOCAL para el cuerpo de technician_ranking_between.
 -- Solo SELECT; no es una migracion y no instala ni reemplaza funciones.
 -- p_start/p_end son los parametros existentes. No cambia puntos ni penalizaciones.
--- Desde el corte oficial, cada ticket acreditado cuenta salvo reconexiones.
+-- Desde el corte oficial, incluye other acreditados; no billing ni installation.
 -- Los contadores deduplican por orden/tecnico; las sumas conservan cada aporte.
 with period as (select p_start as start_date,p_end as end_date),
   contributions as materialized (
@@ -15,8 +15,8 @@ with period as (select p_start as start_date,p_end as end_date),
   ticket_work as (
     select technician_id,
       count(distinct job_id) filter(where category in ('no_service','slow_speed','equipment')
-        or (occurred_at>=timestamptz '2026-11-01 00:00:00 America/Lima'
-          and category is distinct from 'reconnection_relocation')) as averias_count,
+        or (category='other'
+          and occurred_at>=timestamptz '2026-11-01 00:00:00 America/Lima')) as averias_count,
       count(*) filter(where category='reconnection_relocation') as reconexiones_count,
       sum(points) as ticket_points
     from contributions where job_type='ticket' and kind='work' group by technician_id

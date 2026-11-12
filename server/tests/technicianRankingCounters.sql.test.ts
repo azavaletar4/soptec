@@ -97,12 +97,12 @@ test('Ranking: consulta candidata en PostgreSQL aislado, sin red ni datos reales
       assert.equal(JSON.parse(sql('set role service_role;select to_jsonb(r) from get_technician_ranking(11,2026) r;')).averias_count, 1);
     });
 
-    await t.test('Categorias oficiales, reconexiones separadas, rutina y Alta conservadas', () => {
+    await t.test('Solo categorias tecnicas u other acreditado; billing e installation no son averias', () => {
       reset();
       for (const category of ['no_service', 'slow_speed', 'equipment', 'other', 'billing', 'installation', 'reconnection_relocation']) add('ticket', { category });
       add('routine', { points: 3 }); add('installation', { points: 10 });
       const { after } = compare();
-      assert.equal(after[0].averias_count, 6);
+      assert.equal(after[0].averias_count, 4);
       assert.equal(after[0].reconexiones_count, 1);
       assert.equal(after[0].rutinas_count, 1);
       assert.equal(after[0].installations_count, 1);

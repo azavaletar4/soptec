@@ -1,6 +1,6 @@
 # Diagnostico READ ONLY acotado al ranking y TCK-2026-00104.
 [CmdletBinding()]
-param()
+param([ValidateSet('counters','activation','postcheck')][string]$Scope='counters')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $password=$null; $payload=$null; $response=$null
@@ -40,14 +40,18 @@ try {
     if([string]::IsNullOrEmpty($password) -or $password -match '[\r\n]') { throw 'SAFE:CREDENCIAL_INVALIDA' }
     $stage='CA'
     $ca=Get-TrustedCa $settings.PGSSLROOTCERT
-    $queryFile='tests/ranking-counters-readonly.sql'
+    $queryFile=switch($Scope) {
+        'activation' { 'tests/ranking-counters-activation-readonly.sql' }
+        'postcheck' { '../deploy/ranking-counters-20261112/verify-readonly.sql' }
+        default { 'tests/ranking-counters-readonly.sql' }
+    }
     $query=[IO.File]::ReadAllText((Join-Path $PSScriptRoot $queryFile))
     # Evalua solo el SELECT candidato dentro de la misma transaccion READ ONLY.
     # No CREATE/REPLACE, migraciones, cambios de permisos ni datos.
     $candidate=[IO.File]::ReadAllText((Join-Path $PSScriptRoot '../server/queries/technicianRankingCounters.sql')).Trim().TrimEnd(';')
     $candidate=$candidate.Replace('p_start',"timestamptz '2026-11-01 05:00Z'").Replace('p_end',"timestamptz '2026-12-01 05:00Z'")
     $comparison="select jsonb_build_object('read_only',current_setting('transaction_read_only'),'candidate',coalesce(jsonb_agg(r),'[]'::jsonb)) from (`n"+$candidate+"`n) r;`n"
-    $query=$query.Replace('set local role service_role;', $comparison+'set local role service_role;')
+    if($Scope -ne 'postcheck') { $query=$query.Replace('set local role service_role;', $comparison+'set local role service_role;') }
     $shell='IFS= read -r CERT; CERT=${CERT#$(printf ''\357\273\277'')}; printf %s "$CERT" | base64 -d > /tmp/smartrayco-ca.pem; IFS= read -r PGHOST; IFS= read -r PGPORT; IFS= read -r PGDATABASE; IFS= read -r PGUSER; IFS= read -r PGPASSWORD; export PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD; export PGSSLMODE=verify-full PGSSLROOTCERT=/tmp/smartrayco-ca.pem PGCONNECT_TIMEOUT=10 PGCLIENTENCODING=UTF8; export PGOPTIONS=' + "'-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=2000'" + '; exec psql -X -q -A -t --no-password -v ON_ERROR_STOP=1'
     $payload=$ca+"`n"+$settings.PGHOST+"`n5432`npostgres`n"+$settings.PGUSER+"`n"+$password+"`n"+$query+"`n"
     $stage='DOCKER_SQL'
@@ -58,7 +62,12 @@ try {
     }
     $rows=@($response.Output.Trim() -split '\r?\n' | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json })
     foreach($result in $rows) { if($result.read_only -ne 'on') { throw 'SAFE:CONTEXTO_INCORRECTO' } }
-    $destination=Join-Path $PSScriptRoot 'inventory-auth-lab/runtime/ranking-counters-private.json'
+    $outputFile=switch($Scope) {
+        'activation' { 'ranking-counters-activation-private.json' }
+        'postcheck' { 'ranking-counters-postcheck-private.json' }
+        default { 'ranking-counters-private.json' }
+    }
+    $destination=Join-Path $PSScriptRoot ('inventory-auth-lab/runtime/'+$outputFile)
     [IO.File]::WriteAllText($destination,($rows | ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
     Write-Output 'RANKING_COUNTERS_READ_ONLY_OK; private output saved; no credentials or operational identifiers printed'
 } catch {
