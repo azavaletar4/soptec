@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "rollbackExecuted": false,
+  "rollbackOverride": "/opt/smartrayco-staging/frontend-consolidado-tr069-b3cdef6-f00edbfc18/release.rollback.json",
+  "backups": {
+    "backend": {
+      "archive": "/opt/smartrayco-staging/frontend-consolidado-tr069-b3cdef6-f00edbfc18/backend-before.image.tar",
+      "sha256": "1396e3209f95005ce317935ec4febebcb4b607fc2d513f696a324be644ca749f",
+      "tag": "smartrayco-consolidado-backend-rollback:b3cdef6-f00edbfc18",
+      "image": "sha256:87e442e9bdcf17fcd192dbe401fa533c5746e8fd96658b50e0fe24b175162001"
+    },
+    "frontend": {
+      "archive": "/opt/smartrayco-staging/frontend-consolidado-tr069-b3cdef6-f00edbfc18/frontend-before.image.tar",
+      "sha256": "5ac75dab0dd2d5be3b698a8bc4dbb761bb977fe5fb011576bf80338d2a192c98",
+      "tag": "smartrayco-consolidado-frontend-rollback:b3cdef6-f00edbfc18",
+      "image": "sha256:6ed5f7751bb2f8b7c26baf6bed8228c1c9ed695ef60a25c2ca676a36bbea923d"
+    }
+  },
+  "sourceArchiveSha256": "1e5c90ffb5bd676ba0d00dd1731833ca0225ea18767418c6be43143b825c26b7",
+  "otherServicesUnchanged": true,
+  "allServicesRunning": true
+}

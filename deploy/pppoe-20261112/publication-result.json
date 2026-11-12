@@ -1,0 +1,58 @@
+{
+  "at": "2026-11-12T21:45:17.491236+00:00",
+  "action": "deploy",
+  "validation": {
+    "routes": [
+      "/",
+      "/tr069",
+      "/asistencia",
+      "/campo",
+      "/campo/mi-custodia",
+      "/puntos",
+      "/soporte",
+      "/mikrotik",
+      "/analitica",
+      "/rutinas",
+      "/olt"
+    ],
+    "artifactsVerified": 128,
+    "sourceCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+    "frontendCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+    "servicesChanged": [
+      "backend",
+      "frontend"
+    ],
+    "unauthenticatedStatus": 401,
+    "ssidTasksSent": 0
+  },
+  "services": {
+    "frontend": {
+      "id": "be06144fae9afbefe627eca190b04045686d560581974d76703af057a72de162",
+      "image": "sha256:b3a851fb925aa77feab2db9d16be92db50e3309810f42bb671fba96cf3be0b50",
+      "started": "2026-11-12T21:45:01.642812817Z"
+    },
+    "backend": {
+      "id": "bef3f7b4e56fa9ab158e96c9743f7b1f2fde8a3061c828c1f116a4f9f6941cab",
+      "image": "sha256:165126136e3178840e6443094b42993a73a43b79a4b3aa6149f17a3730e2fe16",
+      "started": "2026-11-12T21:45:01.444897238Z"
+    },
+    "caddy": {
+      "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+      "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+      "started": "2026-11-04T16:45:49.064183866Z"
+    },
+    "mongo": {
+      "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+      "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+      "started": "2026-11-04T16:45:49.041453124Z"
+    },
+    "genieacs": {
+      "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+      "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+      "started": "2026-11-04T16:45:49.077217583Z"
+    }
+  },
+  "stage": "/opt/smartrayco-staging/frontend-consolidado-tr069-b3cdef6-f00edbfc18",
+  "sourceCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+  "ssidTasksSent": 0
+}

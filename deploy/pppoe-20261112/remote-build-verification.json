@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "verifiedAt": "2026-11-12T21:44:14.052Z",
+  "localOnly": false,
+  "sourceCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+  "services": [
+    "backend",
+    "frontend"
+  ],
+  "packageAndBackupsVerified": true,
+  "expectedFrontendTreeSha256": "f0485fb7e25a565cb916f43c65b35859ee7de721132862baa8b30c5c653b0fa1",
+  "expectedBackendTreeSha256": "1ae06259d11f39e83d2ff6b0985796ede35bc5bce8ade87fe4444ec3cdef04a8",
+  "stateUnchanged": null,
+  "builtReproducesLocalProof": true,
+  "remoteWrites": 0
+}

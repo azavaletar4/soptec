@@ -1,6 +1,7 @@
 {
   "status": "PASS",
-  "verifiedAt": "2026-11-12T19:12:56.492Z",
+  "verifiedAt": "2026-11-12T19:43:44.023Z",
+  "localOnly": false,
   "sourceCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
   "services": [
     "backend",
