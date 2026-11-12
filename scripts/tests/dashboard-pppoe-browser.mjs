@@ -67,7 +67,7 @@ try {
   await c('Emulation.setTimezoneOverride',{timezoneId:'Asia/Tokyo'});
   await c('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
   await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});
-  await until('document.querySelectorAll("[data-testid=pppoe-card]").length===4 && document.body.innerText.includes("Lectura actual")');
+  await until('document.querySelectorAll("[data-testid=pppoe-card]").length===4 && document.body.innerText.includes("Lectura disponible")');
   assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-testid=pppoe-connected]")].map(el=>el.innerText)'),['40','80','6','7']);
   const section=()=>evaluate('document.querySelector("[data-testid=pppoe-section]").innerText');
   assert.match(await section(),/13:04:05/);assert.doesNotMatch(await section(),/Morosos/);
@@ -94,7 +94,7 @@ try {
   await until('document.querySelector("[data-testid=pppoe-section]")===null');
   assert.equal(await evaluate('window.__pppTimers.size'),0);checks.push('ROLE_REVOCATION_STOPS_POLLING');
   await evaluate('(async()=>{window.__mode="fresh";const m=await import("/src/stores/auth.ts");m.useAuthStore().role="ADMIN";})()');
-  await until('document.body.innerText.includes("Lectura actual")');
+  await until('document.body.innerText.includes("Lectura disponible")');
   }
   await evaluate('window.__mode="slow";window.__pendingPoll=window.__tickPpp();void 0');
   await until('document.querySelector("[data-testid=pppoe-section] button").disabled');

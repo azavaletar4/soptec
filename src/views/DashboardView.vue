@@ -85,7 +85,7 @@ const goToUnconfigured = () => goToOlt();
 const oltCheckedAtLabel = computed(() => {
   const iso = dashboard.summary?.oltSummary.checkedAt;
   if (!iso || !Number.isFinite(Date.parse(iso))) return '';
-  return new Date(iso).toLocaleString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  return new Date(iso).toLocaleString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 });
 
 const recaudoBarClass = computed(() => {
@@ -137,7 +137,7 @@ function updateViewport() { isMobile.value = viewport?.matches ?? false; }
 const visibleClients = computed(() => isMobile.value ? dashboard.summary?.recentClients.slice(0, 3) ?? [] : dashboard.summary?.recentClients ?? []);
 const visibleTickets = computed(() => allTickets.value ? dashboard.summary?.tickets.recent ?? [] : dashboard.summary?.tickets.recent.slice(0, 3) ?? []);
 const dateLabel = computed(() => new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: 'short', year: 'numeric' }).format(dashboard.lastUpdated ?? new Date()));
-const lastSuccessLabel = computed(() => dashboard.lastUpdated ? new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(dashboard.lastUpdated) + ' Perú' : 'Sin actualización exitosa');
+const lastSuccessLabel = computed(() => dashboard.lastUpdated ? new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(dashboard.lastUpdated) + ' Perú' : 'Sin actualización exitosa');
 const networkLabel = computed(() => {
   if (dashboard.error) return 'Estado sin actualizar';
   const network = dashboard.summary?.network;
@@ -163,7 +163,7 @@ const ticketStatus: Record<string, string> = { open: 'Abierto', in_progress: 'En
       <h1 class="sr-only">Dashboard SmartRayco</h1>
       <header class="dv-overview">
         <span class="dv-date">{{ dateLabel }}</span>
-        <span class="dv-updated" :title="lastSuccessLabel" data-testid="summary-updated">{{ dashboard.error ? 'Sin actualizar' : dashboard.lastUpdated ? 'Actualizado ' + updatedLabel : dashboard.loading ? 'Consultando' : 'Sin datos' }}</span>
+        <span class="dv-updated" title="Última consulta general exitosa; las lecturas de origen se indican en cada fuente" data-testid="summary-updated"><span>Dashboard</span><time v-if="dashboard.lastUpdated" :datetime="dashboard.lastUpdated.toISOString()">{{ lastSuccessLabel }}</time><small v-if="dashboard.error">Sin actualizar</small><small v-else-if="dashboard.loading">Consultando</small><span v-else-if="!dashboard.lastUpdated">Sin datos</span><span v-else class="sr-only">{{ updatedLabel }}</span></span>
         <span class="dv-network" :class="{ 'is-warning': networkWarning }" title="Última prueba registrada; no es monitoreo en vivo"><DashboardIcon name="network" /><span>Última prueba: {{ networkLabel }}</span></span>
         <div class="dv-actions">
           <button class="dv-icon-button" :disabled="dashboard.loading" @click="refresh" aria-label="Actualizar Dashboard" :title="'Actualizar · próximo refresco en ' + secondsLeft + 's'"><DashboardIcon name="refresh" /></button>
@@ -184,7 +184,7 @@ const ticketStatus: Record<string, string> = { open: 'Abierto', in_progress: 'En
               <div class="dv-ont-track" aria-hidden="true"><span :style="{ width: (dashboard.summary.oltSummary.online + dashboard.summary.oltSummary.offline ? dashboard.summary.oltSummary.online / (dashboard.summary.oltSummary.online + dashboard.summary.oltSummary.offline) * 100 : 0) + '%' }"></span></div>
               <div class="dv-optical-footer"><span>{{ number(dashboard.summary.oltSummary.online + dashboard.summary.oltSummary.offline) }} autorizadas · {{ dashboard.summary.oltSummary.deviceCount }} OLT(s)</span><div><button class="dv-mini warning" @click="goToOlt('lowSignal')">{{ dashboard.summary.oltSummary.lowSignal }} señal baja</button><button class="dv-mini" @click="goToUnconfigured">{{ dashboard.summary.oltSummary.unconfigured }} sin autorizar</button></div></div>
             </div>
-            <p class="dv-reading">{{ oltCheckedAtLabel ? 'Lectura ' + oltCheckedAtLabel + ' Perú' : 'Sin lectura exitosa' }}<span v-if="!dashboard.summary.oltSummary.scanComplete" class="warning"> · Escaneo parcial</span><span v-else> · Escaneo completo</span></p>
+            <p class="dv-reading" data-testid="ont-reading" title="Lectura almacenada en caché; la fecha más antigua de las OLTs recibidas"><span>Caché ONT ·</span><time v-if="oltCheckedAtLabel" :datetime="dashboard.summary.oltSummary.checkedAt">{{ oltCheckedAtLabel }} Perú</time><span v-else>Sin lectura exitosa</span><span v-if="!dashboard.summary.oltSummary.scanComplete" class="warning">· Escaneo parcial</span><span v-else>· Escaneo completo</span></p>
           </div>
         </section>
         <section v-if="dashboard.summary" class="dv-panel dv-support" aria-labelledby="support-heading">
@@ -206,7 +206,7 @@ const ticketStatus: Record<string, string> = { open: 'Abierto', in_progress: 'En
         </section>
         <div class="dv-detail-grid">
           <section aria-labelledby="clients-heading"><div class="dv-section-heading"><h2 id="clients-heading">Clientes recientes</h2><button class="dv-link" @click="goTo('/clientes')">Ver todos<DashboardIcon name="arrow" /></button></div><p v-if="!dashboard.summary.recentClients.length" class="dv-empty">Sin clientes todavía.</p><ul v-else class="dv-client-list"><li v-for="c in visibleClients" :key="c.id" data-testid="recent-client"><button @click="goTo('/clientes/' + c.id)"><span>{{ c.first_name }} {{ c.last_name }}</span><small>{{ clientStatus[c.status] ?? c.status }}</small><DashboardIcon name="chevron" /></button></li></ul></section>
-          <section aria-labelledby="equipment-heading"><div class="dv-section-heading"><h2 id="equipment-heading">Equipos</h2><span class="dv-source">ÚLTIMA PRUEBA</span></div><div class="dv-equipment-header"><span>Conexión</span><span>OK</span><span>Caídos</span><span>Sin probar</span></div><button v-for="device in [{ label: 'OLTs', path: '/olt', data: dashboard.summary.network.olt }, { label: 'MikroTik', path: '/mikrotik', data: dashboard.summary.network.mikrotik }]" :key="device.path" class="dv-equipment-row" @click="goTo(device.path)"><span>{{ device.label }} <small>{{ device.data.total }}</small></span><b class="good">{{ device.data.ok }}</b><b :class="{ warning: device.data.down }">{{ device.data.down }}</b><b>{{ device.data.untested }}</b></button><p class="dv-reading">Según prueba registrada; no es monitoreo en vivo.</p></section>
+          <section class="dv-equipment" aria-labelledby="equipment-heading"><div class="dv-section-heading"><h2 id="equipment-heading">Equipos</h2><span class="dv-source">ÚLTIMA PRUEBA</span></div><div class="dv-equipment-header"><span>Conexión</span><span>OK</span><span>Caídos</span><span>Sin probar</span></div><button v-for="device in [{ label: 'OLTs', path: '/olt', data: dashboard.summary.network.olt }, { label: 'MikroTik', path: '/mikrotik', data: dashboard.summary.network.mikrotik }]" :key="device.path" class="dv-equipment-row" @click="goTo(device.path)"><span>{{ device.label }} <small>{{ device.data.total }}</small></span><b class="good">{{ device.data.ok }}</b><b :class="{ warning: device.data.down }">{{ device.data.down }}</b><b>{{ device.data.untested }}</b></button><p class="dv-reading">Fecha de prueba no disponible · No es monitoreo en vivo.</p></section>
         </div>
         <section class="dv-attention" aria-labelledby="attention-heading" data-testid="attention"><div class="dv-section-heading"><h2 id="attention-heading">Atención</h2><span class="dv-source">SEGÚN ÚLTIMAS LECTURAS</span></div><ul>
           <li v-if="dashboard.summary.tickets.urgent"><span class="dv-severity danger"><DashboardIcon name="warning" />Urgente</span><span>{{ dashboard.summary.tickets.urgent }} tickets urgentes</span><button class="dv-link" @click="goTo('/soporte')">Ver tickets<DashboardIcon name="arrow" /></button></li>

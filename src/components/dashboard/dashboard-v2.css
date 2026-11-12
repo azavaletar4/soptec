@@ -8,7 +8,10 @@
 .dashboard-v2 svg { flex-shrink:0; }
 .dv-overview { display:flex; align-items:center; flex-wrap:wrap; gap:8px 18px; min-height:57px; padding-bottom:12px; }
 .dv-date { font-size:12px; font-weight:600; white-space:nowrap; }
-.dv-updated { font-size:10px; color:var(--dv-muted); }
+.dv-updated { display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 6px; font-size:11px; color:var(--dv-muted); }
+.dv-updated>span:first-child { font-weight:600; }
+.dv-updated time { white-space:nowrap; }
+.dv-updated small { font-size:inherit; color:#956013; }
 .dv-network { display:flex; gap:5px; align-items:center; font-size:10px; color:var(--dv-muted); }
 .dv-network svg { width:14px; height:14px; }
 .dv-network.is-warning svg { color:#956013; }
@@ -40,17 +43,19 @@
 .dv-online { display:flex; align-items:baseline; gap:7px; }
 .dv-online i { align-self:center; width:5px; height:5px; border-radius:50%; background:#26785c; }
 .dv-online strong { font-size:30px; font-weight:550; letter-spacing:-.7px; }
-.dv-online span { font-size:11px; color:var(--dv-muted); }
-.dv-offline { display:flex; align-items:center; gap:6px; font-size:10px; color:var(--dv-muted); }
+.dv-online span { font-size:12px; color:var(--dv-muted); }
+.dv-offline { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--dv-muted); }
 .dv-offline strong { font-size:18px; color:var(--dv-ink); font-weight:500; }
 .dv-offline svg { height:12px; width:12px; }
 .dv-ont-track { height:4px; margin:0 16px; border-radius:2px; background:#cfd9df; overflow:hidden; }
 .dv-ont-track span { height:100%; display:block; background:#4e987d; }
-.dv-optical-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 16px 3px; font-size:10px; color:var(--dv-muted); }
+.dv-optical-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:8px 16px 3px; font-size:11px; color:var(--dv-muted); }
 .dv-optical-footer>div { display:flex; gap:5px; }
-.dv-mini { background:#f2f6f8; padding:4px 6px; border-radius:4px; color:var(--dv-brand); font-size:10px; white-space:nowrap; min-height:28px; }
+.dv-mini { background:#f2f6f8; padding:4px 6px; border-radius:4px; color:var(--dv-brand); font-size:11px; white-space:nowrap; min-height:28px; }
 .dv-mini.warning { background:#fbf5e9; }
-.dv-reading { padding:2px 16px; font-size:10px; color:var(--dv-muted); }
+.dv-reading { padding:2px 16px; font-size:11px; color:var(--dv-muted); line-height:1.5; }
+.dv-optical .dv-reading { display:flex; flex-wrap:wrap; gap:2px 6px; margin-top:3px; }
+.dv-optical .dv-reading>span:first-child { font-weight:600; }
 .warning { color:#956013; }
 .danger { color:#b34639; }
 .good { color:#26785c; }
@@ -112,10 +117,11 @@
 .dv-client-list small { margin-left:auto; color:var(--dv-muted); font-size:10px; }
 .dv-client-list svg { width:12px; height:12px; color:var(--dv-muted); }
 .dv-equipment-header,.dv-equipment-row { display:grid; grid-template-columns:minmax(80px,1fr) 40px 45px 58px; gap:8px; align-items:center; text-align:right; width:100%; }
-.dv-equipment-header { font-size:9px; color:var(--dv-muted); padding:3px 0 8px; }
+.dv-equipment .dv-source { font-size:11px; letter-spacing:0; }
+.dv-equipment-header { font-size:11px; color:var(--dv-muted); padding:3px 0 8px; }
 .dv-equipment-header span:first-child,.dv-equipment-row span { text-align:left; }
 .dv-equipment-row { border-top:1px solid var(--dv-line); padding:10px 0; font-size:12px; }
-.dv-equipment-row small { font-size:10px; color:var(--dv-muted); margin-left:5px; }
+.dv-equipment-row small { font-size:11px; color:var(--dv-muted); margin-left:5px; }
 .dv-equipment-row b { font-weight:500; }
 .dv-detail-grid .dv-reading { padding:6px 0; }
 .dv-attention { border-top:1px solid var(--dv-line); }
@@ -147,13 +153,17 @@
   .dv-overview { gap:6px 10px; }
   .dv-network { order:3; flex-basis:100%; }
 }
+/* Recupera parte del padding del slot solo en esta vista; el sidebar no cambia. */
+@media(min-width:768px) and (max-width:1150px) {
+  .dashboard-v2 { margin-inline:-16px; padding-inline:12px; }
+}
 @media(max-width:700px) {
   .dashboard-v2 { padding:7px 10px 10px; }
   .dv-overview { display:grid; grid-template-columns:1fr auto; gap:5px 8px; padding-bottom:12px; }
   .dv-date { font-size:11px; }
   .dv-actions { grid-column:2; grid-row:1; gap:3px; }
-  .dv-updated { font-size:9px; grid-column:1; grid-row:2; }
-  .dv-network { grid-column:2; grid-row:2; font-size:8px; gap:3px; max-width:190px; }
+  .dv-updated { font-size:11px; grid-column:1 / -1; grid-row:2; }
+  .dv-network { grid-column:1 / -1; grid-row:3; font-size:10px; gap:3px; }
   .dv-network svg { display:none; }
   .dv-shortcuts summary { font-size:10px; padding:7px 8px; }
   .dv-operations { margin-bottom:12px; }
@@ -161,14 +171,14 @@
   .dv-optical { padding-bottom:8px; }
   .dv-ont-values { padding:0 12px 6px; }
   .dv-online strong { font-size:27px; }
-  .dv-online span { font-size:10px; }
-  .dv-offline { gap:4px; font-size:9px; }
+  .dv-online span { font-size:11px; }
+  .dv-offline { gap:4px; font-size:11px; }
   .dv-offline strong { font-size:17px; }
   .dv-ont-track { margin:0 12px; }
-  .dv-optical-footer { padding:6px 12px 3px; font-size:9px; gap:4px; }
+  .dv-optical-footer { padding:6px 12px 3px; font-size:11px; gap:4px; }
   .dv-optical-footer>div { gap:4px; }
-  .dv-mini { font-size:9px; padding:3px 4px; min-height:28px; }
-  .dv-reading { padding:2px 12px; font-size:9px; }
+  .dv-mini { font-size:11px; padding:3px 4px; min-height:28px; }
+  .dv-reading { padding:2px 12px; font-size:11px; }
   .dv-support-counts { padding:10px 12px; gap:18px; }
   .dv-support-counts button,.dv-support-counts .dv-urgent { flex-direction:column; gap:0; }
   .dv-support-counts .dv-urgent { align-items:flex-end; }
@@ -200,8 +210,8 @@
   #revenue-chart > svg { height:130px; }
   .dv-chart-legend { margin:5px 0; }
   .dv-client-list button { font-size:11px; }
-  .dv-equipment-header,.dv-equipment-row { grid-template-columns:minmax(75px,1fr) 30px 38px 49px; gap:5px; }
-  .dv-equipment-row { font-size:11px; }
+  .dv-equipment-header,.dv-equipment-row { grid-template-columns:minmax(75px,1fr) 30px 38px 58px; gap:5px; }
+  .dv-equipment-row { font-size:12px; }
   .dv-attention li { grid-template-columns:68px minmax(0,1fr) auto; gap:6px; font-size:10px; min-height:43px; }
   .dv-severity { font-size:9px; gap:4px; }
   .dv-severity svg { width:12px; height:12px; }

@@ -78,8 +78,8 @@ onUnmounted(() => { mounted = false; stop(); });
       </article>
     </div>
     <div class="pppoe-reading">
-      <span role="status" :class="{ warning: stale || reading?.partial }"><i :class="{ fresh: reading?.status === 'fresh' && !stale && !reading.partial }"></i>{{ stateLabel }}</span>
-      <span class="pppoe-date"><span class="sr-only">Última lectura exitosa: </span>{{ lastRead }}{{ reading?.lastSuccessAt ? ' · Perú' : '' }}</span>
+      <span role="status" :class="{ warning: stale || reading?.partial }" title="Estado recibido de la fuente; independiente de la consulta general"><i :class="{ fresh: reading?.status === 'fresh' && !stale && !reading.partial }"></i>{{ stateLabel === 'Lectura actual' ? 'Lectura disponible' : stateLabel }}</span>
+      <span class="pppoe-date"><span>Lectura PPPoE · </span><time v-if="reading?.lastSuccessAt" :datetime="reading.lastSuccessAt">{{ lastRead }} · Perú</time><span v-else>{{ lastRead }}</span></span>
     </div>
     <p v-if="stale" class="pppoe-stale">Datos desactualizados</p>
     <p v-if="networkError || reading?.message" class="pppoe-message" role="status">
@@ -89,11 +89,11 @@ onUnmounted(() => { mounted = false; stop(); });
 </template>
 
 <style scoped>
-.pppoe-section { color:var(--dv-ink,#172e40); }
+.pppoe-section { color:var(--dv-ink,#172e40); container:rayco-pppoe / inline-size; }
 .pppoe-heading { display:flex; align-items:center; gap:8px; padding:6px 16px; min-height:43px; position:relative; }
 .pppoe-heading:before { content:''; position:absolute; left:-1px; height:16px; width:3px; background:var(--dv-brand,#087caa); }
 h2 { font-size:13px; font-weight:600; }
-.pppoe-source { margin-left:auto; font-size:10px; color:var(--dv-muted,#617585); }
+.pppoe-source { margin-left:auto; font-size:11px; color:var(--dv-muted,#617585); }
 .pppoe-refresh { width:34px; height:34px; border-radius:5px; color:var(--dv-muted,#617585); font-size:22px; }
 .pppoe-refresh:hover { background:#f2f6f8; color:var(--dv-brand,#087caa); }
 .pppoe-refresh:disabled { opacity:.5; cursor:wait; }
@@ -105,25 +105,27 @@ h2 { font-size:13px; font-weight:600; }
 .pppoe-profile:last-child { padding-right:0; }
 h3 { font-size:12px; font-weight:550; margin-bottom:5px; }
 .pppoe-value strong { font-size:40px; line-height:1.1; font-weight:550; letter-spacing:-1.2px; font-variant-numeric:tabular-nums; }
-.pppoe-label,.pppoe-registered { font-size:11px; color:var(--dv-muted,#617585); }
+.pppoe-label,.pppoe-registered { font-size:12px; color:var(--dv-muted,#617585); }
 .pppoe-label { display:block; margin:1px 0 6px; }
-.pppoe-registered strong { font-weight:600; color:var(--dv-ink,#172e40); font-size:13px; font-variant-numeric:tabular-nums; }
+.pppoe-registered strong { font-weight:600; color:var(--dv-ink,#172e40); font-size:14px; font-variant-numeric:tabular-nums; }
 .pppoe-track { height:3px; background:#e5edf2; margin-top:10px; overflow:hidden; }
 .pppoe-track span { display:block; height:100%; background:var(--dv-brand,#087caa); }
 .is-stale .pppoe-track span { background:#956013; }
-.pppoe-reading { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 16px 12px; font-size:10px; color:var(--dv-muted,#617585); }
+.pppoe-reading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 12px; padding:0 16px 12px; font-size:11px; line-height:1.5; color:var(--dv-muted,#617585); }
 .pppoe-reading>span:first-child { display:flex; align-items:center; gap:5px; white-space:nowrap; }
 .pppoe-reading i { height:5px; width:5px; border-radius:50%; background:#617585; }
 .pppoe-reading i.fresh { background:#26785c; }
 .pppoe-reading .warning { color:#956013; }
 .pppoe-date { text-align:right; font-variant-numeric:tabular-nums; }
+.pppoe-date>span:first-child { font-weight:600; }
+.pppoe-date time { white-space:nowrap; }
 .pppoe-message { margin:0 16px 12px; padding:7px 9px; border-radius:4px; background:#fbf5e9; color:#956013; font-size:11px; }
-.pppoe-stale { color:#956013; font-size:10px; margin:-6px 16px 8px; }
+.pppoe-stale { color:#956013; font-size:11px; margin:-6px 16px 8px; }
 button:focus-visible { outline:2px solid #087caa; outline-offset:2px; }
-@media(max-width:700px) {
+@container rayco-pppoe (max-width:540px) {
   .pppoe-heading { padding:4px 12px; min-height:39px; }
-  .pppoe-source { font-size:9px; }
-  .pppoe-columns { display:grid; grid-template-columns:1fr 78px 80px; gap:6px; padding:0 12px 5px; font-size:10px; color:#617585; }
+  .pppoe-source { font-size:11px; }
+  .pppoe-columns { display:grid; grid-template-columns:1fr 78px 80px; gap:6px; padding:0 12px 5px; font-size:11px; color:#617585; }
   .pppoe-columns span:not(:first-child) { text-align:right; }
   .pppoe-grid { display:block; padding:0 12px 5px; }
   .pppoe-profile,.pppoe-profile:first-child,.pppoe-profile:last-child { display:grid; grid-template-columns:1fr 78px 80px; align-items:center; gap:6px; padding:5px 0; min-height:40px; border:0; border-top:1px solid #dfe7ec; }
@@ -133,12 +135,12 @@ button:focus-visible { outline:2px solid #087caa; outline-offset:2px; }
   .pppoe-label,.pppoe-label-inline,.pppoe-track { display:none; }
   .pppoe-registered { text-align:right; }
   .pppoe-registered strong { font-size:18px; font-weight:400; color:#617585; }
-  .pppoe-reading { padding:4px 12px 9px; font-size:9px; }
+  .pppoe-reading { padding:4px 12px 9px; font-size:11px; }
   .pppoe-message { margin:0 12px 10px; font-size:11px; }
 }
 @media(max-width:359px) {
   .pppoe-columns,.pppoe-profile,.pppoe-profile:first-child,.pppoe-profile:last-child { grid-template-columns:1fr 65px 67px; gap:4px; }
-  .pppoe-columns { font-size:9px; }
+  .pppoe-columns { font-size:11px; }
   h3 { font-size:11px; }
   .pppoe-reading { flex-wrap:wrap; }
   .pppoe-date { margin-left:auto; }

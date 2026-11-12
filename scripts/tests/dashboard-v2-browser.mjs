@@ -5,7 +5,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import assert from 'node:assert/strict';
-const out=path.resolve('docs/dashboard-v2-local');await fs.mkdir(out,{recursive:true});
+const out=path.resolve('docs/dashboard-v2-final-local');await fs.mkdir(out,{recursive:true});
 const root=path.resolve('dist');
 const server=http.createServer(async(req,res)=>{
  try{
@@ -50,7 +50,11 @@ try{
  const evaluate=async expression=>{const result=await c('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw Error(JSON.stringify(result.exceptionDetails));return result.result.value;};
  const until=async expression=>{for(let i=0;i<180;i++){if(await evaluate(expression))return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('UI_TIMEOUT '+expression+' '+await evaluate('document.body.innerText.slice(-1800)'));};
  const click=selector=>evaluate('document.querySelector('+JSON.stringify(selector)+').click()');
- const size=(width,height=1000)=>c('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<768});
+ const size=async(width,height=1000)=>{
+  await c('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<768});
+  // El sidebar existente anima su transform durante 200 ms al cruzar 768 px.
+  await new Promise(resolve=>setTimeout(resolve,240));
+ };
  const capture=async(name,full=true)=>{
   await evaluate('document.activeElement?.blur();window.scrollTo(0,0)');await new Promise(resolve=>setTimeout(resolve,100));
   const {cssContentSize}=await c('Page.getLayoutMetrics');
@@ -90,14 +94,14 @@ try{
     if(window.__mode==='slow')await new Promise((resolve,reject)=>{window.__releasePpp=resolve;init.signal?.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});});
     const unavailable=window.__mode==='unavailable';
     const profiles=[['Dedicado','Profile_Dedicado',302,281],['Balanceador','Profile_Balanceador',610,566],['WAN 4','Profile_Gamer_04',75,71],['WAN 5','Profile_Gamer_05',54,48]].map(([label,profile,registered,connected])=>({label,profile,registered:unavailable?null:registered,connected:unavailable?null:connected}));
-    return response({status:unavailable?'unavailable':window.__mode==='stale'?'stale':'fresh',lastSuccessAt:unavailable?null:'2026-11-12T18:04:05Z',profiles,partial:window.__mode==='partial',message:window.__mode==='stale'?'No se pudo actualizar desde el administrador.':null});
+    return response({status:unavailable?'unavailable':window.__mode==='stale'?'stale':'fresh',lastSuccessAt:unavailable?null:window.__pppReadAt||'2026-11-12T18:04:05Z',profiles,partial:window.__mode==='partial',message:window.__mode==='stale'?'No se pudo actualizar desde el administrador.':null});
    }
    if(url.pathname.startsWith('/api/dashboard/')){
     if(window.__summaryMode==='error')return response({error:'Red de laboratorio no disponible'},0,503);
     if(window.__summaryMode==='slow')await new Promise(resolve=>window.__releases.push(resolve));
    }
    if(url.pathname==='/api/dashboard/network-status')return response(window.__summaryMode==='untested'?{olt:{total:2,ok:0,down:0,untested:2},mikrotik:{total:3,ok:0,down:0,untested:3},problems:[]}:{olt:{total:2,ok:2,down:0,untested:0},mikrotik:{total:3,ok:1,down:1,untested:1},problems:[{kind:'MikroTik',name:'Nodo laboratorio',host:'192.0.2.15'}]});
-   if(url.pathname==='/api/dashboard/olt-summary')return response(window.__summaryMode==='no-olt-cache'?{unconfigured:0,online:0,offline:0,lowSignal:0,deviceCount:2,scanComplete:false,checkedAt:null}:{unconfigured:6,online:843,offline:17,lowSignal:9,deviceCount:2,scanComplete:false,checkedAt:'2026-11-12T18:00:00Z'});
+   if(url.pathname==='/api/dashboard/olt-summary')return response(window.__summaryMode==='no-olt-cache'?{unconfigured:0,online:0,offline:0,lowSignal:0,deviceCount:2,scanComplete:false,checkedAt:null}:{unconfigured:6,online:843,offline:17,lowSignal:9,deviceCount:2,scanComplete:false,checkedAt:window.__oltReadAt||'2026-11-12T18:00:00Z'});
    if(url.pathname==='/api/olt-devices')return response(Array.from({length:window.__manyOlts?2:1},(_,i)=>({id:'lab-olt-'+i,name:'OLT laboratorio',host:'192.0.2.20',brand:'zte',telnet_port:23,username:'lab',zone_id:null,is_active:true,created_at:new Date().toISOString(),lat:null,lng:null})));
    if(url.pathname.startsWith('/api/'))return response([]);
    const table=url.pathname.split('/').at(-1),select=url.searchParams.get('select')||'';
@@ -126,7 +130,7 @@ try{
  await c('Page.addScriptToEvaluateOnNewDocument',{source:'('+fixture.toString()+')()'});
  await c('Emulation.setTimezoneOverride',{timezoneId:'Asia/Tokyo'});
  await size(1440,1100);await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});
- await until('document.querySelector(".dv-portfolio")&&document.body.innerText.includes("Lectura actual")');
+ await until('document.querySelector(".dv-portfolio")&&document.body.innerText.includes("Lectura disponible")');
  assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-testid=pppoe-connected]")].map(x=>x.innerText)'),['281','566','71','48']);
  assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-portfolio strong")].map(x=>x.innerText)'),['80','7','4','87']);
  assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-support-counts strong")].map(x=>x.innerText)'),['24','9','4']);
@@ -147,24 +151,55 @@ try{
  const ioBefore=await evaluate('({api:window.__api.length,db:window.__db.length})');
  await click('.dv-more');assert.equal(await evaluate('document.querySelectorAll(".dv-ticket-list li").length'),5);await click('.dv-more');checks.push('ALL_RECENT_TICKETS_ACCESSIBLE');
  await size(834,1112);await capture('tablet');
+ await size(1024,834);await capture('tablet-landscape');
  await size(390,844);await until('document.querySelector("[data-testid=chart-toggle]")!==null');
  assert.equal(await evaluate('document.querySelectorAll("[data-testid=recent-client]").length'),3);
  assert.equal(await evaluate('getComputedStyle(document.querySelector("#revenue-chart")).display'),'none');
  assert.ok(await evaluate('document.querySelector("[data-testid=chart-toggle] svg").getBoundingClientRect().height<=18'));
  await capture('mobile-full');await capture('mobile',false);checks.push('MOBILE_THREE_CLIENTS_CHART_INITIALLY_COLLAPSED');
  await click('[data-testid=chart-toggle]');assert.equal(await evaluate('getComputedStyle(document.querySelector("#revenue-chart")).display!=="none"'),true);await capture('mobile-chart-expanded');await click('[data-testid=chart-toggle]');checks.push('MOBILE_CHART_EXPANDS_AND_COLLAPSES');
- for(const width of [320,375,390,700,834,1024,1440,1920]){
+ const layouts=[];
+ for(const width of [320,375,390,540,700,701,767,768,820,834,950,951,1024,1150,1151,1440,1920]){
   await size(width,1000);await new Promise(resolve=>setTimeout(resolve,70));
   assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'),'PAGE_OVERFLOW_'+width);
   assert.ok(await evaluate('document.querySelector("[data-testid=dashboard-v2]").scrollWidth<=document.querySelector("[data-testid=dashboard-v2]").clientWidth+1'),'DASHBOARD_OVERFLOW_'+width);
+  const layout=await evaluate(`(()=>{
+   const box=selector=>{const el=document.querySelector(selector),r=el.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width};};
+   return {width:innerWidth,dashboard:box('[data-testid=dashboard-v2]'),main:box('main'),sidebar:box('aside'),pppoe:box('[data-testid=pppoe-section]'),columns:new Set([...document.querySelectorAll('[data-testid=pppoe-card]')].map(el=>Math.round(el.getBoundingClientRect().left))).size};
+  })()`);
+  layouts.push(layout);
+  assert.equal(layout.columns,layout.pppoe.width<=540?1:4,'PPPOE_CONTAINER_COLUMNS_'+width);
+  if(width>=768){assert.equal(layout.sidebar.width,256,'SIDEBAR_WIDTH_'+width);assert.equal(layout.sidebar.left,0,'SIDEBAR_POSITION_'+width);}
+  if(width>=768&&width<=1150){assert.ok(Math.abs(layout.dashboard.left-layout.main.left-16)<1);assert.ok(Math.abs(layout.main.right-layout.dashboard.right-16)<1);}
+  const secondarySizes=await evaluate(`[...document.querySelectorAll('.pppoe-reading,.pppoe-source,.pppoe-registered,.dv-reading,.dv-offline,.dv-optical-footer,.dv-equipment-header,.dv-equipment-row small')].map(el=>parseFloat(getComputedStyle(el).fontSize))`);
+  assert.ok(secondarySizes.every(px=>px>=11),'SECONDARY_TEXT_SIZE_'+width);
  }
- checks.push('RESPONSIVE_320_TO_1920');
+ checks.push('RESPONSIVE_17_WIDTHS_320_TO_1920','TABLET_INSETS_AND_SIDEBAR_UNCHANGED','PPPOE_RESPONDS_TO_AVAILABLE_CONTAINER_WIDTH','SECONDARY_TEXT_MINIMUM_11PX');
  assert.deepEqual(await evaluate('({api:window.__api.length,db:window.__db.length})'),ioBefore);checks.push('VISUAL_INTERACTIONS_ADD_NO_READS');
  const before=await evaluate('({ppp:window.__api.filter(x=>x.endsWith("pppoe-profiles")).length,network:window.__api.filter(x=>x.endsWith("network-status")).length})');
+ const sourceTimes=()=>evaluate(`({summary:document.querySelector('[data-testid=summary-updated] time')?.dateTime,ppp:document.querySelector('.pppoe-date time')?.dateTime,ont:document.querySelector('[data-testid=ont-reading] time')?.dateTime})`);
+ const timesBefore=await sourceTimes();
  await evaluate('window.__tickGeneral()');
  assert.equal(await evaluate('window.__api.filter(x=>x.endsWith("network-status")).length'),before.network+1);
  assert.equal(await evaluate('window.__api.filter(x=>x.endsWith("pppoe-profiles")).length'),before.ppp);
  checks.push('GENERAL_REFRESH_60S_INDEPENDENT_FROM_PPPOE');
+ const timesAfter=await sourceTimes();
+ assert.ok(Date.parse(timesAfter.summary)>Date.parse(timesBefore.summary));
+ assert.equal(timesAfter.ppp,timesBefore.ppp);assert.equal(timesAfter.ont,timesBefore.ont);
+ assert.match(await evaluate('document.querySelector("[data-testid=summary-updated]").innerText'),/Dashboard.*\d{2}\/\d{2}\/\d{4}/s);
+ assert.match(await evaluate('document.querySelector("[data-testid=ont-reading]").innerText'),/Caché ONT/);
+ assert.match(await evaluate('document.querySelector(".dv-equipment .dv-reading").innerText'),/Fecha de prueba no disponible/);
+ checks.push('GENERAL_SUCCESS_DOES_NOT_REDATE_SOURCES','SOURCE_LABELS_AND_UNAVAILABLE_EQUIPMENT_TIME_EXPLICIT');
+ await evaluate('window.__pppReadAt="2001-01-02T08:09:10Z";window.__oltReadAt="2001-01-02T07:08:09Z";window.__tickPpp()');
+ await evaluate('window.__tickGeneral()');
+ const oldTimes=await sourceTimes();
+ assert.equal(oldTimes.ppp,'2001-01-02T08:09:10Z');assert.equal(oldTimes.ont,'2001-01-02T07:08:09Z');
+ assert.match(await evaluate('document.querySelector(".pppoe-date").innerText'),/02\/01\/2001, 03:09:10/);
+ assert.match(await evaluate('document.querySelector("[data-testid=ont-reading]").innerText'),/02\/01\/2001, 02:08:09/);
+ assert.doesNotMatch(await evaluate('document.querySelector("[data-testid=pppoe-section]").innerText'),/Lectura actual/);
+ await size(834,1112);await capture('source-dates');
+ await evaluate('delete window.__pppReadAt;delete window.__oltReadAt;window.__tickPpp()');await evaluate('window.__tickGeneral()');
+ checks.push('OLD_SOURCE_DATES_RETAINED_AFTER_SUCCESSFUL_GENERAL_REFRESH');
  await evaluate('window.__roundToday=true;window.__tickGeneral()');
  assert.match(await evaluate('document.querySelector(".dv-billing-pairs>div:nth-child(2)").innerText'),/1\.00/);
  await evaluate('window.__roundToday=false;window.__tickGeneral()');checks.push('ORIGINAL_TWO_DECIMAL_ROUNDING');
@@ -179,7 +214,9 @@ try{
  await evaluate('window.__mode="denied";window.__tickPpp()');await until('!document.querySelector("[data-testid=pppoe-section] button").disabled');
  assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-testid=pppoe-connected]")].map(x=>x.innerText)'),['—','—','—','—']);checks.push('HTTP_AUTH_REJECTION_CLEARS_PPPOE_VALUES');
  await evaluate('window.__mode="fresh";window.__tickPpp()');
+ const successfulTimes=await sourceTimes();
  await evaluate('window.__summaryMode="error";window.__tickGeneral()');await until('document.querySelector("[data-testid=summary-error]")!==null');
+ assert.deepEqual(await sourceTimes(),successfulTimes);
  assert.match(await evaluate('document.querySelector("[data-testid=summary-error]").innerText'),/última actualización exitosa/);
  assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-portfolio strong")].map(x=>x.innerText)'),['80','7','4','87']);
  assert.match(await evaluate('document.querySelector(".dv-network").innerText'),/Estado sin actualizar/);await size(390,844);await capture('summary-stale');checks.push('SUMMARY_FAILURE_RETAINS_VALUES_AND_SUCCESS_TIME');
@@ -201,14 +238,14 @@ try{
  await until('document.body.innerText.includes("Cargando panel...")&&window.__releases.length===2');
  assert.equal(await evaluate('document.querySelector(".dv-portfolio")'),null);assert.equal(await evaluate(`document.querySelector('button[aria-label="Actualizar Dashboard"]').disabled`),true);
  await capture('initial-loading');await evaluate('window.__summaryMode="good";window.__releases.splice(0).forEach(fn=>fn())');await until('document.querySelector(".dv-portfolio")!==null');checks.push('INITIAL_LOADING_NO_FAKE_SUMMARY');
- await evaluate('sessionStorage.setItem("v2-initial-summary","error")');await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});await until('document.querySelector("[data-testid=summary-error]")!==null&&document.body.innerText.includes("Lectura actual")');
+ await evaluate('sessionStorage.setItem("v2-initial-summary","error")');await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});await until('document.querySelector("[data-testid=summary-error]")!==null&&document.body.innerText.includes("Lectura disponible")');
  assert.equal(await evaluate('document.querySelector(".dv-portfolio")'),null);assert.equal(await evaluate('document.querySelectorAll("[data-testid=pppoe-card]").length'),4);checks.push('INITIAL_SUMMARY_ERROR_PPPOE_INDEPENDENT');
  await evaluate('sessionStorage.removeItem("v2-initial-summary")');
  await evaluate('sessionStorage.setItem("v2-role","FACTURACION")');await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});await until('document.querySelector(".dv-portfolio")!==null');
  assert.equal(await evaluate('document.querySelector("[data-testid=pppoe-section]")'),null);assert.equal(await evaluate('window.__api.filter(x=>x.endsWith("pppoe-profiles")).length'),0);checks.push('PPPOE_PERMISSION_RETAINED');
  assert.equal(await evaluate('window.__writes'),0);assert.deepEqual(writeAttempts,[]);assert.deepEqual(forbidden,[]);assert.deepEqual(exceptions,[]);
  checks.push('ZERO_BUSINESS_WRITES_AND_EXTERNAL_REQUESTS');
- await fs.writeFile(path.join(out,'verification.json'),JSON.stringify({status:'PASS',builtFrontend:true,syntheticResponses:true,productionAccess:false,writes:0,externalRequests:0,preexistingFontStylesServedLocally:replacedFonts,checks,exceptions},null,2)+'\n');
+ await fs.writeFile(path.join(out,'verification.json'),JSON.stringify({status:'PASS',builtFrontend:true,syntheticResponses:true,productionAccess:false,writes:0,externalRequests:0,preexistingFontStylesServedLocally:replacedFonts,checks,layouts,exceptions},null,2)+'\n');
  console.log(JSON.stringify({status:'PASS',checks:checks.length,captures:out}));
  await send('Browser.close');ws.close();chrome.kill();
  // Regresion existente contra el mismo build: polling, no solapamiento y cancelacion.

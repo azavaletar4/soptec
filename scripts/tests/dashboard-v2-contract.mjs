@@ -27,6 +27,11 @@ const declarations=text=>{
  return result;
 };
 const before=declarations(base('src/views/DashboardView.vue')),after=declarations(read('src/views/DashboardView.vue'));
+const approvedReference='80e8e7e';
+const approved=declarations(normalize(execFileSync('git',['show',approvedReference+':src/views/DashboardView.vue'],{encoding:'utf8'})));
+const datePresentationOnly=['oltCheckedAtLabel','lastSuccessLabel'];
+assert.deepEqual([...after.keys()],[...approved.keys()],'DASHBOARD_DECLARATIONS_CHANGED');
+for(const [name,value] of approved)if(!datePresentationOnly.includes(name))assert.equal(after.get(name),value,'APPROVED_DASHBOARD_LOGIC_CHANGED:'+name);
 const preserved=['refresh','goTo','goToOlt','goToUnconfigured','REFRESH_SECONDS','updatedLabel','CHART_WIDTH','CHART_HEIGHT','CHART_PAD','chartBars','hasChartData'];
 for(const name of preserved){assert.ok(before.has(name));assert.equal(after.get(name),before.get(name),'EXISTING_LOGIC_CHANGED:'+name);}
 const expectedRate=before.get('recaudoBarClass').replaceAll('bg-green-500/80','rate-good').replaceAll('bg-amber-500/80','rate-warning').replaceAll('bg-red-500/80','rate-low');
@@ -34,8 +39,9 @@ assert.equal(after.get('recaudoBarClass'),expectedRate,'BILLING_THRESHOLDS_CHANG
 assert.match(read('src/views/DashboardView.vue'),/<style scoped src=/);
 assert.match(read(ppp),/<style scoped>/);
 const report={status:'PASS',baseCommit:execFileSync('git',['rev-parse',reference],{encoding:'utf8'}).trim(),unchanged,
+ approvedReference,approvedDashboardLogicUnchangedExceptDateFormatting:datePresentationOnly,
  pppoeScriptUnchanged:true,preservedFunctionsAndValues:preserved,billingThresholdsUnchanged:true,
  scopedStyles:true,dependenciesAdded:0,productionAccess:false};
-fs.mkdirSync('docs/dashboard-v2-local',{recursive:true});
-fs.writeFileSync('docs/dashboard-v2-local/contract-verification.json',JSON.stringify(report,null,2)+'\n');
+fs.mkdirSync('docs/dashboard-v2-final-local',{recursive:true});
+fs.writeFileSync('docs/dashboard-v2-final-local/contract-verification.json',JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify({status:'PASS',unchangedFiles:unchanged.length,preserved:preserved.length,pppoeScriptUnchanged:true}));
