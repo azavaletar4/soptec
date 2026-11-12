@@ -1,0 +1,60 @@
+{
+  "status": "PASS",
+  "localOnly": true,
+  "sourceCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+  "services": [
+    "backend",
+    "frontend"
+  ],
+  "attempts": [
+    {
+      "run": "repack-run1",
+      "packageSha256": "17231abea8c6c8be81b12e465b024415840a83d77366f2441332ec52b7018f33",
+      "packageFiles": {
+        "source.tar": "1e5c90ffb5bd676ba0d00dd1731833ca0225ea18767418c6be43143b825c26b7",
+        "input.json": "878a1219c80a93bddbfbbc0eeed4ac2c9c345c92bd1dcc63f6bb0e2c43400be5"
+      },
+      "candidateImages": {
+        "backend": "sha256:2565eb60b43504c43d56c3a41ba235e99b2929ce34c7e683228b3befc0e78d2b",
+        "frontend": "sha256:a08a9f0430e5fd39702168ba3ac1b7f0a118e63f65de4c49e59b04693cd6403a",
+        "frontendRepro": "sha256:6a66e3f817cff5a02f0884533bd977aa2a4841bb9f22c8e5d70a9a7c25c841a6"
+      },
+      "frontendTreeSha256": "f0485fb7e25a565cb916f43c65b35859ee7de721132862baa8b30c5c653b0fa1",
+      "backendTreeSha256": "1ae06259d11f39e83d2ff6b0985796ede35bc5bce8ade87fe4444ec3cdef04a8",
+      "frontendExportTarSha256": "5ff684b0ecda8fcc7eacf56bc2afd87c88906cca84bc505fcbc46cf406bc8907",
+      "backendExportTarSha256": "4034db4ceeb2c21d823da4cc956ea55b6053d05a48d87506bd5efa93c517db5f",
+      "frontendFiles": 2555,
+      "backendFiles": 380,
+      "imageMatchesBothFrontendBuilds": true
+    },
+    {
+      "run": "repack-run2",
+      "packageSha256": "17231abea8c6c8be81b12e465b024415840a83d77366f2441332ec52b7018f33",
+      "packageFiles": {
+        "source.tar": "1e5c90ffb5bd676ba0d00dd1731833ca0225ea18767418c6be43143b825c26b7",
+        "input.json": "878a1219c80a93bddbfbbc0eeed4ac2c9c345c92bd1dcc63f6bb0e2c43400be5"
+      },
+      "candidateImages": {
+        "backend": "sha256:7529ce0aa09847fc3bc3d9fb3b007668a2d7d95d9bfe400be4458db8b37bc8f4",
+        "frontend": "sha256:cc4e165859383a9bf5727b938f188aea05010cbd7b39e6080f80a4afe68019ab",
+        "frontendRepro": "sha256:cce18864ca7aa7c9b6a6c3ff8b3cf0925ce12d6a34629e82f01e8792e81de4a5"
+      },
+      "frontendTreeSha256": "f0485fb7e25a565cb916f43c65b35859ee7de721132862baa8b30c5c653b0fa1",
+      "backendTreeSha256": "1ae06259d11f39e83d2ff6b0985796ede35bc5bce8ade87fe4444ec3cdef04a8",
+      "frontendExportTarSha256": "5ff684b0ecda8fcc7eacf56bc2afd87c88906cca84bc505fcbc46cf406bc8907",
+      "backendExportTarSha256": "4034db4ceeb2c21d823da4cc956ea55b6053d05a48d87506bd5efa93c517db5f",
+      "frontendFiles": 2555,
+      "backendFiles": 380,
+      "imageMatchesBothFrontendBuilds": true
+    }
+  ],
+  "scopeUnchanged": true,
+  "originalProofTreesUnchanged": true,
+  "backupsUnchangedAndVerified": true,
+  "originalPreparationRetained": true,
+  "originalRollbackRetained": true,
+  "productionAccessed": false,
+  "productionWrites": 0,
+  "supabaseWrites": 0,
+  "mikrotikRequests": 0
+}

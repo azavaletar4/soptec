@@ -6,6 +6,8 @@ import { createHash } from 'node:crypto';
 import { loadEnv } from 'vite';
 import assert from 'node:assert/strict';
 const root=process.cwd(),runtime=path.resolve('scripts/inventory-auth-lab/runtime/pppoe-publication');
+const option=(name,fallback)=>process.argv.includes(name)?process.argv[process.argv.indexOf(name)+1]:fallback;
+const buildRoot=path.resolve(option('--build-root',runtime));
 const source=path.join(runtime,'source'),feature='a4a5b41c9a862d6b82cccc2c74dfed3d1d328f16';
 const run=(bin,args,cwd=root,env=process.env)=>execFileSync(bin,args,{cwd,env,encoding:'utf8',windowsHide:true,maxBuffer:32*1024*1024});
 const git=(...args)=>run('git',args).trim();
@@ -33,13 +35,13 @@ const live=JSON.parse(fs.readFileSync(path.join(runtime,'live-readonly.json'),'u
 const commit=run('git',['rev-parse','HEAD'],source).trim(),base=live.frontendManifest.commit;
 const front=['src/components/dashboard/PppoeProfileCards.vue','src/lib/pppoeProfileCounts.ts','src/views/DashboardView.vue'];
 const back=['server/src/routes/dashboard.ts','server/src/services/dashboardPppoeHandler.ts','server/src/services/dashboardPppoeProfiles.ts','src/lib/pppoeProfileCounts.ts'];
-const sourcePaths=['src','index.html','vite.config.ts','package.json','package-lock.json','scripts/frontend-release-build.mjs','deploy/Dockerfile.frontend','deploy/frontend-release-policy.json'];
 const node22=path.join(runtime,'node22/node.exe');
 const sums=fs.readFileSync(path.join(runtime,'node22/SHASUMS256.txt'),'utf8');
 const official=sums.split('\n').find(line=>line.endsWith('  win-x64/node.exe'))?.split(/\s+/)[0];
 assert.equal(hash(fs.readFileSync(node22)),official,'NODE_BINARY_CHECKSUM');
 assert.equal(run(node22,['--version']).trim(),live.backendRuntime.node,'NODE_RUNTIME_VERSION');
-const out=path.resolve('deploy/pppoe-20261112');fs.mkdirSync(out,{recursive:true});
+const out=path.resolve(option('--output-dir','deploy/pppoe-20261112'));fs.mkdirSync(out,{recursive:true});
+const scopePath=path.join(out,'scope.json');
 assert.equal(run('git',['rev-parse','HEAD^'],source).trim(),base,'RELEASE_PARENT_MUST_BE_LIVE_FRONTEND');
 for(const file of new Set([...front,...back])) {
  assert.equal(hash(run('git',['show',commit+':'+file],source)),hash(run('git',['show',feature+':'+file])),'FEATURE_CONTENT_DRIFT:'+file);
@@ -65,6 +67,13 @@ const afterBackend={...beforeBackend,...Object.fromEntries(back.map(file=>[file,
 assert.deepEqual(Object.keys(afterBackend).filter(file=>beforeBackend[file]!==afterBackend[file]).sort(),[...back].sort(),'BACKEND_SCOPE');
 const sourceSnapshot=path.join(runtime,'release-source.json');
 run(node22,['scripts/frontend-release-build.mjs','--export-snapshot','--snapshot-output',sourceSnapshot],source,env);
+// Prepara el paquete revisable antes del build. Las imagenes consumen ese TAR.
+const packaged=JSON.parse(run(process.execPath,['scripts/frontend-consolidation-release.cjs','package','--scope',scopePath,'--snapshot',sourceSnapshot]));
+const prepared=JSON.parse(run(process.execPath,['scripts/frontend-consolidation-release.cjs','prepare','--local','--scope',scopePath,'--snapshot',sourceSnapshot]));
+assert.equal(prepared.localOnly,true);assert.equal(prepared.productionWrites,0);
+const packageManifest=JSON.parse(fs.readFileSync(packaged.package,'utf8'));
+const packagedArchive=path.join(path.dirname(packaged.package),'source.tar');
+assert.equal(hash(fs.readFileSync(packagedArchive)),packageManifest.files['source.tar']);
 const images=JSON.parse(fs.readFileSync(path.join(runtime,'image-backups.json'),'utf8'));
 const baseTags={};
 for(const service of ['backend','frontend']){
@@ -77,18 +86,17 @@ for(const service of ['backend','frontend']){
 }
 const builtImages={};
 const makeFront=label=>{
- const folder=path.join(runtime,'linux-'+label);fs.mkdirSync(folder,{recursive:true});
+ const folder=path.join(buildRoot,'linux-'+label);fs.mkdirSync(folder,{recursive:true});
  const sourceFolder=path.join(folder,'source');fs.mkdirSync(sourceFolder,{recursive:true});
- const archive=path.join(runtime,label+'.tar');run('git',['archive',commit,'--format=tar','--output='+archive,...sourcePaths]);
- run('tar.exe',['-xf',path.basename(archive),'-C',sourceFolder],runtime);
- fs.copyFileSync(sourceSnapshot,path.join(sourceFolder,'release-source.json'));
+ run('tar.exe',['-xf',path.basename(packagedArchive),'-C',sourceFolder],path.dirname(packagedArchive));
  let docker='FROM '+baseTags.backend+' AS build\nWORKDIR /build/source\nCOPY source/ ./\nRUN ln -s /app/node_modules node_modules\n';
  for(const key of Object.keys(live.frontendManifest.configurationHashes))docker+='ENV '+key+'='+JSON.stringify(publicEnv[key]??'')+'\n';
  docker+='ENV SOURCE_COMMIT='+commit+'\nRUN node scripts/frontend-release-build.mjs --snapshot release-source.json\nFROM '+baseTags.frontend+'\nCOPY --from=build /build/source/dist/ /usr/share/nginx/html/\nLABEL org.opencontainers.image.revision="'+commit+'"\n';
  fs.writeFileSync(path.join(folder,'Dockerfile'),docker);
  const tag='smartrayco-pppoe-frontend:'+commit.slice(0,12)+(label==='repro'?'-repro':'');
- fs.writeFileSync(path.join(runtime,'linux-'+label+'-build.log'),run('docker',['build','--pull=false','--network=none',...(label==='repro'?['--no-cache']:[]),'-t',tag,'.'],folder));
+ fs.writeFileSync(path.join(buildRoot,'linux-'+label+'-build.log'),run('docker',['build','--pull=false','--network=none',...(label==='repro'?['--no-cache']:[]),'-t',tag,'.'],folder));
  builtImages[label]=JSON.parse(run('docker',['image','inspect',tag]))[0].Id;
+ run('docker',['tag',tag,tag+'-proof-'+hash(buildRoot).slice(0,10)]);
  const cid=run('docker',['create','--network','none',tag]).trim();
  const dist=path.join(folder,'dist');fs.mkdirSync(dist,{recursive:true});
  try{run('docker',['cp',cid+':/usr/share/nginx/html/.',dist]);}finally{run('docker',['rm',cid]);}
@@ -97,7 +105,7 @@ const makeFront=label=>{
 const reuse=process.argv.includes('--reuse-local-builds');
 let canonical,repro;
 if(reuse){
- canonical=path.join(runtime,'linux-canonical/dist');repro=path.join(runtime,'linux-repro/dist');
+ canonical=path.join(buildRoot,'linux-canonical/dist');repro=path.join(buildRoot,'linux-repro/dist');
  for(const label of ['canonical','repro']){
   const tag='smartrayco-pppoe-frontend:'+commit.slice(0,12)+(label==='repro'?'-repro':'');
   const image=JSON.parse(run('docker',['image','inspect',tag]))[0];
@@ -111,7 +119,6 @@ if(reuse){
 }else{canonical=makeFront('canonical');repro=makeFront('repro');}
 const artifactManifest=folder=>JSON.parse(fs.readFileSync(path.join(folder,'release-manifest.json'),'utf8'));
 assert.deepEqual(artifactManifest(canonical),artifactManifest(repro),'NON_REPRODUCIBLE_FRONTEND');
-const scopePath=path.join(out,'scope.json');
 if(!reuse)run('python',['scripts/iptv-release-scope.py',path.join(backup,'frontend'),canonical,scopePath]);
 const scope=JSON.parse(fs.readFileSync(scopePath,'utf8'));
 assert.equal(scope.sourceCommit,commit);
@@ -140,12 +147,13 @@ fs.writeFileSync(path.join(candidate,'pppoe-release-types.local.json'),JSON.stri
 fs.writeFileSync(path.join(runtime,'backend-production-types.log'),run(node22,[path.join(root,'node_modules/typescript/bin/tsc'),'-p','pppoe-release-types.local.json','--noEmit'],candidate));
 const tests=run(node22,['--import','tsx','--test','server/src/services/__tests__/dashboardPppoeProfiles.test.ts','server/src/mikrotik/__tests__/client.test.ts'],source);
 fs.writeFileSync(path.join(runtime,'tests-node22.log'),tests);
-const backendContext=path.join(runtime,'backend-overlay');fs.mkdirSync(backendContext,{recursive:true});
+const backendContext=path.join(buildRoot,'backend-overlay');fs.mkdirSync(backendContext,{recursive:true});
 for(const file of back)safeWrite(backendContext,file,fs.readFileSync(path.join(candidate,file)));
 fs.writeFileSync(path.join(backendContext,'Dockerfile'),'FROM '+baseTags.backend+'\n'+back.map(file=>'COPY '+JSON.stringify([file,'/app/'+file])).join('\n')+'\nLABEL org.opencontainers.image.revision="'+commit+'"\n');
 const backendTag='smartrayco-pppoe-backend:'+commit.slice(0,12);
-fs.writeFileSync(path.join(runtime,'backend-build.log'),run('docker',['build','--pull=false','--network=none','-t',backendTag,'.'],backendContext));
+fs.writeFileSync(path.join(buildRoot,'backend-build.log'),run('docker',['build','--pull=false','--network=none','--no-cache','-t',backendTag,'.'],backendContext));
 builtImages.backend=JSON.parse(run('docker',['image','inspect',backendTag]))[0].Id;
+run('docker',['tag',backendTag,backendTag+'-proof-'+hash(buildRoot).slice(0,10)]);
 assert.match(run('docker',['run','--rm','--network','none',backendTag,'node','--import','tsx','--input-type=module','-e',smoke]),/NODE22_DASHBOARD_IMPORT_AND_AUTH_PASS/);
 const backendEntries=[['server/src','/app/server/src'],['src','/app/src']];
 assert.deepEqual(imageTree(live.services.backend.image,'rollback-backend-image',backendEntries),beforeBackend,'ROLLBACK_BACKEND_NOT_EXACT');
@@ -159,7 +167,9 @@ for(const service of ['backend','frontend']){
  const newImage=JSON.parse(run('docker',['image','inspect',service==='backend'?builtImages.backend:builtImages.canonical]))[0];
  for(const field of ['Env','Cmd','Entrypoint','User','WorkingDir','Volumes','ExposedPorts'])assert.ok(JSON.stringify(oldImage.Config[field])===JSON.stringify(newImage.Config[field]),'IMAGE_RUNTIME_CONFIG_CHANGED:'+field);
 }
-const packaged=JSON.parse(run(process.execPath,['scripts/frontend-consolidation-release.cjs','package','--scope',scopePath,'--snapshot',sourceSnapshot]));
+// Revalida despues del build sin reescribir el paquete ni aceptar hashes nuevos.
+run(process.execPath,['scripts/frontend-consolidation-release.cjs','prepare','--local','--scope',scopePath,'--snapshot',sourceSnapshot]);
+assert.equal(hash(fs.readFileSync(packagedArchive)),packageManifest.files['source.tar']);
 const chains=[live.services.frontend.composeFiles,live.services.backend.composeFiles].sort((a,b)=>b.length-a.length);
 assert.deepEqual(chains[0].slice(0,chains[1].length),chains[1],'COMPOSE_CHAINS_DIVERGE');
 const release={version:1,featureCommit:feature,sourceCommit:commit,baseFrontendCommit:base,liveReadAt:live.at,

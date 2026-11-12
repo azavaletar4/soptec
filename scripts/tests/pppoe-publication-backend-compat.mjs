@@ -2,7 +2,8 @@
 // dentro de Docker local --network none. No inicia index.ts ni schedulers.
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
-const prep=JSON.parse(fs.readFileSync('deploy/pppoe-20261112/preparation.json','utf8'));
+const prepIndex=process.argv.indexOf('--preparation');
+const prep=JSON.parse(fs.readFileSync(prepIndex<0?'deploy/pppoe-20261112/preparation.json':process.argv[prepIndex+1],'utf8'));
 const program=String.raw`
 import assert from 'node:assert/strict';import http from 'node:http';
 import {mikrotikRequest} from './server/src/mikrotik/client.ts';

@@ -1,0 +1,278 @@
+{
+  "status": "PASS",
+  "localOnly": true,
+  "sourceCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+  "originalValidatedTarAvailable": false,
+  "originalValidatedTarSha256": "9a31e1482afe364cdb74d4bab6fec5f54787583aa16133937164ce4a30c81965",
+  "stoppedTarSha256": "ec1fdf08e6627346328900fa1c015deb625be1584fe23634b5e7c97b8926c8d0",
+  "legacyHashes": [
+    "bd4af74f50690f26fcc1fc29a516756bf5362ed53625c04bb1613afaced4fdeb",
+    "dd81ee7bd2f44a74e636d2dce08f7bbab19298bfb327291a65313682f6576839"
+  ],
+  "legacyDifference": {
+    "fileCount": 317,
+    "contentsEqual": true,
+    "orderEqual": true,
+    "formatsBefore": [
+      [
+        "ustar\u0000",
+        "00"
+      ]
+    ],
+    "formatsAfter": [
+      [
+        "ustar\u0000",
+        "00"
+      ]
+    ],
+    "headerTypesBefore": {
+      "0": 317,
+      "5": 42,
+      "g": 1,
+      "x": 1
+    },
+    "headerTypesAfter": {
+      "0": 317,
+      "5": 42,
+      "g": 1,
+      "x": 1
+    },
+    "metadataChanges": {
+      "pax": 1
+    },
+    "examples": {
+      "pax": {
+        "entry": "release-source.json",
+        "before": {
+          "comment": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+          "ctime": "1794511795.4683261",
+          "atime": "978307200"
+        },
+        "after": {
+          "comment": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+          "ctime": "1794511795.4683261",
+          "atime": "1009843200"
+        }
+      }
+    },
+    "canonical": {
+      "mtimes": [
+        946684800,
+        1794506596
+      ],
+      "owners": [
+        [
+          0,
+          0,
+          "",
+          ""
+        ],
+        [
+          0,
+          0,
+          "root",
+          "root"
+        ]
+      ],
+      "modesByType": {
+        "0": [
+          "0o664",
+          "0o666"
+        ],
+        "5": [
+          "0o775"
+        ]
+      },
+      "paxKeys": [
+        "atime",
+        "comment",
+        "ctime"
+      ],
+      "orderSha256": "7a80e0a5f0d352d168cef7eb6fdda199dbf7bee0c49ed1a53585c50b79b84c1d"
+    }
+  },
+  "packages": [
+    {
+      "folder": "D:\\smartrayco\\scripts\\inventory-auth-lab\\runtime\\pppoe-publication\\tar-repro-L6wPSz\\new-0\\frontend-consolidado-tr069-b3cdef6-f00edbfc18",
+      "manifestHash": "17231abea8c6c8be81b12e465b024415840a83d77366f2441332ec52b7018f33",
+      "files": {
+        "source.tar": "1e5c90ffb5bd676ba0d00dd1731833ca0225ea18767418c6be43143b825c26b7",
+        "input.json": "878a1219c80a93bddbfbbc0eeed4ac2c9c345c92bd1dcc63f6bb0e2c43400be5"
+      }
+    },
+    {
+      "folder": "D:\\smartrayco\\scripts\\inventory-auth-lab\\runtime\\pppoe-publication\\tar-repro-L6wPSz\\new-1\\frontend-consolidado-tr069-b3cdef6-f00edbfc18",
+      "manifestHash": "17231abea8c6c8be81b12e465b024415840a83d77366f2441332ec52b7018f33",
+      "files": {
+        "source.tar": "1e5c90ffb5bd676ba0d00dd1731833ca0225ea18767418c6be43143b825c26b7",
+        "input.json": "878a1219c80a93bddbfbbc0eeed4ac2c9c345c92bd1dcc63f6bb0e2c43400be5"
+      }
+    }
+  ],
+  "normalized": {
+    "fileCount": 317,
+    "contentsEqual": true,
+    "orderEqual": true,
+    "formatsBefore": [
+      [
+        "ustar\u0000",
+        "00"
+      ]
+    ],
+    "formatsAfter": [
+      [
+        "ustar\u0000",
+        "00"
+      ]
+    ],
+    "headerTypesBefore": {
+      "0": 317,
+      "5": 42,
+      "g": 1
+    },
+    "headerTypesAfter": {
+      "0": 317,
+      "5": 42,
+      "g": 1
+    },
+    "metadataChanges": {},
+    "examples": {},
+    "canonical": {
+      "mtimes": [
+        1794506596
+      ],
+      "owners": [
+        [
+          0,
+          0,
+          "root",
+          "root"
+        ]
+      ],
+      "modesByType": {
+        "0": [
+          "0o644"
+        ],
+        "5": [
+          "0o755"
+        ]
+      },
+      "paxKeys": [
+        "comment"
+      ],
+      "orderSha256": "7a80e0a5f0d352d168cef7eb6fdda199dbf7bee0c49ed1a53585c50b79b84c1d"
+    }
+  },
+  "previousComparison": {
+    "fileCount": 317,
+    "contentsEqual": true,
+    "orderEqual": true,
+    "formatsBefore": [
+      [
+        "ustar\u0000",
+        "00"
+      ]
+    ],
+    "formatsAfter": [
+      [
+        "ustar\u0000",
+        "00"
+      ]
+    ],
+    "headerTypesBefore": {
+      "0": 317,
+      "5": 42,
+      "g": 1,
+      "x": 1
+    },
+    "headerTypesAfter": {
+      "0": 317,
+      "5": 42,
+      "g": 1
+    },
+    "metadataChanges": {
+      "mode": 359,
+      "mtime": 1,
+      "uname": 1,
+      "gname": 1,
+      "pax": 1
+    },
+    "examples": {
+      "mode": {
+        "entry": "deploy",
+        "before": "0o775",
+        "after": "0o755"
+      },
+      "mtime": {
+        "entry": "release-source.json",
+        "before": 1794508826.9899979,
+        "after": 1794506596
+      },
+      "uname": {
+        "entry": "release-source.json",
+        "before": "",
+        "after": "root"
+      },
+      "gname": {
+        "entry": "release-source.json",
+        "before": "",
+        "after": "root"
+      },
+      "pax": {
+        "entry": "release-source.json",
+        "before": {
+          "comment": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+          "ctime": "1794506868.0620424",
+          "atime": "1794510781.8265191",
+          "LIBARCHIVE.creationtime": "1794506868.0620424",
+          "mtime": "1794508826.9899978"
+        },
+        "after": {
+          "comment": "b3cdef65c2830c2f44270568d7038b342b68b3e6"
+        }
+      }
+    },
+    "canonical": {
+      "mtimes": [
+        1794506596
+      ],
+      "owners": [
+        [
+          0,
+          0,
+          "root",
+          "root"
+        ]
+      ],
+      "modesByType": {
+        "0": [
+          "0o644"
+        ],
+        "5": [
+          "0o755"
+        ]
+      },
+      "paxKeys": [
+        "comment"
+      ],
+      "orderSha256": "7a80e0a5f0d352d168cef7eb6fdda199dbf7bee0c49ed1a53585c50b79b84c1d"
+    }
+  },
+  "checks": [
+    "LEGACY_METADATA_FAILURE_REPRODUCED_WITH_IDENTICAL_317_FILES",
+    "TWO_PACKAGES_AND_LOCAL_PREPARES_IDENTICAL",
+    "MTIME_ATIME_PERMISSIONS_INDEPENDENT",
+    "NO_ATIME_CTIME_IN_CANONICAL_TAR",
+    "NO_VALIDATED_FILE_REWRITTEN",
+    "317_FILES_MATCH_STOPPED_ARCHIVE",
+    "REJECTS_TAMPERED_source.tar",
+    "REJECTS_TAMPERED_input.json",
+    "REJECTS_CHANGED_SNAPSHOT",
+    "REJECTS_CHANGED_PACKAGE_CONTRACT",
+    "REJECTS_PREPARE_WITHOUT_PACKAGE"
+  ],
+  "sshCalls": 0,
+  "productionWrites": 0,
+  "supabaseWrites": 0,
+  "mikrotikRequests": 0
+}
