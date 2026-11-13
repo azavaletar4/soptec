@@ -166,6 +166,10 @@ async function handleSubmit() {
     formError.value = 'Selecciona un cliente';
     return;
   }
+  if (!form.value.contract_id) {
+    formError.value = 'Selecciona el contrato de este cliente — sin contrato, el técnico no podrá asignar el equipo en campo.';
+    return;
+  }
   // Fase 131 — choque de horario: el formulario solo pide una hora puntual
   // (no un turno con fin, a diferencia de Tickets/Rutinas), asi que se
   // sintetiza una ventana de 1h para el chequeo contra lo que el tecnico ya
