@@ -82,7 +82,7 @@ export function proveLinkerOnly({before,after,oldMain,newMain,assets}) {
           const stable=symbols.get(checker.getShorthandAssignmentValueSymbol(node));
           if(stable)return ts.factory.createPropertyAssignment(node.name.text,ts.factory.createIdentifier(stable));
         }
-        if(ts.isBindingElement(node)&&!node.propertyName&&!node.dotDotDotToken&&ts.isIdentifier(node.name)){
+        if(ts.isBindingElement(node)&&ts.isObjectBindingPattern(node.parent)&&!node.propertyName&&!node.dotDotDotToken&&ts.isIdentifier(node.name)){
           const stable=symbols.get(checker.getSymbolAtLocation(node.name));
           if(stable)return ts.factory.updateBindingElement(node,node.dotDotDotToken,ts.factory.createIdentifier(node.name.text),ts.factory.createIdentifier(stable),node.initializer?ts.visitNode(node.initializer,visit):undefined);
         }

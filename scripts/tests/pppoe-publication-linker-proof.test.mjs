@@ -38,3 +38,17 @@ test('los nombres exportados publicos no se normalizan como variables locales',(
  proveLinkerOnly(f);f.after['assets/Other-22222222.js']=f.after['assets/Other-22222222.js'].replace('as publicValue','as differentApi');
  assert.throws(()=>proveLinkerOnly(f),/UNRELATED_FUNCTIONAL_ASSET/);
 });
+
+test('normaliza bindings de arrays sin inventar claves de objeto',()=>{
+ const f=fixture();
+ f.before['assets/Other-11111111.js']='const helper=(a,b)=>{const t=a.__vccOpts||a;for(const[k,v]of b)t[k]=v;return t};export{helper as _};';
+ f.after['assets/Other-22222222.js']='const moved=(component,props)=>{const target=component.__vccOpts||component;for(const[key,value]of props)target[key]=value;return target};export{moved as _};';
+ proveLinkerOnly(f);
+});
+
+test('rechaza intercambiar key/value de un binding de array',()=>{
+ const f=fixture();
+ f.before['assets/Other-11111111.js']='const helper=(a,b)=>{for(const[k,v]of b)a[k]=v;return a};export{helper as _};';
+ f.after['assets/Other-22222222.js']='const helper=(a,b)=>{for(const[k,v]of b)a[v]=k;return a};export{helper as _};';
+ assert.throws(()=>proveLinkerOnly(f),/UNRELATED_FUNCTIONAL_ASSET/);
+});

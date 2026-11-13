@@ -5,8 +5,9 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import assert from 'node:assert/strict';
-const out=path.resolve('docs/dashboard-v2-final-local');await fs.mkdir(out,{recursive:true});
-const root=path.resolve('dist');
+const option=(name,fallback)=>process.argv.includes(name)?process.argv[process.argv.indexOf(name)+1]:fallback;
+const out=path.resolve(option('--output-dir','docs/dashboard-v2-final-local'));await fs.mkdir(out,{recursive:true});
+const root=path.resolve(option('--dist','dist'));
 const server=http.createServer(async(req,res)=>{
  try{
   if(!['GET','HEAD'].includes(req.method)||req.url.startsWith('/api/')){res.writeHead(403);res.end();return;}

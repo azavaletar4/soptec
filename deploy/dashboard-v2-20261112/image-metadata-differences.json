@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "imageIds": [
+    "sha256:3fc2672ff84c7c77097aa45f4d2da242794fd1ef0320a799680166f5e4e1d7e1",
+    "sha256:4df674cffde91f70c5258398944b184d88edb0283b50fbddddc46ec33913f4f4"
+  ],
+  "created": [
+    "2026-11-13T00:02:15.608144945Z",
+    "2026-11-13T00:03:21.211677886Z"
+  ],
+  "runtimeConfigIdentical": true,
+  "fileContentsIdentical": true,
+  "fileTreeSha256": "790d1a1977db7c15082c5f412b6716d3db1378c5e0de7c1f9089186f17c19ac2",
+  "fileMetadataDifferences": {
+    "mtime": 131
+  },
+  "imageIdsByteIdentical": false,
+  "sourceAndFrontendTarByteIdentical": true,
+  "candidateArchiveFrozen": true
+}

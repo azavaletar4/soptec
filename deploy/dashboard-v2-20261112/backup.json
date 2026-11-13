@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "image": "sha256:b3a851fb925aa77feab2db9d16be92db50e3309810f42bb671fba96cf3be0b50",
+  "archive": "deploy/dashboard-v2-20261112/frontend-before.image.tar.gz",
+  "sha256": "e6a1a0bb038d4b00879d763c6bd4771878174715a0f08048d471631e6f1cd497",
+  "bytes": 70543690,
+  "remoteWrites": 0
+}

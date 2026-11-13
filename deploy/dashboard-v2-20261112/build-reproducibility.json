@@ -1,0 +1,48 @@
+{
+  "status": "PASS",
+  "services": [
+    "frontend"
+  ],
+  "approvedCommit": "f9a2845a24bc6b830d565c6850e3bd6577816a7f",
+  "baseFrontendCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+  "sourceCommit": "1d9dd40461d84262d2dfa15ae006177121c1cc97",
+  "sourceFiles": [
+    "src/components/dashboard/DashboardIcon.vue",
+    "src/components/dashboard/PppoeProfileCards.vue",
+    "src/components/dashboard/dashboard-v2.css",
+    "src/views/DashboardView.vue"
+  ],
+  "backendSources": [],
+  "sourceFileCount": 318,
+  "attempts": [
+    {
+      "run": 1,
+      "sourceTarSha256": "c7b4dc966cd66d7ac6b6d3fe40d76feb68a50fbc5b4e87f21657318cadc4d443",
+      "frontendTarSha256": "8b3c24e8065689f77611d777177ed08c43657d83b06bbeb266bc9239694da754",
+      "image": "sha256:3fc2672ff84c7c77097aa45f4d2da242794fd1ef0320a799680166f5e4e1d7e1",
+      "tag": "smartrayco-dashboard-v2:1d9dd40461d8",
+      "files": 2652,
+      "treeSha256": "790d1a1977db7c15082c5f412b6716d3db1378c5e0de7c1f9089186f17c19ac2",
+      "manifestSha256": "c11fa8dacf46db1c52cdf7acc68806e2def0b7a7b3fffee97ccfe614655a1d3c"
+    },
+    {
+      "run": 2,
+      "sourceTarSha256": "c7b4dc966cd66d7ac6b6d3fe40d76feb68a50fbc5b4e87f21657318cadc4d443",
+      "frontendTarSha256": "8b3c24e8065689f77611d777177ed08c43657d83b06bbeb266bc9239694da754",
+      "image": "sha256:4df674cffde91f70c5258398944b184d88edb0283b50fbddddc46ec33913f4f4",
+      "tag": "smartrayco-dashboard-v2:1d9dd40461d8-repro",
+      "files": 2652,
+      "treeSha256": "790d1a1977db7c15082c5f412b6716d3db1378c5e0de7c1f9089186f17c19ac2",
+      "manifestSha256": "c11fa8dacf46db1c52cdf7acc68806e2def0b7a7b3fffee97ccfe614655a1d3c"
+    }
+  ],
+  "types": "PASS",
+  "nginxUnchanged": true,
+  "historicalAssetsRetained": true,
+  "fixturesExcluded": true,
+  "builderImage": "sha256:87e442e9bdcf17fcd192dbe401fa533c5746e8fd96658b50e0fe24b175162001",
+  "node": "v22.23.4",
+  "productionWrites": 0,
+  "supabaseRequests": 0,
+  "mikrotikRequests": 0
+}

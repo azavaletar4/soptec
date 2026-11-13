@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "packageSha256": "0b790f14b694571f21a5c5c6d2f32661d3e09d57ab3f5c43b846bc2db9765787",
+  "checks": [
+    "TWO_READONLY_VERIFICATIONS_IDENTICAL_NO_REGENERATION_OR_OVERWRITE",
+    "REJECTS_SINGLE_BYTE_TAR_CORRUPTION",
+    "REJECTS_CHANGED_MANIFEST_AGAINST_EXTERNAL_DIGEST",
+    "REJECTS_BACKEND_SERVICE_SCOPE",
+    "REMOTE_CONTROLLER_REJECTS_UNAPPROVED_HASH_AND_WRONG_DIRECTORY_BEFORE_DOCKER",
+    "CANONICAL_319_SOURCE_FILES_AND_FRONTEND_ONLY_ARTIFACTS"
+  ],
+  "tar": {
+    "sourceFiles": 319,
+    "owners": [
+      0,
+      0
+    ],
+    "mtime": 1794527754,
+    "modes": [
+      "0o644",
+      "0o755"
+    ],
+    "volatileMetadata": false,
+    "frontendFiles": 2652
+  },
+  "productionWrites": 0
+}
