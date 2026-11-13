@@ -7,12 +7,29 @@ aprobado y en vivo de la otra. Antes de desplegar backend O frontend,
 (no al preparar/probar — solo cuando algo se promueve de verdad a
 producción).
 
+## Última publicación documentada (13/11/2026, 00:51 Perú)
+
+Actualización retrospectiva de continuidad durante la sincronización Git. Evidencia de publicaciones reales ya completadas en sus informes; no hubo nuevo despliegue ni consulta a la VM en esta sesión. Este estado supera los inventarios de octubre conservados debajo.
+
+| Servicio | Fuente publicada | Imagen |
+|---|---|---|
+| Frontend | 9e1e7c1c4e71c354c4c8878cdfc97cd6bf748c09 | sha256:191462d2258a80a3380e919e239d410d322c41fcf3df43f73f2c6a1543f20b58 |
+| Backend | b3cdef65c2830c2f44270568d7038b342b68b3e6 | sha256:165126136e3178840e6443094b42993a73a43b79a4b3aa6149f17a3730e2fe16 |
+
+Frontend iniciado 13/11/2026 00:43 Perú, verificado en publicación a las 00:51. Contiene PPPoE, Dashboard V2 y Soporte/Prospectos. Backend conservado desde PPPoE. SQL puntual de descarte aplicado previamente, sin descartes reales. La modalidad de instalaciones IPTV del panel y el contador de ranking tienen sus propias evidencias SQL anteriores; no reaplicar por esta sincronización.
+
+Evidencias: docs/DASHBOARD-SOPORTE-PROSPECTOS-PUBLICADO-20261113.md, deploy/dashboard-support-prospects-20261113/publication-summary.json, docs/DASHBOARD-V2-PUBLICADO-20261112.md, docs/DASHBOARD-PPPOE-PUBLICADO-20261112.md y docs/ALTAS-IPTV-MIGRACION-SQL-APLICADA-20261111.md. La validación visual autenticada conserva las limitaciones del informe; no se certificó una nueva sesión en esta tarea.
+
+Rollback frontend de esa publicación: imagen anterior sha256:3fc2672ff84c7c77097aa45f4d2da242794fd1ef0320a799680166f5e4e1d7e1; archivo y procedimiento en el paquete documentado de Soporte/Prospectos. Disponibilidad constatada entonces, sin nueva inspección remota. No se ejecutó rollback.
+
+## Evidencia histórica de octubre (superada por el estado anterior)
+
 Verificado por lectura directa de los contenedores/imágenes reales de la VM
 el 2026-10-26; actualizado tras activar la corrección de contadores y verificar
 el primer muestreo de contadores; frontend de devoluciones verificado a las
 17:16 UTC — no es una suposición desde git.
 
-## Estado actual (2026-10-26)
+## Estado histórico (2026-10-26)
 
 | | Backend | Frontend |
 |---|---|---|

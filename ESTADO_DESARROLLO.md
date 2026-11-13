@@ -13,6 +13,22 @@ cuando un punto deja de ser relevante (se desplegó, se cerró, se publicó),
 se resume en una línea o se retira de aquí — el detalle completo ya vive en
 la sección histórica correspondiente, no hace falta repetirlo.
 
+**Actualizado 13/11/2026 — sincronización Git de SmartRayco.** Trabajar exclusivamente en D:\SmartRayco, origin https://github.com/azavaletar4/soptec.git. Rayco TV es una aplicación independiente; no mezclar proyectos. Altas Dúo/IPTV de este panel sí pertenece a SmartRayco.
+
+**Base Git:** integración funcional validada f4f96a2 (sin cambios de producto); cierre documental y publicación normal identificados por tag sync/smartrayco-20261113. Consultar docs/SINCRONIZACION-GIT-SMARTRAYCO-20261113.md y recibo local scripts/inventory-auth-lab/runtime/git-sync-20261113/RESULTADO-FINAL.md para SHA finales y confirmación del push. El informe previo al push no certifica la sincronización remota.
+
+**Producción, última evidencia 13/11/2026 00:51 Perú:** frontend fuente 9e1e7c1, imagen sha256:191462d2258a80a3380e919e239d410d322c41fcf3df43f73f2c6a1543f20b58; backend fuente b3cdef6, imagen sha256:165126136e3178840e6443094b42993a73a43b79a4b3aa6149f17a3730e2fe16. PPPoE, Dashboard V2 y Soporte/Prospectos publicados según sus informes. SQL de descarte y modalidad IPTV ya aplicados en las publicaciones autorizadas anteriores; no reaplicarlos. Esta sincronización NO consultó ni modificó producción. La comprobación visual autenticada productiva conserva la limitación del informe de publicación.
+
+**Preservación:** 68 archivos originales (4 modificados + 64 nuevos), verificados por hash, separados en rama/worktree wip/otros-trabajos-20261113 dentro de scripts/inventory-auth-lab/runtime/git-sync-20261113/wip; copia snapshot y referencias recovery/git-sync-20261113/. No integrarlos automáticamente. Los demás worktrees y ramas permanecen intactos. master sigue siendo la rama predeterminada histórica en GitHub; para esta línea de trabajo usar main.
+
+**Validación local:** compilación PASS; 587 regresiones, 35 comprobaciones Dashboard y 16 PPPoE PASS; fuentes frontend (323 archivos) y backend coinciden con sus fuentes publicadas. Sin despliegues, SQL, escrituras productivas ni comandos a equipos.
+
+**Siguiente fase:** respaldos automáticos, todavía NO implementados ni activados. Conservar respaldos y rollback existentes. Propuestas de asistencia/cancelación y otras fases permanecen separadas; su presencia en Git no acredita publicación. No repetir auditorías cerradas: usar informes de publicaciones y sincronización.
+
+## Antecedente histórico de continuidad anterior al 13/11/2026
+
+Este bloque se conserva íntegro como historial. Sus instrucciones y estados antiguos no sustituyen el estado de continuidad vigente anterior.
+
 **Altas Dúo / IPTV — MIGRACIÓN SQL APLICADA, PRODUCCIÓN OPERATIVA
 (11/11/2026, autorizado expresamente):** supera todos los párrafos IPTV
 anteriores de esta sección (conservados abajo como antecedente/detalle).

@@ -1,0 +1,159 @@
+{
+  "status": "PASS_LOCAL_VALIDATION",
+  "validatedIntegrationCommit": "f4f96a284247dc43fbfefe449988e2dc0b0f526a",
+  "closureRef": "refs/tags/sync/smartrayco-20261113",
+  "remote": "https://github.com/azavaletar4/soptec.git",
+  "scope": "SmartRayco ISP panel only",
+  "tests": {
+    "build": "vue-tsc + vite PASS",
+    "regression": {
+      "files": 62,
+      "passed": 587,
+      "failed": 0,
+      "skipped": 0
+    },
+    "dashboardBrowser": 35,
+    "pppoeBrowser": 16,
+    "externalRequests": 0,
+    "writes": 0
+  },
+  "sourceCorrespondence": {
+    "status": "PASS",
+    "candidateCommit": "f4f96a284247dc43fbfefe449988e2dc0b0f526a",
+    "frontendSourceCommit": "9e1e7c1c4e71c354c4c8878cdfc97cd6bf748c09",
+    "frontendFilesMatched": 323,
+    "backendSourceCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+    "backendSourceMatched": true,
+    "productSourcesChanged": false,
+    "all68WipFilesMatch": true,
+    "raycoTvRepositoryAccessed": false
+  },
+  "secretScan": {
+    "status": "PASS",
+    "commits": "32",
+    "blobs": 385,
+    "textBlobsScanned": 355,
+    "scope": "all newly reachable objects, including prior file versions",
+    "findings": [],
+    "secretsPrinted": false,
+    "productionAccess": false
+  },
+  "preservation": {
+    "files": 68,
+    "tracked": 4,
+    "untracked": 64,
+    "sha256Verified": true,
+    "branch": "wip/otros-trabajos-20261113",
+    "recoveryPrefix": "recovery/git-sync-20261113/"
+  },
+  "production": {
+    "accessed": false,
+    "deployed": false,
+    "migrations": false,
+    "equipmentChanges": false,
+    "lastEvidenceUtc": "2026-11-13T05:51:02.640469+00:00",
+    "frontendCommit": "9e1e7c1c4e71c354c4c8878cdfc97cd6bf748c09",
+    "frontendImage": "sha256:191462d2258a80a3380e919e239d410d322c41fcf3df43f73f2c6a1543f20b58",
+    "backendCommit": "b3cdef65c2830c2f44270568d7038b342b68b3e6",
+    "backendImage": "sha256:165126136e3178840e6443094b42993a73a43b79a4b3aa6149f17a3730e2fe16"
+  },
+  "pendingBranches": [
+    {
+      "name": "backup-fase3-olt-fase158-pendiente",
+      "sha": "3af998621796d3999f999b3913e0481be39c51b2",
+      "integrated": false
+    },
+    {
+      "name": "deploy/fase175-frontend-base-87ddfd3-20261026",
+      "sha": "99dc78bebbaca1d590185fe7e5eee0b1a0cbb040",
+      "integrated": false
+    },
+    {
+      "name": "deploy/fase175-trafico-selective-20261026",
+      "sha": "53f284c70c967b164ff4fa7a8403f3238c2bfbc7",
+      "integrated": false
+    },
+    {
+      "name": "diagnostico/tr069-genieacs-readonly",
+      "sha": "8968e69d244b6767e40db07d95bb4cebecb68389",
+      "integrated": false
+    },
+    {
+      "name": "docs/olt-suspension-20261021",
+      "sha": "e358599dddcdaff02331e0acb7ed62c0ed8b5cfa",
+      "integrated": false
+    },
+    {
+      "name": "feature/asistencia-a0-a1-local",
+      "sha": "2391f19e7e0fe58befba962c71f99e7d36426152",
+      "integrated": false
+    },
+    {
+      "name": "feature/asistencia-a2-local",
+      "sha": "9918bb2a70efb64d4d91542d6792be7461fbcf61",
+      "integrated": false
+    },
+    {
+      "name": "feature/asistencia-a3-local",
+      "sha": "24ef0eb4fd2ec66480d2cdf8f9733f7e29362ad1",
+      "integrated": false
+    },
+    {
+      "name": "fix/averias-rutinas-custodia-20261020",
+      "sha": "f6e60f5bb328ddfab20fe6d715f240b0accfb7a7",
+      "integrated": false
+    },
+    {
+      "name": "fix/campo-direccion-contrato-local",
+      "sha": "becdc38707cc4b5bf49f25ce5cdc9ad1e3ce4b3c",
+      "integrated": false
+    },
+    {
+      "name": "fix/inventario-detalle-retorno",
+      "sha": "595218423f036568d3bb83944ecc7e95ef2e50f5",
+      "integrated": false
+    },
+    {
+      "name": "fix/olt-retiro-historico-20261021",
+      "sha": "1da360de999fad64ac0a82a5be170c3812bdc6c6",
+      "integrated": false
+    },
+    {
+      "name": "fix/puntos-noviembre-local",
+      "sha": "5a3b7b25dc0911cf00b89c2b9ade5a11e1a35cd2",
+      "integrated": false
+    },
+    {
+      "name": "hotfix/cierre-alta-cuadrilla",
+      "sha": "592d282b9f51747b672a06aa1a099470f3539512",
+      "integrated": false
+    },
+    {
+      "name": "preparacion/olt-janet-estiven-post169-tipos",
+      "sha": "6ae885d53618a6698fbb0b119c1dc51ecaf55a3f",
+      "integrated": false
+    },
+    {
+      "name": "release/fase175-counter-batches-20261026",
+      "sha": "16831c6c3597c1e7495a4f2230566a44c3e2b2cd",
+      "integrated": false
+    },
+    {
+      "name": "release/inventario-655ea29-1792194002372",
+      "sha": "4e967d08559a566ea0605087bd0778361bd835ec",
+      "integrated": false
+    },
+    {
+      "name": "release/iptv-20261111",
+      "sha": "191c24426c2d8a689a9b5cece995818f035a7451",
+      "integrated": false
+    },
+    {
+      "name": "visual/campo-cabecera-20261020",
+      "sha": "9ad1cbbbf3d836ec1238ede770e3414c27c324db",
+      "integrated": false
+    }
+  ],
+  "githubDefaultBranch": "master",
+  "githubDefaultBranchChanged": false
+}
