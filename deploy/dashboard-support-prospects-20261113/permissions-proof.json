@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "deployedFunctionBodiesMatchApprovedSql": true,
+  "confirmReasonActorDateAndRoleChecksPresent": true,
+  "realRlsReads": [
+    {
+      "role": "ADMIN",
+      "pendingWorks": 12,
+      "pendingClients": 1
+    },
+    {
+      "role": "SUPERADMIN",
+      "pendingWorks": 12,
+      "pendingClients": 1
+    }
+  ],
+  "activeRoleCounts": {
+    "ADMIN": 2,
+    "SUPERADMIN": 2,
+    "TECNICO_RED": 5
+  },
+  "absentActiveSupportBillingUsersNotCreated": true,
+  "discardedRealRows": 0,
+  "productionWrites": 0,
+  "rollbackExecuted": false,
+  "serializationIncidentConfirmedByProductionSetting": true
+}

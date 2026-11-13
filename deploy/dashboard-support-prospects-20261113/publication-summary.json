@@ -1,0 +1,101 @@
+{
+  "status": "PUBLISHED_AND_VERIFIED",
+  "verifiedAt": "2026-11-13T05:51:02.640469+00:00",
+  "sourceCommit": "9e1e7c1c4e71c354c4c8878cdfc97cd6bf748c09",
+  "preparationCommit": "f619d65",
+  "packageSha256": "2e085a576d5c7a4914bd6584d328b65da51ea4bb93497aedbdd41edf2f552410",
+  "migration": {
+    "applied": true,
+    "script": "apply.sql",
+    "sha256": "6d7c4ab83bb84741fdce274d8001a6f7e233ffba996c4d550f87e3ab9f5b8e1b",
+    "postVerification": "PASS",
+    "existingBusinessRecordsUnchanged": true,
+    "discardedRealRows": 0
+  },
+  "frontend": {
+    "id": "4adbce26d9ac539991cbd22bbccc9cbf179c022ef75a9e0cbdfcd92f757fc575",
+    "image": "sha256:191462d2258a80a3380e919e239d410d322c41fcf3df43f73f2c6a1543f20b58",
+    "running": true,
+    "started": "2026-11-13T05:43:03.963573047Z",
+    "previousImage": "sha256:3fc2672ff84c7c77097aa45f4d2da242794fd1ef0320a799680166f5e4e1d7e1"
+  },
+  "backendUnchanged": true,
+  "otherServicesUnchanged": true,
+  "counters": {
+    "rows": 12,
+    "urgent": 0,
+    "pending": 12,
+    "inProgress": 0,
+    "byTypeStatus": [
+      {
+        "kind": "installation",
+        "amount": 1,
+        "status": "scheduled"
+      },
+      {
+        "kind": "routine",
+        "amount": 10,
+        "status": "scheduled"
+      },
+      {
+        "kind": "ticket",
+        "amount": 1,
+        "status": "open"
+      }
+    ],
+    "uniqueOrders": 12,
+    "discardedRows": 0,
+    "requestedReferenceMatches": true,
+    "pendingInstallationClients": 1,
+    "cancelledRawProspectsExcluded": 3
+  },
+  "postgresBackup": {
+    "status": "PASS",
+    "archive": "C:\\Users\\USER\\AppData\\Local\\SmartRaycoBackups\\dashboard_support_pre_sql_20261113_053254_3b8032fa\\completo.dump",
+    "bytes": 21372811,
+    "sha256": "c6b5675d9c37db65145d2a1c1cfbf353bcb777b407115d71bb9ed0f1fdc1410a",
+    "snapshotUtc": "2026-11-13T05:32:55.2084+00:00",
+    "restoreExit": 0,
+    "fullDatabaseDump": true,
+    "allCriticalRowsAndFieldsExactlyEqual": true,
+    "counts": {
+      "contracts": 768,
+      "installations": 94,
+      "clients": 747
+    },
+    "initialMismatchExplained": "JSON float serialization: local extra_float_digits=0 reproduces both original fingerprints; raw COPY has zero differences",
+    "expectedHashesReplaced": false,
+    "privateAcl": true,
+    "productionWrites": 0,
+    "limitations": "No Storage files, global role attributes/memberships or external Vault keys; no decryption tested. Role names reconstructed as NOLOGIN; isolated supabase_admin SUPERUSER. No writes to Cloud."
+  },
+  "rollback": {
+    "available": true,
+    "image": "sha256:3fc2672ff84c7c77097aa45f4d2da242794fd1ef0320a799680166f5e4e1d7e1",
+    "tag": "smartrayco-dashboard-support-rollback:3fc2672ff84c",
+    "archive": "/opt/smartrayco-staging/dashboard-support-9e1e7c1c4e71-45833940c8/frontend-before.image.tar.gz",
+    "archiveSha256": "b80df4ec443f51fac2e711ee9730316f85c4f7c2779baeb39b8b4e64da05b1e8",
+    "executed": false
+  },
+  "authentication": {
+    "unauthenticatedBrowser": "PASS",
+    "anonymousRpcStatus": 401,
+    "adminSuperadminDatabaseRls": "PASS",
+    "deployedSqlBodiesMatch": true,
+    "authenticatedInteractiveBrowserSessionUsed": false
+  },
+  "criticalErrors": 0,
+  "equipmentCommandsExecuted": 0,
+  "newPeriodicStorage": false,
+  "limitations": [
+    "No interactive authenticated browser session was available; signed-in rendering was tested on this identical candidate before publication. Production validation used real SQL RLS reads, function hashes, HTTPS route guards and anonymous RPC denial.",
+    "Database archive excludes Storage objects, global role attributes and external Vault keys; full database restore was verified in isolation."
+  ],
+  "incidents": [
+    {
+      "resolved": true,
+      "description": "Initial textual JSON fingerprints differed only due to extra_float_digits. Same original fingerprints reproduced at setting 0; original/restored COPY rows and fields were byte-identical. No expected hash changed."
+    }
+  ],
+  "rollbackExecuted": false
+}

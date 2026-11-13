@@ -1,0 +1,36 @@
+{
+  "status": "PASS",
+  "at": "2026-11-13T05:47:35.631Z",
+  "realPublishedHttps": true,
+  "authenticatedSessionUsed": false,
+  "authOrDataFixtures": false,
+  "protectedRoutesRedirectToLogin": [
+    "/dashboard",
+    "/soporte",
+    "/soporte/rutinas",
+    "/soporte/instalaciones",
+    "/clientes?section=pending_install",
+    "/clientes/prospectos",
+    "/facturacion",
+    "/inventario",
+    "/campo"
+  ],
+  "apiGuards": [
+    {
+      "path": "/api/dashboard/pppoe-profiles",
+      "status": 401
+    },
+    {
+      "path": "/api/dashboard/network-status",
+      "status": 401
+    },
+    {
+      "path": "/api/dashboard/olt-summary",
+      "status": 401
+    }
+  ],
+  "health": "ok",
+  "exceptions": [],
+  "writeAttempts": [],
+  "businessWrites": 0
+}

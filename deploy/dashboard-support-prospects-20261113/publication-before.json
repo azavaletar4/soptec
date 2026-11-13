@@ -1,0 +1,49 @@
+{
+  "status": "PASS",
+  "mode": "before",
+  "at": "2026-11-13T05:32:58.697381+00:00",
+  "services": {
+    "frontend": {
+      "id": "5f6c92d2a411ea2b10c82ab3755dfb8da7d698348ae4cba833002a83e40d3cd2",
+      "image": "sha256:3fc2672ff84c7c77097aa45f4d2da242794fd1ef0320a799680166f5e4e1d7e1",
+      "started": "2026-11-13T04:00:43.028957489Z",
+      "running": true
+    },
+    "backend": {
+      "id": "bef3f7b4e56fa9ab158e96c9743f7b1f2fde8a3061c828c1f116a4f9f6941cab",
+      "image": "sha256:165126136e3178840e6443094b42993a73a43b79a4b3aa6149f17a3730e2fe16",
+      "started": "2026-11-12T21:45:01.444897238Z",
+      "running": true
+    },
+    "caddy": {
+      "id": "7ed5980880553f2ee5e272b437c1aeb767b5de76a6dab77ec73527a65b481c41",
+      "image": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+      "started": "2026-11-04T16:45:49.064183866Z",
+      "running": true
+    },
+    "mongo": {
+      "id": "4c7c46fe5845ba1bdb04f568d1b4445907970266844bcf9d9ee2bbb5546a427e",
+      "image": "sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2",
+      "started": "2026-11-04T16:45:49.041453124Z",
+      "running": true
+    },
+    "genieacs": {
+      "id": "088ae3d9dfd4b7a23f40869d7fee0d39114eaaae782a75ea264db87b71bf3d68",
+      "image": "sha256:28244054e1bfa375c67be4d1f1ec8f1a0ef7bf67a6e59ac0a70c2fcbd48f04cc",
+      "started": "2026-11-04T16:45:49.077217583Z",
+      "running": true
+    }
+  },
+  "frontendCommit": "1d9dd40461d84262d2dfa15ae006177121c1cc97",
+  "allFilesAndConfigurationVerified": true,
+  "backendAndOtherServicesUnchanged": true,
+  "health": "ok",
+  "authenticationGuards": {
+    "/api/dashboard/pppoe-profiles": 401,
+    "/api/dashboard/network-status": 401,
+    "/api/dashboard/olt-summary": 401
+  },
+  "productionMutations": 0,
+  "supabaseRequests": 0,
+  "mikrotikRequests": 0
+}

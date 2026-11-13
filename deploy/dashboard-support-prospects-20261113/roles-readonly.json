@@ -1,0 +1,27 @@
+[
+    {
+        "role":  "ADMIN",
+        "pendingWorks":  12,
+        "pendingClients":  1
+    },
+    {
+        "role":  "SUPERADMIN",
+        "pendingWorks":  12,
+        "pendingClients":  1
+    },
+    {
+        "bodies":  {
+                       "guard_discarded_prospect_child":  "e4fdcd6522c1aab6841bfc27bdfc8c41",
+                       "guard_unfulfilled_prospect_discard":  "521ec75e8013cba2fd04537bce40d1cf",
+                       "discard_unfulfilled_client_prospect":  "2e225ebfeae24c6918b5e2cdce94f480"
+                   },
+        "read_only":  "on",
+        "activeRoles":  {
+                            "ADMIN":  2,
+                            "SUPERADMIN":  2,
+                            "TECNICO_RED":  5
+                        },
+        "floatDigits":  "0",
+        "discardedRows":  0
+    }
+]

@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "at": "2026-11-13T05:45:28.929479+00:00",
+  "application": {
+    "status": "PASS",
+    "frontendImage": "sha256:191462d2258a80a3380e919e239d410d322c41fcf3df43f73f2c6a1543f20b58",
+    "frontendCommit": "9e1e7c1c4e71c354c4c8878cdfc97cd6bf748c09",
+    "backendUnchanged": true,
+    "otherServicesUnchanged": true,
+    "apiUnauthenticatedStatus": 401,
+    "sqlExecuted": false,
+    "mikrotikRequests": 0
+  },
+  "frontend": {
+    "id": "4adbce26d9ac539991cbd22bbccc9cbf179c022ef75a9e0cbdfcd92f757fc575",
+    "image": "sha256:191462d2258a80a3380e919e239d410d322c41fcf3df43f73f2c6a1543f20b58",
+    "running": true,
+    "started": "2026-11-13T05:43:03.963573047Z"
+  },
+  "rollback": {
+    "available": true,
+    "image": "sha256:3fc2672ff84c7c77097aa45f4d2da242794fd1ef0320a799680166f5e4e1d7e1",
+    "tag": "smartrayco-dashboard-support-rollback:3fc2672ff84c",
+    "archive": "/opt/smartrayco-staging/dashboard-support-9e1e7c1c4e71-45833940c8/frontend-before.image.tar.gz",
+    "archiveSha256": "b80df4ec443f51fac2e711ee9730316f85c4f7c2779baeb39b8b4e64da05b1e8",
+    "executed": false
+  },
+  "packageSha256": "2e085a576d5c7a4914bd6584d328b65da51ea4bb93497aedbdd41edf2f552410",
+  "sourceTarSha256": "45833940c83707a37937318b1e472beef0104429db8896f963c4c9f1f815a8fb",
+  "frontendTarSha256": "2e83036cbf31e6aa41e1fb668aa315ea9d359b82b37ff681f0e7c0063e55d1bd",
+  "criticalNginxErrors": 0,
+  "productionReadOnly": true
+}

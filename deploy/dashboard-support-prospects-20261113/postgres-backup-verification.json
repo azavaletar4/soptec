@@ -1,0 +1,20 @@
+{
+    "status":  "PASS",
+    "archive":  "C:\\Users\\USER\\AppData\\Local\\SmartRaycoBackups\\dashboard_support_pre_sql_20261113_053254_3b8032fa\\completo.dump",
+    "bytes":  21372811,
+    "sha256":  "c6b5675d9c37db65145d2a1c1cfbf353bcb777b407115d71bb9ed0f1fdc1410a",
+    "snapshotUtc":  "2026-11-13T05:32:55.2084+00:00",
+    "restoreExit":  0,
+    "fullDatabaseDump":  true,
+    "allCriticalRowsAndFieldsExactlyEqual":  true,
+    "counts":  {
+                   "contracts":  768,
+                   "installations":  94,
+                   "clients":  747
+               },
+    "initialMismatchExplained":  "JSON float serialization: local extra_float_digits=0 reproduces both original fingerprints; raw COPY has zero differences",
+    "expectedHashesReplaced":  false,
+    "privateAcl":  true,
+    "productionWrites":  0,
+    "limitations":  "No Storage files, global role attributes/memberships or external Vault keys; no decryption tested. Role names reconstructed as NOLOGIN; isolated supabase_admin SUPERUSER. No writes to Cloud."
+}

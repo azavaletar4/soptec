@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "at": "2026-11-13T05:50:26.029Z",
+  "anonymousRpcStatus": 401,
+  "sqlState": "42501",
+  "permissionDeniedBeforeExecution": true,
+  "clientId": null,
+  "confirm": false,
+  "realProspectsTouched": 0
+}
