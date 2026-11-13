@@ -54,7 +54,7 @@ export interface DashboardSummary {
   network: NetworkStatus;
   oltSummary: OltAggregateSummary;
   recentClients: RecentClient[];
-  tickets: { open: number; inProgress: number; urgent: number; recent: RecentTicket[] };
+  tickets: { open: number; inProgress: number; urgent: number; pendingByType: Record<JobType, number>; recent: RecentTicket[] };
   billing: {
     pendingTotal: number;
     pendingCount: number;

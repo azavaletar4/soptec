@@ -1,0 +1,54 @@
+{
+  "status": "PASS",
+  "services": [
+    "frontend"
+  ],
+  "approvedCommit": "61e0e31f648521001f40bb692a2df2744ad95761",
+  "baseFrontendCommit": "1d9dd40461d84262d2dfa15ae006177121c1cc97",
+  "sourceCommit": "9e1e7c1c4e71c354c4c8878cdfc97cd6bf748c09",
+  "sourceFiles": [
+    "src/components/clientes/UnfulfilledProspectDiscardDialog.vue",
+    "src/lib/__tests__/dashboardOperationalCounts.test.ts",
+    "src/lib/dashboardClients.ts",
+    "src/lib/dashboardSupport.ts",
+    "src/lib/unfulfilledProspect.ts",
+    "src/stores/clients.ts",
+    "src/stores/dashboard.ts",
+    "src/types/domain.ts",
+    "src/views/DashboardView.vue",
+    "src/views/clientes/ClientesView.vue"
+  ],
+  "backendSources": [],
+  "sourceFileCount": 323,
+  "attempts": [
+    {
+      "run": 1,
+      "sourceTarSha256": "45833940c83707a37937318b1e472beef0104429db8896f963c4c9f1f815a8fb",
+      "frontendTarSha256": "2e83036cbf31e6aa41e1fb668aa315ea9d359b82b37ff681f0e7c0063e55d1bd",
+      "image": "sha256:191462d2258a80a3380e919e239d410d322c41fcf3df43f73f2c6a1543f20b58",
+      "tag": "smartrayco-dashboard-support:9e1e7c1c4e71",
+      "files": 2750,
+      "treeSha256": "1f6ba1ffd4f8d30f910cd5fca8cea6047336bd80dce6d0e064b390a4bebcbfb3",
+      "manifestSha256": "e9301890d326e72d57f519c308260cf1a59de71db303a274869ef4d6c990704c"
+    },
+    {
+      "run": 2,
+      "sourceTarSha256": "45833940c83707a37937318b1e472beef0104429db8896f963c4c9f1f815a8fb",
+      "frontendTarSha256": "2e83036cbf31e6aa41e1fb668aa315ea9d359b82b37ff681f0e7c0063e55d1bd",
+      "image": "sha256:c66141bda3b7b3aa237bb0f642f6d84ce9515238fd1c0c297b71c40fcdc26fe3",
+      "tag": "smartrayco-dashboard-support:9e1e7c1c4e71-repro",
+      "files": 2750,
+      "treeSha256": "1f6ba1ffd4f8d30f910cd5fca8cea6047336bd80dce6d0e064b390a4bebcbfb3",
+      "manifestSha256": "e9301890d326e72d57f519c308260cf1a59de71db303a274869ef4d6c990704c"
+    }
+  ],
+  "types": "PASS",
+  "nginxUnchanged": true,
+  "historicalAssetsRetained": true,
+  "fixturesExcluded": true,
+  "builderImage": "sha256:87e442e9bdcf17fcd192dbe401fa533c5746e8fd96658b50e0fe24b175162001",
+  "node": "v22.23.4",
+  "productionWrites": 0,
+  "supabaseRequests": 0,
+  "mikrotikRequests": 0
+}

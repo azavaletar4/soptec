@@ -18,7 +18,7 @@ test('Soporte usa todos los estados operativos de avería, rutina y Alta', () =>
 test('cerrados/resueltos/completados/cancelados no cuentan, ni como urgentes', () => {
   const rows = (['ticket', 'routine', 'installation'] as const).flatMap(kind =>
     ['resolved', 'closed', 'completed', 'cancelled'].map(status => job(kind, status, status, 'urgent')));
-  assert.deepEqual(summarizeDashboardSupport(rows), { open: 0, inProgress: 0, urgent: 0, recent: [] });
+  assert.deepEqual(summarizeDashboardSupport(rows), { open: 0, inProgress: 0, urgent: 0, pendingByType: { ticket: 0, routine: 0, installation: 0 }, recent: [] });
 });
 test('deduplica por tipo e ID; urgentes son subconjunto, no un tercer estado', () => {
   const rows = [job('ticket', 'open', 'same', 'urgent'), job('routine', 'in_progress', 'same', 'urgent'), job('ticket', 'open', 'same', 'urgent')];
@@ -29,6 +29,7 @@ test('caso leído: una avería, diez rutinas, un Alta pendientes; recientes limi
   const rows = [job('ticket', 'open'), ...Array.from({ length: 10 }, (_, i) => job('routine', 'scheduled', String(i))), job('installation', 'scheduled')];
   const summary = summarizeDashboardSupport(rows);
   assert.equal(summary.open, 12); assert.equal(summary.inProgress, 0); assert.equal(summary.urgent, 0); assert.equal(summary.recent.length, 5);
+  assert.deepEqual(summary.pendingByType, { ticket: 1, routine: 10, installation: 1 });
 });
 const client = (id: string, installs: string[], contracts: string[] = ['cancelled'], status = 'prospect') => ({
   id, status, installations: installs.map(status => ({ status })), service_contracts: contracts.map(status => ({ status })),

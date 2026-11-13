@@ -21,6 +21,8 @@ export function summarizeDashboardSupport(rows: DashboardJob[]) {
     open: jobs.filter(row => row.status !== 'in_progress').length,
     inProgress: jobs.filter(row => row.status === 'in_progress').length,
     urgent: jobs.filter(row => row.priority === 'urgent').length,
+    pendingByType: Object.fromEntries((['ticket', 'routine', 'installation'] as const).map(kind =>
+      [kind, jobs.filter(row => row.jobType === kind && row.status !== 'in_progress').length])) as Record<JobType, number>,
     recent: jobs.sort((a, b) => b.created_at.localeCompare(a.created_at)
       || `${a.jobType}:${a.id}`.localeCompare(`${b.jobType}:${b.id}`)).slice(0, 5),
   };

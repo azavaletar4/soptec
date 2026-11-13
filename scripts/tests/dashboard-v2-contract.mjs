@@ -54,6 +54,7 @@ const report={status:'PASS',baseCommit:execFileSync('git',['rev-parse',reference
  approvedReference,approvedDashboardLogicUnchangedExceptDateFormatting:datePresentationOnly,
  pppoeScriptUnchanged:true,preservedFunctionsAndValues:preserved,billingThresholdsUnchanged:true,
  scopedStyles:true,dependenciesAdded:0,productionAccess:false};
-fs.mkdirSync('docs/dashboard-support-prospects-local',{recursive:true});
-fs.writeFileSync('docs/dashboard-support-prospects-local/contract-verification.json',JSON.stringify({...report,operationalCountChanges,billingQueriesAndSummaryUnchanged:true},null,2)+'\n');
+const output=process.argv.includes('--output-dir')?process.argv[process.argv.indexOf('--output-dir')+1]:'docs/dashboard-support-prospects-local';
+fs.mkdirSync(output,{recursive:true});
+fs.writeFileSync(output+'/contract-verification.json',JSON.stringify({...report,operationalCountChanges,billingQueriesAndSummaryUnchanged:true},null,2)+'\n');
 console.log(JSON.stringify({status:'PASS',unchangedFiles:unchanged.length,preserved:preserved.length,pppoeScriptUnchanged:true}));

@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "staticBuild": true,
+  "productionAccess": false,
+  "realWrites": 0,
+  "checks": [
+    "PENDING_INSTALLATION_CANNOT_BE_DISCARDED",
+    "REASON_AND_CONFIRMATION_REQUIRED",
+    "CANCEL_WITHOUT_RPC",
+    "CONFLICT_REQUIRES_REFRESH",
+    "DOUBLE_CLICK_ONE_SUCCESS",
+    "RELATIONS_UNCHANGED",
+    "HISTORY_PRESERVED_AND_VISIBLE",
+    "PERU_TIME",
+    "ADMIN_SUPERADMIN_ONLY",
+    "DESKTOP_MOBILE_DIALOG"
+  ],
+  "exceptions": []
+}

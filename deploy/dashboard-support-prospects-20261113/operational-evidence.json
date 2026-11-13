@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "sourceCommit": "9e1e7c1c4e71c354c4c8878cdfc97cd6bf748c09",
+  "readOnlyEvidenceAt": "2026-11-13T04:30:14.350047+00:00",
+  "reusedEvidence": true,
+  "support": {
+    "open": 12,
+    "inProgress": 0,
+    "urgent": 0,
+    "pendingByType": {
+      "ticket": 1,
+      "routine": 10,
+      "installation": 1
+    }
+  },
+  "pendingInstallationClients": 1,
+  "requestedReferenceConfirmed": true,
+  "legacyCancelledClientsExcluded": 4,
+  "rawProspectCancelledClientsExcluded": 3,
+  "productionMutations": 0
+}

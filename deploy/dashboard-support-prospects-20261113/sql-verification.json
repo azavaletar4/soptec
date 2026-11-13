@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "localOnly": true,
+  "productionWrites": 0,
+  "synthetic": true,
+  "checks": [
+    "EXACT_PACKAGE_REJECTS_SCHEMA_MISMATCH_WITHOUT_DDL_OR_DATA_WRITES",
+    "SAME_GUARD_AND_EXACT_MIGRATION_PASS_SYNTHETIC_BASELINE_WITH_ZERO_BUSINESS_CHANGES",
+    "POSTCHECK_REJECTS_ANONYMOUS_RPC_AND_EXISTING_RLS_DRIFT",
+    "REAPPLY_REJECTED",
+    "EXACT_UNUSED_ROLLBACK_RESTORES_SCHEMA_AND_PRESERVES_DATA"
+  ],
+  "applySha256": "6d7c4ab83bb84741fdce274d8001a6f7e233ffba996c4d550f87e3ab9f5b8e1b",
+  "originalMigrationSha256": "89e3d0f8d11634dc60f65d8c7ae9d91c7ca99e907db3df24e47f424aeaf26ce6",
+  "prior13SqlTestsReusedWithoutRerun": true,
+  "positiveTestUsesSyntheticExpectedCatalog": true
+}

@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "image": "sha256:3fc2672ff84c7c77097aa45f4d2da242794fd1ef0320a799680166f5e4e1d7e1",
+  "archive": "deploy/dashboard-support-prospects-20261113/frontend-before.image.tar.gz",
+  "sha256": "b80df4ec443f51fac2e711ee9730316f85c4f7c2779baeb39b8b4e64da05b1e8",
+  "source": "prior-published-sealed-candidate",
+  "remoteWrites": 0
+}

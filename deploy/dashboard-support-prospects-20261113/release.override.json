@@ -1,0 +1,7 @@
+{
+  "services": {
+    "frontend": {
+      "image": "smartrayco-dashboard-support:9e1e7c1c4e71"
+    }
+  }
+}

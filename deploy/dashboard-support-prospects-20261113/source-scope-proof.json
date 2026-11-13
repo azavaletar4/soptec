@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "sourceCommit": "9e1e7c1c4e71c354c4c8878cdfc97cd6bf748c09",
+  "baseCommit": "1d9dd40461d84262d2dfa15ae006177121c1cc97",
+  "sourceFiles": [
+    "src/components/clientes/UnfulfilledProspectDiscardDialog.vue",
+    "src/lib/__tests__/dashboardOperationalCounts.test.ts",
+    "src/lib/dashboardClients.ts",
+    "src/lib/dashboardSupport.ts",
+    "src/lib/unfulfilledProspect.ts",
+    "src/stores/clients.ts",
+    "src/stores/dashboard.ts",
+    "src/types/domain.ts",
+    "src/views/DashboardView.vue",
+    "src/views/clientes/ClientesView.vue"
+  ],
+  "protectedSourceFiles": 313,
+  "otherModulesSourceUnchanged": true,
+  "backendSources": [],
+  "productionWrites": 0
+}

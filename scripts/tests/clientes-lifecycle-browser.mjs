@@ -13,7 +13,7 @@ process.env.VITE_SUPABASE_ANON_KEY = 'synthetic';
 const sourceArg = process.argv.find(a => a.startsWith('--source='))?.slice('--source='.length);
 const staticMode = process.argv.includes('--static');
 const staticServer = () => {
-  const root = path.resolve('dist');
+  const root = path.resolve(process.argv.includes('--dist') ? process.argv[process.argv.indexOf('--dist') + 1] : 'dist');
   const app = http.createServer(async (req,res) => {
     try {
       if (!['GET','HEAD'].includes(req.method) || req.url.startsWith('/api/')) { res.writeHead(403);res.end();return; }
@@ -166,7 +166,7 @@ try {
     await click('Pendientes de instalación');await until('document.querySelector("tbody")?.textContent.includes("Pendiente Sintetico")');assert.ok((await names()).some(n=>n.includes('Pendiente')));
     assert.equal(await evaluate('Array.from(document.querySelectorAll("tbody button")).some(b=>b.textContent.trim()==="Descartar")'),false);
     await click('No instalados');await click('Descartar');assert.equal(await disabled(),true);
-    const output='docs/dashboard-support-prospects-local';await mkdir(output,{recursive:true});
+    const output=process.argv.includes('--output-dir') ? process.argv[process.argv.indexOf('--output-dir')+1] : 'docs/dashboard-support-prospects-local';await mkdir(output,{recursive:true});
     const capture=async(name,width,height)=>{await c('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<768});await new Promise(r=>setTimeout(r,300));const img=await c('Page.captureScreenshot',{format:'png'});await writeFile(join(output,name+'.png'),Buffer.from(img.data,'base64'));};
     await inputReason('No se concretó');assert.equal(await disabled(),true);
     await capture('discard-desktop',1440,1000);await capture('discard-mobile',390,844);

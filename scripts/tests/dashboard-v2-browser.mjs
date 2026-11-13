@@ -116,7 +116,7 @@ try{
    if(table==='service_contracts')return response([],87);
    if(['tickets','routines','installations'].includes(table)){
     if(window.__supportError&&table==='routines')return response({message:'Rutinas de laboratorio no disponibles'},0,503);
-    const rows=table==='tickets'?tickets:table==='routines'?routines:installations;
+    const rows=window.__operationalCase ? (table==='tickets'?tickets.slice(0,1):table==='routines'?routines:installations).map(row=>({...row,status:table==='tickets'?'open':'scheduled',priority:'medium'})) : table==='tickets'?tickets:table==='routines'?routines:installations;
     return response(window.__summaryMode==='empty'?[]:rows,window.__summaryMode==='empty'?0:rows.length);
    }
    if(table==='invoices'){
@@ -259,6 +259,14 @@ try{
  assert.equal(await evaluate('document.querySelector("[data-testid=pppoe-section]")'),null);assert.equal(await evaluate('window.__api.filter(x=>x.endsWith("pppoe-profiles")).length'),0);checks.push('PPPOE_PERMISSION_RETAINED');
  assert.equal(await evaluate('window.__writes'),0);assert.deepEqual(writeAttempts,[]);assert.deepEqual(forbidden,[]);assert.deepEqual(exceptions,[]);
  checks.push('ZERO_BUSINESS_WRITES_AND_EXTERNAL_REQUESTS');
+ await evaluate('window.__operationalCase=true;window.__tickGeneral()');
+ assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-support-counts strong")].map(x=>x.innerText)'),['12','0','0']);
+ assert.match(await evaluate('document.querySelector(".dv-support-counts").innerText'),/Trabajos pendientes/);
+ assert.equal(await evaluate('document.querySelector("[data-testid=support-breakdown]").innerText'),'1 avería(s) · 10 rutina(s) · 1 Alta(s)');
+ assert.equal(await evaluate('document.querySelectorAll(".dv-portfolio strong")[2].innerText'),'1');
+ await size(1440,1100);await capture('operational-desktop');await size(390,844);await capture('operational-mobile');
+ assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'));
+ checks.push('EXACT_OPERATIONAL_CASE_12_WORKS_ONE_PENDING_CLIENT_DESKTOP_MOBILE');
  await fs.writeFile(path.join(out,'verification.json'),JSON.stringify({status:'PASS',builtFrontend:true,syntheticResponses:true,productionAccess:false,writes:0,externalRequests:0,preexistingFontStylesServedLocally:replacedFonts,checks,layouts,exceptions},null,2)+'\n');
  console.log(JSON.stringify({status:'PASS',checks:checks.length,captures:out}));
  await send('Browser.close');ws.close();chrome.kill();

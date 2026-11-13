@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "action": "preflight",
+  "packageSha256": "2e085a576d5c7a4914bd6584d328b65da51ea4bb93497aedbdd41edf2f552410",
+  "productionCatalogMatched": true,
+  "transactionReadOnly": true,
+  "migrationApplied": false,
+  "businessRowsWritten": 0,
+  "note": "Resultado del comando database.ps1 -Action preflight ejecutado durante la preparación. No se ejecutó apply, verify posterior ni rollback en producción."
+}

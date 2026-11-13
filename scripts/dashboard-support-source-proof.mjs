@@ -1,0 +1,26 @@
+// Prueba de aislamiento de fuentes y datos operativos ya leídos. Sin conexiones.
+import fs from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {summarizeDashboardSupport} from './inventory-auth-lab/runtime/dashboard-support-prospects-release/source/src/lib/dashboardSupport.ts';
+import {countPendingInstallationClients} from './inventory-auth-lab/runtime/dashboard-support-prospects-release/source/src/lib/dashboardClients.ts';
+const out='deploy/dashboard-support-prospects-20261113',runtime='scripts/inventory-auth-lab/runtime';
+const prep=JSON.parse(fs.readFileSync(out+'/build-reproducibility.json'));
+const snapshot=JSON.parse(fs.readFileSync(out+'/release-source.json'));
+const before=JSON.parse(fs.readFileSync('deploy/dashboard-v2-20261112/release-source.json'));
+const paths=Object.keys({...before.files,...snapshot.files}).filter(p=>before.files[p]!==snapshot.files[p]).sort();assert.deepEqual(paths,prep.sourceFiles);
+for(const p of Object.keys(snapshot.files))assert.equal(snapshot.files[p],createHash('sha256').update(execFileSync('git',['show',snapshot.commit+':'+p],{maxBuffer:16*1024*1024,windowsHide:true}).toString().replaceAll('\r\n','\n')).digest('hex'));
+const sourceRoot=runtime+'/dashboard-support-prospects-release/source';
+assert.equal(execFileSync('git',['rev-parse','HEAD^'],{cwd:sourceRoot,encoding:'utf8'}).trim(),before.commit);
+const proof={status:'PASS',sourceCommit:snapshot.commit,baseCommit:before.commit,sourceFiles:paths,protectedSourceFiles:Object.keys(before.files).filter(p=>!paths.includes(p)).length,otherModulesSourceUnchanged:true,backendSources:[],productionWrites:0};
+fs.writeFileSync(out+'/source-scope-proof.json',JSON.stringify(proof,null,2)+'\n',{flag:'wx'});
+const data=JSON.parse(fs.readFileSync(runtime+'/dashboard-support-prospects-private.json'));
+const pending=JSON.parse(fs.readFileSync(runtime+'/dashboard-pending-prospects-private.json'));
+assert.equal(data.read_only,'on');assert.equal(pending.read_only,'on');
+const support=summarizeDashboardSupport(data.active_orders.map(j=>({...j,jobType:j.kind,title:'',clients:null})));delete support.recent;
+assert.equal(support.open,12);assert.equal(support.inProgress,0);assert.equal(support.urgent,0);assert.deepEqual(support.pendingByType,{ticket:1,routine:10,installation:1});
+assert.equal(countPendingInstallationClients(data.client_lifecycle_inputs),1);
+assert.equal(pending.pending_installation_clients.length,1);assert.equal(pending.pending_installation_clients[0].first_name,'Manuel');assert.equal(pending.pending_installation_clients[0].last_name,'Romero Collantes');
+const evidence={status:'PASS',sourceCommit:snapshot.commit,readOnlyEvidenceAt:data.at,reusedEvidence:true,support,pendingInstallationClients:1,requestedReferenceConfirmed:true,legacyCancelledClientsExcluded:4,rawProspectCancelledClientsExcluded:3,productionMutations:0};
+fs.writeFileSync(out+'/operational-evidence.json',JSON.stringify(evidence,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({proof,evidence}));
