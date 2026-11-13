@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientRetirementDialog from '@/components/clientes/ClientRetirementDialog.vue';
+import UnfulfilledProspectDiscardDialog from '@/components/clientes/UnfulfilledProspectDiscardDialog.vue';
+import { canDiscardUnfulfilledProspect } from '@/lib/unfulfilledProspect';
 import { useClientsStore } from '@/stores/clients';
 import { useContractsStore } from '@/stores/contracts';
 import { useMikrotikStore, type PppSecret } from '@/stores/mikrotik';
@@ -133,6 +135,11 @@ const classificationError = ref<string | null>(null);
 const canPrepareReincorporation = computed(() => auth.role === 'ADMIN' || auth.role === 'SUPERADMIN');
 const reincorporatingClient = ref<Client | null>(null);
 const retirementClientId = ref<string | null>(null);
+const discardClient = ref<ClientWithLifecycle | null>(null);
+async function discardCompleted() {
+  try { await clientsStore.fetchClients(); }
+  catch { toast.error('Descarte confirmado. Actualiza el listado para consultar el estado actual.'); }
+}
 function handleFormStatusChange() {
   if (form.value.status !== 'retired' || !editing.value || editing.value.status === 'retired') return;
   form.value.status = editing.value.status;
@@ -287,6 +294,7 @@ function latestInstallationFor(clientId: string): Installation | null {
 // estado real del cliente). No se cambia ningun estado en la base, solo la
 // etiqueta visible.
 function clientDisplayStatus(c: Client): { label: string; cls: string } {
+  if (c.prospect_discarded_at) return { label: 'No concretado / Descartado', cls: 'bg-slate-200 text-slate-700' };
   return { label: STATUS_LABEL[c.status], cls: STATUS_CLASS[c.status] };
 }
 
@@ -713,6 +721,10 @@ function goToDetail(client: Client) {
               </div>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+              <button v-if="canPrepareReincorporation && canDiscardUnfulfilledProspect(c)" type="button"
+                class="text-slate-600 hover:underline text-xs" @click="discardClient = c">Descartar</button>
+              <button v-if="c.prospect_discarded_at" type="button"
+                class="text-slate-600 hover:underline text-xs" @click="discardClient = c">Ver descarte</button>
               <button v-if="clientSection === 'retired' && canPrepareReincorporation" type="button"
                 class="text-sky-700 hover:underline text-xs" @click="prepareReincorporation(c)">Reincorporar</button>
               <router-link
@@ -733,7 +745,7 @@ function goToDetail(client: Client) {
               </router-link>
               <button class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(c)">Editar</button>
               <button
-                v-if="canManageClients"
+                v-if="canManageClients && !c.prospect_discarded_at"
                 class="text-slate-400 hover:text-red-600 text-xs"
                 title="Eliminar cliente"
                 @click="handleDelete(c)"
@@ -939,5 +951,6 @@ function goToDetail(client: Client) {
       </div>
     </Teleport>
     <ClientRetirementDialog v-if="retirementClientId" :client-id="retirementClientId" @close="retirementClientId = null" @completed="retirementCompleted" />
+    <UnfulfilledProspectDiscardDialog v-if="discardClient" :client="discardClient" @close="discardClient = null" @completed="discardCompleted" />
   </AppLayout>
 </template>
