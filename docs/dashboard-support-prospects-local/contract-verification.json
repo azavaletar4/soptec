@@ -1,0 +1,43 @@
+{
+  "status": "PASS",
+  "baseCommit": "45f993e8e974084175c07a44740687e8bcab7718",
+  "unchanged": [
+    "src/stores/olt.ts",
+    "src/router/index.ts",
+    "src/lib/api.ts",
+    "src/lib/pppoeProfileCounts.ts",
+    "src/components/layout/AppLayout.vue",
+    "package.json",
+    "package-lock.json",
+    "server/src/routes/dashboard.ts",
+    "server/src/services/dashboardPppoeProfiles.ts",
+    "server/src/services/dashboardPppoeHandler.ts"
+  ],
+  "approvedReference": "80e8e7e",
+  "approvedDashboardLogicUnchangedExceptDateFormatting": [
+    "oltCheckedAtLabel",
+    "lastSuccessLabel"
+  ],
+  "pppoeScriptUnchanged": true,
+  "preservedFunctionsAndValues": [
+    "refresh",
+    "goTo",
+    "goToOlt",
+    "goToUnconfigured",
+    "REFRESH_SECONDS",
+    "updatedLabel",
+    "CHART_WIDTH",
+    "CHART_HEIGHT",
+    "CHART_PAD",
+    "chartBars",
+    "hasChartData"
+  ],
+  "billingThresholdsUnchanged": true,
+  "scopedStyles": true,
+  "dependenciesAdded": 0,
+  "productionAccess": false,
+  "operationalCountChanges": [
+    "ticketStatus"
+  ],
+  "billingQueriesAndSummaryUnchanged": true
+}

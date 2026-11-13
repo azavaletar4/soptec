@@ -2,7 +2,10 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api';
-import type { ClientStatus, TicketStatus } from '@/types/domain';
+import type { ClientStatus, JobType } from '@/types/domain';
+import { ACTIVE_STATUS } from '@/lib/jobStatus';
+import { summarizeDashboardSupport, type DashboardJob } from '@/lib/dashboardSupport';
+import { countPendingInstallationClients } from '@/lib/dashboardClients';
 import { CLIENT_LIFECYCLE_SELECT, countClientLifecycles, readAllClientPages, type ClientLifecycle } from '@/lib/clientLifecycle';
 
 export interface NetworkStatusGroup {
@@ -26,14 +29,7 @@ export interface RecentClient {
   created_at: string;
 }
 
-export interface RecentTicket {
-  id: string;
-  ticket_number: string | null;
-  title: string;
-  status: TicketStatus;
-  created_at: string;
-  clients: { first_name: string; last_name: string } | null;
-}
+export type RecentTicket = DashboardJob;
 
 export interface MonthlyRevenue {
   month: string;
@@ -53,6 +49,7 @@ export interface OltAggregateSummary {
 
 export interface DashboardSummary {
   clients: { active: number; suspended: number; prospect: number; retired: number };
+  pendingInstallationClients: number;
   activeContracts: number;
   network: NetworkStatus;
   oltSummary: OltAggregateSummary;
@@ -72,24 +69,33 @@ export interface DashboardSummary {
 }
 
 async function countClients() {
-  const rows = await readAllClientPages<ClientLifecycle>((from, to) => supabase
+  const rows = await readAllClientPages<ClientLifecycle & { id: string }>((from, to) => supabase
     .from('clients').select(`id, status, ${CLIENT_LIFECYCLE_SELECT}`, { count: 'exact' })
     .order('id').range(from, to));
-  return countClientLifecycles(rows);
+  return { counts: countClientLifecycles(rows), pending: countPendingInstallationClients(rows) };
 }
 
-async function countTickets(status: TicketStatus): Promise<number> {
-  const { count } = await supabase.from('tickets').select('*', { count: 'exact', head: true }).eq('status', status);
-  return count ?? 0;
+async function readSupportJobs(jobType: JobType): Promise<DashboardJob[]> {
+  const table = { ticket: 'tickets', routine: 'routines', installation: 'installations' }[jobType];
+  const numberColumn = jobType === 'ticket' ? 'ticket_number' : jobType === 'routine' ? 'routine_number' : null;
+  const columns = ['id', 'status', 'priority', 'created_at', 'clients(first_name, last_name)',
+    ...(jobType === 'installation' ? [] : ['title']), ...(numberColumn ? [numberColumn] : [])].join(', ');
+  const rows = await readAllClientPages<Record<string, unknown>>((from, to) => supabase.from(table)
+    .select(columns, { count: 'exact' })
+    .in('status', ACTIVE_STATUS[jobType]).order('created_at', { ascending: false }).order('id').range(from, to)
+    .returns<Record<string, unknown>[]>());
+  return rows.map(row => ({
+    id: String(row.id), jobType, number: numberColumn ? row[numberColumn] as string | null : null,
+    title: jobType === 'installation' ? 'Alta de instalación' : String(row.title),
+    status: String(row.status), priority: String(row.priority), created_at: String(row.created_at),
+    clients: row.clients as DashboardJob['clients'],
+  }));
 }
 
-async function countUrgentTickets(): Promise<number> {
-  const { count } = await supabase
-    .from('tickets')
-    .select('*', { count: 'exact', head: true })
-    .eq('priority', 'urgent')
-    .not('status', 'in', '(resolved,closed)');
-  return count ?? 0;
+async function readSupportSummary() {
+  return summarizeDashboardSupport((await Promise.all([
+    readSupportJobs('ticket'), readSupportJobs('routine'), readSupportJobs('installation'),
+  ])).flat());
 }
 
 function todayIso() {
@@ -146,10 +152,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         network,
         oltSummary,
         recentRes,
-        openTickets,
-        inProgressTickets,
-        urgentTickets,
-        recentTicketsRes,
+        support,
         pendingInvoicesRes,
         billedThisMonthRes,
         paidThisMonthRes,
@@ -166,15 +169,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
           .select('id, first_name, last_name, status, created_at')
           .order('created_at', { ascending: false })
           .limit(5),
-        countTickets('open'),
-        countTickets('in_progress'),
-        countUrgentTickets(),
-        supabase
-          .from('tickets')
-          .select('id, ticket_number, title, status, created_at, clients(first_name, last_name)')
-          .not('status', 'in', '(resolved,closed)')
-          .order('created_at', { ascending: false })
-          .limit(5),
+        readSupportSummary(),
         supabase.from('invoices').select('amount, due_date').eq('status', 'pending'),
         supabase.from('invoices').select('amount, status').neq('status', 'cancelled').gte('created_at', firstOfMonthIso()),
         supabase.from('invoices').select('amount').eq('status', 'paid').gte('paid_at', firstOfMonthIso()),
@@ -194,17 +189,13 @@ export const useDashboardStore = defineStore('dashboard', () => {
       const collectedThisMonth = paidThisMonth.reduce((s, r) => s + Number(r.amount), 0);
 
       summary.value = {
-        clients: clientCounts,
+        clients: clientCounts.counts,
+        pendingInstallationClients: clientCounts.pending,
         activeContracts: contractsRes.count ?? 0,
         network,
         oltSummary,
         recentClients: (recentRes.data ?? []) as RecentClient[],
-        tickets: {
-          open: openTickets,
-          inProgress: inProgressTickets,
-          urgent: urgentTickets,
-          recent: (recentTicketsRes.data ?? []) as unknown as RecentTicket[],
-        },
+        tickets: support,
         billing: {
           pendingTotal: pendingInvoices.reduce((sum, i) => sum + Number(i.amount), 0),
           pendingCount: pendingInvoices.length,

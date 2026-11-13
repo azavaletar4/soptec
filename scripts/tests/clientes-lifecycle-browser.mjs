@@ -1,7 +1,9 @@
 // UI real con datos sintéticos. Todo acceso externo se intercepta; ninguna escritura se permite.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile, mkdir, writeFile } from 'node:fs/promises';
+import http from 'node:http';
+import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'vite';
@@ -9,7 +11,23 @@ import { createServer } from 'vite';
 process.env.VITE_SUPABASE_URL = 'https://clients.invalid';
 process.env.VITE_SUPABASE_ANON_KEY = 'synthetic';
 const sourceArg = process.argv.find(a => a.startsWith('--source='))?.slice('--source='.length);
-const server = await createServer({ ...(sourceArg ? { root: sourceArg, configFile: join(sourceArg, 'vite.config.ts') } : {}), server: { host: '127.0.0.1', port: 4187, strictPort: true } });
+const staticMode = process.argv.includes('--static');
+const staticServer = () => {
+  const root = path.resolve('dist');
+  const app = http.createServer(async (req,res) => {
+    try {
+      if (!['GET','HEAD'].includes(req.method) || req.url.startsWith('/api/')) { res.writeHead(403);res.end();return; }
+      const pathname=decodeURIComponent(new URL(req.url,'http://127.0.0.1').pathname);
+      const target=path.resolve(root,'.'+pathname);
+      if(target!==root&&!target.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}
+      const file=path.extname(pathname)?target:path.join(root,'index.html');
+      const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};
+      const data=await readFile(file);res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(data);
+    }catch{res.writeHead(404);res.end();}
+  });
+  return {listen:()=>new Promise((r,j)=>{app.on('error',j);app.listen(4187,'127.0.0.1',r);}),close:()=>{app.closeAllConnections();return new Promise(r=>app.close(r));}};
+};
+const server = staticMode ? staticServer() : await createServer({ ...(sourceArg ? { root: sourceArg, configFile: join(sourceArg, 'vite.config.ts') } : {}), server: { host: '127.0.0.1', port: 4187, strictPort: true } });
 await server.listen();
 console.log('Local synthetic server ready');
 const profile = await mkdtemp(join(tmpdir(), 'clientes-lifecycle-'));
@@ -33,20 +51,38 @@ try {
   const c = (method, params = {}) => send(method, params, sessionId);
   await c('Page.enable'); await c('Runtime.enable'); await c('Network.enable');
   await c('Network.setBlockedURLs', { urls: ['*supabase.co/*', 'https://clients.invalid/*'] });
+  if(staticMode){
+    await c('Emulation.setTimezoneOverride',{timezoneId:'Asia/Tokyo'});
+    const originalHandler=ws.onmessage;
+    ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.method==='Fetch.requestPaused'){
+      const {request,requestId}=m.params;
+      if(request.url.startsWith('https://fonts.googleapis.com/'))send('Fetch.fulfillRequest',{requestId,responseCode:200,body:''},m.sessionId);
+      else if(!request.url.startsWith('http://127.0.0.1:4187/')||!['GET','HEAD'].includes(request.method))send('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'},m.sessionId);
+      else send('Fetch.continueRequest',{requestId},m.sessionId);
+    }else originalHandler(e);};
+    await c('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]});
+  }
   const evaluate = async expression => { const r = await c('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw Error(JSON.stringify(r.exceptionDetails)); return r.result.value; };
   async function until(expression) { for (let i = 0; i < 100; i++) { if (await evaluate(expression)) return; await new Promise(r => setTimeout(r, 100)); } throw Error('Timeout: ' + expression); }
   const prospectsMode = process.argv.includes('--prospects');
   const retirementMode = process.argv.includes('--retirement');
-  function fixture(prospectsMode, retirementMode) {
+  const discardMode = process.argv.includes('--discard');
+  function fixture(prospectsMode, retirementMode, discardMode) {
     const id = '00000000-0000-4000-8000-000000000001';
     const now = Math.floor(Date.now() / 1000), enc = o => btoa(JSON.stringify(o)).replaceAll('=', '').replaceAll('+', '-').replaceAll('/', '_');
     const user = { id, aud: 'authenticated', role: 'authenticated', email: 'clients@example.invalid', app_metadata: {}, user_metadata: {} };
     localStorage.setItem('sb-clients-auth-token', JSON.stringify({ access_token: enc({ alg: 'HS256' }) + '.' + enc({ sub: id, exp: now + 3600, role: 'authenticated' }) + '.synthetic', refresh_token: 'synthetic', expires_at: now + 3600, user }));
+    localStorage.setItem('sb-mzupdnjegfwmpajywckd-auth-token', localStorage.getItem('sb-clients-auth-token'));
     window.__role = new URLSearchParams(location.search).get('testRole') || 'ADMIN';
     const make = (id, first_name, status, statuses, installationStatus) => ({ id, first_name, last_name: 'Sintetico', document_number: 'DOC-' + id, document_type: 'cedula', status, created_at: '2026-10-01', phone: '555' + id, email: id + '@example.invalid',
       service_contracts: statuses.map((status, n) => ({ id: id + '-' + n, client_id: id, status, client_code: 'CODE-' + id, priority: 'medium' })),
       installations: installationStatus ? [{ id: 'inst-' + id, client_id: id, status: installationStatus, created_at: '2026-10-01' }] : [] });
     const clients = [make('retired', 'Retirado', 'retired', ['cancelled']), make('active', 'Activo', 'active', ['active']), make('suspended', 'Suspendido', 'suspended', ['suspended']), make('mixed', 'Mixto', 'retired', ['cancelled', 'active']), make('pending', 'Pendiente', 'retired', ['cancelled'], 'pending')];
+    if (discardMode) {
+      clients.push(make('unfulfilled', 'No instalado', 'prospect', ['cancelled'], 'cancelled'));
+      for (const client of clients) client.updated_at = '2026-11-12T12:00:00Z';
+      window.__discardPosts = []; window.__discardClients = clients;
+    }
     if (retirementMode) {
       clients[1] = make('active', 'Activo', 'active', ['active', 'suspended']);
       for (const client of clients) { client.saldo_a_favor = 0; for (const [i, ct] of client.service_contracts.entries()) { ct.contract_number = 'TEST-' + client.id + '-' + i; ct.service_type = 'internet_combo'; ct.updated_at = '2026-10-01'; ct.monthly_fee = 50; } }
@@ -59,6 +95,16 @@ try {
       const url = new URL(typeof input === 'string' ? input : input.url, location.href);
       if (url.origin === location.origin && !url.pathname.startsWith('/api/')) return realFetch(input, init);
       const method = init.method ?? 'GET'; window.__calls.push({ path: url.pathname, search: url.search, method });
+      if (discardMode && url.pathname.endsWith('/rpc/discard_unfulfilled_client_prospect') && method === 'POST') {
+        const payload = JSON.parse(init.body); window.__discardPosts.push(payload);
+        const respond = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+        if (!['ADMIN','SUPERADMIN'].includes(window.__role)) return respond({ message: 'Sin permisos' }, 403);
+        if (window.__discardConflict) return respond({ message: 'La ficha cambió. Actualice el listado.' }, 409);
+        const client = clients.find(c => c.id === payload.p_client_id);
+        client.status = 'retired'; client.prospect_discarded_at = '2026-11-12T18:00:00Z';
+        client.prospect_discarded_by = id; client.prospect_discard_reason = payload.p_reason;
+        return respond({ id: client.id, alreadyDiscarded: false, discardedAt: client.prospect_discarded_at });
+      }
       if (retirementMode && /^\/api\/clients\/[^/]+\/retirement$/.test(url.pathname)) {
         const client = clients.find(c => c.id === url.pathname.split('/')[3]);
         const respond = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -81,6 +127,9 @@ try {
       }
       if (!['GET', 'HEAD'].includes(method)) throw Error('Blocked write: ' + method);
       let data = []; const table = url.pathname.split('/').at(-1);
+      if (table === 'user') data = user;
+      if (table === 'company_settings') data = {id:1,lunes_hora_ingreso:'07:30:00',resto_hora_ingreso:'08:00:00',tolerancia_minutos:10};
+      if (table === 'asistencia_registros') data = null;
       if (table === 'profiles') data = { id, role: window.__role, must_change_password: false };
       if (table === 'clients') data = window.__failClients ? null : clients;
       if (table === 'service_contracts') data = clients.flatMap(c => c.service_contracts);
@@ -100,13 +149,51 @@ try {
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json', 'Content-Range': '0-1/*' } });
     };
   }
-  await c('Page.addScriptToEvaluateOnNewDocument', { source: '(' + fixture.toString() + ')(' + JSON.stringify(prospectsMode) + ',' + JSON.stringify(retirementMode) + ');' });
-  const navigate = async (role = 'ADMIN') => { await c('Page.navigate', { url: 'http://127.0.0.1:4187/clientes?testRole=' + role }); await until('document.body?.textContent.includes("4 abonados vigentes · 1 retirados")'); };
-  const click = label => evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().startsWith(${JSON.stringify(label)})).click()`);
+  await c('Page.addScriptToEvaluateOnNewDocument', { source: '(' + fixture.toString() + ')(' + JSON.stringify(prospectsMode) + ',' + JSON.stringify(retirementMode) + ',' + JSON.stringify(discardMode) + ');' });
+  const navigate = async (role = 'ADMIN') => { await c('Page.navigate', { url: 'http://127.0.0.1:4187/clientes?testRole=' + role }); await until(discardMode ? 'document.body?.textContent.includes("1 no instalados")' : 'document.body?.textContent.includes("4 abonados vigentes · 1 retirados")'); };
+  const click = async label => {
+    const button = `Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().startsWith(${JSON.stringify(label)}))`;
+    await until(button + '!==undefined');await evaluate(button + '.click()');
+    await evaluate('new Promise(resolve=>requestAnimationFrame(resolve))');
+  };
   const names = () => evaluate('Array.from(document.querySelectorAll("tbody tr")).map(r => r.textContent)');
   await navigate();
   console.log('Synthetic client list loaded');
-  if (retirementMode) {
+  if (discardMode) {
+    const dialogClick = label => evaluate(`Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(label)}).click()`);
+    const inputReason = value => evaluate(`{const el=document.querySelector('[role=dialog] textarea');el.value=${JSON.stringify(value)};el.dispatchEvent(new Event('input',{bubbles:true}));}`);
+    const disabled = () => evaluate('document.querySelector("[role=dialog] .btn-primary").disabled');
+    await click('Pendientes de instalación');await until('document.querySelector("tbody")?.textContent.includes("Pendiente Sintetico")');assert.ok((await names()).some(n=>n.includes('Pendiente')));
+    assert.equal(await evaluate('Array.from(document.querySelectorAll("tbody button")).some(b=>b.textContent.trim()==="Descartar")'),false);
+    await click('No instalados');await click('Descartar');assert.equal(await disabled(),true);
+    const output='docs/dashboard-support-prospects-local';await mkdir(output,{recursive:true});
+    const capture=async(name,width,height)=>{await c('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<768});await new Promise(r=>setTimeout(r,300));const img=await c('Page.captureScreenshot',{format:'png'});await writeFile(join(output,name+'.png'),Buffer.from(img.data,'base64'));};
+    await inputReason('No se concretó');assert.equal(await disabled(),true);
+    await capture('discard-desktop',1440,1000);await capture('discard-mobile',390,844);
+    await dialogClick('Cancelar');assert.equal(await evaluate('window.__discardPosts.length'),0);
+    await click('Descartar');await inputReason('No se concretó');await evaluate('document.querySelector("[role=dialog] input[type=checkbox]").click()');
+    assert.equal(await disabled(),false);
+    await evaluate('window.__discardConflict=true');await dialogClick('Confirmar descarte');await until('document.querySelector("[role=alert]")?.textContent.includes("La ficha cambió")');assert.equal(await disabled(),true);
+    await dialogClick('Cancelar');await evaluate('window.__discardConflict=false');await click('Descartar');await inputReason('No se concretó');await evaluate('document.querySelector("[role=dialog] input[type=checkbox]").click()');
+    const originalRelations=await evaluate('JSON.stringify(window.__discardClients.map(c=>({contracts:c.service_contracts,installations:c.installations})))');
+    await evaluate('{const b=document.querySelector("[role=dialog] .btn-primary");b.click();b.click();}');await until('document.querySelector("[role=dialog]")?.textContent.includes("Descarte confirmado")');
+    assert.equal(await evaluate('window.__discardPosts.length'),2,'Un conflicto y un éxito; doble clic no duplica');
+    assert.deepEqual(await evaluate('window.__discardPosts[1]'),{p_client_id:'unfulfilled',p_expected_updated_at:'2026-11-12T12:00:00Z',p_reason:'No se concretó',p_confirm:true});
+    assert.equal(await evaluate('JSON.stringify(window.__discardClients.map(c=>({contracts:c.service_contracts,installations:c.installations})))'),originalRelations);
+    await dialogClick('Cerrar');await until('document.body.textContent.includes("Ver descarte")');
+    assert.match((await names()).join(' '),/No concretado \/ Descartado/);
+    assert.equal(await evaluate('Array.from(document.querySelectorAll("tbody button")).some(b=>["Descartar","Eliminar"].includes(b.textContent.trim()))'),false);
+    await click('Ver descarte');assert.match(await evaluate('document.querySelector("[role=dialog]").textContent'),/No se concretó/);assert.match(await evaluate('document.querySelector("[role=dialog]").textContent'),/12\/11\/2026, (13:00:00|1:00:00 p\. m\.)/);
+    await dialogClick('Cerrar');
+    for (const role of ['SOPORTE','FACTURACION']) { await navigate(role);await click('No instalados');assert.equal(await evaluate('Array.from(document.querySelectorAll("tbody button")).some(b=>b.textContent.trim()==="Descartar")'),false); }
+    await c('Page.navigate',{url:'http://127.0.0.1:4187/clientes?testRole=TECNICO_RED'});await until('location.pathname.startsWith("/campo")');
+    assert.equal(await evaluate('Array.from(document.querySelectorAll("button")).some(b=>b.textContent.trim()==="Descartar")'),false);
+    await navigate('SUPERADMIN');await click('No instalados');await click('Descartar');await dialogClick('Cancelar');
+    assert.equal(await evaluate('window.__calls.filter(c=>!["GET","HEAD"].includes(c.method)&&!c.path.endsWith("/rpc/discard_unfulfilled_client_prospect")).length'),0);
+    assert.equal(exceptions.length,0,JSON.stringify(exceptions));
+    await writeFile(join(output,'discard-ui-verification.json'),JSON.stringify({status:'PASS',staticBuild:staticMode,productionAccess:false,realWrites:0,checks:['PENDING_INSTALLATION_CANNOT_BE_DISCARDED','REASON_AND_CONFIRMATION_REQUIRED','CANCEL_WITHOUT_RPC','CONFLICT_REQUIRES_REFRESH','DOUBLE_CLICK_ONE_SUCCESS','RELATIONS_UNCHANGED','HISTORY_PRESERVED_AND_VISIBLE','PERU_TIME','ADMIN_SUPERADMIN_ONLY','DESKTOP_MOBILE_DIALOG'],exceptions},null,2)+'\n');
+    console.log('PASS: descarte UI real; confirmación y motivo; cancelar sin RPC; conflicto bloqueado; doble clic; ficha e historial conservados; contratos/órdenes intactos; ADMIN/SUPERADMIN; cero escrituras reales.');
+  } else if (retirementMode) {
     const editActive = () => evaluate(`Array.from(document.querySelectorAll('tbody tr')).find(r => r.textContent.includes('Activo Sintetico')).querySelectorAll('button')[1].click()`);
     const selectRetired = () => evaluate(`{ const select = Array.from(document.querySelectorAll('select')).find(s => s.querySelector('option[value="retired"]')); select.value = 'retired'; select.dispatchEvent(new Event('change', { bubbles: true })); }`);
     const dialogClick = label => evaluate(`Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(b => b.textContent.trim() === ${JSON.stringify(label)}).click()`);

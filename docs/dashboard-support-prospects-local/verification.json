@@ -1,0 +1,456 @@
+{
+  "status": "PASS",
+  "builtFrontend": true,
+  "syntheticResponses": true,
+  "productionAccess": false,
+  "writes": 0,
+  "externalRequests": 0,
+  "preexistingFontStylesServedLocally": 6,
+  "checks": [
+    "REAL_STORES_API_BINDINGS_NOT_PROTOTYPE_VALUES",
+    "BILLING_AND_LIFECYCLE_MEANINGS_RETAINED",
+    "PERU_TIMES_IN_TOKYO",
+    "NO_DECORATIVE_NUMBERS",
+    "DESKTOP_ALL_CLIENTS_CHART_OPEN_ATTENTION_LAST",
+    "ALL_RECENT_TICKETS_ACCESSIBLE",
+    "MOBILE_THREE_CLIENTS_CHART_INITIALLY_COLLAPSED",
+    "MOBILE_CHART_EXPANDS_AND_COLLAPSES",
+    "RESPONSIVE_17_WIDTHS_320_TO_1920",
+    "TABLET_INSETS_AND_SIDEBAR_UNCHANGED",
+    "PPPOE_RESPONDS_TO_AVAILABLE_CONTAINER_WIDTH",
+    "SECONDARY_TEXT_MINIMUM_11PX",
+    "VISUAL_INTERACTIONS_ADD_NO_READS",
+    "GENERAL_REFRESH_60S_INDEPENDENT_FROM_PPPOE",
+    "GENERAL_SUCCESS_DOES_NOT_REDATE_SOURCES",
+    "SOURCE_LABELS_AND_UNAVAILABLE_EQUIPMENT_TIME_EXPLICIT",
+    "OLD_SOURCE_DATES_RETAINED_AFTER_SUCCESSFUL_GENERAL_REFRESH",
+    "ORIGINAL_TWO_DECIMAL_ROUNDING",
+    "PPPOE_STALE_ERRORS_PARTIAL_NO_FALSE_ZERO",
+    "HTTP_AUTH_REJECTION_CLEARS_PPPOE_VALUES",
+    "SUMMARY_FAILURE_RETAINS_VALUES_AND_SUCCESS_TIME",
+    "MISSING_OLT_CACHE_NOT_PRESENTED_AS_ZERO",
+    "UNTESTED_NETWORK_NOT_HEALTHY",
+    "EMPTY_LISTS",
+    "SUPPORT_FAILURE_RETAINS_COMPLETE_PREVIOUS_COUNTS_AND_TIME",
+    "CLIENTS_FULL_LIST_ROUTE",
+    "PROSPECT_COUNT_LINKS_TO_PENDING_INSTALLATION_SECTION",
+    "MOBILE_FRESH_NAVIGATION_DEFAULTS",
+    "SINGLE_OLT_FILTER_NAVIGATION",
+    "MULTIPLE_OLT_LIST_NAVIGATION",
+    "INITIAL_LOADING_NO_FAKE_SUMMARY",
+    "INITIAL_SUMMARY_ERROR_PPPOE_INDEPENDENT",
+    "PPPOE_PERMISSION_RETAINED",
+    "ZERO_BUSINESS_WRITES_AND_EXTERNAL_REQUESTS"
+  ],
+  "layouts": [
+    {
+      "width": 320,
+      "dashboard": {
+        "left": 16,
+        "right": 304,
+        "width": 288
+      },
+      "main": {
+        "left": 0,
+        "right": 320,
+        "width": 320
+      },
+      "sidebar": {
+        "left": -288,
+        "right": 0,
+        "width": 288
+      },
+      "pppoe": {
+        "left": 24,
+        "right": 296,
+        "width": 272
+      },
+      "columns": 1
+    },
+    {
+      "width": 375,
+      "dashboard": {
+        "left": 16,
+        "right": 359,
+        "width": 343
+      },
+      "main": {
+        "left": 0,
+        "right": 375,
+        "width": 375
+      },
+      "sidebar": {
+        "left": -288,
+        "right": 0,
+        "width": 288
+      },
+      "pppoe": {
+        "left": 27,
+        "right": 348,
+        "width": 321
+      },
+      "columns": 1
+    },
+    {
+      "width": 390,
+      "dashboard": {
+        "left": 16,
+        "right": 374,
+        "width": 358
+      },
+      "main": {
+        "left": 0,
+        "right": 390,
+        "width": 390
+      },
+      "sidebar": {
+        "left": -288,
+        "right": 0,
+        "width": 288
+      },
+      "pppoe": {
+        "left": 27,
+        "right": 363,
+        "width": 336
+      },
+      "columns": 1
+    },
+    {
+      "width": 540,
+      "dashboard": {
+        "left": 16,
+        "right": 524,
+        "width": 508
+      },
+      "main": {
+        "left": 0,
+        "right": 540,
+        "width": 540
+      },
+      "sidebar": {
+        "left": -288,
+        "right": 0,
+        "width": 288
+      },
+      "pppoe": {
+        "left": 27,
+        "right": 513,
+        "width": 486
+      },
+      "columns": 1
+    },
+    {
+      "width": 700,
+      "dashboard": {
+        "left": 16,
+        "right": 684,
+        "width": 668
+      },
+      "main": {
+        "left": 0,
+        "right": 700,
+        "width": 700
+      },
+      "sidebar": {
+        "left": -288,
+        "right": 0,
+        "width": 288
+      },
+      "pppoe": {
+        "left": 27,
+        "right": 673,
+        "width": 646
+      },
+      "columns": 4
+    },
+    {
+      "width": 701,
+      "dashboard": {
+        "left": 16,
+        "right": 685,
+        "width": 669
+      },
+      "main": {
+        "left": 0,
+        "right": 701,
+        "width": 701
+      },
+      "sidebar": {
+        "left": -288,
+        "right": 0,
+        "width": 288
+      },
+      "pppoe": {
+        "left": 33,
+        "right": 668,
+        "width": 635
+      },
+      "columns": 4
+    },
+    {
+      "width": 767,
+      "dashboard": {
+        "left": 16,
+        "right": 751,
+        "width": 735
+      },
+      "main": {
+        "left": 0,
+        "right": 767,
+        "width": 767
+      },
+      "sidebar": {
+        "left": -288,
+        "right": 0,
+        "width": 288
+      },
+      "pppoe": {
+        "left": 33,
+        "right": 734,
+        "width": 701
+      },
+      "columns": 4
+    },
+    {
+      "width": 768,
+      "dashboard": {
+        "left": 272,
+        "right": 702,
+        "width": 430
+      },
+      "main": {
+        "left": 256,
+        "right": 718,
+        "width": 462
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 285,
+        "right": 689,
+        "width": 404
+      },
+      "columns": 1
+    },
+    {
+      "width": 820,
+      "dashboard": {
+        "left": 272,
+        "right": 754,
+        "width": 482
+      },
+      "main": {
+        "left": 256,
+        "right": 770,
+        "width": 514
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 285,
+        "right": 741,
+        "width": 456
+      },
+      "columns": 1
+    },
+    {
+      "width": 834,
+      "dashboard": {
+        "left": 272,
+        "right": 768,
+        "width": 496
+      },
+      "main": {
+        "left": 256,
+        "right": 784,
+        "width": 528
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 285,
+        "right": 755,
+        "width": 470
+      },
+      "columns": 1
+    },
+    {
+      "width": 950,
+      "dashboard": {
+        "left": 272,
+        "right": 884,
+        "width": 612
+      },
+      "main": {
+        "left": 256,
+        "right": 900,
+        "width": 644
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 285,
+        "right": 871,
+        "width": 586
+      },
+      "columns": 4
+    },
+    {
+      "width": 951,
+      "dashboard": {
+        "left": 272,
+        "right": 885,
+        "width": 613
+      },
+      "main": {
+        "left": 256,
+        "right": 901,
+        "width": 645
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 285,
+        "right": 872,
+        "width": 587
+      },
+      "columns": 4
+    },
+    {
+      "width": 1024,
+      "dashboard": {
+        "left": 272,
+        "right": 958,
+        "width": 686
+      },
+      "main": {
+        "left": 256,
+        "right": 974,
+        "width": 718
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 285,
+        "right": 945,
+        "width": 660
+      },
+      "columns": 4
+    },
+    {
+      "width": 1150,
+      "dashboard": {
+        "left": 272,
+        "right": 1084,
+        "width": 812
+      },
+      "main": {
+        "left": 256,
+        "right": 1100,
+        "width": 844
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 285,
+        "right": 1071,
+        "width": 786
+      },
+      "columns": 4
+    },
+    {
+      "width": 1151,
+      "dashboard": {
+        "left": 288,
+        "right": 1069,
+        "width": 781
+      },
+      "main": {
+        "left": 256,
+        "right": 1101,
+        "width": 845
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 309,
+        "right": 751.984375,
+        "width": 442.984375
+      },
+      "columns": 1
+    },
+    {
+      "width": 1440,
+      "dashboard": {
+        "left": 288,
+        "right": 1358,
+        "width": 1070
+      },
+      "main": {
+        "left": 256,
+        "right": 1390,
+        "width": 1134
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 309,
+        "right": 971.34375,
+        "width": 662.34375
+      },
+      "columns": 4
+    },
+    {
+      "width": 1920,
+      "dashboard": {
+        "left": 288,
+        "right": 1838,
+        "width": 1550
+      },
+      "main": {
+        "left": 256,
+        "right": 1870,
+        "width": 1614
+      },
+      "sidebar": {
+        "left": 0,
+        "right": 256,
+        "width": 256
+      },
+      "pppoe": {
+        "left": 309,
+        "right": 1285.8125,
+        "width": 976.8125
+      },
+      "columns": 4
+    }
+  ],
+  "exceptions": []
+}

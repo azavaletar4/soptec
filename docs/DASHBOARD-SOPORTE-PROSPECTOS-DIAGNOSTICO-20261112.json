@@ -1,0 +1,288 @@
+{
+  "readOnly": true,
+  "at": "2026-11-13T04:30:14.350047+00:00",
+  "support": {
+    "oldTicketsOnly": {
+      "open": 1,
+      "inProgress": 0
+    },
+    "byStatus": [
+      {
+        "kind": "installation",
+        "amount": 6,
+        "status": "cancelled",
+        "priority": "medium"
+      },
+      {
+        "kind": "installation",
+        "amount": 10,
+        "status": "completed",
+        "priority": "high"
+      },
+      {
+        "kind": "installation",
+        "amount": 77,
+        "status": "completed",
+        "priority": "medium"
+      },
+      {
+        "kind": "installation",
+        "amount": 1,
+        "status": "scheduled",
+        "priority": "medium"
+      },
+      {
+        "kind": "routine",
+        "amount": 18,
+        "status": "completed",
+        "priority": "high"
+      },
+      {
+        "kind": "routine",
+        "amount": 155,
+        "status": "completed",
+        "priority": "medium"
+      },
+      {
+        "kind": "routine",
+        "amount": 2,
+        "status": "completed",
+        "priority": "urgent"
+      },
+      {
+        "kind": "routine",
+        "amount": 10,
+        "status": "scheduled",
+        "priority": "medium"
+      },
+      {
+        "kind": "ticket",
+        "amount": 3,
+        "status": "closed",
+        "priority": "high"
+      },
+      {
+        "kind": "ticket",
+        "amount": 3,
+        "status": "closed",
+        "priority": "medium"
+      },
+      {
+        "kind": "ticket",
+        "amount": 1,
+        "status": "open",
+        "priority": "medium"
+      },
+      {
+        "kind": "ticket",
+        "amount": 21,
+        "status": "resolved",
+        "priority": "high"
+      },
+      {
+        "kind": "ticket",
+        "amount": 1,
+        "status": "resolved",
+        "priority": "low"
+      },
+      {
+        "kind": "ticket",
+        "amount": 52,
+        "status": "resolved",
+        "priority": "medium"
+      },
+      {
+        "kind": "ticket",
+        "amount": 4,
+        "status": "resolved",
+        "priority": "urgent"
+      }
+    ],
+    "byKind": {
+      "ticket": {
+        "pending": 1,
+        "inProgress": 0,
+        "urgent": 0
+      },
+      "routine": {
+        "pending": 10,
+        "inProgress": 0,
+        "urgent": 0
+      },
+      "installation": {
+        "pending": 1,
+        "inProgress": 0,
+        "urgent": 0
+      }
+    },
+    "unified": {
+      "pending": 12,
+      "inProgress": 0,
+      "urgent": 0
+    },
+    "uniqueOrders": 12
+  },
+  "clientLifecycle": {
+    "active": 723,
+    "suspended": 17,
+    "prospect": 4,
+    "retired": 3
+  },
+  "clientProspects": [
+    {
+      "label": "C1",
+      "idSuffix": "a1807518",
+      "status": "retired",
+      "contracts": [
+        "cancelled"
+      ],
+      "installations": [
+        "cancelled"
+      ]
+    },
+    {
+      "label": "C2",
+      "idSuffix": "1658a8ab",
+      "status": "prospect",
+      "contracts": [
+        "cancelled"
+      ],
+      "installations": [
+        "cancelled"
+      ]
+    },
+    {
+      "label": "C3",
+      "idSuffix": "cc7875d3",
+      "status": "prospect",
+      "contracts": [
+        "cancelled"
+      ],
+      "installations": [
+        "cancelled"
+      ]
+    },
+    {
+      "label": "C4",
+      "idSuffix": "af9379bb",
+      "status": "prospect",
+      "contracts": [
+        "cancelled"
+      ],
+      "installations": [
+        "cancelled"
+      ]
+    }
+  ],
+  "schema": {
+    "enum": [
+      "interesado",
+      "por_contactar",
+      "en_negociacion",
+      "no_interesado",
+      "convertido"
+    ],
+    "functions": [
+      {
+        "name": "convert_prospect_with_installation",
+        "owner": "postgres",
+        "md5": "dc8390d2368cef3a4d18070aeea7c6ce"
+      },
+      {
+        "name": "current_user_role",
+        "owner": "postgres",
+        "md5": "67d13ed6e8c78b73b623b8a76d325761"
+      },
+      {
+        "name": "set_updated_at",
+        "owner": "postgres",
+        "md5": "8de7ae383447503e8949149bfb3f0efb"
+      }
+    ],
+    "prospectPolicies": [
+      {
+        "name": "prospect_followups",
+        "policies": [
+          {
+            "name": "prospect_followups_comercial_staff",
+            "check": "(current_user_role() = ANY (ARRAY['SUPERADMIN'::user_role, 'ADMIN'::user_role, 'SOPORTE'::user_role, 'FACTURACION'::user_role]))",
+            "roles": [
+              "authenticated"
+            ],
+            "using": "(current_user_role() = ANY (ARRAY['SUPERADMIN'::user_role, 'ADMIN'::user_role, 'SOPORTE'::user_role, 'FACTURACION'::user_role]))",
+            "command": "*",
+            "permissive": true
+          }
+        ],
+        "triggers": null
+      },
+      {
+        "name": "prospects",
+        "policies": [
+          {
+            "name": "prospects_comercial_staff",
+            "check": "(current_user_role() = ANY (ARRAY['SUPERADMIN'::user_role, 'ADMIN'::user_role, 'SOPORTE'::user_role, 'FACTURACION'::user_role]))",
+            "roles": [
+              "authenticated"
+            ],
+            "using": "(current_user_role() = ANY (ARRAY['SUPERADMIN'::user_role, 'ADMIN'::user_role, 'SOPORTE'::user_role, 'FACTURACION'::user_role]))",
+            "command": "*",
+            "permissive": true
+          }
+        ],
+        "triggers": [
+          {
+            "name": "trg_prospects_updated_at",
+            "function": "set_updated_at()",
+            "definition": "CREATE TRIGGER trg_prospects_updated_at BEFORE UPDATE ON public.prospects FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+          }
+        ]
+      }
+    ]
+  },
+  "productionMutations": 0,
+  "operationalProspects": {
+    "count": 1,
+    "section": "pending_install",
+    "referenceMatches": true,
+    "allSections": {
+      "current": 739,
+      "pending_install": 1,
+      "unfulfilled": 4,
+      "retired": 3
+    },
+    "discardedMigrationApplied": false,
+    "commercialCrmUnchanged": true
+  },
+  "correctedSupportUsingLocalHelper": {
+    "open": 12,
+    "inProgress": 0,
+    "urgent": 0
+  },
+  "schemaBackup": {
+    "file": "scripts/inventory-auth-lab/runtime/dashboard-prospect-discard-schema-private.json",
+    "sha256": "2bda26cf8b1a660a3354df365c7c0099f6afde60b5c40a0c0d4cbfb8c787ef0d",
+    "at": "2026-11-13T04:53:28.849667+00:00",
+    "tables": [
+      {
+        "name": "clients",
+        "owner": "postgres",
+        "rls": true,
+        "sha256": "f3645148480433ccb7602853b87c61fcd0e0e579fe308bf73029aed747e2aad3"
+      },
+      {
+        "name": "installations",
+        "owner": "postgres",
+        "rls": true,
+        "sha256": "3be2948e751e4f00030b7f4c30c495250d3566c0a789c0ac6616a340378b88da"
+      },
+      {
+        "name": "service_contracts",
+        "owner": "postgres",
+        "rls": true,
+        "sha256": "cd89a1907d857c75ebdac5dfdd9796ff2ae0d4d0b6401ea29f4ac203d6aba111"
+      }
+    ],
+    "proposalFunctionsExist": false
+  }
+}

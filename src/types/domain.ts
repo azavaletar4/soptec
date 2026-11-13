@@ -115,6 +115,10 @@ export interface Client {
   saldo_a_favor: number;
   created_at: string;
   updated_at: string;
+  /** Descarte administrativo de contratación nunca instalada; no es una baja de servicio. */
+  prospect_discarded_at?: string | null;
+  prospect_discarded_by?: string | null;
+  prospect_discard_reason?: string | null;
   zones?: Pick<Zone, 'id' | 'name'> | null;
 }
 

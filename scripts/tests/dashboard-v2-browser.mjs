@@ -76,9 +76,11 @@ try{
   window.clearInterval=id=>{if(!window.__intervals.delete(id))clearInterval(id);};
   window.__tickPpp=async()=>{const jobs=[...window.__timeouts.values()];window.__timeouts.clear();await Promise.all(jobs.map(fn=>fn()));};
   window.__tickGeneral=async()=>{await Promise.all([...window.__intervals.values()].filter(x=>x.ms===60000).map(x=>x.fn()));};
-  const lifecycle=Array.from({length:93},(_,i)=>({id:'lab-client-'+i,status:i<80?'active':i<87?'suspended':i<91?'prospect':'retired',service_contracts:i<80?[{status:'active'}]:i<87?[{status:'suspended'}]:[],installations:[]}));
+  const lifecycle=Array.from({length:93},(_,i)=>({id:'lab-client-'+i,status:i<80?'active':i<87?'suspended':i<91?'prospect':'retired',service_contracts:i<80?[{status:'active'}]:i<87?[{status:'suspended'}]:i<91?[{status:'cancelled'}]:[],installations:i===87?[{status:'scheduled'}]:i<91&&i>=88?[{status:'cancelled'}]:[]}));
   const clients=Array.from({length:5},(_,i)=>({id:'lab-recent-'+i,first_name:'Cliente laboratorio',last_name:String(i+1),status:i===1?'prospect':i===3?'suspended':'active',created_at:new Date().toISOString()}));
-  const tickets=Array.from({length:5},(_,i)=>({id:'lab-ticket-'+i,ticket_number:'LAB-'+(i+1),title:['Intermitencia de prueba','Revisión de enlace','Pérdida de señal','Validación de servicio','Revisión de instalación'][i],status:i%2?'in_progress':'open',clients:{first_name:'Cliente laboratorio',last_name:String(i+1)},created_at:new Date().toISOString()}));
+  const tickets=Array.from({length:5},(_,i)=>({id:'lab-ticket-'+i,ticket_number:'LAB-'+(i+1),title:['Intermitencia de prueba','Revisión de enlace','Pérdida de señal','Validación de servicio','Revisión de instalación'][i],status:i%2?'in_progress':'open',priority:i<2?'urgent':'medium',clients:{first_name:'Cliente laboratorio',last_name:String(i+1)},created_at:new Date().toISOString()}));
+  const routines=Array.from({length:10},(_,i)=>({id:'lab-routine-'+i,routine_number:'LAB-R-'+i,title:'Rutina laboratorio',status:'scheduled',priority:i===0?'urgent':'medium',created_at:'2026-11-12T10:00:00Z',clients:null}));
+  const installations=[{id:'lab-installation',status:'scheduled',priority:'medium',created_at:'2026-11-12T09:00:00Z',clients:null}];
   const monthly=Array.from({length:6},(_,i)=>({created_at:new Date(new Date().getFullYear(),new Date().getMonth()-5+i,10,12).toISOString(),paid_at:new Date(new Date().getFullYear(),new Date().getMonth()-5+i,10,12).toISOString(),amount:[1200,1300,1400,1500,1600,1800][i],collected:[1000,1100,1200,1300,1400,1500][i]}));
   const original=window.fetch.bind(window);
   window.fetch=async(input,init={})=>{
@@ -112,7 +114,11 @@ try{
    if(table==='asistencia_registros')return response(null);
    if(table==='clients')return response(window.__summaryMode==='empty'?[]:select.includes('service_contracts')?lifecycle:clients,select.includes('service_contracts')?93:5);
    if(table==='service_contracts')return response([],87);
-   if(table==='tickets')return method==='HEAD'?response(null,url.searchParams.has('priority')?4:url.searchParams.get('status')==='eq.open'?24:9):response(window.__summaryMode==='empty'?[]:tickets,5);
+   if(['tickets','routines','installations'].includes(table)){
+    if(window.__supportError&&table==='routines')return response({message:'Rutinas de laboratorio no disponibles'},0,503);
+    const rows=table==='tickets'?tickets:table==='routines'?routines:installations;
+    return response(window.__summaryMode==='empty'?[]:rows,window.__summaryMode==='empty'?0:rows.length);
+   }
    if(table==='invoices'){
     if(select==='amount,due_date')return response([{amount:100,due_date:'2000-01-01'},{amount:200,due_date:'2000-01-02'},{amount:150,due_date:'2099-01-01'}]);
     if(select==='amount,status')return response([{amount:1000,status:'paid'},{amount:500,status:'paid'},{amount:300,status:'pending'}]);
@@ -133,8 +139,8 @@ try{
  await size(1440,1100);await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});
  await until('document.querySelector(".dv-portfolio")&&document.body.innerText.includes("Lectura disponible")');
  assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-testid=pppoe-connected]")].map(x=>x.innerText)'),['281','566','71','48']);
- assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-portfolio strong")].map(x=>x.innerText)'),['80','7','4','87']);
- assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-support-counts strong")].map(x=>x.innerText)'),['24','9','4']);
+ assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-portfolio strong")].map(x=>x.innerText)'),['80','7','1','87']);
+ assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-support-counts strong")].map(x=>x.innerText)'),['14','2','3']);
  assert.match(await evaluate('document.querySelector(".dv-billing").innerText'),/1,500\.00/);
  assert.match(await evaluate('document.querySelector(".dv-billing").innerText'),/1,800\.00/);
  assert.match(await evaluate('document.querySelector(".dv-overdue").innerText'),/450\.00/);
@@ -219,16 +225,23 @@ try{
  await evaluate('window.__summaryMode="error";window.__tickGeneral()');await until('document.querySelector("[data-testid=summary-error]")!==null');
  assert.deepEqual(await sourceTimes(),successfulTimes);
  assert.match(await evaluate('document.querySelector("[data-testid=summary-error]").innerText'),/última actualización exitosa/);
- assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-portfolio strong")].map(x=>x.innerText)'),['80','7','4','87']);
+ assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-portfolio strong")].map(x=>x.innerText)'),['80','7','1','87']);
  assert.match(await evaluate('document.querySelector(".dv-network").innerText'),/Estado sin actualizar/);await size(390,844);await capture('summary-stale');checks.push('SUMMARY_FAILURE_RETAINS_VALUES_AND_SUCCESS_TIME');
  await evaluate('window.__summaryMode="no-olt-cache";window.__tickGeneral()');await until('document.body.innerText.includes("Sin lectura de ONT disponible")');
  assert.equal(await evaluate('document.querySelector(".dv-online")'),null);checks.push('MISSING_OLT_CACHE_NOT_PRESENTED_AS_ZERO');
  await evaluate('window.__summaryMode="untested";window.__tickGeneral()');await until('document.querySelector(".dv-network").innerText.includes("Sin pruebas registradas")');checks.push('UNTESTED_NETWORK_NOT_HEALTHY');
- await evaluate('window.__summaryMode="empty";window.__tickGeneral()');await until('document.body.innerText.includes("Sin clientes todavía")');assert.match(await evaluate('document.body.innerText'),/Sin tickets todavía/);checks.push('EMPTY_LISTS');
+ await evaluate('window.__summaryMode="empty";window.__tickGeneral()');await until('document.body.innerText.includes("Sin clientes todavía")');assert.match(await evaluate('document.body.innerText'),/Sin órdenes pendientes/);checks.push('EMPTY_LISTS');
  await evaluate('window.__summaryMode="good";window.__tickGeneral()');await until('document.querySelectorAll("[data-testid=recent-client]").length===3');
+ const supportTimes=await sourceTimes();
+ await evaluate('window.__supportError=true;window.__tickGeneral()');await until('document.querySelector("[data-testid=summary-error]")!==null');
+ assert.deepEqual(await sourceTimes(),supportTimes);
+ assert.deepEqual(await evaluate('[...document.querySelectorAll(".dv-support-counts strong")].map(x=>x.innerText)'),['14','2','3']);
+ await evaluate('window.__supportError=false;window.__tickGeneral()');checks.push('SUPPORT_FAILURE_RETAINS_COMPLETE_PREVIOUS_COUNTS_AND_TIME');
  // El router real recibe el destino; se cancela antes de cargar modulos ajenos.
  const holdNavigation=()=>evaluate('window.__navigation=[];document.querySelector("#app").__vue_app__.config.globalProperties.$router.beforeEach(to=>{if(to.path!=="/dashboard"){window.__navigation.push({path:to.path,query:to.query});return false;}})');
  await holdNavigation();await click('.dv-detail-grid section:first-child .dv-link');await until('window.__navigation.length===1');assert.equal(await evaluate('window.__navigation[0].path'),'/clientes');checks.push('CLIENTS_FULL_LIST_ROUTE');
+ await evaluate('window.__navigation=[]');await click('.dv-portfolio button:nth-of-type(3)');await until('window.__navigation.length===1');
+ assert.equal(await evaluate('window.__navigation[0].path'),'/clientes');assert.equal(await evaluate('window.__navigation[0].query.section'),'pending_install');checks.push('PROSPECT_COUNT_LINKS_TO_PENDING_INSTALLATION_SECTION');
  await c('Page.navigate',{url:'http://127.0.0.1:5194/dashboard'});await until('document.querySelector(".dv-mini.warning")!==null');
  assert.equal(await evaluate('getComputedStyle(document.querySelector("#revenue-chart")).display'),'none');
  assert.equal(await evaluate('document.querySelectorAll("[data-testid=recent-client]").length'),3);checks.push('MOBILE_FRESH_NAVIGATION_DEFAULTS');

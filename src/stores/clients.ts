@@ -81,5 +81,12 @@ export const useClientsStore = defineStore('clients', () => {
   function retireClient(id: string, confirmation: RetirementConfirmation) {
     return apiFetch<RetirementResult>(`/api/clients/${encodeURIComponent(id)}/retirement`, { method: 'POST', body: JSON.stringify(confirmation) });
   }
-  return { clients, loading, error, fetchClients, fetchClientById, createClient, updateClient, deleteClient, previewRetirement, retireClient };
+  async function discardUnfulfilledProspect(client: Client, reason: string) {
+    const { data, error: err } = await supabase.rpc('discard_unfulfilled_client_prospect', {
+      p_client_id: client.id, p_expected_updated_at: client.updated_at, p_reason: reason, p_confirm: true,
+    });
+    if (err) throw err;
+    return data;
+  }
+  return { clients, loading, error, fetchClients, fetchClientById, createClient, updateClient, deleteClient, previewRetirement, retireClient, discardUnfulfilledProspect };
 });
