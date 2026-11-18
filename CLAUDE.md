@@ -2,6 +2,8 @@
 
 ## Antes de empezar
 
+**Balanceador MikroTik híbrido desplegado + rotación de 5 credenciales expuestas — ambos cerrados (18/11/2026).** Detalle completo en la sección "ESTADO DE CONTINUIDAD" (recién actualizada) al inicio de `ESTADO_DESARROLLO.md` — leerla antes de retomar cualquiera de los dos temas. Resumen: corrección del exceso de Log Ingestion de Supabase en producción (rama `fix/mikrotik-balancer-batch-logs-20261118`, commit `ff6ae17`, publicada en GitHub, sin merge a `main`); 4 de 5 credenciales rotadas con la anterior ya revocada (Supabase/Proxmox/GenieACS/SmartOLT), la quinta (XUI) con cuenta nueva verificada y la anterior todavía activa a propósito. Ningún secreto quedó en Git.
+
 **Procedimiento único de continuidad (Claude Code y Codex, 28/10/2026):**
 antes de tocar código, leer la sección **"ESTADO DE CONTINUIDAD"** al
 inicio de `ESTADO_DESARROLLO.md` — es la única fuente de qué está
