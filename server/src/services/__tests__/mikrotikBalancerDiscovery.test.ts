@@ -1,12 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  chunkArray,
   classifyConnectionStatus,
+  dedupeResolvedConnectionsByName,
   diffDiscoveredConnections,
   isBalancerDataStale,
   resolveConnectionTopology,
   type MacvlanRaw,
   type PppoeClientRaw,
+  type ResolvedConnection,
 } from '../../mikrotik/balancerDiscovery';
 
 // Fase 174 — datos reales (anonimizados de nombre, mismos valores) leidos
@@ -107,4 +110,51 @@ test('isBalancerDataStale: mas de 2 ciclos perdidos (>180s) -- obsoleto', () => 
   const now = Date.parse('2026-10-24T20:10:00.000Z');
   const lastSeen = '2026-10-24T20:06:00.000Z'; // hace 240s
   assert.equal(isBalancerDataStale(lastSeen, now), true);
+});
+
+// Helpers agregados 18/11/2026 para la correccion del exceso de logs de
+// Supabase (ver docs/SUPABASE-LOG-INGESTION-*): preparan el lote del
+// upsert/insert por tabla en vez de una llamada por conexion.
+
+function fakeResolved(pppoeInterfaceName: string, overrides: Partial<ResolvedConnection> = {}): ResolvedConnection {
+  return {
+    pppoeInterfaceName,
+    macvlanInterfaceName: null,
+    physicalInterfaceName: null,
+    pppoeUser: null,
+    disabled: false,
+    running: true,
+    ...overrides,
+  };
+}
+
+test('dedupeResolvedConnectionsByName: sin repetidos, devuelve la misma lista', () => {
+  const resolved = [fakeResolved('PPPoE-WAN031'), fakeResolved('PPPoE-WAN037')];
+  assert.deepEqual(dedupeResolvedConnectionsByName(resolved), resolved);
+});
+
+test('dedupeResolvedConnectionsByName: nombre repetido -- se conserva solo la ULTIMA aparicion (mismo resultado final que upserts en orden)', () => {
+  const resolved = [fakeResolved('PPPoE-WAN031', { running: true }), fakeResolved('PPPoE-WAN031', { running: false, disabled: true })];
+  const result = dedupeResolvedConnectionsByName(resolved);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].running, false);
+  assert.equal(result[0].disabled, true);
+});
+
+test('dedupeResolvedConnectionsByName: lista vacia -- vacia, sin error', () => {
+  assert.deepEqual(dedupeResolvedConnectionsByName([]), []);
+});
+
+test('chunkArray: cabe entero en un solo lote si no supera el tamano maximo', () => {
+  const items = [1, 2, 3];
+  assert.deepEqual(chunkArray(items, 500), [[1, 2, 3]]);
+});
+
+test('chunkArray: divide en varios lotes si supera el tamano maximo (salvaguarda de limite de Supabase/PostgREST)', () => {
+  const items = Array.from({ length: 5 }, (_, i) => i);
+  assert.deepEqual(chunkArray(items, 2), [[0, 1], [2, 3], [4]]);
+});
+
+test('chunkArray: lista vacia -- ningun lote (nunca manda una llamada vacia)', () => {
+  assert.deepEqual(chunkArray([], 500), []);
 });

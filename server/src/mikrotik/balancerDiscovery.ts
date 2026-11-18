@@ -89,6 +89,40 @@ export function isBalancerDataStale(lastSeenAtIso: string | null, nowMs: number,
   return nowMs - lastSeenMs > staleAfterSeconds * 1000;
 }
 
+/**
+ * Prepara `resolved` para un UPSERT en lote (una sola llamada con un array,
+ * en vez de una llamada por conexion -- causa real del exceso de logs de
+ * Supabase diagnosticado 18/11/2026, ver docs/SUPABASE-LOG-INGESTION-*).
+ *
+ * Un batch de Postgres con la MISMA clave de conflicto repetida dos veces
+ * en el mismo INSERT ... ON CONFLICT falla ("ON CONFLICT DO UPDATE command
+ * cannot affect row a second time"), algo que la version anterior (una
+ * llamada por fila) nunca podia disparar. El router real no deberia repetir
+ * `pppoeInterfaceName`, pero si llegara a pasar (dato inconsistente de un
+ * ciclo puntual), se conserva solo la ULTIMA aparicion -- mismo resultado
+ * final que tendria el loop anterior ejecutando sus upserts en orden.
+ */
+export function dedupeResolvedConnectionsByName(resolved: readonly ResolvedConnection[]): ResolvedConnection[] {
+  const byName = new Map<string, ResolvedConnection>();
+  for (const conn of resolved) byName.set(conn.pppoeInterfaceName, conn);
+  return [...byName.values()];
+}
+
+// Tamano maximo de un solo lote hacia Supabase/PostgREST. Con los ~30
+// conexiones reales de hoy un solo lote alcanza siempre; este limite es
+// solo una salvaguarda para que, si el numero de conexiones monitoreadas
+// crece mucho a futuro, el batch se divida en varias llamadas en vez de
+// mandar un body sin limite (o volver, por error, a una llamada por fila).
+export const BALANCER_BATCH_CHUNK_SIZE = 500;
+
+export function chunkArray<T>(items: readonly T[], chunkSize: number = BALANCER_BATCH_CHUNK_SIZE): T[][] {
+  if (chunkSize <= 0) throw new Error('chunkArray: chunkSize debe ser mayor a 0');
+  if (!items.length) return [];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += chunkSize) chunks.push(items.slice(i, i + chunkSize));
+  return chunks;
+}
+
 export interface ConnectionDiff {
   /** Nombres que aparecen ahora pero no estaban antes en la BD (altas nuevas). */
   newNames: string[];

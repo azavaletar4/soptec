@@ -1,8 +1,11 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { computeInterfaceDelta } from '../mikrotik/borderTraffic';
 import {
+  chunkArray,
   classifyConnectionStatus,
+  dedupeResolvedConnectionsByName,
   diffDiscoveredConnections,
   isBalancerDataStale,
   resolveConnectionTopology,
@@ -10,6 +13,7 @@ import {
   type PppoeClientRaw,
   type ResolvedConnection,
 } from '../mikrotik/balancerDiscovery';
+
 import { decideWanLinkAlertTransition, wanLinkAlertKey } from '../mikrotik/balancerAlerts';
 import {
   BALANCER_HISTORY_RANGES,
@@ -19,6 +23,12 @@ import {
   type BucketedPoint,
   type RawSample,
 } from '../mikrotik/balancerTrafficSeries';
+
+// Subconjunto minimo del cliente de Supabase que esta funcion necesita --
+// permite inyectar un cliente de prueba en los tests (ver
+// __tests__/mikrotikBalancerDiscoveryBatch.test.ts) sin tocar el
+// comportamiento real: por defecto siempre usa `supabaseAdmin`.
+export type BalancerDbClient = Pick<SupabaseClient, 'from'>;
 
 // Fase 174 — parte con I/O (Supabase + REST) del descubrimiento automatico
 // de conexiones WAN del MikroTik BALANCEADOR. La logica de
@@ -82,7 +92,16 @@ interface InterfaceCountersRaw {
  * removidas las conexiones existentes, ni inventa un sample) — una falla
  * de red nunca se interpreta como "se cayeron todas las lineas".
  */
-export async function discoverAndSyncBalancerConnections(device: BalancerDeviceRow, now: Date = new Date()): Promise<void> {
+export async function discoverAndSyncBalancerConnections(
+  device: BalancerDeviceRow,
+  now: Date = new Date(),
+  db: BalancerDbClient = supabaseAdmin,
+  // Inyectable solo para pruebas (ver __tests__/mikrotikBalancerDiscoveryBatch.test.ts)
+  // -- por defecto siempre es el cliente real de MikroTik, mismo
+  // comportamiento/reintentos/timeout de siempre. Nunca se toca el router
+  // real en una prueba.
+  fetchFn: typeof mikrotikRequest = mikrotikRequest,
+): Promise<void> {
   const target = targetFor(device);
 
   let macvlans: MacvlanRaw[];
@@ -90,19 +109,20 @@ export async function discoverAndSyncBalancerConnections(device: BalancerDeviceR
   let interfaceCounters: InterfaceCountersRaw[];
   try {
     [macvlans, pppoeClients, interfaceCounters] = await Promise.all([
-      mikrotikRequest<MacvlanRaw[]>(target, '/interface/macvlan'),
-      mikrotikRequest<PppoeClientRaw[]>(target, '/interface/pppoe-client'),
-      mikrotikRequest<InterfaceCountersRaw[]>(target, '/interface'),
+      fetchFn<MacvlanRaw[]>(target, '/interface/macvlan'),
+      fetchFn<PppoeClientRaw[]>(target, '/interface/pppoe-client'),
+      fetchFn<InterfaceCountersRaw[]>(target, '/interface'),
     ]);
   } catch {
     // Solo perdida de monitoreo puntual -- nunca se toca la BD (ver doc del metodo).
     return;
   }
 
-  const resolved = resolveConnectionTopology(macvlans, pppoeClients);
+  const resolvedRaw = resolveConnectionTopology(macvlans, pppoeClients);
+  const resolved = dedupeResolvedConnectionsByName(resolvedRaw);
   const countersByName = new Map(interfaceCounters.map((i) => [i.name, i]));
 
-  const { data: existingRows, error: existingErr } = await supabaseAdmin
+  const { data: existingRows, error: existingErr } = await db
     .from('mikrotik_balancer_connections')
     .select('id, pppoe_interface_name, removed_at')
     .eq('device_id', device.id);
@@ -111,39 +131,50 @@ export async function discoverAndSyncBalancerConnections(device: BalancerDeviceR
   const previouslyKnownNames = (existingRows ?? []).filter((r) => !r.removed_at).map((r) => r.pppoe_interface_name);
   const diff = diffDiscoveredConnections(previouslyKnownNames, resolved.map((r) => r.pppoeInterfaceName));
 
-  // Altas nuevas y las que ya existian: upsert de su estado actual.
-  for (const conn of resolved) {
-    await supabaseAdmin
-      .from('mikrotik_balancer_connections')
-      .upsert(
-        {
-          device_id: device.id,
-          pppoe_interface_name: conn.pppoeInterfaceName,
-          macvlan_interface_name: conn.macvlanInterfaceName,
-          physical_interface_name: conn.physicalInterfaceName,
-          pppoe_user: conn.pppoeUser,
-          disabled: conn.disabled,
-          running: conn.running,
-          last_seen_at: now.toISOString(),
-          removed_at: null, // si habia quedado marcada removida y volvio a aparecer, se reactiva
-        },
-        { onConflict: 'device_id,pppoe_interface_name' },
-      );
+  // Errores de escritura de TODO el ciclo (conexiones + muestras/contadores):
+  // se acumulan aqui y se lanzan juntos al final, despues de intentar cada
+  // paso restante -- igual que la version anterior, donde ningun error de
+  // escritura individual detenia el resto del ciclo (nunca los chequeaba),
+  // solo que ahora el error SI se reporta en vez de perderse en silencio.
+  const writeErrors: string[] = [];
+
+  // Altas nuevas y las que ya existian: UN SOLO upsert por lote (en vez de
+  // uno por conexion -- causa real del exceso de logs de Supabase
+  // diagnosticado 18/11/2026; ver docs/SUPABASE-LOG-INGESTION-*). Mismas
+  // columnas/clave de conflicto/valores que la version anterior.
+  for (const chunk of chunkArray(resolved)) {
+    const { error: upsertErr } = await db.from('mikrotik_balancer_connections').upsert(
+      chunk.map((conn) => ({
+        device_id: device.id,
+        pppoe_interface_name: conn.pppoeInterfaceName,
+        macvlan_interface_name: conn.macvlanInterfaceName,
+        physical_interface_name: conn.physicalInterfaceName,
+        pppoe_user: conn.pppoeUser,
+        disabled: conn.disabled,
+        running: conn.running,
+        last_seen_at: now.toISOString(),
+        removed_at: null, // si habia quedado marcada removida y volvio a aparecer, se reactiva
+      })),
+      { onConflict: 'device_id,pppoe_interface_name' },
+    );
+    if (upsertErr) writeErrors.push(`mikrotik_balancer_connections upsert: ${upsertErr.message}`);
   }
 
   // Lo que ya no aparece: se marca removida, NUNCA se borra (requisito 7).
+  // Ya era una sola llamada por lote (no por fila) -- sin cambios aqui.
   if (diff.removedNames.length) {
-    await supabaseAdmin
+    const { error: removeErr } = await db
       .from('mikrotik_balancer_connections')
       .update({ removed_at: now.toISOString() })
       .eq('device_id', device.id)
       .in('pppoe_interface_name', diff.removedNames)
       .is('removed_at', null);
+    if (removeErr) writeErrors.push(`mikrotik_balancer_connections removed_at: ${removeErr.message}`);
   }
 
   // Trafico: una sola fuente por conexion (el contador del nivel
   // PPPoE-client) -- nunca se suma con la macvlan ni con el puerto fisico.
-  const { data: connectionRows, error: connErr } = await supabaseAdmin
+  const { data: connectionRows, error: connErr } = await db
     .from('mikrotik_balancer_connections')
     .select('id, pppoe_interface_name, disabled')
     .eq('device_id', device.id)
@@ -151,11 +182,27 @@ export async function discoverAndSyncBalancerConnections(device: BalancerDeviceR
   if (connErr) throw new Error(connErr.message);
 
   const connectionIds = (connectionRows ?? []).map((c) => c.id);
-  const { data: stateRows } = await supabaseAdmin
+  const { data: stateRows } = await db
     .from('mikrotik_balancer_connection_counters_state')
     .select('connection_id, last_rx_bytes, last_tx_bytes, updated_at')
     .in('connection_id', connectionIds.length ? connectionIds : ['00000000-0000-0000-0000-000000000000']);
   const stateByConnectionId = new Map((stateRows ?? []).map((s) => [s.connection_id, s]));
+
+  // Se junta primero todo lo que hay que guardar (sigue siendo el mismo
+  // calculo por conexion, con su propio intervalo/contador previo) y
+  // recien al final se manda en lotes -- antes era un insert + un upsert
+  // por CADA conexion activa (2 llamadas x conexion x ciclo de 60s).
+  const sampleRows: {
+    connection_id: string;
+    sampled_at: string;
+    interval_seconds: number;
+    rx_bytes: number;
+    tx_bytes: number;
+    rx_bps: number;
+    tx_bps: number;
+    online: true;
+  }[] = [];
+  const stateUpsertRows: { connection_id: string; last_rx_bytes: number; last_tx_bytes: number }[] = [];
 
   for (const row of connectionRows ?? []) {
     // Una conexion deshabilitada no tiene trafico real que medir -- no es
@@ -169,7 +216,7 @@ export async function discoverAndSyncBalancerConnections(device: BalancerDeviceR
     const curr = { rx: Number(counters['rx-byte'] ?? 0), tx: Number(counters['tx-byte'] ?? 0) };
     const delta = computeInterfaceDelta(prevState ? { rx: prevState.last_rx_bytes, tx: prevState.last_tx_bytes } : null, curr, intervalSecondsRaw);
 
-    await supabaseAdmin.from('mikrotik_balancer_connection_samples').insert({
+    sampleRows.push({
       connection_id: row.id,
       sampled_at: now.toISOString(),
       interval_seconds: delta.intervalSeconds,
@@ -179,22 +226,42 @@ export async function discoverAndSyncBalancerConnections(device: BalancerDeviceR
       tx_bps: delta.txBps,
       online: true,
     });
-    await supabaseAdmin
-      .from('mikrotik_balancer_connection_counters_state')
-      .upsert({ connection_id: row.id, last_rx_bytes: curr.rx, last_tx_bytes: curr.tx }, { onConflict: 'connection_id' });
+    stateUpsertRows.push({ connection_id: row.id, last_rx_bytes: curr.rx, last_tx_bytes: curr.tx });
+  }
+
+  // Las dos escrituras son independientes entre si (igual que antes, donde
+  // cada conexion hacia su insert y su upsert por separado): si una de las
+  // dos falla, la otra se intenta igual -- nunca se pierde en silencio, el
+  // error se junta y se lanza al final para que el scheduler lo registre.
+  for (const chunk of chunkArray(sampleRows)) {
+    const { error } = await db.from('mikrotik_balancer_connection_samples').insert(chunk);
+    if (error) writeErrors.push(`mikrotik_balancer_connection_samples insert: ${error.message}`);
+  }
+  for (const chunk of chunkArray(stateUpsertRows)) {
+    const { error } = await db.from('mikrotik_balancer_connection_counters_state').upsert(chunk, { onConflict: 'connection_id' });
+    if (error) writeErrors.push(`mikrotik_balancer_connection_counters_state upsert: ${error.message}`);
   }
 
   // Fase 174b (requiere la migracion de mikrotik_balancer_link_alerts,
   // ver supabase/migrations/20261024150000_*): si la tabla todavia no
   // existe en este entorno, se registra el error y el resto del ciclo
   // (que YA guardo conexiones/muestras arriba) sigue intacto -- esto nunca
-  // debe poder romper el descubrimiento base.
+  // debe poder romper el descubrimiento base. Se evalua SIEMPRE, incluso si
+  // algun paso anterior tuvo un error de escritura (mismo orden que la
+  // version anterior, que nunca los detectaba y por lo tanto nunca los
+  // usaba para saltarse este paso).
   const connectionIdByPppoeName = new Map((connectionRows ?? []).map((c) => [c.pppoe_interface_name, c.id]));
   try {
-    await evaluateAndPersistBalancerLinkAlerts(device, resolved, diff.removedNames, countersByName, connectionIdByPppoeName, now);
+    await evaluateAndPersistBalancerLinkAlerts(device, resolved, diff.removedNames, countersByName, connectionIdByPppoeName, now, db);
   } catch (e) {
     console.error(`[mikrotik-balancer-link-alerts] error en "${device.name}":`, e instanceof Error ? e.message : e);
   }
+
+  // Recien aqui, al final, se reportan (lanzando) los errores de escritura
+  // de este ciclo -- nunca antes de intentar TODOS los pasos (requisito:
+  // ningun fallo parcial debe perder en silencio lo que si se pudo guardar,
+  // ni impedir que se intente el resto del ciclo).
+  if (writeErrors.length) throw new Error(`discoverAndSyncBalancerConnections("${device.name}"): ${writeErrors.join('; ')}`);
 }
 
 /**
@@ -212,8 +279,9 @@ async function evaluateAndPersistBalancerLinkAlerts(
   countersByName: Map<string, InterfaceCountersRaw>,
   connectionIdByPppoeName: Map<string, string>,
   now: Date,
+  db: BalancerDbClient = supabaseAdmin,
 ): Promise<void> {
-  const { data: activeAlertRows, error: activeErr } = await supabaseAdmin
+  const { data: activeAlertRows, error: activeErr } = await db
     .from('mikrotik_balancer_link_alerts')
     .select('id, link_kind, link_name')
     .eq('device_id', device.id)
@@ -224,7 +292,7 @@ async function evaluateAndPersistBalancerLinkAlerts(
   );
 
   async function fire(linkKind: 'pppoe_connection' | 'physical_port', linkName: string, connectionId: string | null, physicalInterfaceName: string | null) {
-    await supabaseAdmin.from('mikrotik_balancer_link_alerts').insert({
+    await db.from('mikrotik_balancer_link_alerts').insert({
       device_id: device.id,
       link_kind: linkKind,
       link_name: linkName,
@@ -237,7 +305,7 @@ async function evaluateAndPersistBalancerLinkAlerts(
   async function resolve(linkKind: 'pppoe_connection' | 'physical_port', linkName: string) {
     const id = activeAlertIdByKey.get(wanLinkAlertKey({ kind: linkKind, name: linkName }));
     if (!id) return;
-    await supabaseAdmin.from('mikrotik_balancer_link_alerts').update({ status: 'resolved', resolved_at: now.toISOString() }).eq('id', id);
+    await db.from('mikrotik_balancer_link_alerts').update({ status: 'resolved', resolved_at: now.toISOString() }).eq('id', id);
   }
 
   // Sesiones PPPoE-WAN presentes este ciclo.
