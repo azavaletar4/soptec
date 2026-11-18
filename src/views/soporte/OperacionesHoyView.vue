@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import WorkOrderSchedule from '@/components/soporte/WorkOrderSchedule.vue';
+import { limaDate } from '@/lib/workOrderSchedule';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -234,8 +236,8 @@ function isDueReschedule(job: UnifiedJob, nowMs: number): boolean {
 // useUnifiedJobs.ts, en formato de fecha simple YYYY-MM-DD.
 function isRelevantToday(job: UnifiedJob): boolean {
   const today = todayStr();
-  if (job.finishedAt && job.finishedAt.slice(0, 10) === today) return true;
-  if (job.scheduledStartAt) return job.scheduledStartAt.slice(0, 10) === today;
+  if (job.finishedAt && limaDate(job.finishedAt) === today) return true;
+  if (job.scheduledStartAt) return limaDate(job.scheduledStartAt) === today;
   return job.fallbackDate === today;
 }
 
@@ -351,6 +353,10 @@ async function handleSubmit() {
     return;
   }
   const turno = TURNOS.find((t) => t.value === form.value.schedule_turno);
+  if (turno && !form.value.schedule_date) {
+    formError.value = 'Selecciona la fecha programada.';
+    return;
+  }
   // Fase 131 — choque de horario: el tecnico ya tiene algo agendado dentro
   // de +/-1h de este turno. No bloquea, solo pide confirmar (puede ser
   // intencional, ej. una visita corta entre dos citas).
@@ -521,6 +527,7 @@ function formatDate(value: string) {
             </div>
           </div>
           <div class="text-slate-900 font-medium mb-1">{{ job.label }}</div>
+          <WorkOrderSchedule :job-type="job.jobType" :order="job.raw" />
           <div class="text-xs text-slate-500 mb-3">
             {{ job.jobType === 'ticket' ? CATEGORY_LABEL[(job.raw as Ticket).category] : job.assignedName ?? 'Sin asignar' }}
           </div>
@@ -574,6 +581,7 @@ function formatDate(value: string) {
             >
               <td class="px-4 py-3">
                 <div class="font-mono text-xs text-slate-500" :title="formatDate(job.createdAt)">{{ job.number ?? '—' }}</div>
+                <WorkOrderSchedule :job-type="job.jobType" :order="job.raw" />
                 <div class="text-slate-900">{{ job.jobType === 'ticket' ? (job.raw as Ticket).title : job.label }}</div>
                 <p v-if="isDueReschedule(job, now)" class="text-[11px] font-bold text-red-600 mt-0.5">🔴 REPROGRAMADO - ATENDER PRIMERO</p>
               </td>

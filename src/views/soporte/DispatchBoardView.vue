@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { limaDate, limaTime, schedulePatch, scheduleTimestamps, type ScheduleFields } from '@/lib/workOrderSchedule';
+import WorkOrderSchedule from '@/components/soporte/WorkOrderSchedule.vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -47,6 +49,7 @@ const TYPE_META: Record<JobType, { label: string; dot: string; bg: string; borde
 };
 
 interface BoardItem {
+  order: ScheduleFields;
   id: string;
   jobType: JobType;
   label: string;
@@ -61,6 +64,7 @@ interface BoardItem {
 
 const items = computed<BoardItem[]>(() => {
   const tickets = ticketsStore.tickets.map<BoardItem>((t) => ({
+    order: t,
     id: t.id,
     jobType: 'ticket',
     label: t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : t.title,
@@ -68,13 +72,14 @@ const items = computed<BoardItem[]>(() => {
     inProgress: t.status === 'in_progress',
     assignedTo: t.assigned_to,
     updatedAt: t.updated_at,
-    scheduledStartAt: t.scheduled_start_at,
-    scheduledEndAt: t.scheduled_end_at,
+    scheduledStartAt: scheduleTimestamps('ticket', t).start,
+    scheduledEndAt: scheduleTimestamps('ticket', t).end,
     fallbackDate: t.created_at.slice(0, 10),
   }));
   const installations = installationsStore.installations
     .filter((i) => i.status !== 'cancelled')
     .map<BoardItem>((i) => ({
+      order: i,
       id: i.id,
       jobType: 'installation',
       label: i.clients ? `${i.clients.first_name} ${i.clients.last_name}` : 'Instalación',
@@ -89,6 +94,7 @@ const items = computed<BoardItem[]>(() => {
   const routines = routinesStore.routines
     .filter((r) => r.status !== 'cancelled')
     .map<BoardItem>((r) => ({
+      order: r,
       id: r.id,
       jobType: 'routine',
       label: r.title,
@@ -113,7 +119,7 @@ function shiftDate(days: number) {
 }
 
 function belongsToSelectedDate(item: BoardItem): boolean {
-  if (item.scheduledStartAt) return item.scheduledStartAt.slice(0, 10) === selectedDate.value;
+  if (item.scheduledStartAt) return limaDate(item.scheduledStartAt) === selectedDate.value;
   return item.fallbackDate === selectedDate.value;
 }
 
@@ -201,17 +207,19 @@ function itemsForTechnician(techId: string) {
 
 // Posicion/ancho del bloque dentro de la franja 08:00-18:00, en %.
 function blockStyle(item: BoardItem) {
-  const start = new Date(item.scheduledStartAt!);
-  const end = new Date(item.scheduledEndAt!);
-  const startMin = Math.max(0, (start.getHours() - HOUR_START) * 60 + start.getMinutes());
-  const endMin = Math.min(DAY_MINUTES, (end.getHours() - HOUR_START) * 60 + end.getMinutes());
+  const minuteOfDay = (iso: string) => {
+    const [hours, minutes] = limaTime(iso).split(':').map(Number);
+    return (hours - HOUR_START) * 60 + minutes;
+  };
+  const startMin = Math.max(0, minuteOfDay(item.scheduledStartAt!));
+  const endMin = Math.min(DAY_MINUTES, minuteOfDay(item.scheduledEndAt!));
   const left = (startMin / DAY_MINUTES) * 100;
   const width = Math.max(2, ((endMin - startMin) / DAY_MINUTES) * 100);
   return { left: `${left}%`, width: `${width}%` };
 }
 
 function timeLabel(iso: string) {
-  return new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+  return limaTime(iso);
 }
 
 // Click & Create (Fase 104): click en una casilla VACIA del tablero (no en
@@ -286,8 +294,8 @@ async function confirmSchedule(item: BoardItem) {
     scheduleError.value = 'Completa la hora de inicio y fin.';
     return;
   }
-  const startIso = `${selectedDate.value}T${scheduleStart.value}:00`;
-  const endIso = `${selectedDate.value}T${scheduleEnd.value}:00`;
+  const startIso = `${selectedDate.value}T${scheduleStart.value}:00-05:00`;
+  const endIso = `${selectedDate.value}T${scheduleEnd.value}:00-05:00`;
   const startMs = new Date(startIso).getTime();
   const endMs = new Date(endIso).getTime();
   if (endMs <= startMs) {
@@ -315,7 +323,9 @@ async function confirmSchedule(item: BoardItem) {
   saving.value = true;
   scheduleError.value = null;
   try {
-    const payload = { scheduled_start_at: startIso, scheduled_end_at: endIso };
+    const programmed = schedulePatch(item.jobType, selectedDate.value, scheduleStart.value, scheduleEnd.value);
+    const payload = item.jobType === 'ticket' && item.status === 'rescheduled'
+      ? { ...programmed, rescheduled_to: programmed.scheduled_start_at } : programmed;
     if (item.jobType === 'ticket') await ticketsStore.updateTicket(item.id, payload);
     else if (item.jobType === 'installation') await installationsStore.updateInstallation(item.id, payload);
     else await routinesStore.updateRoutine(item.id, payload);
@@ -446,7 +456,7 @@ async function confirmSchedule(item: BoardItem) {
 
     <!-- Sin horario asignado -->
     <div class="surface p-3.5">
-      <h2 class="text-sm font-semibold mb-2">Sin horario asignado ({{ unscheduledItems.length }})</h2>
+      <h2 class="text-sm font-semibold mb-2">Programación o asignación por completar ({{ unscheduledItems.length }})</h2>
       <p v-if="!unscheduledItems.length" class="text-xs text-slate-400">Todo lo de este día ya tiene horario.</p>
       <ul v-else class="space-y-2">
         <li v-for="item in unscheduledItems" :key="itemKey(item)" class="rounded-lg border border-slate-200 p-2.5">
@@ -462,6 +472,7 @@ async function confirmSchedule(item: BoardItem) {
               🕐 Agendar
             </button>
           </div>
+          <WorkOrderSchedule :job-type="item.jobType" :order="item.order" />
         </li>
       </ul>
     </div>

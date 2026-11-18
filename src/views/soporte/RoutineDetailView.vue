@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkOrderSchedule from '@/components/soporte/WorkOrderSchedule.vue';
 import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -66,18 +67,9 @@ function targetLabel(r: Routine): string {
   return 'General / sin destino puntual';
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return '—';
-  return new Date(`${value}T12:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 function formatDateTime(value: string | null): string {
   if (!value) return '—';
   return new Date(value).toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-function timeRange(r: Routine): string | null {
-  if (!r.scheduled_start_at || !r.scheduled_end_at) return null;
-  const fmt = (iso: string) => new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-  return `${fmt(r.scheduled_start_at)} – ${fmt(r.scheduled_end_at)}`;
 }
 
 // ---- Cierre de campo (work_order_closures) — mismas tablas/criterio que
@@ -207,10 +199,7 @@ onMounted(async () => {
 
           <div class="surface p-4 text-sm">
             <div class="text-slate-500 text-xs mb-2">Programación</div>
-            <p class="text-slate-800">
-              {{ formatDate(routine.scheduled_date) }}
-              <span v-if="timeRange(routine)"> · {{ timeRange(routine) }}</span>
-            </p>
+            <WorkOrderSchedule job-type="routine" :order="routine" />
           </div>
 
           <div v-if="routine.description" class="surface p-4 text-sm">

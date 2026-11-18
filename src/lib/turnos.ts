@@ -1,3 +1,5 @@
+import { limaDate, peruDateTimeToIso } from './workOrderSchedule';
+
 /**
  * Turnos fijos de 2 horas (Fase 104) — mismo rango horario que el
  * Cronograma de Campo (08:00-18:00, Fase 101-B), para que un turno elegido
@@ -19,13 +21,12 @@ export const TURNOS: Turno[] = [
 ];
 
 export function todayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return limaDate(new Date().toISOString());
 }
 
-/** ISO local (sin Z) para una fecha + hora "HH:mm" — mismo formato que usa el resto de la app para scheduled_start_at/end_at. */
+/** ISO UTC de una cita en Perú para una fecha + hora "HH:mm" — mismo formato que usa el resto de la app para scheduled_start_at/end_at. */
 export function dateTimeToIso(dateStr: string, time: string): string {
-  return new Date(`${dateStr}T${time}:00`).toISOString();
+  return peruDateTimeToIso(dateStr, time);
 }
 
 /** Suma minutos a una hora "HH:mm" (puede cruzar medianoche). Usado para sintetizar un rango [hora, hora+N] en formularios que solo piden una hora puntual (ej. Instalaciones) y necesitan igual un fin para el chequeo de choque de horario (Fase 131). */

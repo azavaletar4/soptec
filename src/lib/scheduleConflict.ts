@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { limaDate } from './workOrderSchedule';
 
 /**
  * Chequeo de choque de horario (Fase 131) al asignar Técnico + Turno en
@@ -37,9 +38,9 @@ export async function findScheduleConflict(
   endIso: string,
   exclude?: { jobType: ScheduleJobType; id: string },
 ): Promise<ScheduleConflict | null> {
-  const dateStr = startIso.slice(0, 10);
-  const dayStart = `${dateStr}T00:00:00`;
-  const dayEnd = `${dateStr}T23:59:59`;
+  const dateStr = limaDate(startIso);
+  const dayStart = `${dateStr}T00:00:00-05:00`;
+  const dayEnd = `${dateStr}T23:59:59.999-05:00`;
 
   const [ticketsRes, installationsRes, routinesRes] = await Promise.all([
     supabase
@@ -104,7 +105,7 @@ export async function findScheduleConflict(
 }
 
 export function conflictConfirmMessage(technicianName: string, conflict: ScheduleConflict): string {
-  const hora = new Date(conflict.startIso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+  const hora = new Date(conflict.startIso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
   const job = JOB_LABEL[conflict.jobType];
   return `El técnico ${technicianName} ya tiene ${job.participle} ${job.article} ${job.noun} ("${conflict.label}") a las ${hora}. ¿Confirmar asignación simultánea?`;
 }

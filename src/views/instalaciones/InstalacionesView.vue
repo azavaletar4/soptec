@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkOrderSchedule from '@/components/soporte/WorkOrderSchedule.vue';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -13,6 +14,7 @@ import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { dateTimeToIso, addMinutesToTime } from '@/lib/turnos';
+import { schedulePatch, scheduleValues } from '@/lib/workOrderSchedule';
 import { findScheduleConflict, conflictConfirmMessage } from '@/lib/scheduleConflict';
 import type { Installation, InstallationStatus, ServiceContract, TicketPriority } from '@/types/domain';
 
@@ -108,7 +110,8 @@ const filteredInstallations = computed(() => {
   if (dateRange.value && !q) {
     const { start, end } = dateRange.value;
     list = list.filter((i) => {
-      const ref = i.scheduled_date ? new Date(`${i.scheduled_date}T12:00:00`) : new Date(i.created_at);
+      const date = scheduleValues('installation', i).date;
+      const ref = date ? new Date(`${date}T12:00:00-05:00`) : new Date(i.created_at);
       const t = ref.getTime();
       return t >= start.getTime() && t <= end.getTime();
     });
@@ -198,8 +201,7 @@ async function handleSubmit() {
       client_id: form.value.client_id,
       contract_id: form.value.contract_id || null,
       priority: form.value.priority,
-      scheduled_date: form.value.scheduled_date || null,
-      scheduled_time: form.value.scheduled_time || null,
+      ...schedulePatch('installation', form.value.scheduled_date, form.value.scheduled_time),
       assigned_to: form.value.assigned_to || null,
       notes: form.value.notes || null,
       status: form.value.scheduled_date ? 'scheduled' : 'pending',
@@ -283,10 +285,6 @@ function goToDetail(inst: Installation) {
   router.push(`/soporte/instalaciones/${inst.id}`);
 }
 
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  return new Date(value + 'T00:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 </script>
 
 <template>
@@ -324,7 +322,7 @@ function formatDate(value: string | null) {
           </button>
         </div>
       </div>
-      <DateRangeFilter @change="dateRange = $event" />
+      <DateRangeFilter time-zone="America/Lima" @change="dateRange = $event" />
     </div>
 
     <p v-if="installationsStore.error" class="mb-4 text-sm text-red-600">{{ installationsStore.error }}</p>
@@ -364,8 +362,7 @@ function formatDate(value: string | null) {
             </td>
             <td class="px-4 py-3 font-mono text-xs text-slate-600">{{ inst.contracts?.contract_number ?? '—' }}</td>
             <td class="px-4 py-3 text-slate-600">
-              {{ formatDate(inst.scheduled_date) }}
-              <span v-if="inst.scheduled_time" class="text-xs text-slate-500"> · {{ inst.scheduled_time.slice(0, 5) }}</span>
+              <WorkOrderSchedule job-type="installation" :order="inst" />
             </td>
             <td class="px-4 py-3">
               <select

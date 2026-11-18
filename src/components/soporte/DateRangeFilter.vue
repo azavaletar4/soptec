@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { limaDate } from '@/lib/workOrderSchedule';
 
 // Filtro de rango de fechas compartido por las 3 bandejas de Soporte
 // (Averias/Altas/Rutinas, Fase 101) — mismo control en los 3, cada vista
@@ -23,7 +24,7 @@ const preset = defineModel<DateRangePreset>('preset', { default: 'hoy' });
 const emit = defineEmits<{ change: [DateRange | null] }>();
 // Solo "Operaciones de Hoy" (Fase 107) pasa esto — ahi "Todos" es un boton
 // permanente mas, no algo que aparece/desaparece segun el preset activo.
-const props = defineProps<{ showAllOption?: boolean }>();
+const props = defineProps<{ showAllOption?: boolean; timeZone?: 'America/Lima' }>();
 
 const rangeStart = ref('');
 const rangeEnd = ref('');
@@ -40,6 +41,7 @@ function endOfDay(d: Date): Date {
 }
 
 function computeRange(): DateRange | null {
+  if (props.timeZone === 'America/Lima') return computePeruRange();
   const now = new Date();
   if (preset.value === 'todos') return null;
   if (preset.value === 'hoy') return { start: startOfDay(now), end: endOfDay(now) };
@@ -61,6 +63,27 @@ function computeRange(): DateRange | null {
   // 'rango': hasta que el usuario elija ambas fechas, no hay filtro aplicable todavia.
   if (!rangeStart.value || !rangeEnd.value) return null;
   return { start: startOfDay(new Date(`${rangeStart.value}T00:00:00`)), end: endOfDay(new Date(`${rangeEnd.value}T00:00:00`)) };
+}
+
+function computePeruRange(): DateRange | null {
+  if (preset.value === 'todos') return null;
+  let start = new Date(`${limaDate(new Date().toISOString())}T12:00:00Z`);
+  let end = new Date(start);
+  if (preset.value === 'semana') {
+    start.setUTCDate(start.getUTCDate() - (start.getUTCDay() || 7) + 1);
+    end = new Date(start); end.setUTCDate(end.getUTCDate() + 6);
+  } else if (preset.value === 'mes') {
+    start.setUTCDate(1);
+    end = new Date(start); end.setUTCMonth(end.getUTCMonth() + 1); end.setUTCDate(0);
+  } else if (preset.value === 'rango') {
+    if (!rangeStart.value || !rangeEnd.value) return null;
+    start = new Date(`${rangeStart.value}T12:00:00Z`);
+    end = new Date(`${rangeEnd.value}T12:00:00Z`);
+  }
+  return {
+    start: new Date(`${start.toISOString().slice(0, 10)}T00:00:00-05:00`),
+    end: new Date(`${end.toISOString().slice(0, 10)}T23:59:59.999-05:00`),
+  };
 }
 
 function emitChange() {

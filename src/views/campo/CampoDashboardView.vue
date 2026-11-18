@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkOrderSchedule from '@/components/soporte/WorkOrderSchedule.vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
@@ -245,11 +246,6 @@ async function handleCardClick(t: TrabajoItem) {
   openTrabajo(t);
 }
 
-function formatFecha(value: string | null) {
-  if (!value) return '—';
-  const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
-  return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
-}
 
 // Fase 132 — alerta preventiva 30 min antes de la hora programada: el
 // backend (scheduleAlertScheduler.ts) marca raw.alerta_enviada=true, y este
@@ -355,10 +351,10 @@ onUnmounted(() => {
             </span>
             <span v-if="activeTab === 'disponible'" class="badge text-[10px] bg-amber-500/15 text-amber-700">🙋 Libre</span>
           </div>
-          <span class="text-[11px] text-slate-500">{{ formatFecha(t.fecha) }}</span>
         </div>
         <p class="font-semibold text-sm text-slate-900">{{ t.clienteNombre }}</p>
         <p class="text-xs text-slate-600 break-all">Orden {{ jobReference(t) }}</p>
+        <WorkOrderSchedule :job-type="t.jobType" :order="t.raw" />
         <p v-if="t.direccion" class="text-xs text-slate-500 mt-0.5">{{ t.direccion }}</p>
         <p v-if="progressIdentity && activeTab !== 'disponible'" class="text-xs text-slate-600 mt-1">
           {{ progress.loading.value ? 'Consultando puntos…' : progress.error.value ? 'Puntos no disponibles' : jobPoints(t) }}

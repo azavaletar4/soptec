@@ -1,0 +1,23 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Prueba local de programación</title><body><div id="app"></div>
+<script type="module">
+import { createApp, h, nextTick } from 'vue';
+import { createPinia } from 'pinia';
+import { RouterView } from 'vue-router';
+import router from '/src/router/index.ts';
+import { useAuthStore } from '/src/stores/auth.ts';
+import { supabase } from '/src/lib/supabase.ts';
+import { useCampoStore } from '/src/stores/campo.ts';
+import '/src/style.css';
+const pinia=createPinia(),auth=useAuthStore(pinia);
+const params=new URLSearchParams(location.search);
+auth.user={id:window.techId,email:'local@example.invalid'};
+auth.role=params.get('role')||'ADMIN';auth.loading=false;
+auth.session={access_token:'synthetic-local'};
+supabase.auth.getSession=async()=>({data:{session:auth.session},error:null});
+supabase.channel=()=>({on(){return this;},subscribe(){return this;},unsubscribe(){}});
+supabase.removeChannel=async()=> 'ok';
+window.auth=auth;window.router=router;window.campo=useCampoStore(pinia);
+const app=createApp({render:()=>h(RouterView)}).use(pinia).use(router);
+await router.replace(params.get('route')||'/soporte');await router.isReady();
+app.mount('#app');await nextTick();window.ready=true;
+</script></body></html>

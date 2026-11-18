@@ -79,7 +79,7 @@ export function useUnifiedJobs() {
       priority: t.priority,
       assignedId: t.assigned_to,
       assignedName: t.assigned_profile?.full_name || t.assigned_profile?.email || null,
-      scheduledStartAt: t.scheduled_start_at,
+      scheduledStartAt: t.status === 'rescheduled' && t.rescheduled_to ? t.rescheduled_to : t.scheduled_start_at,
       fallbackDate: t.created_at.slice(0, 10),
       createdAt: t.created_at,
       finishedAt: t.resolved_at ?? t.closed_at,

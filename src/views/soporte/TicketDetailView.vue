@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { limaDate, limaTime, peruDateTimeToIso } from '@/lib/workOrderSchedule';
+import WorkOrderScheduleEditor from '@/components/soporte/WorkOrderScheduleEditor.vue';
 import WorkOrderPointsEditor from '@/components/soporte/WorkOrderPointsEditor.vue';
 import { useWorkOrderFinality } from '@/composables/useWorkOrderFinality';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -475,7 +477,7 @@ const rescheduleError = ref<string | null>(null);
 function startEditReschedule() {
   if (!ticket.value) return;
   rescheduleDraft.value = {
-    date: ticket.value.rescheduled_to ? ticket.value.rescheduled_to.slice(0, 16) : '',
+    date: ticket.value.rescheduled_to ? `${limaDate(ticket.value.rescheduled_to)}T${limaTime(ticket.value.rescheduled_to)}` : '',
     reason: ticket.value.reschedule_reason ?? '',
   };
   rescheduleError.value = null;
@@ -490,8 +492,11 @@ async function handleSaveReschedule() {
   savingReschedule.value = true;
   rescheduleError.value = null;
   try {
+    const appointment = peruDateTimeToIso(rescheduleDraft.value.date.slice(0, 10), rescheduleDraft.value.date.slice(11, 16));
     ticket.value = await ticketsStore.updateTicket(ticket.value.id, {
-      rescheduled_to: new Date(rescheduleDraft.value.date).toISOString(),
+      rescheduled_to: appointment,
+      scheduled_start_at: appointment,
+      scheduled_end_at: null,
       reschedule_reason: rescheduleDraft.value.reason.trim() || null,
     });
   } catch (e) {
@@ -578,7 +583,7 @@ async function handleAddComment() {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(value).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Lima' });
 }
 
 async function handleDelete() {
@@ -655,6 +660,8 @@ async function handleDelete() {
         📱 Para gestionar este ticket, utiliza la App de Campo.
       </div>
 
+      <WorkOrderScheduleEditor job-type="ticket" :order="ticket" :readonly="!canEdit" @saved="Object.assign(ticket, $event)" />
+
       <div class="grid gap-4 lg:grid-cols-2">
         <!-- Columna izquierda: cliente, descripcion, estado/prioridad -->
         <div class="flex flex-col gap-4">
@@ -724,7 +731,7 @@ async function handleDelete() {
             </template>
             <template v-else>
               <p class="font-medium">
-                {{ ticket.rescheduled_to ? new Date(ticket.rescheduled_to).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : 'Sin fecha' }}
+                {{ ticket.rescheduled_to ? new Date(ticket.rescheduled_to).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Lima' }) : 'Sin fecha' }}
               </p>
               <p v-if="ticket.reschedule_reason" class="text-slate-600 mt-1">{{ ticket.reschedule_reason }}</p>
             </template>

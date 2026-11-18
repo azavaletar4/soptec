@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkOrderScheduleEditor from '@/components/soporte/WorkOrderScheduleEditor.vue';
 import IptvInstallationModeField from '@/components/campo/IptvInstallationModeField.vue';
 import { closurePayloadHash } from '@/lib/closureSubmission';
 import { requiresIptvMode, iptvModeLabel, type IptvInstallationMode } from '@/lib/installationIptv';
@@ -686,10 +687,6 @@ async function handleDelete() {
   }
 }
 
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  return new Date(value + 'T00:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 // Fase 163: historial de postergaciones (solo lectura) — quien, cuando y
 // por que motivo se postergo una Alta en progreso; visible para
@@ -757,8 +754,6 @@ onMounted(async () => {
           </h1>
           <p class="text-slate-600 text-sm mt-1">
             <span class="font-mono">{{ installation.contracts?.contract_number ?? 'Sin contrato' }}</span>
-            · {{ formatDate(installation.scheduled_date) }}
-            <span v-if="installation.scheduled_time"> · {{ installation.scheduled_time.slice(0, 5) }}</span>
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -766,6 +761,8 @@ onMounted(async () => {
           <router-link :to="`/clientes/${installation.client_id}`" class="btn-secondary text-sm">👤 Ver cliente</router-link>
         </div>
       </div>
+
+      <WorkOrderScheduleEditor job-type="installation" :order="installation" :readonly="isTecnico || administrativelyClosed" @saved="Object.assign(installation, $event)" />
 
       <div class="grid gap-4 lg:grid-cols-2">
         <!-- Columna izquierda: estado, prioridad, cuadrilla, acciones -->

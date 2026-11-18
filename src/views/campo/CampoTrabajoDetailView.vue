@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { limaDate, peruDateTimeToIso } from '@/lib/workOrderSchedule';
+import WorkOrderSchedule from '@/components/soporte/WorkOrderSchedule.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import CampoLayout from '@/components/campo/CampoLayout.vue';
@@ -1108,11 +1110,9 @@ const savingAusente = ref(false);
 const ausenteError = ref<string | null>(null);
 
 function defaultAusenteDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(8, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const d = new Date(`${limaDate(new Date().toISOString())}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return `${d.toISOString().slice(0, 10)}T08:00`;
 }
 
 function toggleAusenteForm() {
@@ -1129,10 +1129,13 @@ async function handleMarkAusente() {
   savingAusente.value = true;
   ausenteError.value = null;
   try {
+    const appointment = peruDateTimeToIso(ausenteDate.value.slice(0, 10), ausenteDate.value.slice(11, 16));
     await ticketsStore.updateTicket(jobId, {
       status: 'rescheduled',
       priority: 'urgent',
-      rescheduled_to: new Date(ausenteDate.value).toISOString(),
+      rescheduled_to: appointment,
+      scheduled_start_at: appointment,
+      scheduled_end_at: null,
       reschedule_reason: ausenteReason.value.trim() || null,
     });
     toast.success('Marcado como Cliente Ausente — reprogramado y subido a prioridad urgente.');
@@ -1892,6 +1895,7 @@ async function handleCloseSubmit() {
           {{ jobType === 'installation' ? 'Instalación' : jobType === 'routine' ? 'Rutina' : 'Avería' }}
         </span>
         <p class="font-semibold">{{ trabajo.clienteNombre }}</p>
+        <WorkOrderSchedule :job-type="trabajo.jobType" :order="trabajo.raw" />
         <div data-field-order-location class="text-xs mt-1 min-w-0 break-words">
           <p v-if="trabajo.contractId && displayContract" class="font-semibold text-slate-700">Contrato: {{ fieldLocation.contractNumber || 'Sin código registrado' }}</p>
           <p v-if="fieldLocation.address" class="text-slate-600 mt-0.5">{{ fieldLocation.address }}</p>

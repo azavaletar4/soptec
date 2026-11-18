@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkOrderSchedule from '@/components/soporte/WorkOrderSchedule.vue';
 import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -18,6 +19,7 @@ import { useConfirm } from '@/composables/useConfirm';
 import { getErrorMessage } from '@/lib/errors';
 import { PRIORITY_CLASS, PRIORITY_LABEL } from '@/lib/ticketPriority';
 import { TURNOS, todayStr, dateTimeToIso } from '@/lib/turnos';
+import { routineTurno, routineSchedulePatch, scheduleValues, scheduleLabel, EXISTING_SCHEDULE } from '@/lib/workOrderSchedule';
 import { findScheduleConflict, conflictConfirmMessage } from '@/lib/scheduleConflict';
 import { TRASLADO_SERVICIO_SUBTIPO } from '@/lib/routineTraslado';
 import { supabase } from '@/lib/supabase';
@@ -140,7 +142,8 @@ const filteredRoutines = computed(() => {
   if (dateRange.value && !q) {
     const { start, end } = dateRange.value;
     list = list.filter((r) => {
-      const ref = r.scheduled_date ? new Date(`${r.scheduled_date}T12:00:00`) : new Date(r.created_at);
+      const date = scheduleValues('routine', r).date;
+      const ref = date ? new Date(`${date}T12:00:00-05:00`) : new Date(r.created_at);
       const t = ref.getTime();
       return t >= start.getTime() && t <= end.getTime();
     });
@@ -308,8 +311,8 @@ async function openEdit(r: Routine) {
     tv_box_qty: r.adicionales_json?.tv_box || 1,
     wants_mesh: !!r.adicionales_json?.mesh,
     mesh_qty: r.adicionales_json?.mesh || 1,
-    scheduled_date: r.scheduled_date ?? '',
-    schedule_turno: '',
+    scheduled_date: scheduleValues('routine', r).date,
+    schedule_turno: routineTurno(r),
     schedule_tech_id: '',
   };
   targetKind.value = r.client_id ? 'client' : r.nap_elemento_id ? 'nap' : r.zone_id ? 'zone' : r.direccion_destino ? 'direccion' : 'none';
@@ -370,6 +373,9 @@ async function handleSubmit() {
       if (!ok) return;
     }
   }
+  let programmed;
+  try { programmed = routineSchedulePatch(editingRoutine.value, form.value.scheduled_date, form.value.schedule_turno); }
+  catch (e) { formError.value = getErrorMessage(e, 'Revisa la programación'); return; }
   saving.value = true;
   formError.value = null;
   const adicionales_json =
@@ -393,9 +399,7 @@ async function handleSubmit() {
     nap_elemento_id: targetKind.value === 'nap' ? form.value.nap_elemento_id || null : null,
     direccion_destino: targetKind.value === 'direccion' ? form.value.direccion_destino.trim() || null : null,
     adicionales_json,
-    scheduled_date: form.value.scheduled_date || null,
-    scheduled_start_at: turno ? dateTimeToIso(form.value.scheduled_date, turno.start) : null,
-    scheduled_end_at: turno ? dateTimeToIso(form.value.scheduled_date, turno.end) : null,
+    ...programmed,
   };
   try {
     if (editingRoutine.value) {
@@ -444,10 +448,6 @@ async function handleDelete(r: Routine) {
   }
 }
 
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  return new Date(`${value}T12:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 </script>
 
 <template>
@@ -481,7 +481,7 @@ function formatDate(value: string | null) {
           </button>
         </div>
       </div>
-      <DateRangeFilter @change="dateRange = $event" />
+      <DateRangeFilter time-zone="America/Lima" @change="dateRange = $event" />
     </div>
 
     <p v-if="routinesStore.error" class="mb-4 text-sm text-red-600">{{ routinesStore.error }}</p>
@@ -503,7 +503,8 @@ function formatDate(value: string | null) {
           <p v-if="r.routine_returns?.length" class="text-xs text-amber-700">↩ Con devoluciones · ver historial</p>
           <div class="text-xs text-slate-500 mb-1">{{ TIPO_RUTINA_LABEL[r.tipo_rutina] }} · {{ targetLabel(r) }}</div>
           <div class="text-xs text-slate-500">
-            {{ formatDate(r.scheduled_date) }} · {{ r.assigned_profile?.full_name || r.assigned_profile?.email || 'Sin asignar' }}
+            {{ r.assigned_profile?.full_name || r.assigned_profile?.email || 'Sin asignar' }}
+            <WorkOrderSchedule job-type="routine" :order="r" />
           </div>
         </div>
       </div>
@@ -541,7 +542,7 @@ function formatDate(value: string | null) {
                 <span v-if="r.subtipo" class="text-slate-400">· {{ r.subtipo }}</span>
               </td>
               <td class="px-4 py-3 text-slate-600">{{ targetLabel(r) }}</td>
-              <td class="px-4 py-3 text-slate-600">{{ formatDate(r.scheduled_date) }}</td>
+              <td class="px-4 py-3 text-slate-600"><WorkOrderSchedule job-type="routine" :order="r" /></td>
               <td class="px-4 py-3">
                 <span class="badge" :class="PRIORITY_CLASS[r.priority]">{{ PRIORITY_LABEL[r.priority] }}</span>
               </td>
@@ -604,6 +605,7 @@ function formatDate(value: string | null) {
               <label class="block text-xs text-slate-600 mb-1">Turno / hora estimada</label>
               <select v-model="form.schedule_turno" class="field-input">
                 <option value="">Sin agendar</option>
+                <option v-if="editingRoutine && routineTurno(editingRoutine)" :value="EXISTING_SCHEDULE">Conservar: {{ scheduleLabel('routine', editingRoutine) }}</option>
                 <option v-for="t in TURNOS" :key="t.value" :value="t.value">{{ t.label }}</option>
               </select>
             </div>

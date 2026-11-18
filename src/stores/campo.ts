@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { scheduleValues } from '@/lib/workOrderSchedule';
 import { assertWorkOrderMutable } from '@/lib/workOrderFinality';
 import { closurePayloadHash, withClosureLock } from '@/lib/closureSubmission';
 import { getErrorMessage } from '@/lib/errors';
@@ -108,7 +109,7 @@ function fromInstallation(i: Installation): TrabajoItem {
     direccion: i.clients?.address ?? null,
     latitude: i.clients?.latitude ?? null,
     longitude: i.clients?.longitude ?? null,
-    fecha: i.scheduled_date ?? i.created_at,
+    fecha: scheduleValues('installation', i).date || null,
     contractId: i.contract_id,
     raw: i,
   };
@@ -126,7 +127,7 @@ function fromTicket(t: Ticket): TrabajoItem {
     direccion: null,
     latitude: null,
     longitude: null,
-    fecha: t.created_at,
+    fecha: scheduleValues('ticket', t).date || null,
     contractId: t.contract_id,
     raw: t,
   };
@@ -158,7 +159,7 @@ function fromRoutine(r: Routine): TrabajoItem {
     direccion: r.direccion_destino,
     latitude: r.clients?.latitude ?? null,
     longitude: r.clients?.longitude ?? null,
-    fecha: r.scheduled_date ?? r.created_at,
+    fecha: scheduleValues('routine', r).date || null,
     // Fase 159 — null en casi toda rutina (sigue sin ser un dato puntual,
     // Fase 101); el subtipo "Traslado de servicio" (Fase 3 OLT, Fase C,
     // ver ESTADO_DESARROLLO.md 13an/13ao) es la unica excepcion real y SI
