@@ -376,6 +376,45 @@ test('PostgreSQL + PostgREST reales (aislados): validacion de la correccion de l
       ).trim();
       assert.equal(Number(sampleCountOut), N, 'las 1200 muestras tambien deben llegar completas');
     });
+
+    // Fase 174c (18/11/2026, alternativa C): la capa de coordinacion bajo
+    // demanda (mikrotikBalancerOnDemand.ts) tambien se valida contra
+    // Postgres/PostgREST reales -- con latencia de red real, la ventana de
+    // "algo ya esta en vuelo" importa mucho mas que contra el cliente falso.
+    await t.test('bajo demanda contra Postgres/PostgREST reales: 2 solicitudes concurrentes comparten UN solo ciclo real', async () => {
+      const { ensureFreshBalancerData, resetBalancerOnDemandStateForTests } = await import('../src/services/mikrotikBalancerOnDemand');
+      resetBalancerOnDemandStateForTests();
+      const device = await insertDevice('balanceador-ondemand-concurrencia');
+      const { db, calls } = createSpy(realClient as unknown as BalancerDbClient);
+
+      const fetchCalls = { count: 0 };
+      const baseFetch = makeFetch();
+      const countingFetch = async <T>(t: unknown, path: string): Promise<T> => {
+        fetchCalls.count += 1;
+        return baseFetch<T>(t, path);
+      };
+
+      await Promise.all([
+        ensureFreshBalancerData(device, db, countingFetch, 0),
+        ensureFreshBalancerData(device, db, countingFetch, 0),
+      ]);
+
+      assert.equal(fetchCalls.count, 3, 'las 2 solicitudes simultaneas deben compartir un unico ciclo real (3 llamadas al router, nunca 6)');
+      const { data: conns } = await realClient.from('mikrotik_balancer_connections').select('id').eq('device_id', device.id);
+      assert.equal(conns?.length, 5, 'el ciclo compartido debe haber escrito las 5 conexiones una sola vez (nunca duplicadas)');
+    });
+
+    await t.test('bajo demanda contra Postgres/PostgREST reales: la ventana de frescura evita un segundo ciclo real inmediato', async () => {
+      const { ensureFreshBalancerData, resetBalancerOnDemandStateForTests } = await import('../src/services/mikrotikBalancerOnDemand');
+      resetBalancerOnDemandStateForTests();
+      const device = await insertDevice('balanceador-ondemand-frescura');
+      const { db, calls } = createSpy(realClient as unknown as BalancerDbClient);
+
+      await ensureFreshBalancerData(device, db, makeFetch(), 9999);
+      const callsAfterFirst = calls.length;
+      await ensureFreshBalancerData(device, db, makeFetch(), 9999);
+      assert.equal(calls.length, callsAfterFirst, 'ninguna llamada real nueva a Supabase dentro de la ventana de frescura');
+    });
   } finally {
     for (const name of [pgrestName, pgName]) {
       try { sh('docker', ['rm', '-f', name]); } catch { /* ya no existia */ }

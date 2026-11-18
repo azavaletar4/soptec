@@ -6,6 +6,7 @@ import { getLastReconcileReport, reconcileMikrotikDevice } from '../services/mik
 import { DEFAULT_MIKROTIK_DEVICE_ROLE, isPppoeAdminRole, isValidMikrotikDeviceRole } from '../mikrotik/deviceRole';
 import { getLiveSnapshot } from '../services/mikrotikBorderTrafficService';
 import { getBalancerConnectionsSnapshot, getBalancerLinkAlerts, getBalancerTrafficHistory } from '../services/mikrotikBalancerDiscoveryService';
+import { ensureFreshBalancerData } from '../services/mikrotikBalancerOnDemand';
 import { BALANCER_HISTORY_RANGES, type BalancerHistoryRange } from '../mikrotik/balancerTrafficSeries';
 
 export const mikrotikRoutes = new Hono();
@@ -26,6 +27,7 @@ mikrotikRoutes.use('*', requireAuth);
 
 interface MikrotikDeviceRow {
   id: string;
+  name: string;
   host: string;
   port: number;
   use_tls: boolean;
@@ -412,15 +414,19 @@ mikrotikRoutes.get('/:id/saturation-alerts', requireRole(...STAFF_READ), async (
 });
 
 // ---- Fase 174: descubrimiento de conexiones WAN del balanceador ----
-// Solo lectura -- sirve lo que ya descubrio/guardo el scheduler
-// (mikrotikBalancerDiscoveryScheduler.ts); esta ruta nunca llama al router
-// directamente ni modifica su configuracion.
+// Fase 174c (18/11/2026): antes de leer, pide un refresco BAJO DEMANDA --
+// `ensureFreshBalancerData` nunca lanza y es idempotente dentro de su
+// ventana de frescura (ver mikrotikBalancerOnDemand.ts), asi que esta ruta
+// sigue siendo, en la practica, "solo lectura" de cara a quien la llama:
+// jamas modifica la configuracion del router, solo puede disparar el mismo
+// ciclo de descubrimiento que ya corria de fondo, un poco antes.
 mikrotikRoutes.get('/:id/balancer/connections', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
   if (device.device_role !== 'borde_balanceador') {
     return c.json({ error: `"${device.host}" no esta clasificado como router balanceador` }, 400);
   }
+  await ensureFreshBalancerData(device);
   try {
     const health = await getBalancerConnectionsSnapshot(device.id);
     return c.json(health);
@@ -447,6 +453,7 @@ mikrotikRoutes.get('/:id/balancer/traffic-history', requireRole(...STAFF_READ), 
   const range: BalancerHistoryRange = isBalancerHistoryRange(rangeParam) ? rangeParam : '1h';
   const port = c.req.query('port') || undefined;
   const connectionId = c.req.query('connectionId') || undefined;
+  await ensureFreshBalancerData(device);
   try {
     const result = await getBalancerTrafficHistory(device.id, range, { port, connectionId });
     return c.json(result);
@@ -457,15 +464,19 @@ mikrotikRoutes.get('/:id/balancer/traffic-history', requireRole(...STAFF_READ), 
 
 // Fase 174b: alertas de caida/recuperacion de enlaces WAN (sesiones PPPoE
 // y puertos fisicos SFP) -- requiere la migracion
-// 20261024150000_fase174_balancer_link_alerts.sql, NO aplicada todavia en
-// produccion (pendiente de autorizacion). Hasta entonces responde 500 con
-// un mensaje claro; el frontend lo muestra sin romper el resto del panel.
+// 20261024150000_fase174_balancer_link_alerts.sql. Verificado en vivo
+// 18/11/2026: la tabla SI esta aplicada en produccion y tiene historial
+// real (103 alertas resueltas a esa fecha) -- el comentario anterior que
+// decia "NO aplicada todavia" estaba desactualizado. Si en algun entorno
+// nuevo todavia no se aplico, esta ruta responde 500 con un mensaje claro
+// y el frontend lo muestra sin romper el resto del panel.
 mikrotikRoutes.get('/:id/balancer/link-alerts', requireRole(...STAFF_READ), async (c) => {
   const device = await getDeviceOrNull(c.req.param('id'));
   if (!device) return c.json({ error: 'Router no encontrado' }, 404);
   if (device.device_role !== 'borde_balanceador') {
     return c.json({ error: `"${device.host}" no esta clasificado como router balanceador` }, 400);
   }
+  await ensureFreshBalancerData(device);
   try {
     const result = await getBalancerLinkAlerts(device.id);
     return c.json(result);

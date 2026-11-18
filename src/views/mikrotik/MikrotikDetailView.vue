@@ -529,9 +529,12 @@ onMounted(async () => {
   }
   if (isBalancer.value) {
     await Promise.all([loadBalancerConnections(), loadBalancerHistory(), loadBalancerLinkAlerts()]);
-    // Cada 60s -- mismo ritmo que el scheduler de descubrimiento del
-    // backend (mikrotikBalancerDiscoveryScheduler.ts); pedir mas seguido
-    // no traeria datos mas nuevos.
+    // Cada 60s -- mientras esta vista este abierta, estas lecturas disparan
+    // (bajo demanda, server/src/services/mikrotikBalancerOnDemand.ts) un
+    // ciclo fresco de descubrimiento/muestreo cada vez que el ultimo
+    // intento tenga mas de 30s. El scheduler de fondo
+    // (mikrotikBalancerDiscoveryScheduler.ts) ya no corre cada 60s -- corre
+    // cada 5 min, solo para nunca perder una alerta con el panel cerrado.
     balancerPoll = setInterval(loadBalancerConnections, 60000);
     balancerHistoryPoll = setInterval(loadBalancerHistory, 60000);
     balancerLinkAlertsPoll = setInterval(loadBalancerLinkAlerts, 60000);

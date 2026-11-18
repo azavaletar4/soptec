@@ -30,6 +30,25 @@ import {
 // comportamiento real: por defecto siempre usa `supabaseAdmin`.
 export type BalancerDbClient = Pick<SupabaseClient, 'from'>;
 
+// Fase 174c (18/11/2026, alternativa C del diagnostico de Log Ingestion de
+// Supabase) -- el ciclo ESENCIAL (conexiones + alertas de caida/
+// recuperacion, ver mikrotikBalancerOnDemand.ts) ahora corre cada 5 minutos
+// por defecto (antes 60s): nunca deja de monitorear de fondo, solo con
+// menos frecuencia -- las MUESTRAS de trafico detalladas se piden bajo
+// demanda cuando alguien abre la vista, no en cada ciclo. Mismo nombre de
+// variable de entorno que antes (quien ya la configuraba explicitamente no
+// pierde su valor), solo cambia el DEFAULT.
+export const BALANCER_ESSENTIAL_INTERVAL_SECONDS = Number(process.env.MIKROTIK_BALANCER_DISCOVERY_INTERVAL_SECONDS ?? 300);
+
+// Cuantos ciclos esenciales perdidos antes de que el panel deje de confiar
+// en el ultimo running/disabled guardado y muestre "estado desconocido"
+// (ver isBalancerDataStale). Se aplica sobre el intervalo REAL configurado
+// (no un numero fijo que asumia 60s) -- con el default de 300s esto da
+// 750s/12.5min, bastante margen para 2-3 ciclos de fondo perdidos, sabiendo
+// que abrir la vista ya dispara un refresco bajo demanda mucho antes de
+// llegar a ese umbral (ver ensureFreshBalancerData).
+const BALANCER_STALE_CYCLE_MULTIPLIER = 2.5;
+
 // Fase 174 — parte con I/O (Supabase + REST) del descubrimiento automatico
 // de conexiones WAN del MikroTik BALANCEADOR. La logica de
 // resolucion/clasificacion vive en mikrotik/balancerDiscovery.ts (sin I/O,
@@ -385,7 +404,7 @@ export async function getBalancerConnectionsSnapshot(deviceId: string): Promise<
   const lastDiscoveryAt = (connections ?? [])
     .filter((c) => !c.removed_at)
     .reduce<string | null>((max, c) => (!max || c.last_seen_at > max ? c.last_seen_at : max), null);
-  const isStale = isBalancerDataStale(lastDiscoveryAt, Date.now());
+  const isStale = isBalancerDataStale(lastDiscoveryAt, Date.now(), BALANCER_ESSENTIAL_INTERVAL_SECONDS * BALANCER_STALE_CYCLE_MULTIPLIER);
 
   if (!connections?.length) return { connections: [], isStale, lastDiscoveryAt };
 
@@ -478,10 +497,11 @@ export async function getBalancerTrafficHistory(
 
 // ---- Fase 174b: alertas de caida/recuperacion de enlaces WAN ----
 // Requiere la migracion 20261024150000_fase174_balancer_link_alerts.sql
-// (tabla mikrotik_balancer_link_alerts) -- preparada pero NO aplicada
-// todavia en produccion (pendiente de autorizacion). Hasta entonces, estas
-// funciones fallan con un error claro ("relation ... does not exist") que
-// la ruta/el frontend manejan sin romper el resto del panel.
+// (tabla mikrotik_balancer_link_alerts). Verificado en vivo 18/11/2026: SI
+// esta aplicada en produccion, con historial real (103 alertas resueltas).
+// Si en algun entorno nuevo todavia no se aplico, estas funciones fallan
+// con un error claro ("relation ... does not exist") que la ruta/el
+// frontend manejan sin romper el resto del panel.
 
 export interface BalancerLinkAlertRow {
   id: string;
