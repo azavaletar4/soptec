@@ -1,9 +1,12 @@
 // Paquete reproducible SOLO BACKEND para la correccion del exceso de Log
-// Ingestion de Supabase (fix/mikrotik-balancer-batch-logs-20261118, commit
-// 414778e). A diferencia de scripts/frontend-consolidation-release.*, este
-// release no toca absolutamente nada de frontend (sin cambios en src/,
-// index.html, vite.config.ts) -- por eso no reutiliza esa herramienta, que
-// siempre empaqueta el arbol de frontend completo sin importar el alcance.
+// Ingestion de Supabase (fix/mikrotik-balancer-batch-logs-20261118):
+// batch de escrituras (414778e) + alternativa C, monitoreo esencial cada
+// 5 min + muestras bajo demanda (2582f43). El unico cambio de frontend de
+// toda la rama es un comentario (MikrotikDetailView.vue, sin cambio de
+// comportamiento) -- a proposito NO se incluye en este paquete, que es
+// estrictamente backend. Por eso tampoco se reutiliza
+// scripts/frontend-consolidation-release.*, que siempre empaqueta el
+// arbol de frontend completo sin importar el alcance declarado.
 //
 // 100% local: no abre SSH, no hace scp, no toca la VM de produccion
 // (192.168.55.201), no ejecuta deploy/update.sh, no aplica migraciones.
@@ -23,7 +26,13 @@ import os from 'node:os';
 // alcance (BACKEND_SOURCES/EVIDENCE_TESTS) este limpio y realmente
 // commiteado -- el commit real queda registrado dinamicamente en el manifiesto.
 const EXPECTED_BRANCH = 'fix/mikrotik-balancer-batch-logs-20261118';
-const BACKEND_SOURCES = ['server/src/mikrotik/balancerDiscovery.ts', 'server/src/services/mikrotikBalancerDiscoveryService.ts'];
+const BACKEND_SOURCES = [
+  'server/src/mikrotik/balancerDiscovery.ts',
+  'server/src/services/mikrotikBalancerDiscoveryService.ts',
+  'server/src/services/mikrotikBalancerDiscoveryScheduler.ts',
+  'server/src/services/mikrotikBalancerOnDemand.ts',
+  'server/src/routes/mikrotik.ts',
+];
 // Tests empaquetados solo como evidencia trazable, nunca se copian a la
 // imagen de produccion (el Dockerfile.backend hace COPY . . de todo el
 // repo en el commit real, los tests viajan igual que hoy -- esto no cambia
@@ -31,6 +40,7 @@ const BACKEND_SOURCES = ['server/src/mikrotik/balancerDiscovery.ts', 'server/src
 const EVIDENCE_TESTS = [
   'server/src/services/__tests__/mikrotikBalancerDiscovery.test.ts',
   'server/src/services/__tests__/mikrotikBalancerDiscoveryBatch.test.ts',
+  'server/src/services/__tests__/mikrotikBalancerOnDemand.test.ts',
   'server/tests/mikrotikBalancerBatchPostgrest.test.ts',
 ];
 
@@ -104,16 +114,26 @@ const manifest = {
   },
   verification: {
     'tsc -p tsconfig.server.json --noEmit': 'PASS (sin errores nuevos; 1 error preexistente no relacionado en src/types/domain.ts, confirmado igual en main)',
-    'node --import tsx --test server/src/services/__tests__/*.test.ts': '383/383 PASS',
+    'node --import tsx --test server/src/services/__tests__/*.test.ts': '391/391 PASS',
     'node --import tsx --test server/src/services/__tests__/mikrotikBalancerDiscoveryBatch.test.ts': '7/7 PASS (cliente Supabase y fetch MikroTik falsos)',
-    'node --import tsx --test server/tests/mikrotikBalancerBatchPostgrest.test.ts': '6/6 PASS (Postgres 17 + PostgREST reales y aislados en Docker, imagenes fijadas por digest, sin tocar produccion)',
+    'node --import tsx --test server/src/services/__tests__/mikrotikBalancerOnDemand.test.ts': '8/8 PASS (concurrencia, ventana de frescura, caida/recuperacion, fallo de red -- cliente/fetch falsos)',
+    'node --import tsx --test server/tests/mikrotikBalancerBatchPostgrest.test.ts': '8/8 PASS (Postgres 17 + PostgREST reales y aislados en Docker, imagenes fijadas por digest, sin tocar produccion)',
   },
+  envVerifiedOnVm: {
+    checkedAt: '2026-11-18',
+    MIKROTIK_BALANCER_DISCOVERY_INTERVAL_SECONDS: 'no definida en .env ni en el contenedor en ejecucion -- usara el default del codigo (300s) tras desplegar',
+    MIKROTIK_BALANCER_ON_DEMAND_FRESHNESS_SECONDS: 'no definida -- usara el default del codigo (30s)',
+    MIKROTIK_BALANCER_RETENTION_DAYS: 'no definida -- usara el default del codigo (45 dias)',
+    MIKROTIK_BALANCER_DISCOVERY_ENABLED: 'no definida -- el scheduler queda habilitado por defecto',
+  },
+  requiresSqlMigration: false,
+  requiresMikrotikConfigChange: false,
   rollback: {
     procedure:
       'Este release NUNCA debe desplegarse solo: siempre junto a la imagen backend que ya corre en produccion en ese momento. ' +
       'Antes de construir/promover la imagen candidata, el procedimiento de 5 fases del proyecto (prepare/build/deploy/verify/rollback, ver ESTADO_DESARROLLO.md) ' +
       'debe respaldar primero la imagen backend EN VIVO (su tag/sha256 se confirma en el momento real del deploy, nunca se fija de antemano en este paquete). ' +
-      'Si verify falla despues de desplegar, revertir sirve el backend a esa imagen respaldada -- cero migraciones SQL en este release, por lo que el rollback no requiere ningun paso de base de datos.',
+      'Si verify falla despues de desplegar, revertir sirve el backend a esa imagen respaldada -- cero migraciones SQL en este release, por lo que el rollback no requiere ningun paso de base de datos ni de configuracion de MikroTik.',
     requiresSqlRollback: false,
   },
 };
