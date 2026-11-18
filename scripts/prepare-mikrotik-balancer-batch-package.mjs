@@ -17,7 +17,11 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync
 import path from 'node:path';
 import os from 'node:os';
 
-const EXPECTED_COMMIT = '414778e4bf268d54032014adf7d61d74524e8ec5';
+// A proposito NO hay un commit esperado fijo escrito aqui: un script que se
+// commitea a si mismo no puede conocer de antemano el hash del commit que
+// lo incluye. En su lugar se valida la RAMA (estable) y que el arbol en
+// alcance (BACKEND_SOURCES/EVIDENCE_TESTS) este limpio y realmente
+// commiteado -- el commit real queda registrado dinamicamente en el manifiesto.
 const EXPECTED_BRANCH = 'fix/mikrotik-balancer-batch-logs-20261118';
 const BACKEND_SOURCES = ['server/src/mikrotik/balancerDiscovery.ts', 'server/src/services/mikrotikBalancerDiscoveryService.ts'];
 // Tests empaquetados solo como evidencia trazable, nunca se copian a la
@@ -41,32 +45,27 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 // autorizado, ni algo que no coincida con lo ya commiteado) ---
 const headCommit = git('rev-parse', 'HEAD');
 const headBranch = git('rev-parse', '--abbrev-ref', 'HEAD');
-if (headCommit !== EXPECTED_COMMIT) throw new Error(`COMMIT_MISMATCH: HEAD=${headCommit}, esperado=${EXPECTED_COMMIT}`);
 if (headBranch !== EXPECTED_BRANCH) throw new Error(`BRANCH_MISMATCH: HEAD en "${headBranch}", esperado "${EXPECTED_BRANCH}"`);
 const dirtyScoped = git('status', '--porcelain', '--', ...BACKEND_SOURCES);
 if (dirtyScoped) throw new Error(`WORKING_TREE_DIRTY_IN_SCOPE:\n${dirtyScoped}`);
 // Nunca empaquetar un commit que todavia arrastra cambios de otras fases
 // (Altas/respaldos) -- confirma que esos archivos NO estan en este commit.
-const committedFiles = git('ls-tree', '-r', '--name-only', EXPECTED_COMMIT).split('\n');
+const committedFiles = git('ls-tree', '-r', '--name-only', headCommit).split('\n');
 for (const f of [...BACKEND_SOURCES, ...EVIDENCE_TESTS]) {
   if (!committedFiles.includes(f)) throw new Error(`FILE_NOT_IN_COMMIT: ${f}`);
 }
-const forbiddenHints = committedFiles.filter((f) => /altas|iptv-mode|respaldo-automatico/i.test(f) && !f.startsWith('supabase/migrations/'));
-// (busqueda informativa, no bloqueante: el commit base es "main" ya
-// publicado, no debe traer nada de esas fases; si algo coincide, se
-// reporta para revision manual en vez de fallar en silencio)
 
 // --- Tarball determinista SOLO de los 2 archivos backend (mismo patron de
 // git archive + mtime fijo + umask fijo que el resto del proyecto, para
 // que el tar sea byte-a-byte reproducible sin importar la maquina/hora). ---
-const commitEpoch = git('show', '-s', '--format=%ct', EXPECTED_COMMIT);
+const commitEpoch = git('show', '-s', '--format=%ct', headCommit);
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'mikrotik-balancer-pkg-'));
 let tarBytes;
 try {
   const tarPath = path.join(tmp, 'backend-source.tar');
   execFileSync('git', [
     '-c', 'tar.umask=0022',
-    'archive', EXPECTED_COMMIT, '--format=tar', `--mtime=@${commitEpoch}`, '--output=' + tarPath,
+    'archive', headCommit, '--format=tar', `--mtime=@${commitEpoch}`, '--output=' + tarPath,
     ...BACKEND_SOURCES,
   ]);
   tarBytes = readFileSync(tarPath);
@@ -88,7 +87,7 @@ const manifest = {
   kind: 'backend-only-package',
   localOnly: true,
   productionWrites: 0,
-  sourceCommit: EXPECTED_COMMIT,
+  sourceCommit: headCommit,
   sourceBranch: EXPECTED_BRANCH,
   toolHash,
   generatedAt: new Date().toISOString(),
