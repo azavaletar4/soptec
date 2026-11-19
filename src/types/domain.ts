@@ -234,6 +234,7 @@ export interface Prospect {
   updated_at: string;
   zones?: Pick<Zone, 'id' | 'name'> | null;
   plans?: Pick<Plan, 'id' | 'name'> | null;
+  converted_client?: Pick<Client, 'id'> | null;
 }
 
 export interface ProspectFollowup {

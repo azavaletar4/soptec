@@ -13,7 +13,7 @@ export interface ProspectConversionReceipt {
 }
 type ConversionClient = Pick<Client, 'document_type' | 'document_number' | 'first_name' | 'last_name' | 'phone' | 'phone_2' | 'email' | 'address' | 'status'>;
 
-const PROSPECT_SELECT = '*, zones(id, name), plans(id, name)';
+const PROSPECT_SELECT = '*, zones(id, name), plans(id, name), converted_client:clients!converted_client_id(id)';
 
 /** Fase 140 — Prospectos y seguimiento comercial. Estructuras separadas de
  *  clients/service_contracts (ver migracion); solo se vuelve cliente real al
@@ -25,9 +25,20 @@ export const useProspectsStore = defineStore('prospects', () => {
   async function fetchProspects() {
     loading.value = true;
     try {
-      const { data, error } = await supabase.from('prospects').select(PROSPECT_SELECT).order('created_at', { ascending: false });
-      if (error) throw error;
-      prospects.value = (data ?? []) as unknown as Prospect[];
+      // PostgREST limita cada respuesta: cargar todas las páginas mantiene
+      // búsqueda, filtros y contadores completos sin depender del límite por defecto.
+      const rows: Prospect[] = [];
+      const pageSize = 500;
+      for (let from = 0; ; ) {
+        const { data, error, count } = await supabase.from('prospects').select(PROSPECT_SELECT, { count: 'exact' })
+          .order('created_at', { ascending: false }).order('id').range(from, from + pageSize - 1);
+        if (error) throw error;
+        rows.push(...((data ?? []) as unknown as Prospect[]));
+        if (!data?.length) break;
+        from += data.length;
+        if (count !== null && from >= count) break;
+      }
+      prospects.value = rows;
     } finally {
       loading.value = false;
     }
@@ -89,6 +100,16 @@ export const useProspectsStore = defineStore('prospects', () => {
     return (data ?? []) as unknown as ProspectFollowup[];
   }
 
+  /** API de PostgreSQL: valida rol activo, versión y relaciones en la misma transacción. */
+  async function deleteProspect(prospect: Prospect) {
+    const { data, error } = await supabase.rpc('delete_empty_prospect', {
+      p_prospect_id: prospect.id, p_expected_updated_at: prospect.updated_at, p_confirm: true,
+    });
+    if (error) throw error;
+    if (data?.deleted_id !== prospect.id) throw new Error('No se confirmó la eliminación. Actualiza el listado.');
+    prospects.value = prospects.value.filter(p => p.id !== prospect.id);
+  }
+
   async function addFollowup(prospectId: string, notas: string): Promise<ProspectFollowup> {
     const { data, error } = await supabase
       .from('prospect_followups')
@@ -109,5 +130,6 @@ export const useProspectsStore = defineStore('prospects', () => {
     markConverted,
     fetchFollowups,
     addFollowup,
+    deleteProspect,
   };
 });

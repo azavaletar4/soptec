@@ -3,8 +3,11 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import { useProspectsStore } from '@/stores/prospects';
+import { useAuthStore } from '@/stores/auth';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useToast } from '@/composables/useToast';
+import { useConfirm } from '@/composables/useConfirm';
+import { filterProspects, isConvertedProspect, isProspectDue, prospectCounts, type ProspectFilter } from '@/lib/prospectManagement';
 import { getErrorMessage } from '@/lib/errors';
 import { waLink } from '@/lib/phone';
 import { fechaLimaISO } from '@/lib/asistenciaReglas';
@@ -19,14 +22,20 @@ import type { Prospect, ProspectEstado, ProspectFollowup } from '@/types/domain'
 
 const router = useRouter();
 const prospectsStore = useProspectsStore();
+const auth = useAuthStore();
 const catalogs = useCatalogsStore();
 const toast = useToast();
+const { confirmDialog } = useConfirm();
 
 const searchQuery = ref('');
-const estadoFilter = ref<ProspectEstado | 'all'>('all');
+const estadoFilter = ref<ProspectFilter>('active');
 
 onMounted(async () => {
-  await Promise.all([prospectsStore.fetchProspects(), catalogs.fetchZones(), catalogs.fetchPlans()]);
+  try {
+    await Promise.all([prospectsStore.fetchProspects(), catalogs.fetchZones(), catalogs.fetchPlans()]);
+  } catch (e) {
+    toast.error(getErrorMessage(e, 'Error al cargar los prospectos'));
+  }
 });
 
 const ESTADO_LABEL: Record<ProspectEstado, string> = {
@@ -55,23 +64,37 @@ const CANAL_LABEL: Record<string, string> = {
 };
 
 function isDue(p: Prospect): boolean {
-  if (!p.proximo_seguimiento || p.estado === 'convertido' || p.estado === 'no_interesado') return false;
-  return p.proximo_seguimiento <= fechaLimaISO();
+  return isProspectDue(p, fechaLimaISO());
 }
 
-const filtered = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase();
-  return prospectsStore.prospects
-    .filter((p) => estadoFilter.value === 'all' || p.estado === estadoFilter.value)
-    .filter((p) => !q || `${p.full_name} ${p.phone}`.toLowerCase().includes(q))
-    .sort((a, b) => Number(isDue(b)) - Number(isDue(a)) || b.created_at.localeCompare(a.created_at));
-});
+const filtered = computed(() => filterProspects(prospectsStore.prospects, estadoFilter.value, searchQuery.value, fechaLimaISO()));
 
-const counts = computed(() => ({
-  interesados: prospectsStore.prospects.filter((p) => p.estado === 'interesado').length,
-  pendientes: prospectsStore.prospects.filter(isDue).length,
-  convertidos: prospectsStore.prospects.filter((p) => p.estado === 'convertido').length,
-}));
+const counts = computed(() => prospectCounts(prospectsStore.prospects, fechaLimaISO()));
+
+const deletingId = ref<string | null>(null);
+async function deleteProspect(p: Prospect) {
+  if (!auth.isSuperAdmin || deletingId.value || isConvertedProspect(p)) return;
+  deletingId.value = p.id;
+  try {
+    const history = await prospectsStore.fetchFollowups(p.id);
+    if (history.length) {
+      toast.error('Este prospecto tiene seguimientos. Se conserva su historial y no se puede eliminar.');
+      return;
+    }
+    if (!(await confirmDialog({
+      title: 'Eliminar prospecto erróneo',
+      message: `Se eliminará a ${p.full_name} (${p.phone}). Solo se permite si no tiene seguimientos, conversión ni relaciones.`,
+      danger: true,
+      confirmLabel: 'Eliminar prospecto',
+    }))) return;
+    await prospectsStore.deleteProspect(p);
+    toast.success('Prospecto eliminado');
+  } catch (e) {
+    toast.error(getErrorMessage(e, 'No se pudo eliminar el prospecto. Actualiza el listado y revisa sus relaciones.'));
+  } finally {
+    deletingId.value = null;
+  }
+}
 
 // ---- Alta/edicion ----
 const showModal = ref(false);
@@ -169,6 +192,7 @@ const savingFollowup = ref(false);
 
 async function openFollowups(p: Prospect) {
   showFollowups.value = p;
+  followups.value = [];
   newFollowupNotas.value = '';
   loadingFollowups.value = true;
   try {
@@ -211,7 +235,7 @@ function followupAuthorName(f: ProspectFollowup): string {
 
     <div class="grid grid-cols-3 gap-3 mb-5">
       <div class="kpi-tile bg-sky-500/10">
-        <div><p class="text-xs text-slate-500">Interesados</p><p class="text-xl font-semibold">{{ counts.interesados }}</p></div>
+        <div><p class="text-xs text-slate-500">Prospectos activos</p><p class="text-xl font-semibold">{{ counts.activos }}</p></div>
       </div>
       <div class="kpi-tile bg-amber-500/10">
         <div><p class="text-xs text-slate-500">Pendientes de seguimiento</p><p class="text-xl font-semibold">{{ counts.pendientes }}</p></div>
@@ -223,13 +247,15 @@ function followupAuthorName(f: ProspectFollowup): string {
 
     <div class="flex flex-wrap gap-2 mb-4">
       <input v-model="searchQuery" placeholder="Buscar por nombre o celular..." class="field-input flex-1 min-w-[200px]" />
-      <select v-model="estadoFilter" class="field-input w-auto">
-        <option value="all">Todos los estados</option>
-        <option v-for="(label, value) in ESTADO_LABEL" :key="value" :value="value">{{ label }}</option>
+      <select v-model="estadoFilter" aria-label="Filtrar prospectos" class="field-input w-auto">
+        <option value="active">Activos</option>
+        <option value="all">Todos</option>
+        <option v-for="(label, value) in ESTADO_LABEL" :key="value" :value="value">{{ value === 'convertido' ? 'Convertidos' : label }}</option>
       </select>
     </div>
 
     <p v-if="prospectsStore.loading" class="text-sm text-slate-500">Cargando...</p>
+    <p v-else class="text-xs text-slate-500 mb-3">{{ filtered.length }} resultados de {{ counts.total }} prospectos. Los contadores incluyen todo el registro. Activos: interesados, por contactar y en negociación.</p>
 
     <div class="table-shell">
       <table class="w-full text-sm min-w-[760px]">
@@ -261,7 +287,7 @@ function followupAuthorName(f: ProspectFollowup): string {
             </td>
             <td class="px-4 py-3 text-slate-600">{{ p.plans?.name ?? '—' }}</td>
             <td class="px-4 py-3 text-slate-600">{{ CANAL_LABEL[p.canal_contacto] ?? p.canal_contacto }}</td>
-            <td class="px-4 py-3"><span class="badge" :class="ESTADO_CLASS[p.estado]">{{ ESTADO_LABEL[p.estado] }}</span></td>
+            <td class="px-4 py-3"><span class="badge" :class="ESTADO_CLASS[isConvertedProspect(p) ? 'convertido' : p.estado]">{{ ESTADO_LABEL[isConvertedProspect(p) ? 'convertido' : p.estado] }}</span></td>
             <td class="px-4 py-3">
               <span :class="isDue(p) ? 'text-red-600 font-medium' : 'text-slate-500'">{{ p.proximo_seguimiento ?? '—' }}</span>
               <span v-if="isDue(p)" class="ml-1 text-[11px]">⚠️ vencido/hoy</span>
@@ -269,9 +295,12 @@ function followupAuthorName(f: ProspectFollowup): string {
             <td class="px-4 py-3 text-right whitespace-nowrap">
               <button class="text-xs text-sky-700 hover:underline mr-3" @click="openFollowups(p)">Seguimientos</button>
               <button class="text-xs text-sky-700 hover:underline mr-3" @click="openEdit(p)">Editar</button>
-              <button v-if="p.estado !== 'convertido'" class="text-xs text-green-700 hover:underline" @click="convertToClient(p)">
+              <RouterLink v-if="p.converted_client?.id && p.converted_client.id === p.converted_client_id" :to="`/clientes/${p.converted_client.id}`" class="text-xs text-green-700 hover:underline mr-3">Ver cliente</RouterLink>
+              <span v-else-if="isConvertedProspect(p)" class="text-xs text-slate-500 mr-3">Cliente vinculado no disponible</span>
+              <button v-if="!isConvertedProspect(p)" class="text-xs text-green-700 hover:underline mr-3" @click="convertToClient(p)">
                 Convertir en cliente
               </button>
+              <button v-if="auth.isSuperAdmin" class="text-xs text-red-700 hover:underline disabled:opacity-50 disabled:cursor-not-allowed" :disabled="!!deletingId || isConvertedProspect(p)" :title="isConvertedProspect(p) ? 'Se conserva el historial de conversión' : 'Eliminar solo si no tiene relaciones ni seguimientos'" @click="deleteProspect(p)">{{ deletingId === p.id ? 'Verificando...' : 'Eliminar' }}</button>
             </td>
           </tr>
           <tr v-if="!prospectsStore.loading && !filtered.length">
@@ -304,7 +333,7 @@ function followupAuthorName(f: ProspectFollowup): string {
             <select v-model="form.canal_contacto" class="field-input">
               <option v-for="c in CANAL_OPTIONS" :key="c" :value="c">{{ CANAL_LABEL[c] }}</option>
             </select>
-            <select v-model="form.estado" class="field-input">
+            <select v-model="form.estado" :disabled="!!editing && isConvertedProspect(editing)" class="field-input">
               <option v-for="(label, value) in ESTADO_LABEL" :key="value" :value="value">{{ label }}</option>
             </select>
             <div>
