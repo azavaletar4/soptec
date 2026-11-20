@@ -1,0 +1,193 @@
+{
+  "source": "Previously verified real PostgreSQL catalogue, 2026-11-20; no new production audit",
+  "capturedAt": "2026-11-20T04:28:08.372985+00:00",
+  "serverVersion": "17.6",
+  "table": {
+    "name": "fo_cables",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "default": "gen_random_uuid()",
+        "identity": "",
+        "nullable": false,
+        "generated": ""
+      },
+      {
+        "name": "codigo",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "nullable": false,
+        "generated": ""
+      },
+      {
+        "name": "tipo",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "nullable": false,
+        "generated": ""
+      },
+      {
+        "name": "hilos_total",
+        "type": "integer",
+        "default": null,
+        "identity": "",
+        "nullable": false,
+        "generated": ""
+      },
+      {
+        "name": "metraje",
+        "type": "numeric",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      },
+      {
+        "name": "path",
+        "type": "jsonb",
+        "default": null,
+        "identity": "",
+        "nullable": false,
+        "generated": ""
+      },
+      {
+        "name": "origen_olt_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      },
+      {
+        "name": "origen_infra_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      },
+      {
+        "name": "destino_olt_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      },
+      {
+        "name": "destino_infra_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      },
+      {
+        "name": "is_active",
+        "type": "boolean",
+        "default": "true",
+        "identity": "",
+        "nullable": false,
+        "generated": ""
+      },
+      {
+        "name": "notes",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      },
+      {
+        "name": "created_by",
+        "type": "uuid",
+        "default": "auth.uid()",
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "identity": "",
+        "nullable": false,
+        "generated": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "default": "now()",
+        "identity": "",
+        "nullable": false,
+        "generated": ""
+      },
+      {
+        "name": "kml_ref",
+        "type": "text",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      },
+      {
+        "name": "import_batch_id",
+        "type": "uuid",
+        "default": null,
+        "identity": "",
+        "nullable": true,
+        "generated": ""
+      }
+    ],
+    "policies": [
+      {
+        "name": "fo_cables_staff_only",
+        "check": "(current_user_role() = ANY (ARRAY['SUPERADMIN'::user_role, 'ADMIN'::user_role, 'TECNICO_RED'::user_role, 'SOPORTE'::user_role, 'FACTURACION'::user_role]))",
+        "roles": [
+          "authenticated"
+        ],
+        "using": "(current_user_role() = ANY (ARRAY['SUPERADMIN'::user_role, 'ADMIN'::user_role, 'TECNICO_RED'::user_role, 'SOPORTE'::user_role, 'FACTURACION'::user_role]))",
+        "command": "*",
+        "permissive": true
+      }
+    ],
+    "updatedAtTrigger": {
+      "name": "trg_fo_cables_updated_at",
+      "enabled": "O",
+      "function": "set_updated_at()",
+      "definition": "CREATE TRIGGER trg_fo_cables_updated_at BEFORE UPDATE ON fo_cables FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    }
+  },
+  "functions": [
+    {
+      "name": "current_user_role",
+      "definition": "CREATE OR REPLACE FUNCTION public.current_user_role()\n RETURNS user_role\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\n  select role from public.profiles where id = auth.uid() and active;\r\n$function$\n",
+      "md5": "67d13ed6e8c78b73b623b8a76d325761"
+    },
+    {
+      "name": "set_updated_at",
+      "definition": "CREATE OR REPLACE FUNCTION public.set_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nbegin\r\n  new.updated_at = now();\r\n  return new;\r\nend;\r\n$function$\n",
+      "md5": "8de7ae383447503e8949149bfb3f0efb"
+    }
+  ],
+  "userRoleEnum": {
+    "name": "user_role",
+    "labels": [
+      "SUPERADMIN",
+      "ADMIN",
+      "TECNICO_RED",
+      "SOPORTE",
+      "FACTURACION",
+      "CLIENTE"
+    ]
+  },
+  "publishedAdditionalColumn": {
+    "name": "map_removed_at",
+    "type": "timestamp with time zone",
+    "nullable": true
+  },
+  "productionRowsIncluded": false
+}

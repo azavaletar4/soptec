@@ -12,6 +12,7 @@ import { useToast } from '@/composables/useToast';
 const props = defineProps<{
   canDelete?: boolean;
   deleting?: boolean;
+  canEditRoute?: boolean;
   cable: FoCable;
   infraElementos: InfraElemento[];
   oltDevices: OltDevice[];
@@ -20,6 +21,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   edit: [];
+  'edit-route': [];
   delete: [];
   changed: [];
   'open-splice': [infraElementoId: string];
@@ -108,7 +110,8 @@ async function eliminarHilo() {
           <button class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" @click="cable.destino_infra_id && emit('open-splice', cable.destino_infra_id)">
             📍 {{ destinoNombre }}
           </button>
-          <button class="ml-auto btn-secondary text-xs" @click="emit('edit')">Editar cable</button>
+          <button class="ml-auto btn-secondary text-xs" @click="emit('edit')">Editar datos del cable</button>
+          <button v-if="canEditRoute" class="btn-primary text-xs" @click="emit('edit-route')">Editar trazado</button>
           <button v-if="canDelete" class="text-red-600 hover:underline text-xs" :disabled="deleting" @click="emit('delete')">Eliminar</button>
         </div>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import AppLayout from '@/components/layout/AppLayout.vue';
@@ -12,6 +12,10 @@ import { useFoFibraStore, type TraceResult } from '@/stores/foFibra';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
 import { canDeleteMapPassive, confirmMapRemoval } from '@/lib/mapPassiveDeletion';
+import { canEditCableRoute, cloneRoute, validateRoute } from '@/lib/cableRoute';
+import { networkBasemap, satelliteConfigured, type NetworkBasemap } from '@/lib/mapBasemaps';
+import { useConfirm } from '@/composables/useConfirm';
+import CableRouteEditor from './CableRouteEditor.vue';
 import CableFormModal from './CableFormModal.vue';
 import CableHilosModal from './CableHilosModal.vue';
 import SpliceDiagramModal from './SpliceDiagramModal.vue';
@@ -32,6 +36,14 @@ const auth = useAuthStore();
 const canDeletePassive = computed(() => canDeleteMapPassive(auth.role));
 const mapInfra = computed(() => infraStore.elementos.filter(e => !e.map_removed_at));
 const toast = useToast();
+const canEditRoute = computed(() => canEditCableRoute(auth.role));
+const routeCable = ref<FoCable | null>(null);
+const routeSaving = ref(false);
+const routeError = ref<string | null>(null);
+const selectedBasemap = ref<NetworkBasemap>('streets');
+const mapKey = import.meta.env.VITE_MAPTILER_KEY ?? '';
+const satelliteEnabled = satelliteConfigured(mapKey, import.meta.env.VITE_MAPTILER_LICENSED ?? '');
+let basemap: L.TileLayer | null = null;
 
 const loading = ref(true);
 const showOlt = ref(true);
@@ -94,6 +106,7 @@ async function applyMove(action: MoveAction, coords: LatLng) {
 const undoing = ref(false);
 
 async function undo() {
+  if (routeCable.value) return;
   const action = undoStack.value.pop();
   if (!action) return;
   undoing.value = true;
@@ -109,6 +122,7 @@ async function undo() {
 }
 
 async function redo() {
+  if (routeCable.value) return;
   const action = redoStack.value.pop();
   if (!action) return;
   undoing.value = true;
@@ -124,6 +138,7 @@ async function redo() {
 }
 
 function onHistoryKeydown(e: KeyboardEvent) {
+  if (routeCable.value) return;
   const tag = (e.target as HTMLElement)?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (!(e.ctrlKey || e.metaKey) || undoing.value) return;
@@ -141,7 +156,7 @@ function renderOltMarkers() {
   oltLayer.clearLayers();
   if (!showOlt.value) return;
   for (const d of oltsWithGps.value) {
-    const marker = L.marker([d.lat as number, d.lng as number], { icon: teardropIcon('#2563eb', OLT_GLYPH), draggable: true });
+    const marker = L.marker([d.lat as number, d.lng as number], { icon: teardropIcon('#2563eb', OLT_GLYPH), draggable: !routeCable.value });
     marker.bindTooltip(permanentLabel(d.name, 'OLT'), { permanent: true, direction: 'top', offset: [0, -30], className: 'leaflet-label-custom' });
     marker.bindPopup(
       `<div style="font-size:13px"><b>${d.name}</b><br/>${d.host}:${d.telnet_port}<br/><a href="/olt/${d.id}" style="color:#38bdf8">Ver OLT →</a></div>`,
@@ -166,7 +181,7 @@ function renderMikrotikMarkers() {
   mikrotikLayer.clearLayers();
   if (!showMikrotik.value) return;
   for (const d of mikrotiksWithGps.value) {
-    const marker = L.marker([d.latitude as number, d.longitude as number], { icon: teardropIcon('#7c3aed', MIKROTIK_GLYPH), draggable: true });
+    const marker = L.marker([d.latitude as number, d.longitude as number], { icon: teardropIcon('#7c3aed', MIKROTIK_GLYPH), draggable: !routeCable.value });
     marker.bindTooltip(permanentLabel(d.name, 'MikroTik'), { permanent: true, direction: 'top', offset: [0, -30], className: 'leaflet-label-custom' });
     marker.bindPopup(
       `<div style="font-size:13px"><b>${d.name}</b><br/>${d.host}<br/><a href="/mikrotik/${d.id}" style="color:#38bdf8">Ver router →</a></div>`,
@@ -195,7 +210,7 @@ function renderInfraMarkers() {
   if (!showInfra.value) return;
   for (const el of mapInfra.value) {
     if (el.latitude == null || el.longitude == null) continue;
-    const marker = L.marker([el.latitude, el.longitude], { icon: infraIcon(el), draggable: true });
+    const marker = L.marker([el.latitude, el.longitude], { icon: infraIcon(el), draggable: !routeCable.value });
     marker.bindTooltip(permanentLabel(el.name, INFRA_LABEL[el.tipo]), { permanent: true, direction: 'top', offset: [0, -10], className: 'leaflet-label-custom' });
 
     let hoverHtml = `<b>${el.name}</b><br/><span style="opacity:0.8">${INFRA_LABEL[el.tipo]}</span>`;
@@ -278,9 +293,25 @@ function fitToMarkers() {
   }
 }
 
+function setBasemap() {
+  if (!map) return;
+  const definition = networkBasemap(selectedBasemap.value, mapKey, import.meta.env.VITE_MAPTILER_LICENSED ?? '');
+  basemap?.remove();
+  let failed = false;
+  basemap = L.tileLayer(definition.url, { attribution: definition.attribution, maxNativeZoom: definition.maxNativeZoom, maxZoom: 22 });
+  basemap.on('tileerror', () => {
+    if (failed || selectedBasemap.value === 'streets') return;
+    failed = true;
+    selectedBasemap.value = 'streets';
+    toast.error('No se pudo cargar la imagen satelital. Se conserva el mapa de calles y tu trabajo.');
+  });
+  basemap.addTo(map);
+}
+watch(selectedBasemap, setBasemap);
+
 onMounted(async () => {
   map = L.map(mapEl.value as HTMLDivElement, { zoomControl: true }).setView([-1.83, -78.18], 6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(map);
+  setBasemap();
   oltLayer = L.layerGroup().addTo(map);
   mikrotikLayer = L.layerGroup().addTo(map);
   infraLayer = L.layerGroup().addTo(map);
@@ -325,6 +356,15 @@ watch(showOlt, renderOltMarkers);
 watch(showMikrotik, renderMikrotikMarkers);
 watch(showInfra, renderInfraMarkers);
 watch(showCables, renderCables);
+watch(routeCable, () => { renderOltMarkers(); renderMikrotikMarkers(); renderInfraMarkers(); renderCables(); });
+
+onBeforeRouteLeave(async () => {
+  if (!routeCable.value) return true;
+  if (routeSaving.value) return false;
+  const leave = await useConfirm().confirmDialog({ title: 'Salir del editor de trazado', message: 'Se descartará el trazado sin guardar.', confirmLabel: 'Descartar trazado', focusCancel: true });
+  if (leave) routeCable.value = null;
+  return leave;
+});
 
 function goTo(path: string) {
   router.push(path);
@@ -494,6 +534,7 @@ function renderCables() {
   cableLayer.clearLayers();
   if (!showCables.value) return;
   for (const cable of fibra.cables) {
+    if (cable.id === routeCable.value?.id) continue;
     if (!cable.path?.length) continue;
     const style = CABLE_STYLE[cable.tipo];
     const line = L.polyline(cable.path as L.LatLngExpression[], {
@@ -516,6 +557,7 @@ const drawMode = ref<FoCableTipo | null>(null);
 const drawPoints = ref<LatLngPoint[]>([]);
 
 function startDrawMode(tipo: FoCableTipo) {
+  if (routeCable.value) return;
   cancelDrawing();
   drawMode.value = tipo;
   drawPoints.value = [];
@@ -615,8 +657,38 @@ const showCableHilos = ref(false);
 const inspectingCable = ref<FoCable | null>(null);
 
 function openCableHilos(cable: FoCable) {
+  if (routeCable.value) {
+    toast.error('Guarda o cancela el trazado antes de seleccionar otro cable.');
+    return;
+  }
   inspectingCable.value = cable;
   showCableHilos.value = true;
+}
+
+function startRouteEdit() {
+  const cable = inspectingCable.value;
+  if (!cable || !map || !canEditRoute.value || cable.map_removed_at) return;
+  try {
+    validateRoute(cable.path);
+    if (!cable.updated_at) throw new Error('Recarga el cable antes de editar.');
+    cancelDrawing();
+    showCableHilos.value = false;
+    routeError.value = null;
+    routeCable.value = { ...cable, path: cloneRoute(cable.path) };
+  } catch (e) { toast.error(getErrorMessage(e, 'No se puede editar este trazado')); }
+}
+
+async function saveRoute(points: LatLngPoint[]) {
+  if (!routeCable.value || routeSaving.value || !canEditRoute.value) return;
+  routeSaving.value = true;
+  routeError.value = null;
+  try {
+    await fibra.updateCableRoute(routeCable.value, points);
+    routeCable.value = null;
+    clearTrace();
+    toast.success('Trazado guardado. Se conservaron los datos del cable y su metraje registrado.');
+  } catch (e) { routeError.value = getErrorMessage(e, 'No se pudo guardar el trazado'); }
+  finally { routeSaving.value = false; }
 }
 
 function openCableEditFromHilos() {
@@ -706,10 +778,10 @@ function clearTrace() {
         >
           <span class="w-3 h-0.5 rounded-full inline-block" style="background:#0ea5e9"></span> Cables ({{ fibra.cables.length }})
         </button>
-        <button class="btn-primary text-xs" @click="openInfraModal()">+ Elemento pasivo</button>
+        <button class="btn-primary text-xs" :disabled="!!routeCable" @click="openInfraModal()">+ Elemento pasivo</button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
-          :disabled="!undoStack.length"
+          :disabled="!undoStack.length || !!routeCable"
           title="Deshacer (Ctrl+Z)"
           @click="undo"
         >
@@ -717,7 +789,7 @@ function clearTrace() {
         </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
-          :disabled="!redoStack.length"
+          :disabled="!redoStack.length || !!routeCable"
           title="Rehacer (Ctrl+Y)"
           @click="redo"
         >
@@ -726,6 +798,7 @@ function clearTrace() {
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium"
           :class="drawMode === 'troncal' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+          :disabled="!!routeCable"
           @click="drawMode === 'troncal' ? cancelDrawing() : startDrawMode('troncal')"
         >
           ✏️ Trazar troncal
@@ -733,11 +806,25 @@ function clearTrace() {
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium"
           :class="drawMode === 'ramal' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
+          :disabled="!!routeCable"
           @click="drawMode === 'ramal' ? cancelDrawing() : startDrawMode('ramal')"
         >
           ✏️ Trazar ramal
         </button>
       </div>
+    </div>
+
+    <CableRouteEditor v-if="routeCable && map" :key="routeCable.id" :map="map" :cable="routeCable" :saving="routeSaving" :error="routeError" :allowed="canEditRoute" @save="saveRoute" @cancel="routeCable = null" />
+
+    <div class="flex flex-wrap items-center gap-3 mb-3 text-xs">
+      <label class="flex items-center gap-2">Vista del mapa
+        <select v-model="selectedBasemap" class="field-input !w-auto" aria-label="Vista del mapa">
+          <option value="streets">Calles</option>
+          <option value="satellite" :disabled="!satelliteEnabled">Satélite</option>
+          <option value="hybrid" :disabled="!satelliteEnabled">Híbrido</option>
+        </select>
+      </label>
+      <span v-if="!satelliteEnabled" class="text-slate-500">Satélite e Híbrido pendientes de habilitar el proveedor cartográfico.</span>
     </div>
 
     <div v-if="drawMode" class="rounded-xl border border-sky-500/40 bg-sky-500/10 p-3 mb-3 text-xs flex flex-wrap items-center gap-3">
@@ -759,10 +846,10 @@ function clearTrace() {
     <div v-if="oltsWithoutGps.length || mikrotiksWithoutGps.length" class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-3 mb-3 text-xs">
       <span class="text-slate-600">Sin ubicar en el mapa — clic para colocar en el centro actual, luego arrastra para ajustar:</span>
       <div class="flex flex-wrap gap-2 mt-2">
-        <button v-for="d in oltsWithoutGps" :key="d.id" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-100 text-sky-600" @click="placeOlt(d.id)">
+        <button v-for="d in oltsWithoutGps" :key="d.id" :disabled="!!routeCable" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-100 text-sky-600" @click="placeOlt(d.id)">
           📍 {{ d.name }} (OLT)
         </button>
-        <button v-for="d in mikrotiksWithoutGps" :key="d.id" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-100 text-violet-600" @click="placeMikrotik(d.id)">
+        <button v-for="d in mikrotiksWithoutGps" :key="d.id" :disabled="!!routeCable" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-100 text-violet-600" @click="placeMikrotik(d.id)">
           📍 {{ d.name }} (MikroTik)
         </button>
       </div>
@@ -901,7 +988,9 @@ function clearTrace() {
       :can-delete="canDeletePassive"
       :deleting="cableDeleting"
       @close="showCableHilos = false"
+      :can-edit-route="canEditRoute"
       @edit="openCableEditFromHilos"
+      @edit-route="startRouteEdit"
       @delete="handleDeleteCable(inspectingCable!)"
       @open-splice="openSpliceModal"
       @changed="clearTrace"
