@@ -14,6 +14,8 @@ import { useAuthStore } from '@/stores/auth';
 import { canDeleteMapPassive, confirmMapRemoval } from '@/lib/mapPassiveDeletion';
 import { canEditCableRoute, cloneRoute, validateRoute } from '@/lib/cableRoute';
 import { networkBasemap, satelliteConfigured, type NetworkBasemap } from '@/lib/mapBasemaps';
+import { googleTilesEnabled } from '@/lib/googleMapTiles';
+import { GoogleTilesLayer } from '@/lib/googleTilesLayer';
 import { useConfirm } from '@/composables/useConfirm';
 import CableRouteEditor from './CableRouteEditor.vue';
 import CableFormModal from './CableFormModal.vue';
@@ -42,8 +44,13 @@ const routeSaving = ref(false);
 const routeError = ref<string | null>(null);
 const selectedBasemap = ref<NetworkBasemap>('streets');
 const mapKey = import.meta.env.VITE_MAPTILER_KEY ?? '';
-const satelliteEnabled = satelliteConfigured(mapKey, import.meta.env.VITE_MAPTILER_LICENSED ?? '');
+const googleSelected = import.meta.env.VITE_NETWORK_MAP_PROVIDER === 'google';
+const googleConfig = { key: import.meta.env.VITE_GOOGLE_MAPS_KEY ?? '', authorized: import.meta.env.VITE_GOOGLE_MAPS_AUTHORIZED ?? '' };
+const googleEnabled = googleTilesEnabled(googleConfig);
+const satelliteEnabled = googleSelected ? googleEnabled : satelliteConfigured(mapKey, import.meta.env.VITE_MAPTILER_LICENSED ?? '');
+const basemapError = ref<string | null>(null);
 let basemap: L.TileLayer | null = null;
+let googleBasemap: GoogleTilesLayer | null = null;
 
 const loading = ref(true);
 const showOlt = ref(true);
@@ -295,6 +302,16 @@ function fitToMarkers() {
 
 function setBasemap() {
   if (!map) return;
+  if (googleSelected) {
+    if (!googleEnabled) {
+      basemapError.value = 'Google Maps está preparado, pendiente de autorización y clave del proveedor.';
+      return;
+    }
+    basemapError.value = null;
+    googleBasemap ??= new GoogleTilesLayer(map, googleConfig, message => { basemapError.value = message || null; if (message) toast.error(message); });
+    void googleBasemap.setMode(selectedBasemap.value);
+    return;
+  }
   const definition = networkBasemap(selectedBasemap.value, mapKey, import.meta.env.VITE_MAPTILER_LICENSED ?? '');
   basemap?.remove();
   let failed = false;
@@ -348,6 +365,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onHistoryKeydown);
+  googleBasemap?.dispose();
   map?.remove();
   map = null;
 });
@@ -818,14 +836,16 @@ function clearTrace() {
 
     <div class="flex flex-wrap items-center gap-3 mb-3 text-xs">
       <label class="flex items-center gap-2">Vista del mapa
-        <select v-model="selectedBasemap" class="field-input !w-auto" aria-label="Vista del mapa">
+        <select v-model="selectedBasemap" class="field-input !w-auto" aria-label="Vista del mapa" :disabled="googleSelected && !googleEnabled">
           <option value="streets">Calles</option>
           <option value="satellite" :disabled="!satelliteEnabled">Satélite</option>
           <option value="hybrid" :disabled="!satelliteEnabled">Híbrido</option>
         </select>
       </label>
       <span v-if="!satelliteEnabled" class="text-slate-500">Satélite e Híbrido pendientes de habilitar el proveedor cartográfico.</span>
+      <span v-if="googleSelected && googleEnabled" class="text-slate-500">Fondo: Google Maps · Infraestructura propia: SmartRayco. No digitalizar elementos de las imágenes.</span>
     </div>
+    <p v-if="basemapError" role="alert" class="text-sm text-amber-800 mb-3">{{ basemapError }}</p>
 
     <div v-if="drawMode" class="rounded-xl border border-sky-500/40 bg-sky-500/10 p-3 mb-3 text-xs flex flex-wrap items-center gap-3">
       <span>
