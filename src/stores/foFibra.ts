@@ -3,6 +3,8 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { deleteMapPassive, type MapRemovalPreview, type MapRemovalResult } from '@/lib/mapPassiveDeletion';
+import { persistCableRoute } from '@/lib/cableRoute';
+import { useAuthStore } from '@/stores/auth';
 import type { FoCable, FoFusion, FoHiloEstado, FoNapPuerto, FoFusionDestinoTipo, FoHiloEstadoTipo } from '@/types/domain';
 
 export interface TraceHop {
@@ -111,6 +113,13 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     if (error) throw error;
     const cable = data as FoCable;
     const idx = cables.value.findIndex((c) => c.id === id);
+    if (idx !== -1) cables.value[idx] = cable;
+    return cable;
+  }
+
+  async function updateCableRoute(original: FoCable, points: FoCable['path']) {
+    const cable = await persistCableRoute(supabase, original, points, useAuthStore().role);
+    const idx = cables.value.findIndex(c => c.id === cable.id);
     if (idx !== -1) cables.value[idx] = cable;
     return cable;
   }
@@ -386,6 +395,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     fetchFusiones,
     createCable,
     updateCable,
+    updateCableRoute,
     deleteCable,
     deleteHilo,
     applyMapRemoval,

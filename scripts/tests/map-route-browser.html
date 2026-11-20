@@ -1,0 +1,43 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Mapa: pruebas sintéticas del editor</title><div id="app"></div>
+<script type="module">
+import {createApp,h,ref,nextTick} from 'vue';
+import {createPinia} from 'pinia';
+import {createRouter,createMemoryHistory} from 'vue-router';
+import RedMapView from '../../src/views/mapa/RedMapView.vue';
+import {useAuthStore} from '../../src/stores/auth';
+import {useInfraElementosStore} from '../../src/stores/infraElementos';
+import {useFoFibraStore} from '../../src/stores/foFibra';
+import {useOltStore} from '../../src/stores/olt';
+import {useMikrotikStore} from '../../src/stores/mikrotik';
+import {useClientsStore} from '../../src/stores/clients';
+import {useCatalogsStore} from '../../src/stores/catalogs';
+import {supabase} from '../../src/lib/supabase';
+import L from 'leaflet';
+import '../../src/style.css';
+const original={id:'20000000-0000-4000-8000-000000000001',codigo:'FIBRA SINTETICA',tipo:'troncal',hilos_total:12,metraje:987,path:[[-8.1,-79.01],[-8.101,-79.011],[-8.102,-79.01]],is_active:true,map_removed_at:null,origen_olt_id:null,destino_olt_id:null,origen_infra_id:'nap',destino_infra_id:'mufa',notes:'CONSERVAR',updated_at:'2026-11-20T10:00:00Z'};
+const db={cable:JSON.parse(localStorage.getItem('synthetic-route')||'null')||structuredClone(original),infra:[{id:'nap',name:'NAP SINTETICA',tipo:'caja_nap',latitude:-8.1,longitude:-79.01,is_active:true,photo_path:null},{id:'mufa',name:'MUFA SINTETICA',tipo:'manga',latitude:-8.102,longitude:-79.01,is_active:true,photo_path:null}]};
+const calls=[];let writes=0,attempts=0;
+supabase.from=table=>{
+ const filters=[];let payload=null;
+ const matches=r=>filters.every(([k,v])=>k==='path'?JSON.stringify(r[k])===v:(r[k]??null)===v);
+ const builder={select(){return this},order(){return this},eq(k,v){filters.push([k,v]);return this},is(k,v){filters.push([k,v]);return this},update(p){if(table!=='fo_cables')throw Error('TABLA_NO_PERMITIDA');payload=p;return this},
+  async maybeSingle(){attempts++;calls.push({table,payload,filters});if(!matches(db.cable))return {data:null,error:null};if(Object.keys(payload).join()!=='path')throw Error('SOLO_PATH');db.cable={...db.cable,path:structuredClone(payload.path),updated_at:new Date(Date.parse(db.cable.updated_at)+1000).toISOString()};writes++;localStorage.setItem('synthetic-route',JSON.stringify(db.cable));return {data:structuredClone(db.cable),error:null}},
+  then(resolve){const data=table==='fo_cables'?[db.cable]:table==='infra_elementos'?db.infra:[];resolve({data:structuredClone(data.filter(matches)),error:null})}};
+ return builder;
+};
+supabase.rpc=async(name,payload)=>{calls.push({rpc:name,payload});if(name!=='preview_map_removal')throw Error('NO_REAL_DELETION');return {data:{id:payload.p_id,kind:payload.p_kind,hilo:payload.p_hilo,token:'synthetic',clientes:1,asignaciones:1,ordenes:1,conexiones:1,empalmes:1},error:null}};
+const view=ref(),app=createApp({setup:()=>()=>h(RedMapView,{ref:view})});app.use(createPinia());
+const auth=useAuthStore(),infra=useInfraElementosStore(),fibra=useFoFibraStore(),olts=useOltStore(),mikro=useMikrotikStore(),clients=useClientsStore(),catalogs=useCatalogsStore();
+auth.role='ADMIN';
+olts.devices=[{id:'olt-synthetic',name:'OLT SINTETICA',host:'synthetic.invalid',lat:-8.1005,lng:-79.009}];
+mikro.devices=[{id:'mikro-synthetic',name:'MIKRO SINTETICO',host:'synthetic.invalid',latitude:-8.1015,longitude:-79.009}];
+olts.fetchDevices=async()=>{};mikro.fetchDevices=async()=>{};clients.fetchClients=async()=>{};catalogs.fetchZones=async()=>{};
+const router=createRouter({history:createMemoryHistory(),routes:[{path:'/mapa/red',component:RedMapView}]});app.use(router);await router.push('/mapa/red');await router.isReady();app.mount('#app');await nextTick();
+function draft(){let route;view.value.map.eachLayer(l=>{if(l instanceof L.Polyline&&l.options.color==='#a21caf')route=l.getLatLngs().map(p=>[p.lat,p.lng]);});return route;}
+window.harness={view,auth,fibra,db,calls,original,draft,get writes(){return writes},get attempts(){return attempts},
+ async open(){view.value.openCableHilos(fibra.cables[0]);await nextTick()},
+ async free(){db.cable={...structuredClone(original),origen_infra_id:null,destino_infra_id:null};localStorage.setItem('synthetic-route',JSON.stringify(db.cable));await fibra.fetchCables()},
+ concurrent(){db.cable={...db.cable,path:[...db.cable.path.map(p=>[...p])],updated_at:new Date(Date.parse(db.cable.updated_at)+1000).toISOString()};db.cable.path[1][0]-=.0001;localStorage.setItem('synthetic-route',JSON.stringify(db.cable));},
+ tileError(){view.value.map.eachLayer(l=>{if(l instanceof L.TileLayer)l.fire('tileerror')})},L};
+window.ready=true;
+</script></html>
