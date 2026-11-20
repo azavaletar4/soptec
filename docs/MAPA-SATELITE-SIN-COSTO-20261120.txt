@@ -1,0 +1,114 @@
+SMART RAYCO — VISTA SATELITAL CON COSTO DE PROVEEDOR S/0
+Fecha: 20/11/2026. Estado: IMPLEMENTADO Y VALIDADO LOCALMENTE; NO PUBLICADO.
+Rama: fix/mapa-trazado-capas-20261120. Base: 78fc035.
+Se mantienen los avances 17c031c y 6caea4d del editor de trazado.
+
+DECISIÓN Y ALCANCE
+Leaflet 1.9.4 + OpenStreetMap permanecen. Calles es el fondo inicial.
+Satélite usa exclusivamente EOxCloudless 2016. Híbrido agrega el overlay
+transparente de nombres y vías de EOX, construido con datos OSM/Natural Earth.
+No hay cuenta, API key, tarjeta, suscripción ni facturación que activar.
+No se añadieron dependencias ni infraestructura contratada.
+
+CONDICIONES VERIFICADAS EN FUENTES OFICIALES
+EOX confirma que su mosaico 2016 bajo CC BY 4.0 puede ser fondo de aplicaciones
+comerciales y portales B2B. Exige atribución, uso razonable y no revender las
+teselas originales como un conjunto GIS independiente. El servicio público no
+tiene SLA ni cuota numérica garantizada: las ráfagas pueden limitarse o bloquearse.
+Las capas 2018+ requieren licencia comercial pagada y quedan excluidas.
+El servicio cartográfico permite incorporar sus overlays con créditos y enlace.
+Se muestra la atribución a EOX/Copernicus 2016/CC BY 4.0; en Híbrido también
+OSM y el renderizado EOX/MapServer. Deben conservarse los créditos en capturas.
+
+https://cloudless.eox.at/documentation/faq
+https://maps.eox.at/
+https://tiles.maps.eox.at/wmts/1.0.0/WMTSCapabilities.xml
+
+LÍMITES REALES DE UTILIDAD
+Es una imagen de 2016, con detalle aproximado de 10 m, no una ortofoto reciente
+de alta resolución. Sirve como contexto territorial y urbano. No permite
+identificar postes, acometidas ni cambios recientes. El mapa muestra este aviso.
+Se limita la solicitud satelital al zoom 14; acercar hasta el zoom del editor
+amplía el mosaico existente y NO añade detalle. Las etiquetas dependen del
+contenido del overlay de EOX, sin promesa de actualización o cobertura de cada vía.
+Referencia técnica de la resolución original:
+https://eox.at/2017/03/sentinel-2-cloudless-original-tiles-available/
+La licencia actual seleccionada consta en las capacidades WMTS y FAQ; el artículo
+histórico sirve únicamente como referencia de resolución, no de licencia actual.
+
+OTRAS ALTERNATIVAS COMPROBADAS
+- MapTiler Free: 100.000 solicitudes/mes, pero limitado a uso personal/no comercial
+  o desarrollo. No autoriza la operación comercial permanente de este panel.
+  https://www.maptiler.com/cloud/pricing/
+  https://www.maptiler.com/terms/cloud/
+- Stadia Free: 200.000 créditos/mes; uso comercial no permitido. La prueba de
+  14 días sin tarjeta no equivale a un plan satelital comercial gratuito permanente.
+  https://stadiamaps.com/pricing/
+  https://docs.stadiamaps.com/limits/
+- Google Map Tiles: exige facturación activa, aun cuando exista un cupo gratuito.
+  Se excluye bajo esta decisión. No se utilizan accesos no oficiales.
+  https://developers.google.com/maps/documentation/tile/usage-and-billing
+- SentinelMap: anuncia 50.000 teselas/mes beta, CC BY-SA 4.0 y uso comercial,
+  con registro GitHub y clave. Solo declara 4,13 millones de km² de cobertura;
+  no se confirmó cobertura operativa en Perú ni se creó una cuenta. No integrado.
+  https://www.sentinelmap.eu/
+No se confirmó otra alternativa de alta resolución que satisfaga todas las
+condiciones para este panel. No se promete equivalencia visual con Google.
+
+IMPLEMENTACIÓN
+- src/lib/zeroCostBasemaps.ts: lista cerrada de URLs HTTPS oficiales gratuitas.
+  WMTS identifica s2cloudless_3857 como el mosaico 2016; overlay_bright_3857
+  es la capa transparente. Orden WMTS: zoom/fila/columna, compatible con Leaflet.
+- src/views/mapa/RedMapView.vue: selector de tres vistas, créditos y aviso de
+  antigüedad/resolución. Solo reemplaza fondos; conserva capas de red, cámara,
+  filtros, selección y borrador. No cambia el metraje registrado.
+  Tras error EOX vuelve a OSM sin reintentos automáticos ni proveedor de pago.
+  Un fallo OSM muestra aviso conservando infraestructura y edición.
+  Carga tras finalizar desplazamientos, sin buffer fuera de vista ni precarga
+  durante zoom. Se usa el caché HTTP normal del navegador, sin descarga masiva.
+- deploy/map-route.env.example: explica que no se necesitan variables.
+  Las antiguas variables Google/MapTiler se IGNORAN en el Mapa de Red. No pueden
+  reactivar servicios por accidente. Adaptadores anteriores conservados en código
+  e historial; ninguna importación activa de esos adaptadores en RedMapView.
+- scripts/tests/zero-cost-basemap-browser.mjs: comprobación vigente de capas.
+  El test anterior del editor solo actualiza expectativas del proveedor; sus
+  escenarios de geometría no se repitieron. La prueba antigua de integración
+  Google indica SKIP bajo la política S/0; no representa una validación Google.
+
+PRUEBAS Y EVIDENCIA
+1. Servicio real: capacidades WMTS y dos teselas, sin credenciales, HTTP 200.
+   Coordenada sintética de referencia cerca de Trujillo, zoom 14, x=4596/y=8561.
+   JPEG satelital 256x256: 9.271 bytes. PNG overlay 256x256: 8.787 bytes,
+   canal alfa con píxeles transparentes y visibles. Inspección visual correcta.
+   Headers: Cache-Control max-age=604800. Hashes en JSON adjunto.
+   Archivos originales conservados fuera del código fuente en:
+   scripts/inventory-auth-lab/runtime/map-route-editor/eox-*
+2. Navegador: 11 comprobaciones PASS con base, infraestructura y mosaicos
+   sintéticos/interceptados. No son pruebas de disponibilidad futura de EOX.
+   Conservación de cámara, selección, filtros, cajas/cables y borrador; híbrido
+   transparente bajo las capas propias; créditos/aviso; zoom máximo solicitado;
+   cancelar sin escribir; guardar solo path y recargar geometría sintética;
+   fallback gratuito por fallo; recuperación; flags antiguos no activan pagos.
+   109 solicitudes interceptadas; ninguna solicitud real durante ese navegador.
+   Ejecutar localmente: node scripts/tests/zero-cost-basemap-browser.mjs
+3. npm.cmd run build: PASS, vue-tsc + Vite, 446 módulos. El chunk RedMapView
+   contiene EOX y OSM y no contiene endpoints Google/MapTiler. Hash en JSON.
+4. git diff --check y sintaxis de los tres scripts de navegador: PASS.
+   Las comprobaciones amplias de editor, RLS y SQL ya aprobadas no se repitieron.
+
+INTEGRIDAD Y ESTADO
+Sin cambios en cableRoute.ts, CableRouteEditor.vue, stores, SQL/RLS,
+mapPassiveDeletion.ts, dominios de clientes/contratos/órdenes ni dependencias.
+Se conserva el control de permisos y concurrencia existente para guardar path.
+No hubo datos reales modificados, bajas, operaciones físicas, publicación,
+migración, merge ni push. El checkout principal se dejó con sus cambios previos.
+Producción no fue consultada ni modificada en esta tarea.
+
+PENDIENTE
+Revisar localmente si el detalle de 2016 resulta suficiente para la operación.
+La publicación requerirá una autorización nueva; esta entrega no la ejecuta.
+Antes de publicarlo, volver a comprobar que el identificador WMTS continúa
+correspondiendo al año 2016/CC BY 4.0 y que las condiciones públicas se mantienen.
+Si falla el servicio gratuito se conserva Calles; no se contratará otro servicio.
+Para imágenes recientes con detalle de postes no se ha acreditado una solución
+que cumpla el presupuesto S/0: queda fuera de lo implementado.

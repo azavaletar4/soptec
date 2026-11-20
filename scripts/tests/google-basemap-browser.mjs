@@ -4,11 +4,17 @@ import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import {spawn} from 'node:child_process';
 import {mkdtemp} from 'node:fs/promises';
-import {realpathSync,mkdirSync,writeFileSync} from 'node:fs';
+import {realpathSync,mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import assert from 'node:assert/strict';
 const unauthorized=process.argv.includes('--unauthorized'),root=realpathSync.native(process.cwd()),outDir='dist/google-provider-test-'+process.pid;
+// Keep this historical integration fixture for the authorized prototype.
+// Current owner policy disconnects paid adapters from the application.
+if(readFileSync(join(root,'src/views/mapa/RedMapView.vue'),'utf8').includes("from '@/lib/zeroCostBasemaps'")){
+ console.log(JSON.stringify({status:'SKIP',reason:'Owner S/0 policy: Google adapter inactive; run scripts/tests/zero-cost-basemap-browser.mjs',liveGoogleRequests:0}));
+ process.exit(0);
+}
 const expose={name:'google-evaluation-fixture',enforce:'pre',transform(code,id){
  if(id.endsWith('/components/layout/AppLayout.vue'))return '<script setup>import ConfirmHost from "../ConfirmHost.vue";import ToastHost from "../ToastHost.vue";</script><template><main><slot/></main><ConfirmHost/><ToastHost/></template>';
  if(id.endsWith('/views/mapa/RedMapView.vue'))return code.replace('</script>','defineExpose({openCableHilos,get map(){return map},routeCable,selectedBasemap,showOlt,showCables});\n</script>');

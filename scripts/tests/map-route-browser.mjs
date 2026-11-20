@@ -38,8 +38,9 @@ try{
  const vertex2=`document.querySelector('.route-vertex[title^="Vértice 2"]')`;
  await c('Page.navigate',{url:base+'scripts/tests/map-route-browser.html'});await until('window.ready===true && harness.fibra.cables.length===1');await until('document.querySelectorAll(".leaflet-interactive").length>0');
  if(disabled){
-  assert.equal(await evaluate('document.querySelector("option[value=satellite]").disabled'),true);assert.equal(await evaluate('document.querySelector("option[value=hybrid]").disabled'),true);
-  assert.equal(tiles.some(u=>u.includes('api.maptiler.com')),false);checks.push('NO_KEY_NO_LICENSE_NO_REQUESTS');
+  // Legacy --no-satellite flag now checks availability without credentials.
+  assert.equal(await evaluate('document.querySelector("option[value=satellite]").disabled'),false);assert.equal(await evaluate('document.querySelector("option[value=hybrid]").disabled'),false);
+  assert.equal(tiles.some(u=>u.includes('api.maptiler.com')||u.includes('tile.googleapis.com')),false);checks.push('FREE_VIEWS_ENABLED_WITHOUT_PROVIDER_KEY');
  }else{
   await open();const original=await evaluate('harness.db.cable.path');
   assert.equal(await evaluate('document.querySelectorAll(".route-locked").length'),2);
@@ -57,7 +58,7 @@ try{
   await evaluate('harness.concurrent()');await click(button('Guardar trazado'));await until('document.body.innerText.includes("El cable cambió")');assert.equal(await evaluate('harness.writes'),0);assert.notEqual(await evaluate('harness.draft()'),null);checks.push('CONCURRENT_EDIT_CONFLICT_KEEPS_DRAFT_NO_OVERWRITE');
   await click(button('Cancelar trazado'));await evaluate('harness.free()');await open();await click(button('Mover recorrido completo'));const freeBefore=await evaluate('harness.draft()');await drag('document.querySelector(".route-move-handle")',25,-15);const freeAfter=await evaluate('harness.draft()');assert.notDeepEqual(freeAfter,freeBefore);for(let i=0;i<freeAfter.length;i++){assert.ok(Math.abs((freeAfter[i][0]-freeBefore[i][0])-(freeAfter[0][0]-freeBefore[0][0]))<0.0000002)}checks.push('TRANSLATE_FREE_ROUTE_ONLY');
   await evaluate('harness.auth.role=null');await until(button('Guardar trazado')+'.disabled');assert.equal(await evaluate('harness.writes'),0);await click(button('Cancelar trazado'));await evaluate('harness.open()');await until('document.querySelectorAll(".modal-overlay").length>0');assert.equal(await evaluate(button('Editar trazado')+'!==undefined'),false);checks.push('ROLE_REVOCATION_DISABLES_SAVE_AND_ENTRY');
-  assert.ok(tiles.some(u=>u.includes('/satellite-v4/')));assert.ok(tiles.some(u=>u.includes('/hybrid-v4/')));
+  assert.ok(tiles.some(u=>u.includes('/s2cloudless_3857/')));assert.ok(tiles.some(u=>u.includes('/overlay_bright_3857/')));
   // Simulate a provider error after the successful switching checks.
   await evaluate('harness.view.value.selectedBasemap="satellite"');await until('harness.view.value.selectedBasemap==="satellite"');await evaluate('harness.tileError()');await until('harness.view.value.selectedBasemap==="streets"');checks.push('PROVIDER_FAILURE_RETURNS_TO_STREETS');
  }
