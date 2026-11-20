@@ -1,0 +1,167 @@
+SMART RAYCO — EDITOR DE TRAZADO Y CAPAS CARTOGRÁFICAS
+Fecha: 20/11/2026. Estado: IMPLEMENTACIÓN LOCAL VALIDADA.
+Commit de implementación: 17c031c.
+Rama: fix/mapa-trazado-capas-20261120.
+Base: eb23f96bb831e12dfc5bbbdad3e4f26748369cca, frontend publicado.
+Worktree: D:/smartrayco/scripts/inventory-auth-lab/runtime/map-route-editor/source
+La rama original y los trabajos del propietario permanecen intactos.
+No hubo despliegue, migración, merge, push ni operaciones contra equipos.
+
+DIAGNÓSTICO ESPECÍFICO
+Vue 3, Pinia y Leaflet 1.9.4 ya estaban instalados. Fondo de calles OSM.
+RedMapView tenía creación de polilíneas por clic, formulario de datos,
+inspección de hilos, filtros OLT/MikroTik/pasivos/cables y trazabilidad óptica.
+No había edición de vértices de un cable existente ni selector de fondos.
+Las geometrías son JSONB en fo_cables.path: arrays [latitud,longitud].
+La persistencia existente usa Supabase/PostgREST; updated_at lo mantiene
+el trigger PostgreSQL set_updated_at(). updateCable no compara versión.
+
+Se reutilizó el catálogo productivo verificado el 20/11, sin otra auditoría.
+fo_cables tiene RLS y política fo_cables_staff_only, con USING/WITH CHECK
+para SUPERADMIN, ADMIN, TECNICO_RED, SOPORTE y FACTURACION activos a través
+de current_user_role(). CLIENTE, usuarios inactivos y anónimos no pasan.
+El acceso de ruta existente /mapa/red excluye TECNICO_RED (NOT_TECNICO);
+no se amplió esa ruta ni se cambió ninguna política o privilegio.
+Las bajas lógicas y sus RPC/advertencias SUPERADMIN se conservan.
+
+FASE 1 — IMPLEMENTADA
+Seleccionar cable > Editar trazado, separado de Editar datos del cable.
+El editor encuadra el recorrido y muestra puntos numerados arrastrables.
+Los controles + insertan vértices; se puede seleccionar y quitar uno
+intermedio, conservando al menos dos puntos y geometría no degenerada.
+Los extremos que tienen origen/destino asociado permanecen fijos en sus
+coordenadas originales. No se cambian las referencias de conexión.
+Mover recorrido completo requiere ambos extremos libres y un control ↔
+explícito; desplazar el fondo del mapa no mueve el cable.
+Guardar, Cancelar y Restaurar trazado original están disponibles.
+La longitud geográfica es 2D, calculada en metros y mostrada por separado.
+No se cambia metraje, código, capacidad, numeración, fusiones o conexiones.
+Durante el editor se deshabilitan el arrastre de infraestructura y las
+acciones de posicionamiento/deshacer del mapa para evitar interferencias.
+El cambio de página advierte que se descarta el borrador; la recarga del
+navegador tiene advertencia nativa si hay un trazado modificado.
+
+Guardar realiza UN PATCH que escribe solamente path. Exige id, updated_at
+original exacto, path original y map_removed_at IS NULL en la misma operación.
+PostgreSQL vuelve a evaluar el predicado bajo concurrencia. Una respuesta
+sin fila se trata como conflicto/permiso revocado/baja lógica: no se fuerza
+otro guardado, no se revierte al dato viejo y se conserva el borrador.
+La acción comprueba nuevamente el rol antes del transporte; RLS decide
+el permiso real. No se añadieron RPC, tablas, columnas ni migraciones.
+
+FASE 2 — SELECTOR IMPLEMENTADO; IMÁGENES REALES PENDIENTES DE CUENTA
+Calles usa la URL oficial actual https://tile.openstreetmap.org/{z}/{x}/{y}.png
+y atribución visible enlazada a OpenStreetMap contributors.
+Satélite e Híbrido están preparados con raster XYZ oficial de MapTiler:
+satellite-v4 y hybrid-v4, formato JPG de 256 px. No se añadió un SDK.
+Al cambiar se sustituye solo el TileLayer: permanecen overlays, vista,
+zoom, filtros, selección y borrador. Un error de imagen vuelve a Calles.
+Ambos fondos requieren VITE_MAPTILER_KEY y VITE_MAPTILER_LICENSED=true.
+Ejemplo sin credenciales: deploy/map-route.env.example.
+No se encontró ni usó una clave real; no se contrató un servicio.
+Sin configuración se ven las opciones deshabilitadas y no se consume API.
+Se preservan las atribuciones de MapTiler y de OSM para las etiquetas híbridas.
+No hay URLs privadas, claves demo ajenas, descargas masivas ni proxy de tiles.
+
+CONDICIONES Y COSTOS CONSULTADOS EN FUENTES OFICIALES
+MapTiler Flex figura en USD 30/mes, antes de impuestos, con 500.000
+peticiones/mes incluidas y extras de USD 0,15 por 1.000 peticiones.
+Ejemplo orientativo: 600.000 peticiones en un mes => USD 45 antes de impuestos.
+Leaflet raster consume peticiones de tiles; no hay que presupuestarlo como
+si se utilizara la sesión del SDK MapTiler. Reconfirmar tarifa/plan al activar.
+Free se presenta para pruebas/PoC/uso personal o no comercial: no se asumió
+que permita operar gratuitamente un ISP comercial.
+Usar clave pública del frontend restringida al origen autorizado y claves
+separadas para pruebas/producción; VITE no oculta claves al navegador.
+La cuenta debe permitir las imágenes y la utilización comercial concreta.
+OSM público es best effort, sin SLA; respetar atribución, Referer y caché.
+No se añadieron prefetch, cachés offline ni eliminación de atribuciones.
+
+PRUEBAS EJECUTADAS — PASS
+1. npm.cmd run build: vue-tsc y Vite completos; 446 módulos.
+2. node --import tsx --test src/lib/__tests__/cableRoute.test.ts:
+   9 casos: path exclusivo, conflicto, extremos, traslación, geometrías,
+   roles/bajas, errores del servidor, activación y endpoints/atribuciones.
+3. node --test scripts/tests/cable-route-postgres.mjs:
+   10 escenarios (11 resultados incluyendo el contenedor de node:test).
+   Se reprodujeron columnas, helper real, política RLS y trigger updated_at
+   del catálogo verificado en PostgreSQL 17 local sin red. Solo fixtures.
+   Dos operadores simultáneos: uno guarda y el otro obtiene cero filas.
+   CLIENTE, anónimo e inactivo rechazados; retiro y datos concurrentes seguros.
+4. node scripts/tests/map-route-browser.mjs:
+   12 comprobaciones con Vue/Leaflet reales y ratón CDP: arrastrar, agregar,
+   quitar, restaurar, guardar path, recargar, cancelar, cambiar los tres fondos,
+   conservar filtros/vista/selección/borrador, mover mapa, conflicto,
+   trasladar recorrido libre, revocar rol y recuperar Calles ante error.
+5. node scripts/tests/map-route-browser.mjs --no-satellite:
+   1 comprobación adicional: opciones deshabilitadas y cero solicitudes
+   al proveedor sin clave/licencia.
+6. git diff --check: PASS.
+Los datos, la persistencia del navegador y las imágenes de prueba son
+sintéticos. Chrome usa proxy que bloquea red externa; los tiles se responden
+localmente. NO se validó la cobertura/calidad de imágenes reales de MapTiler,
+ni se usaron autenticación, escrituras, equipos o borrados productivos.
+No se repitieron suites generales ni las anteriores auditorías de publicación.
+Vite avisa de chunks grandes preexistentes; la compilación termina correctamente.
+
+ARCHIVOS DE PRODUCTO
+src/lib/cableRoute.ts
+src/lib/mapBasemaps.ts
+src/stores/foFibra.ts
+src/views/mapa/CableRouteEditor.vue
+src/views/mapa/CableHilosModal.vue
+src/views/mapa/RedMapView.vue
+Pruebas: src/lib/__tests__/cableRoute.test.ts, scripts/tests/cable-route-postgres.mjs,
+scripts/tests/fixtures/cable-route-permission-proof.json,
+scripts/tests/map-route-browser.html, scripts/tests/map-route-browser.mjs.
+Configuración documentada: deploy/map-route.env.example.
+Informe y resultados: este archivo y MAPA-TRAZADO-CAPAS-PRUEBAS-20261120.json.
+El fixture del catálogo contiene solo definiciones de esquema; ninguna fila real.
+package.json, lockfile, backend, migraciones y demás módulos no se modificaron.
+
+FASE 3 — PROPUESTAS, SIN IMPLEMENTAR
+Prioridad 1. Resaltado al pasar el cursor: halo temporal en la línea y código;
+limpiar al salir. No escribir geometría ni cambiar selección permanente.
+Prioridad 1. Cables superpuestos: selector de candidatos al pulsar un tramo
+y halo del elegido. En una fase posterior, offset solo visual por nivel de zoom;
+nunca guardar el offset como una ruta geográfica nueva.
+Prioridad 2. Trazado por postes/puntos: reutilizar infra de tipo poste para
+captura por proximidad configurable y previsualización. Para vínculos durables
+intermedios, diseñar primero el modelo de anclas y qué ocurre al mover/retirar
+un poste; requiere una propuesta separada de SQL y permisos antes de migrar.
+Prioridad 1. Medición: herramienta temporal de distancia 2D por clic,
+sin escrituras, con borrar/terminar y sin sustituir metraje de inventario.
+La medición con relieve requeriría otra fuente/costo y no se asumirá aquí.
+Prioridad 2. Capas de infraestructura por tipo: NAP/MUFA/poste/reserva y
+troncal/ramal, con contador/leyenda. Empezar como preferencia local del usuario,
+sin alterar ni mezclar permisos o visibilidad de datos por RLS.
+Prioridad 2. Seguimiento de fibras/empalmes: mejorar la ruta óptica ya
+existente con secuencia de saltos, color/índice de hilo y continuidad/falla
+explícita. Mantener distinción entre recorrido geográfico y conexión óptica.
+OZmap sirve como referencia de interacción; no se copiaron marca, interfaz,
+activos ni código, ni se implementaron divisiones/uniones de cable o cajas.
+
+PENDIENTE ANTES DE UNA PUBLICACIÓN FUTURA
+Autorizar un nuevo paquete frontend; no editar ni reutilizar el paquete
+sellado de eliminación como si incluyera estas mejoras.
+Elegir/confirmar proveedor, plan comercial y clave restringida; verificar
+cobertura real en las zonas de SmartRayco y condiciones de uso vigentes.
+Si se activa MapTiler, pasar las dos variables al constructor de la imagen
+y añadir sus hashes al manifiesto de configuración de la nueva publicación.
+El builder canónico existente registra tres variables anteriores; no se
+modificó el proceso de publicación en este trabajo local.
+Mantener separadas las conexiones reales de los extremos y la representación
+GPS: esta fase fija las coordenadas existentes y no corrige automáticamente
+desajustes antiguos entre un extremo importado y la posición actual de su caja.
+No es necesario aplicar otra migración para este editor.
+
+FUENTES OFICIALES CONSULTADAS
+https://ajuda.ozmap.com.br/es-LA/support/solutions/articles/44002168504-edici%C3%B3n-de-cable
+https://ajuda.ozmap.com.br/es-LA/support/solutions/articles/44001755540-ajustes-del-sistema
+https://operations.osmfoundation.org/policies/tiles/
+https://docs.maptiler.com/leaflet/examples/raster-tiles-in-leaflet-js/
+https://docs.maptiler.com/cloud/api/maps/
+https://docs.maptiler.com/sdk-js/api-reference/variables/Externals.MAP_STYLE_CONFIG/
+https://docs.maptiler.com/guides/developer/credentials/api-key/
+https://www.maptiler.com/cloud/pricing/
+https://www.maptiler.com/terms/

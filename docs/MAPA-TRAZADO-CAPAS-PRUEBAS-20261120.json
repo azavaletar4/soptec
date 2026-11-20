@@ -1,0 +1,107 @@
+{
+  "status": "LOCAL_VALIDATED_NOT_PUBLISHED",
+  "at": "2026-11-20T14:30:55.286Z",
+  "baseCommit": "eb23f96bb831e12dfc5bbbdad3e4f26748369cca",
+  "implementationCommit": "17c031cd2ab221a3a910e40197aca05188e17692",
+  "branch": "fix/mapa-trazado-capas-20261120",
+  "worktree": "D:\\smartrayco\\scripts\\inventory-auth-lab\\runtime\\map-route-editor\\source",
+  "productSourceFiles": [
+    "src/lib/cableRoute.ts",
+    "src/lib/mapBasemaps.ts",
+    "src/stores/foFibra.ts",
+    "src/views/mapa/CableHilosModal.vue",
+    "src/views/mapa/CableRouteEditor.vue",
+    "src/views/mapa/RedMapView.vue"
+  ],
+  "files": {
+    "deploy/map-route.env.example": "ea742f4cda2a67f65f6a5f02d6552c15451e7cd21c5171104770266c85162549",
+    "scripts/tests/cable-route-postgres.mjs": "4ec0731d34c14cec75b4a3aec7235fde2305688b91ac0e97a8be65853fc5aa36",
+    "scripts/tests/fixtures/cable-route-permission-proof.json": "714c9eb158908df05268d65223054f1616add5ef87d85293daf0a6cb0c6f824c",
+    "scripts/tests/map-route-browser.html": "93bb4ea57e8ee7a803dc1cff2d10a480be61e747ea9f4a02b7ab0e1eaa949e76",
+    "scripts/tests/map-route-browser.mjs": "3a019984d55082e3671b44f6aea0ead1da0774946760453208acd22540772d97",
+    "src/lib/__tests__/cableRoute.test.ts": "7cd3f1304894a0ada279175addf06c9e5cd9de4148845ea58d832a852e09370b",
+    "src/lib/cableRoute.ts": "1f0d2c61437a8be2b3aec5623244b7578e0ed4531a20ad9b006ac2faf374b1f0",
+    "src/lib/mapBasemaps.ts": "fbe98dc7ecae77205d0b6bbcb8798c8335b6cca46082e87d50254e35d9b7a38f",
+    "src/stores/foFibra.ts": "3cbbfa8b96d8cdbd8b12dd99b951c5691b32f63fac523a3e1a65c4bd5b69897c",
+    "src/views/mapa/CableHilosModal.vue": "9266221fcc0dd88c5e62da8ca1754cb24cfb52097b683e8821ffbd566ca47214",
+    "src/views/mapa/CableRouteEditor.vue": "edaf2947e8d77e8530d6887778581f18ad40fc7c9fe48ee333054148f74ba239",
+    "src/views/mapa/RedMapView.vue": "e9d483558da49a66ebf9b9defa454884157580751b42fee56e54e44f3ec59128"
+  },
+  "checks": {
+    "build": "PASS: vue-tsc -b && vite build (446 modules)",
+    "unitTests": {
+      "status": "PASS",
+      "cases": 9,
+      "command": "node --import tsx --test src/lib/__tests__/cableRoute.test.ts"
+    },
+    "postgres": {
+      "status": "PASS",
+      "scenarios": 10,
+      "nodeTestResultsIncludingParent": 11,
+      "command": "node --test scripts/tests/cable-route-postgres.mjs",
+      "catalogue": "Previously verified production definitions of fo_cables and current_user_role/set_updated_at, no row data",
+      "network": "none",
+      "concurrentOperators": "Exactly one succeeds"
+    },
+    "browser": {
+      "status": "PASS",
+      "at": "2026-11-20T14:26:20.218Z",
+      "checks": [
+        "REAL_DRAG_DRAFT_ONLY_CONNECTED_ENDS_FIXED",
+        "ADD_REMOVE_VERTEX",
+        "RESTORE_ORIGINAL_WITHOUT_WRITES",
+        "SAVE_ONLY_PATH_KEEP_LENGTH_CAPACITY_LINKS",
+        "RELOAD_PERSISTED_GEOMETRY",
+        "CANCEL_PRESERVES_DATABASE",
+        "ALL_BASEMAPS_KEEP_VIEW_FILTERS_SELECTION_DRAFT",
+        "MAP_PAN_NEVER_MOVES_CABLE",
+        "CONCURRENT_EDIT_CONFLICT_KEEPS_DRAFT_NO_OVERWRITE",
+        "TRANSLATE_FREE_ROUTE_ONLY",
+        "ROLE_REVOCATION_DISABLES_SAVE_AND_ENTRY",
+        "PROVIDER_FAILURE_RETURNS_TO_STREETS"
+      ],
+      "fixtures": "synthetic-only",
+      "postgresTransport": "synthetic",
+      "externalNetwork": "proxy-blocked; tiles fulfilled locally",
+      "productionWrites": 0,
+      "newDependencies": 0
+    },
+    "browserUnconfigured": {
+      "status": "PASS",
+      "at": "2026-11-20T14:26:44.526Z",
+      "checks": [
+        "NO_KEY_NO_LICENSE_NO_REQUESTS"
+      ],
+      "fixtures": "synthetic-only",
+      "postgresTransport": "synthetic",
+      "externalNetwork": "proxy-blocked; tiles fulfilled locally",
+      "productionWrites": 0,
+      "newDependencies": 0
+    },
+    "whitespace": "PASS"
+  },
+  "satellite": {
+    "providerPrepared": "MapTiler raster XYZ satellite-v4 / hybrid-v4",
+    "actualKeyPresent": false,
+    "licenseActivated": false,
+    "realImageryCoverageTested": false,
+    "pricingCheckedDate": "2026-11-20",
+    "flexUsdMonthly": 30,
+    "includedRequests": 500000,
+    "extraUsdPerThousand": 0.15,
+    "pricingSource": "https://www.maptiler.com/cloud/pricing/",
+    "requiresAccountAndRestrictedKeyBeforeRealUse": true
+  },
+  "preserved": {
+    "deletionSqlUnchanged": true,
+    "logicalRemovalMethodsUnchanged": true,
+    "otherModulesUnchanged": true,
+    "dependenciesUnchanged": true
+  },
+  "productionWrites": 0,
+  "migrationsApplied": 0,
+  "physicalDeviceCommands": 0,
+  "deployments": 0,
+  "merge": false,
+  "push": false
+}
