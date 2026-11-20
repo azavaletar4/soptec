@@ -13,7 +13,10 @@
     "authorizedFlag": "false",
     "realKeysUsed": false,
     "billingEnabledByAgent": false,
-    "liveGoogleApiCalls": 0
+    "liveGoogleApiCalls": 0,
+    "realCredentialSecurityValidated": false,
+    "remoteOperatorsRequireAuthenticatedProxyOrVerifiedApplicationRestrictions": true,
+    "recommendedMapTilesKeyRestriction": "IP restriction for trusted corporate clients/servers, according to Google guidance"
   },
   "tests": {
     "unit": {
@@ -152,7 +155,7 @@
   },
   "limitations": [
     "No real Google service, credentials, billing, imagery coverage, CORS or latency validated",
-    "A client-side key is visible by design and must be restricted; no real key was used or exposed",
+    "Direct browser prototype only used fictitious keys; remote production needs secure authentication/proxy. Do not place a private server key in VITE.",
     "No OSM/MapTiler fallback when Google is selected",
     "Canonical release environment fingerprints must be extended before any future publication"
   ],
@@ -161,5 +164,9 @@
   "migrationsApplied": 0,
   "deployments": 0,
   "merge": false,
-  "push": false
+  "push": false,
+  "securitySources": [
+    "https://developers.google.com/maps/api-security-best-practices",
+    "https://developers.google.com/maps/documentation/tile/get-api-key"
+  ]
 }

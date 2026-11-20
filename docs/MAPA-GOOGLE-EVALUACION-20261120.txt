@@ -119,10 +119,18 @@ y genera cero llamadas a Google o a fondos alternativos.
 
 No se obtuvo, imprimió ni guardó una clave real. Una clave utilizada directamente
 por el navegador es observable por diseño; no equivale a un secreto de servidor.
-Para uso real se necesita una clave de navegador restringida por HTTP referrer
-y API, separada para pruebas/producción. Si se exige que ninguna clave llegue
-al cliente, hace falta diseñar otro canal de autenticación/backend; no prometer
-ocultarla mediante VITE. No se implementó ni activó ese backend.
+No debe confundirse la clave de navegador de Maps JavaScript API con una
+credencial de web service. La guía Google recomienda restricciones por IP
+para Map Tiles en servidores o clientes corporativos de confianza.
+No se da por verificado que una restricción HTTP referrer sea suficiente
+para todos los endpoints de este adaptador: requiere prueba real autorizada.
+Para operadores remotos o IP dinámica se recomienda un proxy autenticado
+con credencial en servidor, restringido a peticiones permitidas y sin
+rehost/caché indebidos. También hace falta ese canal si se exige que ninguna
+clave llegue al navegador. No ocultar secretos mediante VITE.
+No se implementó ni activó el proxy; el prototipo directo solo se validó
+con credenciales ficticias. Nunca introducir una clave privada de servidor
+en VITE_GOOGLE_MAPS_KEY.
 
 La marca se obtuvo de los assets oficiales de atribución Google Maps,
 conservando bytes SVG. Origen:
@@ -147,6 +155,8 @@ RECOMENDACIÓN CONCRETA
 Conservar Leaflet y el editor. Mantener OSM/MapTiler como predeterminado.
 Si se desea evaluar Google, usar este adaptador Map Tiles oficial en un
 entorno autorizado y con datos de procedencia propia, antes de decidir sustituir.
+La autenticación para operadores remotos debe resolverse antes de ese piloto;
+el adaptador directo no se considera listo para producción con una clave real.
 Con consumo menor a 150.000 tiles/mes puede resultar más barato que Flex;
 con el escenario intermedio MapTiler cuesta menos y demanda menos operación.
 No migrar ahora a la API JS nativa solo para buscar menor factura: requiere
@@ -156,7 +166,8 @@ La cobertura local y el caso de licencia prevalecen sobre el precio.
 
 PENDIENTE PARA VALIDACIÓN REAL, NO AUTORIZADO EN ESTE TRABAJO
 Validar uso/licencia, dirección de facturación y avisos de privacidad.
-Autorizar proyecto, facturación, Map Tiles API, clave restringida y cuotas.
+Autorizar proyecto, facturación, Map Tiles API y cuotas; elegir y verificar
+el canal seguro de autenticación (IP corporativa o proxy autenticado).
 Probar imágenes y CORS reales en áreas SmartRayco, cobertura/zoom, tiempos,
 atribuciones y consumo medido. Después decidir proveedor.
 Para una futura publicación incorporar variables/hashes al build canónico
@@ -173,5 +184,8 @@ https://developers.google.com/maps/documentation/tile/session_tokens
 https://developers.google.com/maps/documentation/tile/2d-tiles-overview
 https://developers.google.com/maps/documentation/tile/policies
 https://developers.google.com/maps/documentation/tile/usage-and-billing
+https://developers.google.com/maps/documentation/tile/get-api-key
+https://developers.google.com/maps/api-security-best-practices
+https://cloud.google.com/billing/docs/how-to/budgets
 https://cloud.google.com/maps-platform/terms
 https://www.maptiler.com/cloud/pricing/
