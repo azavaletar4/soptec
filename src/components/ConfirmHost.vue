@@ -15,6 +15,7 @@ const { state, handleConfirm, handleCancel } = useConfirm();
     :title="state.title"
     :message="state.message"
     :wrap-message="state.wrapMessage"
+    :focus-cancel="state.focusCancel"
     :danger="state.danger"
     :warning="state.warning"
     :confirm-label="state.confirmLabel"

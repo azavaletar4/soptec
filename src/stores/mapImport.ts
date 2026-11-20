@@ -338,18 +338,13 @@ export const useMapImportStore = defineStore('mapImport', () => {
     const infra = useInfraElementosStore();
     const fibra = useFoFibraStore();
 
-    // Cables primero: pueden referenciar (origen/destino) las cajas creadas en el mismo batch.
-    const { data: cables, error: cablesErr } = await supabase.from('fo_cables').select('id').eq('import_batch_id', batchId);
-    if (cablesErr) throw cablesErr;
-    for (const c of (cables ?? []) as { id: string }[]) {
-      await fibra.deleteCable(c.id);
-    }
-
-    const { data: elementos, error: elErr } = await supabase.from('infra_elementos').select('id').eq('import_batch_id', batchId);
-    if (elErr) throw elErr;
-    for (const e of (elementos ?? []) as { id: string }[]) {
-      await infra.deleteElemento(e.id);
-    }
+    const { data, error } = await supabase.rpc('revert_map_import_safe', { p_batch_id: batchId });
+    if (error) throw error;
+    if (data !== batchId) throw new Error('No se confirmó la reversión de la importación. Actualiza el mapa.');
+    for (const c of fibra.cables.filter(c => c.import_batch_id === batchId)) delete fibra.hiloEstadosPorCable[c.id];
+    for (const e of infra.elementos.filter(e => e.import_batch_id === batchId)) delete fibra.napPuertosPorElemento[e.id];
+    fibra.cables = fibra.cables.filter(c => c.import_batch_id !== batchId);
+    infra.elementos = infra.elementos.filter(e => e.import_batch_id !== batchId);
 
     if (lastResult.value?.batchId === batchId) lastResult.value = null;
   }

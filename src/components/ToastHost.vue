@@ -20,7 +20,7 @@ const CLASS: Record<string, string> = {
          combina el margen normal con env(safe-area-inset-bottom) para no
          quedar tapado por la barra/home-indicator de un celular con notch. -->
     <div
-      class="fixed inset-x-0 z-[80] flex flex-col gap-2 px-4 pointer-events-none items-center sm:inset-x-auto sm:right-4 sm:items-end sm:px-0"
+      class="fixed inset-x-0 z-[2300] flex flex-col gap-2 px-4 pointer-events-none items-center sm:inset-x-auto sm:right-4 sm:items-end sm:px-0"
       style="bottom: 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));"
     >
       <div

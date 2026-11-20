@@ -11,6 +11,7 @@ export interface ConfirmOptions {
   message: string;
   /** Conserva líneas y ajusta identificadores largos; opt-in para no alterar otros diálogos. */
   wrapMessage?: boolean;
+  focusCancel?: boolean;
   /** true = boton de confirmar en rojo solido + "Esta accion no se puede deshacer." */
   danger?: boolean;
   /** true = caja ambar con icono ⚠️ alrededor del mensaje — advertencia no destructiva (ej. choque de horario) que de todos modos se puede confirmar. */
@@ -52,6 +53,7 @@ export function useConfirm() {
       state.title = options.title;
       state.message = options.message;
       state.wrapMessage = options.wrapMessage ?? false;
+      state.focusCancel = options.focusCancel ?? false;
       state.danger = options.danger ?? false;
       state.warning = options.warning ?? false;
       state.confirmLabel = options.confirmLabel;

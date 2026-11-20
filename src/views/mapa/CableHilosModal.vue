@@ -6,8 +6,12 @@ import { ubicarHilo, HILO_ESTADO_LABEL } from '@/lib/fiberColors';
 import type { FoCable, FoHiloEstadoTipo, InfraElemento } from '@/types/domain';
 import type { OltDevice } from '@/stores/olt';
 import { getErrorMessage } from '@/lib/errors';
+import { confirmMapRemoval } from '@/lib/mapPassiveDeletion';
+import { useToast } from '@/composables/useToast';
 
 const props = defineProps<{
+  canDelete?: boolean;
+  deleting?: boolean;
   cable: FoCable;
   infraElementos: InfraElemento[];
   oltDevices: OltDevice[];
@@ -17,6 +21,7 @@ const emit = defineEmits<{
   close: [];
   edit: [];
   delete: [];
+  changed: [];
   'open-splice': [infraElementoId: string];
 }>();
 
@@ -24,6 +29,8 @@ const fibra = useFoFibraStore();
 const loading = ref(true);
 const selected = ref<number | null>(null);
 const error = ref<string | null>(null);
+const deletingHilo = ref(false);
+const retired = computed(() => new Set((fibra.hiloEstadosPorCable[props.cable.id] ?? []).filter(h => h.map_removed_at).map(h => h.hilo_index)));
 
 const estadosMap = computed<Record<number, FoHiloEstadoTipo>>(() => {
   const rows = fibra.hiloEstadosPorCable[props.cable.id] ?? [];
@@ -57,6 +64,25 @@ async function marcarEstado(estado: FoHiloEstadoTipo) {
     error.value = getErrorMessage(e, 'No se pudo actualizar el hilo');
   }
 }
+
+async function eliminarHilo() {
+  if (!props.canDelete || !selected.value || deletingHilo.value) return;
+  const hilo = selected.value;
+  deletingHilo.value = true;
+  error.value = null;
+  try {
+    const preview = await confirmMapRemoval('hilo', props.cable.id, `hilo ${hilo} de ${props.cable.codigo}`, hilo);
+    if (!preview) return;
+    await fibra.deleteHilo(props.cable.id, hilo, preview);
+    selected.value = null;
+    emit('changed');
+    useToast().success('Hilo retirado del mapa. Se conservaron la numeración y las referencias históricas.');
+  } catch (e) {
+    error.value = getErrorMessage(e, 'No se pudo eliminar el hilo');
+  } finally {
+    deletingHilo.value = false;
+  }
+}
 </script>
 
 <template>
@@ -83,12 +109,12 @@ async function marcarEstado(estado: FoHiloEstadoTipo) {
             📍 {{ destinoNombre }}
           </button>
           <button class="ml-auto btn-secondary text-xs" @click="emit('edit')">Editar cable</button>
-          <button class="text-red-600 hover:underline text-xs" @click="emit('delete')">Eliminar</button>
+          <button v-if="canDelete" class="text-red-600 hover:underline text-xs" :disabled="deleting" @click="emit('delete')">Eliminar</button>
         </div>
 
         <div v-if="loading" class="text-sm text-slate-500 py-6 text-center">Cargando hilos…</div>
         <template v-else>
-          <HiloGrid :hilos-total="cable.hilos_total" :estados="estadosMap" :selected="selected" @select="selected = $event" />
+          <HiloGrid :hilos-total="cable.hilos_total" :retired="retired" :estados="estadosMap" :selected="selected" @select="selected = $event" />
 
           <div v-if="selectedUbicacion" class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
             <p class="font-medium mb-2">
@@ -96,6 +122,7 @@ async function marcarEstado(estado: FoHiloEstadoTipo) {
               {{ selectedUbicacion.hiloColor.name }}
             </p>
             <div class="flex flex-wrap gap-1.5">
+              <button v-if="canDelete" type="button" class="text-red-600 hover:underline text-xs" :disabled="deletingHilo || deleting" @click="eliminarHilo">Eliminar hilo del mapa</button>
               <button
                 v-for="(label, estado) in HILO_ESTADO_LABEL"
                 :key="estado"

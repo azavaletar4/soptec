@@ -5,6 +5,7 @@ import type { FoHiloEstadoTipo } from '@/types/domain';
 
 const props = defineProps<{
   hilosTotal: number;
+  retired?: Set<number>;
   /** hilo_index (1-based) -> estado. Ausente = 'libre'. */
   estados?: Record<number, FoHiloEstadoTipo>;
   /** hilo_index seleccionado actualmente (resaltado con anillo). */
@@ -17,7 +18,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{ select: [hiloIndex: number] }>();
 
-const tubos = computed(() => tubosDeCable(props.hilosTotal));
+const tubos = computed(() => tubosDeCable(props.hilosTotal)
+  .map(tubo => ({ ...tubo, hilos: tubo.hilos.filter(h => !props.retired?.has(h.hiloIndex)) }))
+  .filter(tubo => tubo.hilos.length > 0));
 
 function estadoDe(hiloIndex: number): FoHiloEstadoTipo {
   return props.estados?.[hiloIndex] ?? 'libre';
