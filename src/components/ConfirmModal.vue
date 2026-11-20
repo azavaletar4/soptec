@@ -110,12 +110,12 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="modal-overlay" role="dialog" aria-modal="true" :aria-labelledby="titleId">
+    <div v-if="open" class="modal-overlay" style="z-index: 2200" role="dialog" aria-modal="true" :aria-labelledby="titleId">
       <div ref="panelRef" class="w-full max-w-sm modal-panel max-h-[90vh] overflow-y-auto">
         <h2 :id="titleId" class="text-lg font-semibold mb-1">{{ title }}</h2>
         <p v-if="!warning" class="text-sm text-slate-600 mb-1" :class="{ 'whitespace-pre-line break-all': wrapMessage }">{{ message }}</p>
         <p v-if="danger" class="text-xs text-red-600 font-medium mb-3">Esta acción no se puede deshacer.</p>
-        <p v-if="warning" class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-1">
+        <p v-if="warning" class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-1" :class="{ 'whitespace-pre-line': wrapMessage }">
           ⚠️ {{ message }}
         </p>
         <p v-if="details" class="text-xs text-slate-500 mb-3">{{ details }}</p>

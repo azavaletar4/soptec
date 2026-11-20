@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/imageCompression';
+import { deleteMapPassive, type MapRemovalPreview } from '@/lib/mapPassiveDeletion';
 import { ZONE_NAP_LIMIT, type InfraElemento, type InfraElementoTipo } from '@/types/domain';
 
 const BUCKET = 'infra-photos';
@@ -87,12 +88,13 @@ export const useInfraElementosStore = defineStore('infraElementos', () => {
     return updateElemento(id, { latitude, longitude });
   }
 
-  async function deleteElemento(id: string) {
-    const existing = elementos.value.find((e) => e.id === id);
-    if (existing?.photo_path) await supabase.storage.from(BUCKET).remove([existing.photo_path]);
-    const { error: err } = await supabase.from('infra_elementos').delete().eq('id', id);
-    if (err) throw err;
-    elementos.value = elementos.value.filter((e) => e.id !== id);
+  async function deleteElemento(id: string, preview?: MapRemovalPreview) {
+    const result = await deleteMapPassive('infra', id, preview);
+    // Conservar la foto: Storage no participa en la transacción PostgreSQL.
+    // El registro sigue disponible para las fichas operativas e históricas.
+    const existing = elementos.value.find(e => e.id === id);
+    if (existing) existing.map_removed_at = result.removedAt;
+    return result;
   }
 
   async function uploadPhoto(id: string, file: File, previousPath?: string | null) {

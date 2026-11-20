@@ -580,6 +580,7 @@ export interface InventoryMovement {
 }
 
 export interface InfraElemento {
+  map_removed_at?: string | null;
   id: string;
   name: string;
   tipo: InfraElementoTipo;
@@ -611,6 +612,7 @@ export type FoNapPuertoEstado = 'libre' | 'ocupado' | 'reservado' | 'dañado';
 export type LatLngPoint = [number, number];
 
 export interface FoCable {
+  map_removed_at?: string | null;
   id: string;
   codigo: string;
   tipo: FoCableTipo;
@@ -639,6 +641,7 @@ export interface MapImport {
 }
 
 export interface FoHiloEstado {
+  map_removed_at?: string | null;
   id: string;
   cable_id: string;
   hilo_index: number;
@@ -648,6 +651,7 @@ export interface FoHiloEstado {
 }
 
 export interface FoFusion {
+  map_removed_at?: string | null;
   id: string;
   infra_elemento_id: string;
   cable_a_id: string;

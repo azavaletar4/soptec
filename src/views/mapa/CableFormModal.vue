@@ -5,6 +5,8 @@ import type { FoCable, FoCableTipo, InfraElemento, LatLngPoint } from '@/types/d
 import type { OltDevice } from '@/stores/olt';
 
 const props = defineProps<{
+  canDelete?: boolean;
+  deleting?: boolean;
   cable?: FoCable | null;
   path?: LatLngPoint[];
   defaultTipo?: FoCableTipo;
@@ -145,7 +147,7 @@ async function submit() {
         <p v-if="error" class="text-sm text-red-600 mb-3">{{ error }}</p>
 
         <div class="flex justify-between gap-2">
-          <button v-if="cable" type="button" class="text-red-600 hover:underline text-xs" :disabled="saving" @click="emit('delete')">
+          <button v-if="cable && canDelete" type="button" class="text-red-600 hover:underline text-xs" :disabled="saving || deleting" @click="emit('delete')">
             Eliminar cable
           </button>
           <div class="flex gap-2 ml-auto">

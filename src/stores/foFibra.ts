@@ -2,6 +2,7 @@ import { reserveContractNap, reserveContractNapSyncOntZone, type NapAndOntZoneRe
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { deleteMapPassive, type MapRemovalPreview, type MapRemovalResult } from '@/lib/mapPassiveDeletion';
 import type { FoCable, FoFusion, FoHiloEstado, FoNapPuerto, FoFusionDestinoTipo, FoHiloEstadoTipo } from '@/types/domain';
 
 export interface TraceHop {
@@ -56,7 +57,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
   async function fetchCables() {
     loading.value = true;
     try {
-      const { data, error } = await supabase.from('fo_cables').select('*').order('codigo');
+      const { data, error } = await supabase.from('fo_cables').select('*').is('map_removed_at', null).order('codigo');
       if (error) throw error;
       cables.value = (data ?? []) as FoCable[];
     } finally {
@@ -66,7 +67,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
 
   /** Carga todas las fusiones (el dataset es pequeño; se usa para trazabilidad completa). */
   async function fetchFusiones() {
-    const { data, error } = await supabase.from('fo_fusiones').select('*');
+    const { data, error } = await supabase.from('fo_fusiones').select('*').is('map_removed_at', null);
     if (error) throw error;
     fusiones.value = (data ?? []) as FoFusion[];
   }
@@ -114,10 +115,28 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     return cable;
   }
 
-  async function deleteCable(id: string) {
-    const { error } = await supabase.from('fo_cables').delete().eq('id', id);
-    if (error) throw error;
-    cables.value = cables.value.filter((c) => c.id !== id);
+  function applyMapRemoval(result: MapRemovalResult) {
+    const ids = new Set(result.fusionIds);
+    fusiones.value = fusiones.value.filter(f => !ids.has(f.id));
+    if (result.kind === 'cable') {
+      cables.value = cables.value.filter(c => c.id !== result.id);
+      delete hiloEstadosPorCable.value[result.id];
+    } else if (result.kind === 'hilo' && result.thread) {
+      const rows = hiloEstadosPorCable.value[result.id] ?? [];
+      hiloEstadosPorCable.value[result.id] = [...rows.filter(h => h.hilo_index !== result.hilo), result.thread];
+    }
+  }
+
+  async function deleteCable(id: string, preview?: MapRemovalPreview) {
+    const result = await deleteMapPassive('cable', id, preview);
+    applyMapRemoval(result);
+    return result;
+  }
+
+  async function deleteHilo(id: string, hilo: number, preview: MapRemovalPreview) {
+    const result = await deleteMapPassive('hilo', id, preview, hilo);
+    applyMapRemoval(result);
+    return result;
   }
 
   async function fetchHiloEstados(cableId: string) {
@@ -142,7 +161,7 @@ export const useFoFibraStore = defineStore('foFibra', () => {
   }
 
   async function fetchFusionesDeElemento(infraElementoId: string) {
-    const { data, error } = await supabase.from('fo_fusiones').select('*').eq('infra_elemento_id', infraElementoId);
+    const { data, error } = await supabase.from('fo_fusiones').select('*').eq('infra_elemento_id', infraElementoId).is('map_removed_at', null);
     if (error) throw error;
     return (data ?? []) as FoFusion[];
   }
@@ -309,7 +328,9 @@ export const useFoFibraStore = defineStore('foFibra', () => {
    */
   function traceFromNapPuerto(puerto: Pick<FoNapPuerto, 'fusion_id'>): TraceResult {
     const fusion = fusiones.value.find((f) => f.id === puerto.fusion_id);
-    if (!fusion) return { hops: [], reachedOlt: false, error: 'Este puerto no tiene una fusión asignada.' };
+    if (!fusion) return { hops: [], reachedOlt: false, error: puerto.fusion_id
+      ? 'La fusión de este puerto no está visible en el mapa; su asignación de servicio se conserva.'
+      : 'Este puerto no tiene una fusión asignada.' };
     return traceUpstream(fusion.cable_a_id, fusion.hilo_a_index, fusion.infra_elemento_id);
   }
 
@@ -366,6 +387,8 @@ export const useFoFibraStore = defineStore('foFibra', () => {
     createCable,
     updateCable,
     deleteCable,
+    deleteHilo,
+    applyMapRemoval,
     clearInfraLinks,
     fetchHiloEstados,
     setHiloEstado,

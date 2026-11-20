@@ -10,14 +10,15 @@ import { useMikrotikStore } from '@/stores/mikrotik';
 import { useInfraElementosStore, type InfraElementoWithUrl } from '@/stores/infraElementos';
 import { useFoFibraStore, type TraceResult } from '@/stores/foFibra';
 import { useCatalogsStore } from '@/stores/catalogs';
+import { useAuthStore } from '@/stores/auth';
+import { canDeleteMapPassive, confirmMapRemoval } from '@/lib/mapPassiveDeletion';
 import CableFormModal from './CableFormModal.vue';
 import CableHilosModal from './CableHilosModal.vue';
 import SpliceDiagramModal from './SpliceDiagramModal.vue';
 import { INFRA_STYLE, INFRA_LABEL, INACTIVE_COLOR, OLT_GLYPH, MIKROTIK_GLYPH, teardropIcon, infraIcon, permanentLabel } from './mapIcons';
-import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
-import type { FoCable, FoCableTipo, FoFusion, FoNapPuerto, InfraElemento, InfraElementoTipo, LatLngPoint } from '@/types/domain';
+import type { FoCable, FoCableTipo, InfraElementoTipo, LatLngPoint } from '@/types/domain';
 
 const route = useRoute();
 const router = useRouter();
@@ -27,7 +28,9 @@ const mikrotikStore = useMikrotikStore();
 const infraStore = useInfraElementosStore();
 const fibra = useFoFibraStore();
 const catalogs = useCatalogsStore();
-const { confirmDialog } = useConfirm();
+const auth = useAuthStore();
+const canDeletePassive = computed(() => canDeleteMapPassive(auth.role));
+const mapInfra = computed(() => infraStore.elementos.filter(e => !e.map_removed_at));
 const toast = useToast();
 
 const loading = ref(true);
@@ -51,7 +54,7 @@ const oltsWithoutGps = computed(() => oltStore.devices.filter((d) => d.lat == nu
 const mikrotiksWithGps = computed(() => mikrotikStore.devices.filter((d) => d.latitude != null && d.longitude != null));
 const mikrotiksWithoutGps = computed(() => mikrotikStore.devices.filter((d) => d.latitude == null || d.longitude == null));
 
-// ---- Historial de deshacer/rehacer (mover u eliminar un elemento por error) ----
+// ---- Historial de deshacer/rehacer movimientos ----
 interface LatLng {
   lat: number;
   lng: number;
@@ -63,15 +66,7 @@ interface MoveAction {
   before: LatLng;
   after: LatLng;
 }
-interface DeleteInfraAction {
-  kind: 'delete-infra';
-  snapshot: InfraElemento;
-  puertos: FoNapPuerto[];
-  fusiones: FoFusion[];
-  /** Cables que tenian esta caja como origen/destino (ver fase30: al borrar la caja, el cable no se borra, solo pierde ese extremo). */
-  cableLinks: { cableId: string; field: 'origen_infra_id' | 'destino_infra_id' }[];
-}
-type HistoryAction = MoveAction | DeleteInfraAction;
+type HistoryAction = MoveAction;
 
 const MAX_HISTORY = 50;
 const undoStack = ref<HistoryAction[]>([]);
@@ -96,37 +91,6 @@ async function applyMove(action: MoveAction, coords: LatLng) {
   }
 }
 
-/** Recrea el elemento pasivo borrado (nuevo id: los originales ya se perdieron en cascada) junto con sus fusiones y puertos NAP. */
-async function undoDeleteInfra(action: DeleteInfraAction) {
-  const created = await infraStore.createElemento({
-    name: action.snapshot.name,
-    tipo: action.snapshot.tipo,
-    potencia: action.snapshot.potencia,
-    spliteo: action.snapshot.spliteo,
-    puertos_total: action.snapshot.puertos_total,
-    is_active: action.snapshot.is_active,
-    latitude: action.snapshot.latitude ?? 0,
-    longitude: action.snapshot.longitude ?? 0,
-    notes: action.snapshot.notes,
-    zone_id: action.snapshot.zone_id,
-  });
-  const fusionIdMap = await fibra.restoreFusiones(created.id, action.fusiones);
-  await fibra.restoreNapPuertos(created.id, action.puertos, fusionIdMap);
-  for (const link of action.cableLinks) {
-    await fibra.updateCable(link.cableId, { [link.field]: created.id });
-  }
-  action.snapshot = { ...action.snapshot, id: created.id };
-  renderInfraMarkers();
-  renderCables();
-}
-
-async function redoDeleteInfra(action: DeleteInfraAction) {
-  await infraStore.deleteElemento(action.snapshot.id);
-  fibra.clearInfraLinks(action.snapshot.id);
-  renderInfraMarkers();
-  renderCables();
-}
-
 const undoing = ref(false);
 
 async function undo() {
@@ -134,8 +98,7 @@ async function undo() {
   if (!action) return;
   undoing.value = true;
   try {
-    if (action.kind === 'move') await applyMove(action, action.before);
-    else await undoDeleteInfra(action);
+    await applyMove(action, action.before);
     redoStack.value.push(action);
   } catch (e) {
     undoStack.value.push(action);
@@ -150,8 +113,7 @@ async function redo() {
   if (!action) return;
   undoing.value = true;
   try {
-    if (action.kind === 'move') await applyMove(action, action.after);
-    else await redoDeleteInfra(action);
+    await applyMove(action, action.after);
     undoStack.value.push(action);
   } catch (e) {
     redoStack.value.push(action);
@@ -231,7 +193,7 @@ function renderInfraMarkers() {
   infraLayer.clearLayers();
   infraMarkers.clear();
   if (!showInfra.value) return;
-  for (const el of infraStore.elementos) {
+  for (const el of mapInfra.value) {
     if (el.latitude == null || el.longitude == null) continue;
     const marker = L.marker([el.latitude, el.longitude], { icon: infraIcon(el), draggable: true });
     marker.bindTooltip(permanentLabel(el.name, INFRA_LABEL[el.tipo]), { permanent: true, direction: 'top', offset: [0, -10], className: 'leaflet-label-custom' });
@@ -307,7 +269,7 @@ function fitToMarkers() {
   const points: L.LatLngExpression[] = [
     ...oltsWithGps.value.map((d) => [d.lat as number, d.lng as number] as L.LatLngExpression),
     ...mikrotiksWithGps.value.map((d) => [d.latitude as number, d.longitude as number] as L.LatLngExpression),
-    ...infraStore.elementos.filter((e) => e.latitude != null).map((e) => [e.latitude as number, e.longitude as number] as L.LatLngExpression),
+    ...mapInfra.value.filter((e) => e.latitude != null).map((e) => [e.latitude as number, e.longitude as number] as L.LatLngExpression),
   ];
   if (points.length) {
     map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 15 });
@@ -494,33 +456,20 @@ async function handleSaveInfra() {
 }
 
 async function handleDeleteInfra() {
-  if (!editingInfraId.value) return;
+  if (!editingInfraId.value || infraSaving.value || !canDeletePassive.value) return;
   const id = editingInfraId.value;
-  const cableLinks: DeleteInfraAction['cableLinks'] = [];
-  for (const c of fibra.cables) {
-    if (c.origen_infra_id === id) cableLinks.push({ cableId: c.id, field: 'origen_infra_id' });
-    if (c.destino_infra_id === id) cableLinks.push({ cableId: c.id, field: 'destino_infra_id' });
-  }
-  const cableWarning = cableLinks.length
-    ? ` Tiene ${cableLinks.length} cable(s) conectados: quedarán sin ese extremo (podrás reconectarlos después desde el editor de cables).`
-    : '';
-  const ok = await confirmDialog({
-    title: 'Eliminar elemento',
-    message: `¿Eliminar "${infraForm.value.name}"?${cableWarning} Puedes deshacerlo con el botón "Deshacer" o Ctrl+Z.`,
-  });
-  if (!ok) return;
+  infraError.value = null;
   infraSaving.value = true;
   try {
-    const snapshot = infraStore.elementos.find((e) => e.id === id);
-    if (!snapshot) throw new Error('Elemento no encontrado');
-    const puertos = await fibra.fetchNapPuertos(id);
-    const fusiones = fibra.fusiones.filter((f) => f.infra_elemento_id === id);
-    await infraStore.deleteElemento(id);
-    fibra.clearInfraLinks(id);
-    pushHistory({ kind: 'delete-infra', snapshot: { ...snapshot }, puertos, fusiones, cableLinks });
+    const preview = await confirmMapRemoval('infra', id, infraForm.value.name);
+    if (!preview) return;
+    const result = await infraStore.deleteElemento(id, preview);
+    fibra.applyMapRemoval(result);
     showInfraModal.value = false;
+    clearTrace();
     renderInfraMarkers();
     renderCables();
+    toast.success('Elemento retirado del mapa. Se conservaron las referencias y el historial.');
   } catch (e) {
     infraError.value = getErrorMessage(e, 'Error al eliminar');
   } finally {
@@ -638,22 +587,26 @@ async function handleSaveCable(payload: Record<string, unknown>) {
   }
 }
 
+const cableDeleting = ref(false);
+
 async function handleDeleteCable(cableOverride?: FoCable) {
+  if (cableDeleting.value || !canDeletePassive.value) return;
   const cable = cableOverride ?? editingCable.value;
   if (!cable) return;
-  const ok = await confirmDialog({
-    title: 'Eliminar cable',
-    message: `¿Eliminar el cable "${cable.codigo}"? Se borrará también su traza, hilos y fusiones asociadas.`,
-    danger: true,
-  });
-  if (!ok) return;
+  cableDeleting.value = true;
   try {
-    await fibra.deleteCable(cable.id);
+    const preview = await confirmMapRemoval('cable', cable.id, cable.codigo);
+    if (!preview) return;
+    await fibra.deleteCable(cable.id, preview);
     showCableForm.value = false;
     showCableHilos.value = false;
+    clearTrace();
     renderCables();
+    toast.success('Cable retirado del mapa. No se modificaron servicios ni equipos.');
   } catch (e) {
     toast.error(getErrorMessage(e, 'Error al eliminar el cable'));
+  } finally {
+    cableDeleting.value = false;
   }
 }
 
@@ -676,9 +629,13 @@ function openCableEditFromHilos() {
 // ---- Diagrama de fusión / puertos NAP ----
 const showSpliceModal = ref(false);
 const spliceElementoId = ref<string | null>(null);
-const spliceElemento = computed(() => infraStore.elementos.find((e) => e.id === spliceElementoId.value) ?? null);
+const spliceElemento = computed(() => mapInfra.value.find((e) => e.id === spliceElementoId.value) ?? null);
 
 function openSpliceModal(infraElementoId: string) {
+  if (!mapInfra.value.some(e => e.id === infraElementoId)) {
+    toast.info('Este elemento fue retirado del mapa. Se conservan sus referencias e historial.');
+    return;
+  }
   spliceElementoId.value = infraElementoId;
   showSpliceModal.value = true;
   showCableHilos.value = false;
@@ -714,7 +671,7 @@ function clearTrace() {
           <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-700 font-medium">Diseño de planta externa</span>
         </div>
         <p class="text-slate-600 text-sm mt-1">
-          {{ oltsWithGps.length }} OLTs · {{ mikrotiksWithGps.length }} MikroTiks · {{ infraStore.elementos.length }} elementos pasivos ·
+          {{ oltsWithGps.length }} OLTs · {{ mikrotiksWithGps.length }} MikroTiks · {{ mapInfra.length }} elementos pasivos ·
           {{ fibra.cables.length }} cables
         </p>
       </div>
@@ -740,7 +697,7 @@ function clearTrace() {
           :class="showInfra ? 'bg-sky-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:text-slate-900'"
           @click="showInfra = !showInfra"
         >
-          <span class="w-2 h-2 rounded-full" style="background:#f97316"></span> Pasivos ({{ infraStore.elementos.length }})
+          <span class="w-2 h-2 rounded-full" style="background:#f97316"></span> Pasivos ({{ mapInfra.length }})
         </button>
         <button
           class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
@@ -902,7 +859,7 @@ function clearTrace() {
 
           <div class="flex justify-between gap-2">
             <button
-              v-if="editingInfraId"
+              v-if="editingInfraId && canDeletePassive"
               type="button"
               class="text-red-600 hover:underline text-xs"
               :disabled="infraSaving"
@@ -927,8 +884,10 @@ function clearTrace() {
       :path="pendingPath ?? undefined"
       :default-tipo="drawMode ?? undefined"
       :metraje-sugerido="pendingPath ? metrajeCalculado(pendingPath) : null"
-      :infra-elementos="infraStore.elementos"
+      :infra-elementos="mapInfra"
       :olt-devices="oltStore.devices"
+      :can-delete="canDeletePassive"
+      :deleting="cableDeleting"
       @save="handleSaveCable"
       @cancel="showCableForm = false"
       @delete="handleDeleteCable"
@@ -939,10 +898,13 @@ function clearTrace() {
       :cable="inspectingCable"
       :infra-elementos="infraStore.elementos"
       :olt-devices="oltStore.devices"
+      :can-delete="canDeletePassive"
+      :deleting="cableDeleting"
       @close="showCableHilos = false"
       @edit="openCableEditFromHilos"
       @delete="handleDeleteCable(inspectingCable!)"
       @open-splice="openSpliceModal"
+      @changed="clearTrace"
     />
 
     <SpliceDiagramModal
