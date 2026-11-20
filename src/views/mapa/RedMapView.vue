@@ -13,9 +13,8 @@ import { useCatalogsStore } from '@/stores/catalogs';
 import { useAuthStore } from '@/stores/auth';
 import { canDeleteMapPassive, confirmMapRemoval } from '@/lib/mapPassiveDeletion';
 import { canEditCableRoute, cloneRoute, validateRoute } from '@/lib/cableRoute';
-import { networkBasemap, satelliteConfigured, type NetworkBasemap } from '@/lib/mapBasemaps';
-import { googleTilesEnabled } from '@/lib/googleMapTiles';
-import { GoogleTilesLayer } from '@/lib/googleTilesLayer';
+import type { NetworkBasemap } from '@/lib/mapBasemaps';
+import { zeroCostBasemaps } from '@/lib/zeroCostBasemaps';
 import { useConfirm } from '@/composables/useConfirm';
 import CableRouteEditor from './CableRouteEditor.vue';
 import CableFormModal from './CableFormModal.vue';
@@ -43,14 +42,8 @@ const routeCable = ref<FoCable | null>(null);
 const routeSaving = ref(false);
 const routeError = ref<string | null>(null);
 const selectedBasemap = ref<NetworkBasemap>('streets');
-const mapKey = import.meta.env.VITE_MAPTILER_KEY ?? '';
-const googleSelected = import.meta.env.VITE_NETWORK_MAP_PROVIDER === 'google';
-const googleConfig = { key: import.meta.env.VITE_GOOGLE_MAPS_KEY ?? '', authorized: import.meta.env.VITE_GOOGLE_MAPS_AUTHORIZED ?? '' };
-const googleEnabled = googleTilesEnabled(googleConfig);
-const satelliteEnabled = googleSelected ? googleEnabled : satelliteConfigured(mapKey, import.meta.env.VITE_MAPTILER_LICENSED ?? '');
 const basemapError = ref<string | null>(null);
-let basemap: L.TileLayer | null = null;
-let googleBasemap: GoogleTilesLayer | null = null;
+let basemaps: L.TileLayer[] = [];
 
 const loading = ref(true);
 const showOlt = ref(true);
@@ -302,29 +295,34 @@ function fitToMarkers() {
 
 function setBasemap() {
   if (!map) return;
-  if (googleSelected) {
-    if (!googleEnabled) {
-      basemapError.value = 'Google Maps está preparado, pendiente de autorización y clave del proveedor.';
-      return;
-    }
-    basemapError.value = null;
-    googleBasemap ??= new GoogleTilesLayer(map, googleConfig, message => { basemapError.value = message || null; if (message) toast.error(message); });
-    void googleBasemap.setMode(selectedBasemap.value);
-    return;
-  }
-  const definition = networkBasemap(selectedBasemap.value, mapKey, import.meta.env.VITE_MAPTILER_LICENSED ?? '');
-  basemap?.remove();
+  const mode = selectedBasemap.value;
+  basemaps.forEach(layer => { layer.off('tileerror'); layer.remove(); });
+  basemaps = [];
   let failed = false;
-  basemap = L.tileLayer(definition.url, { attribution: definition.attribution, maxNativeZoom: definition.maxNativeZoom, maxZoom: 22 });
-  basemap.on('tileerror', () => {
-    if (failed || selectedBasemap.value === 'streets') return;
-    failed = true;
-    selectedBasemap.value = 'streets';
-    toast.error('No se pudo cargar la imagen satelital. Se conserva el mapa de calles y tu trabajo.');
-  });
-  basemap.addTo(map);
+  for (const definition of zeroCostBasemaps(mode)) {
+    const layer = L.tileLayer(definition.url, {
+      attribution: definition.attribution, maxNativeZoom: definition.maxNativeZoom,
+      maxZoom: 22, zIndex: definition.zIndex,
+      // Only the visible viewport after movement; no bulk/offline prefetch.
+      updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 0,
+    });
+    layer.on('tileerror', () => {
+      if (failed || selectedBasemap.value !== mode) return;
+      failed = true;
+      basemapError.value = mode === 'streets'
+        ? 'El fondo de calles no está disponible. La infraestructura y tu trazado se conservan.'
+        : 'El servicio satelital gratuito no está disponible. Se vuelve a Calles y se conserva tu trazado.';
+      if (mode !== 'streets') selectedBasemap.value = 'streets';
+    });
+    basemaps.push(layer);
+    layer.addTo(map);
+  }
 }
-watch(selectedBasemap, setBasemap);
+watch(selectedBasemap, (_mode, oldMode) => {
+  // Keep the failure notice when returning automatically to streets.
+  if (selectedBasemap.value !== 'streets' || oldMode === 'streets') basemapError.value = null;
+  setBasemap();
+});
 
 onMounted(async () => {
   map = L.map(mapEl.value as HTMLDivElement, { zoomControl: true }).setView([-1.83, -78.18], 6);
@@ -365,7 +363,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onHistoryKeydown);
-  googleBasemap?.dispose();
+  basemaps.forEach(layer => layer.off('tileerror'));
   map?.remove();
   map = null;
 });
@@ -836,14 +834,14 @@ function clearTrace() {
 
     <div class="flex flex-wrap items-center gap-3 mb-3 text-xs">
       <label class="flex items-center gap-2">Vista del mapa
-        <select v-model="selectedBasemap" class="field-input !w-auto" aria-label="Vista del mapa" :disabled="googleSelected && !googleEnabled">
+        <select v-model="selectedBasemap" class="field-input !w-auto" aria-label="Vista del mapa">
           <option value="streets">Calles</option>
-          <option value="satellite" :disabled="!satelliteEnabled">Satélite</option>
-          <option value="hybrid" :disabled="!satelliteEnabled">Híbrido</option>
+          <option value="satellite">Satélite</option>
+          <option value="hybrid">Híbrido</option>
         </select>
       </label>
-      <span v-if="!satelliteEnabled" class="text-slate-500">Satélite e Híbrido pendientes de habilitar el proveedor cartográfico.</span>
-      <span v-if="googleSelected && googleEnabled" class="text-slate-500">Fondo: Google Maps · Infraestructura propia: SmartRayco. No digitalizar elementos de las imágenes.</span>
+      <span class="text-slate-500">Fondos gratuitos · S/0</span>
+      <span v-if="selectedBasemap !== 'streets'" data-testid="satellite-limit" class="text-amber-800">EOxCloudless 2016 · resolución aproximada de 10 m · detalle nativo hasta zoom 14. Al acercar se amplía la imagen; no muestra postes ni cambios recientes.</span>
     </div>
     <p v-if="basemapError" role="alert" class="text-sm text-amber-800 mb-3">{{ basemapError }}</p>
 

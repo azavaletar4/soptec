@@ -1,0 +1,106 @@
+{
+  "status": "IMPLEMENTED_LOCAL_VALIDATED_NOT_PUBLISHED",
+  "dateLima": "2026-11-20",
+  "branch": "fix/mapa-trazado-capas-20261120",
+  "baseCommit": "78fc035",
+  "provider": "EOxCloudless 2016 + EOX bright overlay; OSM streets default",
+  "mandatoryProviderCostPEN": 0,
+  "accountCreated": false,
+  "billingActivated": false,
+  "apiKeysRequired": false,
+  "privateFrontendKeysAdded": false,
+  "legacyPaidProviderFlagsIgnored": true,
+  "license": "2016 imagery: CC BY 4.0, commercial embedded use permitted with attribution and fair use; overlay: EOX::Maps permission with attribution",
+  "limits": {
+    "numericPublicQuota": null,
+    "fairUseAndRateLimiting": true,
+    "sla": false,
+    "imageryYear": 2016,
+    "approximateGroundResolutionMeters": 10,
+    "requestedSatelliteMaxZoom": 14,
+    "mapMaxZoomOverzoom": 22,
+    "paidFallback": false,
+    "fallback": "OpenStreetMap streets"
+  },
+  "officialSources": [
+    "https://cloudless.eox.at/documentation/faq",
+    "https://maps.eox.at/",
+    "https://tiles.maps.eox.at/wmts/1.0.0/WMTSCapabilities.xml",
+    "https://eox.at/2017/03/sentinel-2-cloudless-original-tiles-available/",
+    "https://www.maptiler.com/cloud/pricing/",
+    "https://www.maptiler.com/terms/cloud/",
+    "https://stadiamaps.com/pricing/",
+    "https://docs.stadiamaps.com/limits/",
+    "https://developers.google.com/maps/documentation/tile/usage-and-billing",
+    "https://www.sentinelmap.eu/"
+  ],
+  "liveSmoke": {
+    "capabilitiesSha256": "5f7f37b51f4bd53a2ec309d21a3fe94ef889d4af1b6b707d98cd6bf1940f5f34",
+    "capabilitiesBytes": 67911,
+    "credentialsSent": false,
+    "sampleSyntheticLocation": { "z": 14, "x": 4596, "y": 8561 },
+    "samples": [
+      {
+        "url": "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/14/8561/4596.jpg",
+        "httpStatus": 200,
+        "httpDate": "Fri, 20 Nov 2026 23:47:46 GMT",
+        "contentType": "image/jpeg",
+        "bytes": 9271,
+        "size": [256, 256],
+        "sha256": "35de4173233150f906ead56e76159c3daa9b9421778d467df0bcee4008ba3b18"
+      },
+      {
+        "url": "https://tiles.maps.eox.at/wmts/1.0.0/overlay_bright_3857/default/g/14/8561/4596.png",
+        "httpStatus": 200,
+        "httpDate": "Fri, 20 Nov 2026 23:47:47 GMT",
+        "contentType": "image/png",
+        "bytes": 8787,
+        "size": [256, 256],
+        "alphaRange": [0, 255],
+        "sha256": "40d926e3faa128bff48536cb38ca6f7e23552150bac0d6c2fd9483423b5754a6"
+      }
+    ],
+    "cacheControl": "max-age=604800"
+  },
+  "browser": {
+    "status": "PASS",
+    "at": "2026-11-20T23:52:33.206Z",
+    "checks": [
+      "OSM_DEFAULT_NO_ACCOUNT_NO_DISABLED_VIEWS",
+      "VIEWS_PRESERVE_CENTER_ZOOM_DRAFT_FILTERS_SELECTION_INFRASTRUCTURE",
+      "HYBRID_TRANSPARENT_LABEL_LAYER_BELOW_NETWORK_NO_PREFETCH",
+      "ATTRIBUTION_AND_OLD_LOW_RESOLUTION_OVERZOOM_NOTICE",
+      "NO_IMAGERY_REQUEST_ABOVE_NATIVE_ZOOM_14",
+      "CANCEL_WITH_LAYER_CHANGES_WRITES_NOTHING",
+      "SAVE_ON_SATELLITE_ONLY_SYNTHETIC_GEOMETRY_METRAGE_UNCHANGED",
+      "SYNTHETIC_GEOMETRY_RELOAD_PRESERVED",
+      "EOX_ERROR_RETURNS_TO_FREE_OSM_NO_WRITE",
+      "USER_RETRY_CLEARS_PROVIDER_ERROR",
+      "LEGACY_GOOGLE_MAPTILER_FLAGS_IGNORED_NO_PAID_OR_KEY_REQUESTS"
+    ],
+    "interceptedRequests": 109,
+    "liveRequests": 0,
+    "productionWrites": 0
+  },
+  "build": {
+    "command": "npm.cmd run build",
+    "status": "PASS",
+    "transformedModules": 446,
+    "mapChunk": "dist/assets/RedMapView-CveB9hco.js",
+    "mapChunkSha256": "99d0b4798092f9e6a62763fae45a48f1006d8ae0dc323660452859cb66703735",
+    "mapChunkBytes": 44320,
+    "mapChunkContainsPaidProviderEndpoints": false
+  },
+  "priorEditorAndSqlSuitesRepeated": false,
+  "newDependencies": 0,
+  "realDataWrites": 0,
+  "productionOperations": 0,
+  "deploy": false,
+  "migrations": false,
+  "merge": false,
+  "push": false,
+  "pending": [
+    "Owner review of 2016 medium resolution suitability",
+    "Any publication requires new authorization and revalidation of provider conditions/2016 WMTS metadata"
+  ]
+}
