@@ -1,0 +1,2 @@
+# Preserve the official attribution asset byte for byte; review provenance/hash.
+google-maps-attribution.svg -text -diff

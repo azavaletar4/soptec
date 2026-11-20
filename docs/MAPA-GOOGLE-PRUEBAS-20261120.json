@@ -1,0 +1,165 @@
+{
+  "status": "LOCAL_ADAPTER_TESTED_WITH_MOCKS_REAL_SERVICE_NOT_AUTHORIZED",
+  "at": "2026-11-20T23:29:51.492Z",
+  "branch": "fix/mapa-trazado-capas-20261120",
+  "baselineCommit": "6caea4d051bdd189ec0ff70127cee714efc13abf",
+  "implementationCommit": "f1d0e749d1dc7bff0e916ceadc29f23915a8d64e",
+  "library": "Leaflet 1.9.4",
+  "nativeGoogleJs": "Requires port of map rendering and editor interactions",
+  "preparedAdapter": "Official Google Map Tiles API for Leaflet, no new npm dependencies",
+  "activation": {
+    "defaultProvider": "existing OSM/MapTiler",
+    "googleKeyInExample": "empty",
+    "authorizedFlag": "false",
+    "realKeysUsed": false,
+    "billingEnabledByAgent": false,
+    "liveGoogleApiCalls": 0
+  },
+  "tests": {
+    "unit": {
+      "status": "PASS",
+      "cases": 11,
+      "command": "node --import tsx --test src/lib/__tests__/googleMapTiles.test.ts"
+    },
+    "browser": {
+      "status": "PASS",
+      "at": "2026-11-20T23:26:07.227Z",
+      "checks": [
+        "OFFICIAL_GOOGLE_TILES_ONLY",
+        "OFFICIAL_LOGO_VIEWPORT_CREDIT_PLAIN_TEXT",
+        "THREE_GOOGLE_VIEWS_KEEP_EXISTING_EDITOR_AND_GEOMETRY",
+        "HYBRID_IS_BLENDED_GOOGLE_IMAGERY_AND_LABELS",
+        "VIEWPORT_MOVE_UPDATES_CREDIT_PRESERVES_DRAFT",
+        "RAPID_MODE_CHANGE_IGNORES_STALE_RESPONSES",
+        "EXISTING_SAVE_PATH_ONLY_UNCHANGED",
+        "ERROR_STOPS_GOOGLE_NO_UNAUTHORIZED_OSM_FALLBACK",
+        "RECOVERY_CLEARS_STALE_PROVIDER_ERROR"
+      ],
+      "provider": "Google Map Tiles API via unchanged Leaflet editor",
+      "liveGoogleRequests": 0,
+      "fixtures": "synthetic session, viewport, tiles and infrastructure",
+      "billingEnabled": false,
+      "productionWrites": 0
+    },
+    "unauthorizedBrowser": {
+      "status": "PASS",
+      "at": "2026-11-20T23:25:35.998Z",
+      "checks": [
+        "NO_AUTHORIZATION_ZERO_GOOGLE_OR_FALLBACK_REQUESTS"
+      ],
+      "provider": "Google Map Tiles API via unchanged Leaflet editor",
+      "liveGoogleRequests": 0,
+      "fixtures": "synthetic session, viewport, tiles and infrastructure",
+      "billingEnabled": false,
+      "productionWrites": 0
+    },
+    "build": {
+      "status": "PASS",
+      "command": "npm.cmd run build",
+      "modules": 449
+    },
+    "oldEditorSuitesRepeated": false
+  },
+  "fileHashes": {
+    "deploy/map-route.env.example": "5a91261d1430a990c253e046ae0d156a9ef597f8943d91def6893b52bdea99c7",
+    "scripts/tests/google-basemap-browser.mjs": "e716b93469e1e3fd03e21eaa5d923b6120d82a4f7a818cc4fae73cd4e312284c",
+    "src/assets/providers/google-maps-attribution.svg": "16751302519e08d2cdfe3b693c78e1a288a7dc85cc17218bdc971bbdcf427cbe",
+    "src/lib/__tests__/googleMapTiles.test.ts": "7e21ec192e4b9aef697bc4b617686f589cc6ff13549b622b4a8941e90172611f",
+    "src/lib/googleMapTiles.ts": "afedd9cd5490b316aa521cdd2a1a327498065cc99040f1491e00f08710ad47de",
+    "src/lib/googleTilesLayer.ts": "35b8f4c2889b2b8f937e4ed395dd291aad6a1327346806bbe8676f07dc2e631f",
+    "src/views/mapa/RedMapView.vue": "f28b5ac7633c7e1472ddbdb1f3903e139213e6bf77276aad4865aab080a31ac7"
+  },
+  "unchangedPaths": [
+    "src/views/mapa/CableRouteEditor.vue",
+    "src/lib/cableRoute.ts",
+    "src/lib/mapBasemaps.ts",
+    "src/stores/foFibra.ts",
+    "src/views/mapa/CableHilosModal.vue",
+    "supabase",
+    "server",
+    "package.json",
+    "package-lock.json"
+  ],
+  "pricing": {
+    "checkedDate": "2026-11-20",
+    "currency": "USD, taxes excluded",
+    "scope": "Global PAYG, no other usage of billing account, no additional Google SKUs",
+    "hypotheticalNotMeasured": true,
+    "googleDynamicMaps": {
+      "freeLoads": 10000,
+      "usdPerThousandUpTo100k": 7
+    },
+    "googleTiles": {
+      "freeTiles": 100000,
+      "usdPerThousandUpTo1m": 0.6
+    },
+    "mapTiler": {
+      "baseMonthly": 30,
+      "includedRequests": 500000,
+      "extraUsdPerThousand": 0.15
+    },
+    "sources": [
+      "https://developers.google.com/maps/billing-and-pricing/pricing",
+      "https://developers.google.com/maps/billing-and-pricing/sku-details/maps",
+      "https://www.maptiler.com/cloud/pricing/"
+    ],
+    "scenarios": [
+      {
+        "operators": 10,
+        "opensPerDay": 4,
+        "workingDays": 22,
+        "tilesPerLoad": 80,
+        "monthlyLoads": 880,
+        "monthlyTiles": 70400,
+        "googleJsUsd": 0,
+        "googleTilesUsd": 0,
+        "mapTilerUsd": 30,
+        "tilesPerWorkday": 3200
+      },
+      {
+        "operators": 30,
+        "opensPerDay": 6,
+        "workingDays": 22,
+        "tilesPerLoad": 80,
+        "monthlyLoads": 3960,
+        "monthlyTiles": 316800,
+        "googleJsUsd": 0,
+        "googleTilesUsd": 130.08,
+        "mapTilerUsd": 30,
+        "tilesPerWorkday": 14400
+      },
+      {
+        "operators": 60,
+        "opensPerDay": 8,
+        "workingDays": 22,
+        "tilesPerLoad": 80,
+        "monthlyLoads": 10560,
+        "monthlyTiles": 844800,
+        "googleJsUsd": 3.92,
+        "googleTilesUsd": 446.88,
+        "mapTilerUsd": 81.72,
+        "tilesPerWorkday": 38400
+      }
+    ],
+    "crossoverTilesPerMonthInTheseRanges": 150000
+  },
+  "license": {
+    "independentOwnDataRequired": true,
+    "imageryTracingNotAuthorizedByStandardTerms": true,
+    "source": "https://cloud.google.com/maps-platform/terms",
+    "productionUseRequiresCaseReview": true,
+    "officialGoogleLogoSha256": "16751302519e08d2cdfe3b693c78e1a288a7dc85cc17218bdc971bbdcf427cbe"
+  },
+  "limitations": [
+    "No real Google service, credentials, billing, imagery coverage, CORS or latency validated",
+    "A client-side key is visible by design and must be restricted; no real key was used or exposed",
+    "No OSM/MapTiler fallback when Google is selected",
+    "Canonical release environment fingerprints must be extended before any future publication"
+  ],
+  "productionWrites": 0,
+  "deviceCommands": 0,
+  "migrationsApplied": 0,
+  "deployments": 0,
+  "merge": false,
+  "push": false
+}

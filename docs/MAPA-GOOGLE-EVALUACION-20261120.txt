@@ -1,0 +1,177 @@
+SMART RAYCO — EVALUACIÓN DE GOOGLE MAPS
+20/11/2026. Rama: fix/mapa-trazado-capas-20261120.
+Se continúa desde 17c031c y 6caea4d. No se rehízo el editor.
+Estado: adaptador local opcional, probado con simulaciones; NO activado.
+
+VIABILIDAD
+La biblioteca real es Leaflet 1.9.4, integrada en Vue 3 y Pinia.
+CableRouteEditor usa L.Map, L.Marker, L.Polyline y eventos de Leaflet.
+Persistencia y concurrencia están separadas en cableRoute.ts/foFibra.ts.
+NAP, MUFA, OLT, MikroTik, hilos, empalmes y trazabilidad son datos propios.
+
+Maps JavaScript API nativa:
+- Ofrece roadmap, satellite e hybrid con google.maps.Map.
+- No es un L.TileLayer. Requiere adaptar el renderizador de marcadores,
+  polilíneas, controles, eventos y editor de vértices a las clases Google.
+- Datos, permisos, JSONB y guardado podrían conservarse, pero la interacción
+  cartográfica tendría que portarse. No es un cambio directo de URL.
+- No se recomienda introducir GoogleMutant ni extraer mosaicos de la API JS.
+
+Map Tiles API oficial:
+- Devuelve mosaicos XYZ 2D compatibles técnicamente con L.TileLayer.
+- Las políticas oficiales contemplan renderizadores de terceros.
+- Es una API distinta de Maps JavaScript API y tiene facturación distinta.
+- Mantiene el mapa Leaflet y todas las herramientas del editor.
+- Esta fue la adaptación local preparada; no se declara certificación oficial
+  de Leaflet ni que se haya validado el servicio real sin una credencial.
+
+LICENCIA Y CONDICIONES RELEVANTES
+Una visualización con infraestructura independiente propia es diferente de
+crear datos a partir de contenido de Google. El contrato estándar prohíbe
+crear contenido derivado; pone como ejemplos digitalizar calles, edificios,
+postes o líneas eléctricas de imágenes satelitales.
+No se debe aprobar un flujo de calcar elementos de las imágenes y guardarlos
+como inventario propio bajo la suposición de que la licencia estándar lo permite.
+El origen de rutas/postes debe ser propio (GPS, levantamiento de campo u otra
+fuente autorizada). Si se quiere digitalizar imágenes, validar ese caso con
+Google/contrato aplicable antes de activar; el código no concede una excepción.
+No se habilitaron análisis de imagen, extracción, descargas masivas ni uso offline.
+
+Se preserva la marca oficial Google Maps y la atribución dinámica del viewport.
+La infraestructura se identifica separadamente como SmartRayco.
+No se mezcla fondo Google con OSM/MapTiler ni se salta a otro proveedor al fallar.
+El proveedor se elige por configuración, no con capas de otros proveedores
+simultáneas. Deben revisarse también avisos de uso/privacidad del panel.
+Maps JavaScript API exige términos y política de privacidad públicamente
+accesibles; el uso interno no elimina los demás requisitos del servicio.
+La dirección de facturación determina el contrato regional. Aquí se comparan
+precios globales; no se asumió dirección de facturación en India ni EEE.
+
+TARIFAS OFICIALES CONSULTADAS
+Google Dynamic Maps (Maps JavaScript API): primeras 10.000 cargas/mes sin
+cargo; siguiente tramo hasta 100.000, USD 7 por 1.000 cargas.
+Google Map Tiles 2D: primeros 100.000 mosaicos/mes sin cargo; siguiente
+tramo hasta 1.000.000, USD 0,60 por 1.000 mosaicos.
+Las solicitudes createSession y viewport no son eventos facturados.
+MapTiler Flex: USD 30/mes, 500.000 peticiones incluidas y USD 0,15 por
+1.000 adicionales. Free no se presupuestó para operar comercialmente un ISP.
+No se aplica el antiguo crédito Google de USD 200 que terminó en 2025.
+Los importes siguientes son estimaciones antes de impuestos, sin Places,
+Geocoding, Street View, Elevation ni otros servicios.
+Los cupos sin cargo se comparten según la cuenta y SKU, no se multiplican
+creando proyectos. El consumo adicional ajeno a SmartRayco cambia la estimación.
+
+ESCENARIOS HIPOTÉTICOS PARA UN PANEL ISP
+Supuesto: 22 días laborables y 80 mosaicos descargados por apertura.
+No son mediciones reales. Navegar mucho, cambiar fondos o recargar aumenta tiles.
+
+Operadores | Aperturas/día/operador | Cargas/mes | Tiles/mes | JS Google | Tiles Google | MapTiler
+10         | 4                     | 880        | 70.400    | USD 0     | USD 0        | USD 30
+30         | 6                     | 3.960      | 316.800   | USD 0     | USD 130,08   | USD 30
+60         | 8                     | 10.560     | 844.800   | USD 3,92  | USD 446,88   | USD 81,72
+
+Fórmulas para los rangos de esta tabla:
+cargas = operadores * 22 * aperturas;
+tiles = cargas * 80;
+JS = max(cargas-10000,0)/1000*7;
+Google Tiles = max(tiles-100000,0)/1000*0,60;
+MapTiler = 30 + max(tiles-500000,0)/1000*0,15.
+En estos rangos, Google Tiles y MapTiler empatan cerca de 150.000 tiles/mes.
+La API JS puede ser más barata por uso, pero su portado tiene costo de desarrollo.
+Para volúmenes mayores existen otros tramos/planes; no se extrapolan estas fórmulas.
+Google publica además una suscripción Starter de USD 100/mes para 50.000
+llamadas combinadas de SKUs incluidos; no compensa los tres ejemplos anteriores.
+No se contrató ningún plan.
+
+Map Tiles documenta un límite diario predeterminado de 15.000 solicitudes
+de mosaicos. El tercer escenario requeriría revisar/aumentar cuota: la cifra
+de costo no implica que ese volumen ya esté permitido por una cuenta.
+Las alertas presupuestarias no son un interruptor de facturación; los
+límites efectivos se configuran con cuotas, después de autorización.
+Ninguna cuota ni cuenta se modificó.
+
+ADAPTACIÓN LOCAL PREPARADA
+src/lib/googleMapTiles.ts:
+cliente exclusivo de endpoints oficiales, sesiones por vista solo en memoria,
+renovación por expiry, solicitudes cancelables con timeout y errores saneados.
+Hybrid = satellite + layerRoadmap, overlay:false (mosaico combinado).
+Solicita copyright y cobertura por viewport antes de mostrar las imágenes.
+
+src/lib/googleTilesLayer.ts:
+adaptador Leaflet con logo oficial sin modificar, copyright como texto seguro,
+renovación de créditos al cambiar vista, protección contra respuestas tardías,
+retiro de imágenes ante error y limpieza al desmontar.
+No usa Google Maps JS, bibliotecas extra, caché persistente, mt*.google.com
+ni extracción de DOM/URLs internas.
+
+RedMapView añade únicamente la selección del proveedor y su ciclo de vida.
+Los controles de cable, geometrías, guardado, permisos y módulos permanecen.
+El camino OSM/MapTiler sigue presente y es el predeterminado.
+No se eliminó la implementación anterior.
+
+Configuración pública documentada en deploy/map-route.env.example:
+VITE_NETWORK_MAP_PROVIDER=existing (valor actual por defecto);
+VITE_GOOGLE_MAPS_KEY vacío;
+VITE_GOOGLE_MAPS_AUTHORIZED=false.
+Solo una futura configuración google + clave + autorización habilita solicitudes.
+Un proveedor Google solicitado sin autorización muestra estado pendiente
+y genera cero llamadas a Google o a fondos alternativos.
+
+No se obtuvo, imprimió ni guardó una clave real. Una clave utilizada directamente
+por el navegador es observable por diseño; no equivale a un secreto de servidor.
+Para uso real se necesita una clave de navegador restringida por HTTP referrer
+y API, separada para pruebas/producción. Si se exige que ninguna clave llegue
+al cliente, hace falta diseñar otro canal de autenticación/backend; no prometer
+ocultarla mediante VITE. No se implementó ni activó ese backend.
+
+La marca se obtuvo de los assets oficiales de atribución Google Maps,
+conservando bytes SVG. Origen:
+https://developers.google.com/static/maps/documentation/images/Google_Maps_Attribution_Assets.zip
+Archivo: GoogleMaps_Logo_WithLightOutline.svg.
+SHA-256: 16751302519e08d2cdfe3b693c78e1a288a7dc85cc17218bdc971bbdcf427cbe.
+
+PRUEBAS
+11 pruebas unitarias nuevas del cliente: autorización, vistas, sesiones/expiry,
+endpoints, atribución/cobertura, cancelación, errores sin secretos y coordenadas.
+9 comprobaciones nuevas en navegador, con proveedor sintético: imágenes
+oficiales simuladas, marca/créditos seguros, tres fondos manteniendo editor,
+hybrid combinado, movimiento, cambio rápido de vista, guardado original,
+fallo sin cambio de proveedor y recuperación sin mensaje obsoleto.
+1 comprobación adicional sin autorización: cero solicitudes.
+Todas usan datos y respuestas simuladas; ninguna llamada real a las APIs Google.
+Se reutiliza el fixture existente del editor; no se repitieron sus 32 pruebas,
+ni PostgreSQL, auditorías generales, migraciones o verificaciones productivas.
+La evidencia JSON adjunta registra resultados, build y hashes de archivos.
+
+RECOMENDACIÓN CONCRETA
+Conservar Leaflet y el editor. Mantener OSM/MapTiler como predeterminado.
+Si se desea evaluar Google, usar este adaptador Map Tiles oficial en un
+entorno autorizado y con datos de procedencia propia, antes de decidir sustituir.
+Con consumo menor a 150.000 tiles/mes puede resultar más barato que Flex;
+con el escenario intermedio MapTiler cuesta menos y demanda menos operación.
+No migrar ahora a la API JS nativa solo para buscar menor factura: requiere
+portar la interacción ya validada. Considerarlo en otro alcance si se confirma
+que el uso sostenido y los ahorros justifican ese trabajo.
+La cobertura local y el caso de licencia prevalecen sobre el precio.
+
+PENDIENTE PARA VALIDACIÓN REAL, NO AUTORIZADO EN ESTE TRABAJO
+Validar uso/licencia, dirección de facturación y avisos de privacidad.
+Autorizar proyecto, facturación, Map Tiles API, clave restringida y cuotas.
+Probar imágenes y CORS reales en áreas SmartRayco, cobertura/zoom, tiempos,
+atribuciones y consumo medido. Después decidir proveedor.
+Para una futura publicación incorporar variables/hashes al build canónico
+y preparar paquete nuevo; no alterar el paquete sellado eb23f96.
+No se activó facturación, ni se desplegó, migró, hizo merge o push.
+
+FUENTES OFICIALES
+https://developers.google.com/maps/billing-and-pricing/pricing
+https://developers.google.com/maps/billing-and-pricing/sku-details/maps
+https://developers.google.com/maps/billing-and-pricing/overview
+https://developers.google.com/maps/documentation/javascript/maptypes
+https://developers.google.com/maps/documentation/javascript/policies
+https://developers.google.com/maps/documentation/tile/session_tokens
+https://developers.google.com/maps/documentation/tile/2d-tiles-overview
+https://developers.google.com/maps/documentation/tile/policies
+https://developers.google.com/maps/documentation/tile/usage-and-billing
+https://cloud.google.com/maps-platform/terms
+https://www.maptiler.com/cloud/pricing/
