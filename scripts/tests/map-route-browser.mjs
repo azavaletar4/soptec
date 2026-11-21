@@ -36,6 +36,9 @@ try{
  const drag=async(expression,dx=35,dy=-20)=>{const p=await point(expression);await c('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await c('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});for(let n=1;n<=8;n++)await c('Input.dispatchMouseEvent',{type:'mouseMoved',buttons:1,x:p.x+dx*n/8,y:p.y+dy*n/8});await c('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:p.x+dx,y:p.y+dy});await new Promise(r=>setTimeout(r,80))};
  const open=async()=>{await evaluate('harness.open()');await until(button('Editar trazado')+'!==undefined');await click(button('Editar trazado'));await until('document.querySelector("[data-testid=route-editor]")!==null')};
  const vertex2=`document.querySelector('.route-vertex[title^="Vértice 2"]')`;
+ const undoBtn=`document.querySelector('button[title="Ctrl+Z"]')`,redoBtn=`document.querySelector('button[title="Ctrl+Y"]')`;
+ const segPoint=async(idx,frac)=>evaluate(`(()=>{const m=harness.view.value.map;const d=harness.draft();const a=d[${idx}],b=d[${idx+1}];const ll=harness.L.latLng(a[0]+(b[0]-a[0])*${frac},a[1]+(b[1]-a[1])*${frac});const p=m.latLngToContainerPoint(ll);const r=m.getContainer().getBoundingClientRect();return {x:r.x+p.x,y:r.y+p.y}})()`);
+ const dragAt=async(p,dx,dy)=>{await c('Input.dispatchMouseEvent',{type:'mouseMoved',...p});await c('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});for(let n=1;n<=8;n++)await c('Input.dispatchMouseEvent',{type:'mouseMoved',buttons:1,x:p.x+dx*n/8,y:p.y+dy*n/8});await c('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:p.x+dx,y:p.y+dy});await new Promise(r=>setTimeout(r,80))};
  await c('Page.navigate',{url:base+'scripts/tests/map-route-browser.html'});await until('window.ready===true && harness.fibra.cables.length===1');await until('document.querySelectorAll(".leaflet-interactive").length>0');
  if(disabled){
   // Legacy --no-satellite flag now checks availability without credentials.
@@ -45,9 +48,19 @@ try{
   await open();const original=await evaluate('harness.db.cable.path');
   assert.equal(await evaluate('document.querySelectorAll(".route-locked").length'),2);
   assert.equal(await evaluate(button('Mover recorrido completo')+'.disabled'),true);
+  assert.equal(await evaluate('document.querySelectorAll(".route-segment-hit").length'),0);checks.push('NO_SEGMENT_MOVE_WHEN_BOTH_ENDS_LOCKED');
+  assert.equal(await evaluate(undoBtn+'.disabled'),true);assert.equal(await evaluate(redoBtn+'.disabled'),true);checks.push('UNDO_REDO_DISABLED_ON_FRESH_EDITOR');
   await drag(vertex2);const changed=await evaluate('harness.draft()');assert.notDeepEqual(changed,original);assert.deepEqual(changed[0],original[0]);assert.deepEqual(changed.at(-1),original.at(-1));assert.deepEqual(await evaluate('harness.db.cable.path'),original);checks.push('REAL_DRAG_DRAFT_ONLY_CONNECTED_ENDS_FIXED');
   await click('document.querySelector(".route-midpoint")');assert.equal((await evaluate('harness.draft()')).length,4);await click(button('Quitar vértice seleccionado'));assert.equal((await evaluate('harness.draft()')).length,3);checks.push('ADD_REMOVE_VERTEX');
   await click(button('Restaurar trazado original'));assert.deepEqual(await evaluate('harness.draft()'),original);checks.push('RESTORE_ORIGINAL_WITHOUT_WRITES');
+  assert.equal(await evaluate(redoBtn+'.disabled'),true);
+  await drag(vertex2);const draggedForUndo=await evaluate('harness.draft()');assert.equal(await evaluate(undoBtn+'.disabled'),false);
+  await click(undoBtn);assert.deepEqual(await evaluate('harness.draft()'),original);assert.equal(await evaluate(redoBtn+'.disabled'),false);
+  await click(redoBtn);assert.deepEqual(await evaluate('harness.draft()'),draggedForUndo);
+  await click(undoBtn);assert.deepEqual(await evaluate('harness.draft()'),original);
+  await click('document.querySelector(".route-midpoint")');assert.equal((await evaluate('harness.draft()')).length,4);
+  await click(undoBtn);assert.deepEqual(await evaluate('harness.draft()'),original);
+  checks.push('UNDO_REDO_DRAG_AND_INSERT');
   await drag(vertex2);const beforeSave=await evaluate('harness.draft()');await click(button('Guardar trazado'));await until('document.querySelector("[data-testid=route-editor]")===null');assert.deepEqual(await evaluate('harness.db.cable.path'),beforeSave);assert.equal(await evaluate('harness.db.cable.metraje'),987);assert.equal(await evaluate('harness.db.cable.hilos_total'),12);assert.equal(await evaluate('harness.db.cable.origen_infra_id'),'nap');checks.push('SAVE_ONLY_PATH_KEEP_LENGTH_CAPACITY_LINKS');
   await c('Page.navigate',{url:base+'scripts/tests/map-route-browser.html'});await until('window.ready===true && harness.fibra.cables.length===1');assert.deepEqual(await evaluate('JSON.parse(JSON.stringify(harness.fibra.cables[0].path))'),beforeSave);checks.push('RELOAD_PERSISTED_GEOMETRY');
   await open();await drag(vertex2);await click(button('Cancelar trazado'));await until('document.querySelector("[data-testid=route-editor]")===null');assert.deepEqual(await evaluate('harness.db.cable.path'),beforeSave);assert.equal(await evaluate('harness.writes'),0);checks.push('CANCEL_PRESERVES_DATABASE');
@@ -57,6 +70,14 @@ try{
   const draftBeforePan=await evaluate('harness.draft()');await drag('document.querySelector(".leaflet-container")',70,30);assert.deepEqual(await evaluate('harness.draft()'),draftBeforePan);checks.push('MAP_PAN_NEVER_MOVES_CABLE');
   await evaluate('harness.concurrent()');await click(button('Guardar trazado'));await until('document.body.innerText.includes("El cable cambió")');assert.equal(await evaluate('harness.writes'),0);assert.notEqual(await evaluate('harness.draft()'),null);checks.push('CONCURRENT_EDIT_CONFLICT_KEEPS_DRAFT_NO_OVERWRITE');
   await click(button('Cancelar trazado'));await evaluate('harness.free()');await open();await click(button('Mover recorrido completo'));const freeBefore=await evaluate('harness.draft()');await drag('document.querySelector(".route-move-handle")',25,-15);const freeAfter=await evaluate('harness.draft()');assert.notDeepEqual(freeAfter,freeBefore);for(let i=0;i<freeAfter.length;i++){assert.ok(Math.abs((freeAfter[i][0]-freeBefore[i][0])-(freeAfter[0][0]-freeBefore[0][0]))<0.0000002)}checks.push('TRANSLATE_FREE_ROUTE_ONLY');
+  await click(button('Editar vértices'));
+  assert.equal(await evaluate('document.querySelectorAll(".route-segment-hit").length'),2);
+  const beforeSeg=await evaluate('harness.draft()');const segPt=await segPoint(0,0.3);await dragAt(segPt,18,12);const afterSeg=await evaluate('harness.draft()');
+  assert.notDeepEqual(afterSeg[0],beforeSeg[0]);assert.notDeepEqual(afterSeg[1],beforeSeg[1]);assert.deepEqual(afterSeg[2],beforeSeg[2]);
+  const dLat0=afterSeg[0][0]-beforeSeg[0][0],dLng0=afterSeg[0][1]-beforeSeg[0][1];
+  assert.ok(Math.abs((afterSeg[1][0]-beforeSeg[1][0])-dLat0)<0.0000002 && Math.abs((afterSeg[1][1]-beforeSeg[1][1])-dLng0)<0.0000002);
+  checks.push('MOVE_SEGMENT_BOTH_FREE_ENDPOINTS_TOGETHER');
+  await click(undoBtn);assert.deepEqual(await evaluate('harness.draft()'),beforeSeg);checks.push('MOVE_SEGMENT_UNDOABLE');
   await evaluate('harness.auth.role=null');await until(button('Guardar trazado')+'.disabled');assert.equal(await evaluate('harness.writes'),0);await click(button('Cancelar trazado'));await evaluate('harness.open()');await until('document.querySelectorAll(".modal-overlay").length>0');assert.equal(await evaluate(button('Editar trazado')+'!==undefined'),false);checks.push('ROLE_REVOCATION_DISABLES_SAVE_AND_ENTRY');
   assert.ok(tiles.some(u=>u.includes('/s2cloudless_3857/')));assert.ok(tiles.some(u=>u.includes('/overlay_bright_3857/')));
   // Simulate a provider error after the successful switching checks.
