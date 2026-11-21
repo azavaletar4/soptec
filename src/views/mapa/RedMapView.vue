@@ -830,7 +830,19 @@ function clearTrace() {
       </div>
     </div>
 
-    <CableRouteEditor v-if="routeCable && map" :key="routeCable.id" :map="map" :cable="routeCable" :saving="routeSaving" :error="routeError" :allowed="canEditRoute" @save="saveRoute" @cancel="routeCable = null" />
+    <CableRouteEditor
+      v-if="routeCable && map"
+      :key="routeCable.id"
+      :map="map"
+      :cable="routeCable"
+      :saving="routeSaving"
+      :error="routeError"
+      :allowed="canEditRoute"
+      :origin-name="elementoNombre(routeCable.origen_olt_id, routeCable.origen_infra_id)"
+      :dest-name="elementoNombre(routeCable.destino_olt_id, routeCable.destino_infra_id)"
+      @save="saveRoute"
+      @cancel="routeCable = null"
+    />
 
     <div class="flex flex-wrap items-center gap-3 mb-3 text-xs">
       <label class="flex items-center gap-2">Vista del mapa

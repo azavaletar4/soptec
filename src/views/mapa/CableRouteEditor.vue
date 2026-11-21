@@ -4,7 +4,15 @@ import L from 'leaflet';
 import { cloneRoute, routeLocks, translateRoute, validateRoute } from '@/lib/cableRoute';
 import type { FoCable, LatLngPoint } from '@/types/domain';
 
-const props = defineProps<{ map: L.Map; cable: FoCable; saving: boolean; error: string | null; allowed: boolean }>();
+// originName/destName: nombre REAL del elemento vinculado (resuelto por el
+// padre con el mismo elementoNombre() que ya usa el mapa), nunca inferido
+// aqui por cercania ni coordenadas. routeLocks() solo mira si origen_*/
+// destino_* tiene un id -- un id puede apuntar a un registro real pero
+// incorrecto (caso real encontrado 21/11/2026: un "destino_infra_id" vivo
+// apuntando a una caja NAP de prueba nunca borrada); mostrar el nombre deja
+// que la persona lo note, en vez de que el codigo adivine cual conexion es
+// "valida".
+const props = defineProps<{ map: L.Map; cable: FoCable; saving: boolean; error: string | null; allowed: boolean; originName: string; destName: string }>();
 const emit = defineEmits<{ save: [points: LatLngPoint[]]; cancel: [] }>();
 const original = cloneRoute(props.cable.path);
 const points = ref(cloneRoute(original));
@@ -22,6 +30,13 @@ let controls: L.LayerGroup;
 const round = (p: L.LatLng): LatLngPoint => [Number(p.lat.toFixed(7)), Number(p.lng.toFixed(7))];
 const editable = () => props.allowed && !props.saving;
 const locked = (i: number) => (i === 0 && locks.start) || (i === points.value.length - 1 && locks.end);
+const lockedName = (i: number) => (i === 0 ? props.originName : props.destName);
+const lockStatusText = computed(() => {
+  if (!locks.start && !locks.end) return 'Los extremos no están conectados. Puedes moverlos o desplazar el recorrido completo.';
+  const parte = (connected: boolean, name: string, etiqueta: string) =>
+    connected ? `${etiqueta} conectado a "${name}" (fijo)` : `${etiqueta} libre (puedes moverlo)`;
+  return `${parte(locks.start, props.originName, 'Extremo inicial')}. ${parte(locks.end, props.destName, 'Extremo final')}. No se mueven cajas ni equipos.`;
+});
 
 // Deshacer/rehacer locales del borrador (nunca toca Supabase): una
 // instantánea de `points` antes de CADA accion discreta (arrastrar un
@@ -136,7 +151,7 @@ function render() {
   points.value.forEach((point, i) => {
     const marker = L.marker(point, {
       draggable: !locked(i), keyboard: true,
-      title: locked(i) ? `Extremo conectado ${i + 1} (fijo) — no se puede arrastrar` : `Vértice ${i + 1}: arrastrar o seleccionar`,
+      title: locked(i) ? `Extremo conectado a "${lockedName(i)}" (fijo) — no se puede arrastrar` : `Vértice ${i + 1}: arrastrar o seleccionar`,
       // Area real de agarre mas grande que el circulo dibujado (34px, antes
       // 26px) -- en la practica, con mouse/trackpad, 26px es dificil de
       // acertar y un fallo silencioso (clic justo al lado) se ve identico
@@ -226,7 +241,7 @@ onBeforeUnmount(() => {
         <h2 class="font-semibold">Editar trazado · {{ cable.codigo }}</h2>
         <p class="text-xs text-slate-600 mt-1">Arrastra los puntos numerados. Pulsa + para agregar un vértice y selecciona uno intermedio para quitarlo. Arrastra la línea entre dos vértices libres (fuera del +) para mover ese tramo completo.</p>
         <p class="text-xs text-slate-600 mt-1">{{ points.length }} vértices · Longitud geográfica: <b>{{ meters }} m</b> · Metraje registrado: <b>{{ cable.metraje == null ? 'Sin registrar' : cable.metraje + ' m' }}</b> (se conserva).</p>
-        <p class="text-xs text-slate-600 mt-1">{{ locks.start || locks.end ? 'Los extremos conectados permanecen fijos. No se mueven cajas ni equipos.' : 'Los extremos no están conectados. Puedes moverlos o desplazar el recorrido completo.' }}</p>
+        <p class="text-xs text-slate-600 mt-1">{{ lockStatusText }}</p>
       </div>
       <div class="flex flex-wrap gap-2">
         <button class="btn-secondary text-xs" :disabled="!canUndo || saving || !allowed" title="Ctrl+Z" @click="undo">↶ Deshacer{{ canUndo ? ` (${undoStack.length})` : '' }}</button>

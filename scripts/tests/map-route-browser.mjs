@@ -94,6 +94,33 @@ try{
   assert.deepEqual(afterEndpointDrag[2], beforeEndpointDrag[2]);
   checks.push('DRAG_FREE_ENDPOINT_VERTEX');
   await click(undoBtn);assert.deepEqual(await evaluate('harness.draft()'),beforeEndpointDrag);
+  // Caso mixto, reportado real (21/11/2026): "RAMAL DE 6H" con origen libre
+  // y destino conectado a una caja NAP de prueba nunca borrada ("boirrar").
+  // Ningun test anterior cubria un cable con UN extremo conectado y el
+  // OTRO libre (siempre ambos iguales). Debe poder arrastrarse solo el
+  // libre; el conectado sigue fijo Y debe mostrarse con el nombre REAL
+  // del elemento vinculado (nunca "Elemento"/generico ni por cercania).
+  await click(button('Cancelar trazado'));
+  await evaluate("(async()=>{harness.db.cable={...structuredClone(harness.original),origen_infra_id:null};localStorage.setItem('synthetic-route',JSON.stringify(harness.db.cable));await harness.fibra.fetchCables()})()");
+  await open();
+  assert.equal(await evaluate('document.querySelectorAll(".route-locked").length'), 1);
+  assert.ok(await evaluate("document.body.innerText.includes('MUFA SINTETICA')"), 'debe mostrar el nombre real del extremo conectado, no un texto generico');
+  // 3 puntos = 2 tramos: el tramo 0-1 (ambos libres) SI admite mover-tramo;
+  // el tramo 1-2 (vertice 2 conectado) no -- a diferencia de "mover
+  // recorrido completo", que exige AMBOS extremos libres, mover un tramo
+  // se evalua POR TRAMO.
+  assert.equal(await evaluate('document.querySelectorAll(".route-segment-hit").length'), 1, 'solo el tramo sin ningun extremo conectado debe admitir mover-tramo');
+  const mixedBefore = await evaluate('harness.draft()');
+  await drag(vertex1, 12, -8);
+  const mixedAfterFree = await evaluate('harness.draft()');
+  assert.notDeepEqual(mixedAfterFree[0], mixedBefore[0]);
+  assert.deepEqual(mixedAfterFree.at(-1), mixedBefore.at(-1));
+  await click(undoBtn);
+  const vertexLast = `document.querySelector('.route-vertex[title^="Extremo conectado"]')`;
+  const beforeLockedDrag = await evaluate('harness.draft()');
+  await drag(vertexLast, 12, -8);
+  assert.deepEqual(await evaluate('harness.draft()'), beforeLockedDrag, 'el extremo conectado nunca debe moverse, ni en un cable mixto');
+  checks.push('MIXED_ONE_LOCKED_ONE_FREE_ONLY_FREE_MOVES');
   await evaluate('harness.auth.role=null');await until(button('Guardar trazado')+'.disabled');assert.equal(await evaluate('harness.writes'),0);await click(button('Cancelar trazado'));await evaluate('harness.open()');await until('document.querySelectorAll(".modal-overlay").length>0');assert.equal(await evaluate(button('Editar trazado')+'!==undefined'),false);checks.push('ROLE_REVOCATION_DISABLES_SAVE_AND_ENTRY');
   assert.ok(tiles.some(u=>u.includes('/s2cloudless_3857/')));assert.ok(tiles.some(u=>u.includes('/overlay_bright_3857/')));
   // Simulate a provider error after the successful switching checks.
