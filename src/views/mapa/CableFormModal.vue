@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { FO_HILOS_TOTAL_OPCIONES } from '@/types/domain';
 import type { FoCable, FoCableTipo, InfraElemento, LatLngPoint } from '@/types/domain';
 import type { OltDevice } from '@/stores/olt';
+import { useConfirm } from '@/composables/useConfirm';
 
 const props = defineProps<{
   canDelete?: boolean;
@@ -47,6 +48,15 @@ function parseExtremo(v: ExtremoValue) {
   return { olt_id: null, infra_id: null };
 }
 
+// Mismo patron que elementoNombre() en RedMapView.vue / nombreExtremo() en
+// CableHilosModal.vue -- resuelve el nombre REAL a partir de los datos ya
+// cargados (props.oltDevices/props.infraElementos), nunca por cercania.
+function nombreDe(oltId: string | null, infraId: string | null): string {
+  if (oltId) return props.oltDevices.find((o) => o.id === oltId)?.name ?? 'OLT';
+  if (infraId) return props.infraElementos.find((e) => e.id === infraId)?.name ?? 'Elemento';
+  return 'Sin definir';
+}
+
 async function submit() {
   error.value = null;
   if (!form.value.codigo.trim()) {
@@ -55,6 +65,35 @@ async function submit() {
   }
   const origen = parseExtremo(form.value.origen as ExtremoValue);
   const destino = parseExtremo(form.value.destino as ExtremoValue);
+
+  // Desvincular un extremo YA conectado (pasar a "Sin definir") exige
+  // SUPERADMIN y confirmacion explicita -- el servidor (trigger
+  // guard_cable_endpoint_unlink) lo exige igual, con o sin esto; esto solo
+  // evita un intento fallido confuso y explica, en lenguaje simple, que se
+  // desvincula y que permanece intacto. Reasignar a OTRO elemento real
+  // (ninguno de los dos queda vacio) no entra aqui: no es una
+  // desvinculacion, sigue disponible para el mismo personal de siempre.
+  const unlinkingOrigen = !!(props.cable?.origen_olt_id || props.cable?.origen_infra_id) && !origen.olt_id && !origen.infra_id;
+  const unlinkingDestino = !!(props.cable?.destino_olt_id || props.cable?.destino_infra_id) && !destino.olt_id && !destino.infra_id;
+  if (unlinkingOrigen || unlinkingDestino) {
+    if (!props.canDelete) {
+      error.value = 'Solo un SUPERADMIN puede desvincular un extremo ya conectado.';
+      return;
+    }
+    const partes: string[] = [];
+    if (unlinkingOrigen) partes.push(`origen (actualmente "${nombreDe(props.cable!.origen_olt_id, props.cable!.origen_infra_id)}")`);
+    if (unlinkingDestino) partes.push(`destino (actualmente "${nombreDe(props.cable!.destino_olt_id, props.cable!.destino_infra_id)}")`);
+    const ok = await useConfirm().confirmDialog({
+      title: 'Desvincular extremo conectado',
+      message: `Vas a desvincular el ${partes.join(' y el ')} de este cable.\nEl cable, su trazado, hilos, fusiones e historial permanecen intactos.\nLa caja/OLT y sus clientes, contratos u órdenes NO se modifican — solo deja de estar marcada como extremo de este cable.\nDespués podrás mover ese extremo libremente desde "Editar trazado".`,
+      wrapMessage: true,
+      warning: true,
+      focusCancel: true,
+      confirmLabel: 'Desvincular',
+    });
+    if (!ok) return;
+  }
+
   saving.value = true;
   try {
     emit('save', {

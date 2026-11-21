@@ -521,6 +521,11 @@ async function handleDeleteInfra() {
     if (!preview) return;
     const result = await infraStore.deleteElemento(id, preview);
     fibra.applyMapRemoval(result);
+    // El servidor ya deja sin efecto el origen/destino de los cables que
+    // todavia apuntaban a este elemento (ver migracion
+    // 20261121190726_fo_cable_endpoint_unlink_guard.sql) -- esto solo
+    // refleja lo mismo en el estado local, sin otro viaje a la red.
+    fibra.clearInfraLinks(id);
     showInfraModal.value = false;
     clearTrace();
     renderInfraMarkers();

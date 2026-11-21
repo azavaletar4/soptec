@@ -22,6 +22,7 @@ supabase.from=table=>{
  const matches=r=>filters.every(([k,v])=>k==='path'?JSON.stringify(r[k])===v:(r[k]??null)===v);
  const builder={select(){return this},order(){return this},eq(k,v){filters.push([k,v]);return this},is(k,v){filters.push([k,v]);return this},update(p){if(table!=='fo_cables')throw Error('TABLA_NO_PERMITIDA');payload=p;return this},
   async maybeSingle(){attempts++;calls.push({table,payload,filters});if(!matches(db.cable))return {data:null,error:null};if(Object.keys(payload).join()!=='path')throw Error('SOLO_PATH');db.cable={...db.cable,path:structuredClone(payload.path),updated_at:new Date(Date.parse(db.cable.updated_at)+1000).toISOString()};writes++;localStorage.setItem('synthetic-route',JSON.stringify(db.cable));return {data:structuredClone(db.cable),error:null}},
+  async single(){attempts++;calls.push({table,payload,filters});if(table!=='fo_cables'||!matches(db.cable))return {data:null,error:{message:'NOT_FOUND'}};db.cable={...db.cable,...payload,updated_at:new Date(Date.parse(db.cable.updated_at)+1000).toISOString()};writes++;localStorage.setItem('synthetic-route',JSON.stringify(db.cable));return {data:structuredClone(db.cable),error:null}},
   then(resolve){const data=table==='fo_cables'?[db.cable]:table==='infra_elementos'?db.infra:[];resolve({data:structuredClone(data.filter(matches)),error:null})}};
  return builder;
 };
