@@ -78,6 +78,22 @@ try{
   assert.ok(Math.abs((afterSeg[1][0]-beforeSeg[1][0])-dLat0)<0.0000002 && Math.abs((afterSeg[1][1]-beforeSeg[1][1])-dLng0)<0.0000002);
   checks.push('MOVE_SEGMENT_BOTH_FREE_ENDPOINTS_TOGETHER');
   await click(undoBtn);assert.deepEqual(await evaluate('harness.draft()'),beforeSeg);checks.push('MOVE_SEGMENT_UNDOABLE');
+  // Reportado por el propietario (21/11/2026, video real): un cable SUELTO
+  // (sin conectar) no se dejaba mover -- diagnosticado como el circulo de
+  // 26px dificil de acertar con el mouse, no un error de logica. Prueba
+  // puntual: arrastrar el VERTICE 1 (un extremo real, no el del medio) de
+  // un cable con ambos extremos libres, algo que ninguna prueba anterior
+  // cubria (solo se arrastraba el vertice del medio o el handle de mover
+  // todo el recorrido).
+  const vertex1 = `document.querySelector('.route-vertex[title^="Vértice 1"]')`;
+  const beforeEndpointDrag = await evaluate('harness.draft()');
+  await drag(vertex1, 15, -10);
+  const afterEndpointDrag = await evaluate('harness.draft()');
+  assert.notDeepEqual(afterEndpointDrag[0], beforeEndpointDrag[0]);
+  assert.deepEqual(afterEndpointDrag[1], beforeEndpointDrag[1]);
+  assert.deepEqual(afterEndpointDrag[2], beforeEndpointDrag[2]);
+  checks.push('DRAG_FREE_ENDPOINT_VERTEX');
+  await click(undoBtn);assert.deepEqual(await evaluate('harness.draft()'),beforeEndpointDrag);
   await evaluate('harness.auth.role=null');await until(button('Guardar trazado')+'.disabled');assert.equal(await evaluate('harness.writes'),0);await click(button('Cancelar trazado'));await evaluate('harness.open()');await until('document.querySelectorAll(".modal-overlay").length>0');assert.equal(await evaluate(button('Editar trazado')+'!==undefined'),false);checks.push('ROLE_REVOCATION_DISABLES_SAVE_AND_ENTRY');
   assert.ok(tiles.some(u=>u.includes('/s2cloudless_3857/')));assert.ok(tiles.some(u=>u.includes('/overlay_bright_3857/')));
   // Simulate a provider error after the successful switching checks.

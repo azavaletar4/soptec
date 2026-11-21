@@ -136,8 +136,19 @@ function render() {
   points.value.forEach((point, i) => {
     const marker = L.marker(point, {
       draggable: !locked(i), keyboard: true,
-      title: locked(i) ? `Extremo conectado ${i + 1} (fijo)` : `Vértice ${i + 1}: arrastrar o seleccionar`,
-      icon: L.divIcon({ className: `route-vertex ${locked(i) ? 'route-locked' : ''} ${selected.value === i ? 'route-selected' : ''}`, html: String(i + 1), iconSize: [26, 26], iconAnchor: [13, 13] }),
+      title: locked(i) ? `Extremo conectado ${i + 1} (fijo) — no se puede arrastrar` : `Vértice ${i + 1}: arrastrar o seleccionar`,
+      // Area real de agarre mas grande que el circulo dibujado (34px, antes
+      // 26px) -- en la practica, con mouse/trackpad, 26px es dificil de
+      // acertar y un fallo silencioso (clic justo al lado) se ve identico
+      // a "no funciona". El numero/color va en un <span> INTERNO, nunca en
+      // el div que Leaflet posiciona con su propio transform: si el :hover
+      // de abajo escalara ese div exterior, pelearia con esa posicion y el
+      // marcador "saltaria".
+      icon: L.divIcon({
+        className: `route-vertex ${locked(i) ? 'route-locked' : ''} ${selected.value === i ? 'route-selected' : ''}`,
+        html: `<span class="route-vertex-dot">${i + 1}</span>`,
+        iconSize: [34, 34], iconAnchor: [17, 17],
+      }),
     }).addTo(controls);
     marker.on('click', () => { if (!editable()) return; selected.value = i; render(); });
     marker.on('dragstart', () => { if (editable() && !locked(i)) commit(); });
@@ -152,7 +163,7 @@ function render() {
     const a = points.value[i], b = points.value[i + 1];
     const marker = L.marker([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], {
       keyboard: true, title: `Agregar vértice en tramo ${i + 1}`,
-      icon: L.divIcon({ className: 'route-midpoint', html: '+', iconSize: [22, 22], iconAnchor: [11, 11] }),
+      icon: L.divIcon({ className: 'route-midpoint', html: '<span class="route-midpoint-dot">+</span>', iconSize: [28, 28], iconAnchor: [14, 14] }),
     }).addTo(controls);
     marker.on('click', () => {
       if (!editable() || points.value.length >= 10000) return;
@@ -234,10 +245,27 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-.route-vertex, .route-midpoint, .route-move-handle { display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid #86198f; background: white; color: #701a75; font-weight: 700; box-shadow: 0 1px 5px #0005; }
-.route-vertex.route-locked { background: #e2e8f0; border-color: #64748b; color: #334155; }
-.route-vertex.route-selected { outline: 3px solid #f0abfc; }
-.route-midpoint { border-style: dashed; font-size: 18px; }
-.route-move-handle { background: #fef3c7; border-color: #b45309; font-size: 24px; }
+/* El div exterior (.route-vertex / .route-midpoint) es el que Leaflet
+   posiciona con su propio transform: translate3d(...) -- nunca ponerle un
+   transform propio (ni :hover) aqui, o el marcador "salta" de lugar. El
+   circulo visible vive en un <span> interno (.route-vertex-dot /
+   .route-midpoint-dot) que sí se puede escalar al pasar el mouse, dando
+   una señal clara de "esto se puede agarrar" ANTES de soltar el clic —
+   confirmado con usuarios reales que el círculo pequeño (26px) se sentía
+   roto: el clic caía al lado y no pasaba nada, sin ningún aviso.
+   iconSize ya viene agrandado en el script (34px vértices, 28px "+"); esto
+   solo agrega la retroalimentación visual encima. */
+.route-vertex, .route-midpoint, .route-move-handle { display: flex; align-items: center; justify-content: center; }
+.route-vertex-dot, .route-midpoint-dot {
+  display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;
+  border-radius: 50%; border: 2px solid #86198f; background: white; color: #701a75;
+  font-weight: 700; box-shadow: 0 1px 5px #0005; transition: transform .08s ease-out;
+}
+.route-vertex:hover .route-vertex-dot, .route-midpoint:hover .route-midpoint-dot { transform: scale(1.3); }
+.route-vertex.route-locked .route-vertex-dot { background: #e2e8f0; border-color: #64748b; color: #334155; cursor: not-allowed; }
+.route-vertex.route-locked:hover .route-vertex-dot { transform: none; } /* fijo: ni agrandar simula que se puede arrastrar */
+.route-vertex.route-selected .route-vertex-dot { outline: 3px solid #f0abfc; }
+.route-midpoint-dot { border-style: dashed; font-size: 18px; cursor: copy; }
+.route-move-handle { background: #fef3c7; border-color: #b45309; font-size: 24px; border-radius: 50%; border: 2px solid #b45309; }
 .route-segment-hit { cursor: move; }
 </style>
