@@ -1,6 +1,6 @@
-import { Hono } from 'hono';
+import { Hono, type Context, type Next } from 'hono';
 import { createClient } from '@supabase/supabase-js';
-import { requireAuth, requireRole, invalidateProfileCache } from '../middleware/auth';
+import { requireAuth, invalidateProfileCache } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import type { Role } from '../types';
 
@@ -8,7 +8,23 @@ export const usersRoutes = new Hono();
 
 // Gestion de usuarios de staff (crear/editar/eliminar) es exclusiva de
 // SUPERADMIN — a diferencia de otros modulos, no se comparte con ADMIN.
-const MANAGE = ['SUPERADMIN'] as const;
+// La caché general de requireAuth no autoriza la administración de cuentas.
+// Releer el perfil evita que una sesión demovida/desactivada conserve acceso.
+async function requireManageUsers(c: Context, next: Next) {
+  const actor = c.get('user');
+  if (!actor) return c.json({ error: 'No autenticado' }, 401);
+  const { data, error } = await supabaseAdmin.from('profiles').select('role, active').eq('id', actor.id).maybeSingle();
+  if (error) return c.json({ error: 'No se pudieron verificar los permisos vigentes' }, 503);
+  if (data?.role !== 'SUPERADMIN' || data.active !== true) return c.json({ error: 'La gestión de usuarios requiere SUPERADMIN activo' }, 403);
+  await next();
+}
+
+function profileSession(c: Context) {
+  return createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: c.req.header('Authorization')! } },
+  });
+}
 
 // CLIENTE no es un rol que se gestione aqui (los clientes no inician sesion
 // en esta plataforma via profiles — este modulo es solo para tecnicos y
@@ -61,7 +77,7 @@ usersRoutes.post('/me/change-password', async (c) => {
   return c.json({ ok: true });
 });
 
-usersRoutes.get('/', requireRole(...MANAGE), async (c) => {
+usersRoutes.get('/', requireManageUsers, async (c) => {
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select(PROFILE_FIELDS)
@@ -71,7 +87,7 @@ usersRoutes.get('/', requireRole(...MANAGE), async (c) => {
   return c.json(data ?? []);
 });
 
-usersRoutes.post('/', requireRole(...MANAGE), async (c) => {
+usersRoutes.post('/', requireManageUsers, async (c) => {
   const body = await c.req.json();
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const password = typeof body.password === 'string' ? body.password : '';
@@ -89,6 +105,7 @@ usersRoutes.post('/', requireRole(...MANAGE), async (c) => {
   if (!ASSIGNABLE_ROLES.includes(role)) return c.json({ error: 'Rol invalido' }, 400);
   if (password.length < 8) return c.json({ error: 'La contraseña debe tener al menos 8 caracteres' }, 400);
 
+  const operatorDb = profileSession(c);
   const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
@@ -101,7 +118,9 @@ usersRoutes.post('/', requireRole(...MANAGE), async (c) => {
   // El trigger handle_new_user ya inserto el profile (rol CLIENTE y un
   // username auto-generado del correo) — lo completamos con el nombre,
   // rol y username reales.
-  const { data: profile, error: profileErr } = await supabaseAdmin
+  // PostgreSQL recibe el JWT del SUPERADMIN y vuelve a comprobarlo, incluso
+  // si se revocó su rol después del control HTTP. service_role no asigna roles.
+  const { data: profile, error: profileErr } = await operatorDb
     .from('profiles')
     .update({ full_name: fullName || null, role, username, phone: phone || null })
     .eq('id', created.user.id)
@@ -115,13 +134,13 @@ usersRoutes.post('/', requireRole(...MANAGE), async (c) => {
     const message = /duplicate key|unique/i.test(profileErr.message)
       ? 'Ese nombre de usuario ya esta en uso'
       : profileErr.message;
-    return c.json({ error: message }, 400);
+    return c.json({ error: message }, ['42501', 'PGRST116'].includes(profileErr.code) ? 403 : 400);
   }
 
   return c.json(profile, 201);
 });
 
-usersRoutes.patch('/:id', requireRole(...MANAGE), async (c) => {
+usersRoutes.patch('/:id', requireManageUsers, async (c) => {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'Falta el id' }, 400);
   const currentUser = c.get('user');
@@ -160,10 +179,12 @@ usersRoutes.patch('/:id', requireRole(...MANAGE), async (c) => {
   }
 
   if (Object.keys(updates).length > 0) {
-    const { error } = await supabaseAdmin.from('profiles').update(updates).eq('id', id);
+    // RLS puede excluir todas las filas sin devolver error en un UPDATE
+    // normal. Exigir una fila impide continuar con Auth tras una revocación.
+    const { error } = await profileSession(c).from('profiles').update(updates).eq('id', id).select('id').single();
     if (error) {
       const message = /duplicate key|unique/i.test(error.message) ? 'Ese nombre de usuario ya esta en uso' : error.message;
-      return c.json({ error: message }, 400);
+      return c.json({ error: message }, ['42501', 'PGRST116'].includes(error.code) ? 403 : 400);
     }
     // Sin esto, un rol cambiado o una cuenta recien desactivada seguiria
     // actuando con los permisos viejos hasta 60s (ver PROFILE_TTL_MS en
@@ -186,7 +207,7 @@ usersRoutes.patch('/:id', requireRole(...MANAGE), async (c) => {
 // la suya) y lo obliga a cambiarla en su proximo ingreso — a diferencia del
 // campo "password" del PATCH de arriba (clave elegida por el admin, sin
 // forzar cambio), esta accion es explicitamente el flujo de "se me olvido".
-usersRoutes.post('/:id/reset-password', requireRole(...MANAGE), async (c) => {
+usersRoutes.post('/:id/reset-password', requireManageUsers, async (c) => {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'Falta el id' }, 400);
 
@@ -204,7 +225,7 @@ usersRoutes.post('/:id/reset-password', requireRole(...MANAGE), async (c) => {
   return c.json(data);
 });
 
-usersRoutes.delete('/:id', requireRole(...MANAGE), async (c) => {
+usersRoutes.delete('/:id', requireManageUsers, async (c) => {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'Falta el id' }, 400);
   const currentUser = c.get('user');
