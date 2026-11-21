@@ -160,6 +160,23 @@ interface KnownOnt {
   contract_id: string | null;
 }
 
+// Diagnostico de consumo de logs de Supabase (21/11/2026): la senal optica
+// real varia decimas de dB entre lecturas sin ningun cambio real (ruido del
+// ADC) -- exigir una diferencia EXACTA disparaba una escritura real a
+// Supabase (UPDATE+SELECT) para ~90% de las ONTs en cada sync que incluye
+// lectura de senal (~700 solicitudes confirmadas via logs de la API en un
+// solo ciclo), la segunda mayor fuente de ingesta de logs del proyecto tras
+// el monitoreo de borde MikroTik. La deteccion de alertas (oltAlerts.ts)
+// no se ve afectada por este umbral: compara contra su propia referencia en
+// memoria (ontTelemetry.signalReference), que se actualiza en CADA lectura
+// valida sin importar si esta funcion decide persistir el cambio o no.
+export const SIGNAL_WRITE_DEADBAND_DBM = Number(process.env.OLT_SIGNAL_WRITE_DEADBAND_DBM ?? 0.5);
+export function isMeaningfulPowerChange(previous: number | null, next: number | undefined): boolean {
+  if (next === undefined) return false;
+  if (previous === null) return true;
+  return Math.abs(previous - next) >= SIGNAL_WRITE_DEADBAND_DBM;
+}
+
 interface PendingUpdate {
   id: string;
   status?: 'online' | 'offline';
@@ -267,7 +284,7 @@ async function performFullSync(
       pushAlert(row, signalAlert, `posición ${evidence.position} señal ${update.rx_power} dBm`);
       signalReadings.push({ row, evidence });
     }
-    if (row.status !== update.status || row.admin_state !== update.admin_state || (update.rx_power !== undefined && row.rx_power !== update.rx_power) || (update.tx_power !== undefined && row.tx_power !== update.tx_power)) updatesById.set(row.id, update);
+    if (row.status !== update.status || row.admin_state !== update.admin_state || isMeaningfulPowerChange(row.rx_power, update.rx_power) || isMeaningfulPowerChange(row.tx_power, update.tx_power)) updatesById.set(row.id, update);
   }
   // Conditional writes close the database identity race; unchanged historical values are not rewritten.
   const updates = [...updatesById.values()];

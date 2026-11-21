@@ -4,7 +4,7 @@ import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import { getLastReconcileReport, reconcileMikrotikDevice } from '../services/mikrotikReconcileService';
 import { DEFAULT_MIKROTIK_DEVICE_ROLE, isPppoeAdminRole, isValidMikrotikDeviceRole } from '../mikrotik/deviceRole';
-import { getLiveSnapshot } from '../services/mikrotikBorderTrafficService';
+import { getLiveSnapshot, invalidateConfiguredBorderDevicesCache } from '../services/mikrotikBorderTrafficService';
 import { getBalancerConnectionsSnapshot, getBalancerLinkAlerts, getBalancerTrafficHistory } from '../services/mikrotikBalancerDiscoveryService';
 import { ensureFreshBalancerData } from '../services/mikrotikBalancerOnDemand';
 import { BALANCER_HISTORY_RANGES, type BalancerHistoryRange } from '../mikrotik/balancerTrafficSeries';
@@ -96,6 +96,9 @@ mikrotikRoutes.post('/', requireRole(...DEVICE_WRITE), async (c) => {
     .select(DEVICE_PUBLIC_FIELDS)
     .single();
   if (error) return c.json({ error: error.message }, 400);
+  // Invalida la cache de config de borde (mikrotikBorderTrafficService.ts):
+  // un alta nueva no debe esperar hasta el vencimiento del TTL para sondearse.
+  invalidateConfiguredBorderDevicesCache();
   return c.json(data, 201);
 });
 
@@ -130,12 +133,18 @@ mikrotikRoutes.put('/:id', requireRole(...DEVICE_WRITE), async (c) => {
     .select(DEVICE_PUBLIC_FIELDS)
     .single();
   if (error) return c.json({ error: error.message }, 400);
+  // Mismo motivo que en el POST: host/credenciales/rol/estado activo o la
+  // interfaz monitoreada pueden haber cambiado — nunca sondear con datos
+  // de borde viejos hasta que venza el TTL por si solo.
+  invalidateConfiguredBorderDevicesCache();
   return c.json(data);
 });
 
 mikrotikRoutes.delete('/:id', requireRole(...DEVICE_WRITE), async (c) => {
   const { error } = await supabaseAdmin.from('mikrotik_devices').delete().eq('id', c.req.param('id'));
   if (error) return c.json({ error: error.message }, 400);
+  // El dispositivo eliminado no debe seguir sondeandose hasta que venza el TTL.
+  invalidateConfiguredBorderDevicesCache();
   return c.json({ ok: true });
 });
 

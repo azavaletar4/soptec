@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { mikrotikRequest, type MikrotikTarget } from '../mikrotik/client';
 import {
@@ -32,15 +33,53 @@ export interface BorderDeviceRow {
   capacity_upload_mbps: number;
 }
 
-export async function getConfiguredBorderDevices(): Promise<BorderDeviceRow[]> {
-  const { data, error } = await supabaseAdmin
+// Diagnostico de consumo de logs de Supabase (21/11/2026): este scheduler
+// corre cada 5s (LIVE_INTERVAL_MS) y llamaba a Supabase sin cache en CADA
+// ciclo solo para leer la config de los routers de borde — ~17.900
+// solicitudes/dia confirmadas via logs de la API, la mayor fuente individual
+// de ingesta de logs del proyecto, pese a que esta config casi nunca cambia.
+// Cache simple con TTL (por defecto igual al ciclo de persistencia, 60s)
+// MAS invalidacion explicita desde el CRUD de administracion
+// (server/src/routes/mikrotik.ts, ver invalidateConfiguredBorderDevicesCache
+// en el POST/PUT/DELETE de '/mikrotik/:id') — un alta, edicion o baja real
+// de un router se nota en el siguiente tick (<=5s), no hasta que venza el
+// TTL. El TTL solo cubre el caso residual de un cambio hecho fuera de esa
+// API (ej. UPDATE directo en Supabase).
+//
+// Asuncion explicita (valida hoy, confirmado en docker-compose.onprem.yml
+// — servicio "backend" sin "replicas"/"scale", es decir UN solo contenedor;
+// mismo criterio que ecosystem.production.config.cjs, "Un solo proceso"
+// PM2): esta cache vive en memoria de UN proceso. Si en el futuro el
+// backend corriera en varias instancias/replicas,
+// cada una mantendria su propia cache (sin estado compartido) — sigue siendo
+// correcto (nunca lee datos de OTRO dispositivo), solo que la invalidacion
+// del CRUD unicamente alcanza al proceso que la ejecuta; las demas
+// instancias quedarian acotadas por el TTL igual que hoy. No es un problema
+// con el despliegue actual; se deja documentado por si cambia.
+const DEVICE_CACHE_TTL_MS = Number(process.env.MIKROTIK_BORDER_DEVICES_CACHE_TTL_SECONDS ?? 60) * 1000;
+let deviceCache: { devices: BorderDeviceRow[]; fetchedAt: number } | null = null;
+
+// `db` inyectable con el mismo patron que persistOntMeasurement
+// (oltTelemetryPersistence.ts): por defecto el cliente real, pero
+// reemplazable en pruebas sin tocar Supabase real.
+export async function getConfiguredBorderDevices(db: SupabaseClient = supabaseAdmin): Promise<BorderDeviceRow[]> {
+  const now = Date.now();
+  if (deviceCache && now - deviceCache.fetchedAt < DEVICE_CACHE_TTL_MS) return deviceCache.devices;
+  const { data, error } = await db
     .from('mikrotik_devices')
     .select('id, name, host, port, use_tls, username, password, monitored_interface_name, uplink_interface_name, capacity_download_mbps, capacity_upload_mbps')
     .eq('device_role', 'borde_dedicado')
     .eq('is_active', true)
     .not('monitored_interface_name', 'is', null);
   if (error) throw new Error(error.message);
-  return (data ?? []) as BorderDeviceRow[];
+  const devices = (data ?? []) as BorderDeviceRow[];
+  deviceCache = { devices, fetchedAt: now };
+  return devices;
+}
+
+/** Fuerza una relectura real en el proximo tick (pruebas, o tras editar la config manualmente). */
+export function invalidateConfiguredBorderDevicesCache() {
+  deviceCache = null;
 }
 
 function targetFor(device: BorderDeviceRow): MikrotikTarget {
