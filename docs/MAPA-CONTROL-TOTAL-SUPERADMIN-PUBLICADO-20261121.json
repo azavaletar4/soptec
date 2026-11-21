@@ -1,0 +1,114 @@
+{
+  "status": "PUBLISHED_AND_VALIDATED",
+  "completedAt": "2026-11-21T20:11:34Z",
+  "feature": "Control total del mapa para SUPERADMIN: desvincular extremo conectado (con confirmacion y auditoria) + limpiar referencias colgantes al eliminar NAP/MUFA",
+  "preflight": {
+    "productionBaseReverified": true,
+    "productionBaseCommit": "a11309d0f0ec56fa6dd697563b9f0c7d8cf68a39",
+    "productionBaseImageBeforeId": "sha256:a3d725f0a2b28eacfa5675b44e3f9b1f1f0eac4d15460c082bed7cf75227cb99",
+    "verifiedAt": "2026-11-21T19:57:58Z",
+    "schemaAndPermissionsPreflight": "PASS",
+    "preflightChecks": {
+      "newObjectsDidNotExistYet": true,
+      "remove_from_network_map_bodyMatchedRealProduction": true,
+      "existingTriggersUnaffected": ["audit_map_removal", "guard_map_passive_delete", "trg_fo_cables_updated_at"],
+      "rlsPolicyMatchedExpected": "fo_cables_staff_only"
+    }
+  },
+  "backup": {
+    "status": "PASS",
+    "method": "Esquema separado dentro de la misma base de Supabase (backup_20261121190726), fuera de los contenedores Docker; copia completa fila por fila de las tablas afectadas.",
+    "tables": {
+      "fo_cables": { "count": 127, "md5": "66a0894ca07cd602bc469bd2067bf1a8" },
+      "infra_elementos": { "count": 282, "md5": "aac82519ad4f9c32be836170ce9d7ea1" },
+      "fo_fusiones": { "count": 1, "md5": "8ab3211e0b09f114bb0acd127f6c7296" },
+      "fo_hilo_estados": { "count": 0, "md5": null }
+    },
+    "integrityVerifiedAgainstLiveData": true,
+    "restorabilityVerifiedInIsolation": {
+      "method": "Restaurado a un esquema desechable (restore_test_20261121190726), comparado fila por fila (conteo + md5) contra las tablas reales, luego eliminado.",
+      "result": "PASS, sin discrepancias"
+    },
+    "localOffPlatformFileCopy": false,
+    "localOffPlatformFileCopyReason": "Bloqueado por el clasificador de seguridad del entorno (Sensitive-Source Provenance) al intentar copiar un volcado de filas reales a un archivo local. El respaldo quedo en un esquema separado dentro de Supabase, privado (revoke all de anon/authenticated), independiente de los contenedores que se redeployaron.",
+    "productionWrites": 0
+  },
+  "migration": {
+    "status": "APPLIED",
+    "file": "supabase/migrations/20261121190726_fo_cable_endpoint_unlink_guard.sql",
+    "appliedAt": "2026-11-21T20:0x UTC",
+    "project": "mzupdnjegfwmpajywckd (Supabase Cloud, SMARTRAYCO)",
+    "verifiedAfterApply": {
+      "logTableExists": true,
+      "guardFunctionExists": true,
+      "guardFunctionExecuteGrantedOnlyToOwner": true,
+      "triggerCount": 1,
+      "removeFromNetworkMapUpdated": true
+    },
+    "superadminEnforcementTest": {
+      "method": "Fila sintetica (NAP y cable de prueba con UUIDs ficticios), dentro de una transaccion que termina en rollback -- cero escritura permanente.",
+      "results": {
+        "adminBlocked": true,
+        "adminErrorMessage": "Solo SUPERADMIN puede desvincular un extremo ya conectado.",
+        "cableUnchangedAfterAdminAttempt": true,
+        "superadminSucceeded": true,
+        "auditLogRecorded": true,
+        "auditLogEntry": { "extremo": "destino", "unlinked_by": "10f2fedc-b407-465c-af16-3c64d4364eb6" }
+      },
+      "postRollbackVerification": "fo_cables=127, infra_elementos=282, log=0 -- idéntico a antes de la prueba"
+    },
+    "rollbackFile": "supabase/migrations/20261121190726_fo_cable_endpoint_unlink_guard.rollback.sql (preparado, verificado byte a byte contra la version real previa; no aplicado -- no hizo falta)"
+  },
+  "unexpectedFindingDuringPublication": {
+    "what": "La NAP de prueba 'boirrar' ya aparecia con map_removed_at=2026-11-21 14:57:17 UTC, y un cable 'RAMAL DE 6H' seguia con una referencia colgante a ella (actualizado 16:45:10 UTC, antes de que esta migracion existiera).",
+    "causedByThisPublication": false,
+    "confirmedByOwner": "Operacion propia del propietario, confirmada expresamente en el chat.",
+    "actionTaken": "Ninguna escritura sobre esas filas reales; se informo y se espero confirmacion antes de continuar, segun lo pedido."
+  },
+  "frontend": {
+    "status": "PUBLISHED",
+    "candidateCommit": "f56fc3509fe5adbfee41a94071144dbbef59febd",
+    "candidateImageId": "sha256:9bf1b4bfdd87daa0a0c1cca797e1bc432b8df954e6419861130a10da2b4d2bba",
+    "candidateArchiveSha256VerifiedAfterTransfer": "e6776322c46c3cedbf69c2fb55100750b3e3d00dd12d830fbeb9b3ecc0ef6fd2",
+    "transferVerified": "sha256 del archivo transferido a la VM coincide exacto con el preparado",
+    "tags": {
+      "smartrayco-frontend:latest": "sha256:9bf1b4bfdd87daa0a0c1cca797e1bc432b8df954e6419861130a10da2b4d2bba",
+      "smartrayco-frontend:mapa-control-total-f56fc350": "sha256:9bf1b4bfdd87daa0a0c1cca797e1bc432b8df954e6419861130a10da2b4d2bba",
+      "smartrayco-frontend:rollback-pre-mapa-control-total-20261121": "sha256:a3d725f0a2b28eacfa5675b44e3f9b1f1f0eac4d15460c082bed7cf75227cb99"
+    },
+    "deployCommand": "docker compose -p smartrayco -f docker-compose.onprem.yml up -d --no-deps --no-build --pull never frontend",
+    "postDeployVerification": {
+      "releaseManifestCommitServed": "f56fc3509fe5adbfee41a94071144dbbef59febd",
+      "rootRoute200": true,
+      "spaRouteFallback200": true,
+      "backendHealth200": true,
+      "otherServicesUnchanged": {
+        "backend": "Up 5 hours, sin reinicio",
+        "genieacs": "healthy, sin cambios",
+        "caddy": "sin cambios",
+        "mongo": "healthy, sin cambios"
+      }
+    }
+  },
+  "protectedEntitiesVerified": {
+    "clients_count": 768,
+    "service_contracts_count": 789,
+    "olt_onts_count": 776,
+    "routines_count": 225,
+    "inventory_units_count": 275,
+    "olt_devices_count": 1,
+    "mikrotik_devices_count": 3,
+    "note": "La migracion no escribe en ninguna de estas tablas; conteos leidos para confirmar presencia, no hay baseline pre-migracion porque estan fuera de su alcance.",
+    "physicalOltMikrotikPppoeCommandsExecuted": 0
+  },
+  "git": {
+    "sourceBranch": "release/mapa-control-total-superadmin-20261121",
+    "sourceWorktree": "scripts/inventory-auth-lab/runtime/mapa-control-total-worktree",
+    "merge": false,
+    "push": false,
+    "otherPendingWorkUntouched": true
+  },
+  "realTestNapAndCableTouchedByThisSession": false,
+  "syntheticTestDataUsedForValidation": true,
+  "realDataDeletedByThisSession": 0
+}
