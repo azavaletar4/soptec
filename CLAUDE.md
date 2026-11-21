@@ -16,6 +16,18 @@ procedimiento de despliegue en 5 fases separadas (`prepare`/`build`/
 `deploy`/`verify`/`rollback`) y cómo Claude Code y Codex comparten avances
 sin merge/push/despliegue automático.
 
+**Logs Supabase + editor de trazado de fibra — AMBOS DESPLEGADOS Y
+RESPALDADOS EN GITHUB (21/11/2026):** `main`/`origin/main` coinciden en
+`75300d3`. Backend (`893214f`, caché MikroTik + umbral óptico 0,5dB —
+confirmado en vivo: `mikrotik_devices` de ~12/min a ~1/min, OLT sync de
+~700 escrituras/ciclo a 3) y frontend (`dbf1a3a`, deshacer/rehacer +
+mover-tramo agregados al editor de fibra ya existente) desplegados por
+separado, solo el servicio correspondiente recreado cada vez, con
+rollback sin rebuild probado para ambos. Detalle completo, imágenes
+anterior/nueva, incidente de credenciales expuestas (no repetir
+`docker compose config` sin filtrar) y pendientes: sección "ESTADO DE
+CONTINUIDAD" al inicio de `ESTADO_DESARROLLO.md`.
+
 **ONT externas — cinco vínculos manuales verificados (03/11/2026 03:12 UTC):**
 Gustavo Reyes Sandoval (`ZTEGD4FE1386`, `1/2/8:26`, `CTR-2026-00764`) y
 las otras cuatro ONT del lote ya tienen cliente y contrato activo correctos,
