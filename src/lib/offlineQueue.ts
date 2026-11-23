@@ -2,6 +2,7 @@ import { get, set, del, keys } from 'idb-keyval';
 import { campoStore } from '@/lib/campoDatabase';
 import { withClosureLock } from '@/lib/closureSubmission';
 import { getErrorMessage } from '@/lib/errors';
+import { WorkOrderFinalError, FINAL_ORDER_MESSAGE } from '@/lib/workOrderFinality';
 import type { EquipmentPhotoType, JobType } from '@/types/domain';
 
 /**
@@ -62,6 +63,14 @@ export interface QueuedClosure {
   /** Opcional para conservar colas anteriores; el servidor nunca deduce modalidad. */
   iptvInstallationMode?: import('@/lib/installationIptv').IptvInstallationMode | null;
   lastError?: string;
+  /**
+   * true SOLO cuando el ultimo intento fallo porque la orden ya tiene un
+   * cierre administrativo definitivo (WorkOrderFinalError) — nunca por un
+   * fallo transitorio (red, sesion, 5xx). Un envio en este estado ya no se
+   * reintenta solo (ver flushQueue); el tecnico/administrador debe revisar
+   * el contenido guardado y descartarlo explicitamente (discardFinalRejection).
+   */
+  rejectedFinal?: boolean;
 }
 
 const store = campoStore('closures');
@@ -91,8 +100,30 @@ export async function removeQueuedClosure(localId: string) {
   await del(localId, store);
 }
 
-export async function markQueuedError(item: QueuedClosure, message: string) {
-  await changeQueued(item.localId, current => ({ ...current, lastError: message }));
+/** Un fallo transitorio (red, sesion, validacion) no marca `rejectedFinal` — se reintenta en el proximo flushQueue. */
+export async function markQueuedError(item: QueuedClosure, message: string, rejectedFinal = false) {
+  await changeQueued(item.localId, current => ({ ...current, lastError: message, rejectedFinal }));
+}
+
+/** true solo para WorkOrderFinalError (cierre administrativo definitivo) — nunca para red/sesion/validacion. */
+export function isDefinitiveRejection(e: unknown): boolean {
+  return e instanceof WorkOrderFinalError || (e instanceof Error && e.message === FINAL_ORDER_MESSAGE);
+}
+
+/**
+ * Descarta explicitamente un envio con rechazo DEFINITIVO ya revisado (nunca
+ * uno transitorio: la guarda de abajo lo impide incluso si se llama por error
+ * o con datos viejos). El tecnico/administrador debe haber visto el
+ * contenido (fotos/notas) antes de llamar esto — ver ClosureQueuePanel.vue.
+ */
+export async function discardFinalRejection(id: string, actorId?: string | null) {
+  return withClosureLock('queue', async () => {
+    const item = await get<QueuedClosure>(id, store);
+    if (!item) return;
+    if (item.actorId && item.actorId !== actorId) throw new Error('Este pendiente no corresponde a tu sesión.');
+    if (!item.rejectedFinal) throw new Error('Solo puede descartarse un cierre con rechazo administrativo definitivo confirmado.');
+    await del(id, store);
+  });
 }
 
 function changeQueued(id: string, change: (current: QueuedClosure) => QueuedClosure): Promise<void> {
@@ -138,14 +169,20 @@ export async function flushQueue(submit: (item: QueuedClosure) => Promise<void>,
     const job = item.jobType + ':' + item.jobId;
     if (blocked.has(job)) continue;
     if (item.actorId && item.actorId !== actorId) { blocked.add(job); continue; }
+    // Rechazo definitivo ya confirmado en un intento anterior: reenviarlo
+    // nunca va a funcionar (la orden ya tiene cierre administrativo). No
+    // perder tiempo/datos reintentandolo solo — queda a la espera de que el
+    // tecnico/administrador revise su contenido y lo descarte (ClosureQueuePanel).
+    if (item.rejectedFinal) { blocked.add(job); continue; }
     try {
       await submit(item);
       await removeQueuedClosure(item.localId);
       synced++;
     } catch (e) {
-      await markQueuedError(item, getErrorMessage(e, 'Error al sincronizar'));
+      const final = isDefinitiveRejection(e);
+      await markQueuedError(item, getErrorMessage(e, 'Error al sincronizar'), final);
       blocked.add(job);
-      if (pauseAll(e)) break;
+      if (!final && pauseAll(e)) break;
     }
   }
   return { synced, remaining: (await listQueuedClosures()).length };
