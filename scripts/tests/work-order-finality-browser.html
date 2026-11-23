@@ -1,0 +1,28 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Prueba local cola offline — rechazo definitivo</title><div id="app"></div>
+<script type="module">
+import { supabase } from '/src/lib/supabase.ts';
+import { assertWorkOrderMutable, WorkOrderFinalError, FINAL_ORDER_MESSAGE } from '/src/lib/workOrderFinality.ts';
+import {
+  enqueueClosure, listQueuedClosures, flushQueue, removeQueuedClosure,
+  discardFinalRejection, isDefinitiveRejection, markQueuedError,
+} from '/src/lib/offlineQueue.ts';
+import { closeCampoDatabase } from '/src/lib/campoDatabase.ts';
+
+// Conjunto de "job_type:job_id" con cierre administrativo definitivo ya
+// confirmado en Supabase (real: work_order_is_final). Replica exactamente
+// el chequeo que hace performClosureSubmitInner antes de reenviar nada.
+const finalJobs = new Set();
+supabase.rpc = async (name, args) => {
+  if (name === 'work_order_is_final') return { data: finalJobs.has(args.p_job_type + ':' + args.p_job_id), error: null };
+  throw Error('RPC inesperada: ' + name);
+};
+
+window.harness = {
+  assertWorkOrderMutable, WorkOrderFinalError, FINAL_ORDER_MESSAGE,
+  enqueueClosure, listQueuedClosures, flushQueue, removeQueuedClosure,
+  discardFinalRejection, isDefinitiveRejection, markQueuedError,
+  closeCampoDatabase,
+  setFinal: (jobType, jobId, value) => { const k = jobType + ':' + jobId; if (value) finalJobs.add(k); else finalJobs.delete(k); },
+};
+window.ready = true;
+</script></html>
