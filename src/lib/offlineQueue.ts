@@ -3,6 +3,7 @@ import { campoStore } from '@/lib/campoDatabase';
 import { withClosureLock } from '@/lib/closureSubmission';
 import { getErrorMessage } from '@/lib/errors';
 import { WorkOrderFinalError, FINAL_ORDER_MESSAGE } from '@/lib/workOrderFinality';
+import { toSafeBlob } from '@/lib/safeBlob';
 import type { EquipmentPhotoType, JobType } from '@/types/domain';
 
 /**
@@ -79,14 +80,50 @@ export function isOnline() {
   return typeof navigator === 'undefined' || navigator.onLine;
 }
 
+/**
+ * Ultima linea de defensa antes de escribir a IndexedDB: un Blob/File que
+ * todavia referencia su origen (ej. el URI de contenido de la camara
+ * nativa en Android) puede hacer fallar el `set()` de abajo con el error
+ * nativo "Failed to write blobs (InvalidBlob)". Materializar cada Blob en
+ * memoria aqui cubre cualquier llamador, no solo el formulario de cierre
+ * (que ya materializa al capturar, ver safeBlob.ts) — un Blob ya en memoria
+ * se vuelve a copiar sin riesgo, asi que no hace daño aplicarlo siempre.
+ */
+async function sanitizeForStorage(item: Omit<QueuedClosure, 'localId' | 'createdAt'>): Promise<Omit<QueuedClosure, 'localId' | 'createdAt'>> {
+  const [photos, equipmentPhotos, signatureBlob] = await Promise.all([
+    Promise.all(item.photos.map(async (p) => ({ ...p, blob: await toSafeBlob(p.blob) }))),
+    Promise.all(item.equipmentPhotos.map(async (p) => ({ ...p, blob: await toSafeBlob(p.blob) }))),
+    item.signatureBlob ? toSafeBlob(item.signatureBlob) : Promise.resolve(null),
+  ]);
+  return { ...item, photos, equipmentPhotos, signatureBlob };
+}
+
 export async function enqueueClosure(item: Omit<QueuedClosure, 'localId' | 'createdAt'>): Promise<QueuedClosure> {
+  let safeItem: Omit<QueuedClosure, 'localId' | 'createdAt'>;
+  try {
+    safeItem = await sanitizeForStorage(item);
+  } catch {
+    throw new Error('No se pudo preparar una de las fotos para guardarla localmente. Vuelve a capturar esa foto — el resto del formulario no se perdió.');
+  }
   const queued: QueuedClosure = {
-    ...item,
+    ...safeItem,
     localId: crypto.randomUUID(),
     createdAt: Date.now(),
   };
   if (queued.jobType === 'installation' && !queued.closureOperationId) queued.closureOperationId = queued.localId;
-  await set(queued.localId, queued, store);
+  try {
+    await set(queued.localId, queued, store);
+  } catch (e) {
+    const detail = getErrorMessage(e, '');
+    const quota = (e as { name?: string })?.name === 'QuotaExceededError' || /quota/i.test(detail);
+    throw new Error(
+      (quota
+        ? 'No hay espacio de almacenamiento suficiente en este dispositivo para guardar el cierre con sus fotos.'
+        : 'No se pudo guardar este cierre para reintentar más tarde.') +
+      ' El formulario y las fotos siguen en pantalla — nada se borró, puedes reintentar sin salir de esta vista.' +
+      (detail ? ` (detalle técnico: ${detail})` : ''),
+    );
+  }
   return queued;
 }
 

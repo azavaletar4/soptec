@@ -36,6 +36,7 @@ import type { FieldInventoryContext, FieldInventoryProduct, FieldInventoryMoveme
 import { useConfirm } from '@/composables/useConfirm';
 import { useToast } from '@/composables/useToast';
 import { getErrorMessage } from '@/lib/errors';
+import { toSafeFile } from '@/lib/safeBlob';
 import { saveDraft, loadDraft, clearDraft } from '@/lib/formDrafts';
 import { MOTIVO_AVERIA_OPTIONS, MOTIVOS_EXIMEN_TECNICO } from '@/lib/ticketMotivoAveria';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
@@ -328,9 +329,19 @@ function removeEquipmentEntry(id: string) {
   equipmentEntries.value = equipmentEntries.value.filter((e) => e.id !== id);
 }
 
-function onEquipmentFileChange(id: string, event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
+async function onEquipmentFileChange(id: string, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const rawFile = input.files?.[0];
+  if (!rawFile) return;
+  let file: File;
+  try {
+    file = await toSafeFile(rawFile);
+  } catch {
+    input.value = '';
+    photoCaptureError.value = 'No se pudo leer esa foto recién tomada. Vuelve a capturarla — no se perdió ninguna otra foto ni dato del formulario.';
+    return;
+  }
+  photoCaptureError.value = null;
   const entry = equipmentEntries.value.find((e) => e.id === id);
   if (!entry) return;
   if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
@@ -1495,6 +1506,11 @@ const requiresJustification = computed(
 );
 const justificacionMissing = ref(false);
 const closurePhotos = ref<Record<string, File | undefined>>({});
+// Materializa cada foto apenas se captura (ver safeBlob.ts) — evita el error
+// nativo "Failed to write blobs (InvalidBlob)" de IndexedDB en Android, que
+// aparecia recien mas adelante (borrador local o cola offline) con un File
+// todavia respaldado por el URI de contenido temporal de la camara.
+const photoCaptureError = ref<string | null>(null);
 // Solo conserva firmas capturadas en borradores anteriores. Ya no hay captura digital.
 const signatureBlob = ref<Blob | null>(null);
 const gettingLocation = ref(false);
@@ -1530,9 +1546,19 @@ function useCurrentLocation() {
 // ni de corregir una foto borrosa/equivocada sin cerrar y reabrir la app.
 const photoPreviewUrls = ref<Record<string, string>>({});
 
-function onPhotoChange(category: string, event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
+async function onPhotoChange(category: string, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const rawFile = input.files?.[0];
+  if (!rawFile) return;
+  let file: File;
+  try {
+    file = await toSafeFile(rawFile);
+  } catch {
+    input.value = '';
+    photoCaptureError.value = 'No se pudo leer esa foto recién tomada. Vuelve a capturarla — no se perdió ninguna otra foto ni dato del formulario.';
+    return;
+  }
+  photoCaptureError.value = null;
   closurePhotos.value[category] = file;
   if (photoPreviewUrls.value[category]) URL.revokeObjectURL(photoPreviewUrls.value[category]);
   photoPreviewUrls.value[category] = URL.createObjectURL(file);
@@ -2639,6 +2665,7 @@ async function handleCloseSubmit() {
             {{ draftStorageError }}
             <button type="button" class="underline" @click="retryDraftStorage">Reintentar almacenamiento</button>
           </p>
+          <p v-if="photoCaptureError" class="text-sm text-red-600 mb-3" role="alert">{{ photoCaptureError }}</p>
           <IptvInstallationModeField
             v-if="showIptvMode && installStep === 5 && iptvInstallation?.status !== 'completed' && iptvInstallation?.status !== 'cancelled'"
             v-model="closureForm.iptvInstallationMode"
