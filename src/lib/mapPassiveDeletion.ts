@@ -24,7 +24,7 @@ export interface MapRemovalResult {
 }
 
 export function canDeleteMapPassive(role: string | null): boolean {
-  return role === 'SUPERADMIN';
+  return role === 'SUPERADMIN' || role === 'ADMIN';
 }
 
 function checkError(error: { code?: string; message?: string } | null) {

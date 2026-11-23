@@ -10,7 +10,7 @@ const props = defineProps<{ administracion?: boolean }>();
 const emit = defineEmits<{ changed: [] }>();
 const auth = useAuthStore();
 const canReport = computed(() => ['ADMIN', 'TECNICO_RED'].includes(auth.role ?? '') && !props.administracion);
-const canResolve = computed(() => auth.role === 'SUPERADMIN' && props.administracion);
+const canResolve = computed(() => auth.isAdminOrAbove && props.administracion);
 const rows = ref<Ausencia[]>([]);
 const error = ref('');
 const notice = ref('');
@@ -62,8 +62,9 @@ async function reportar() {
 }
 function nuevaOperacion() { operacion = null; error.value = ''; }
 async function resolver(row: Ausencia, decision: 'aprobada' | 'rechazada') {
-  // Rechazar siempre exige un motivo real escrito por SUPERADMIN — el boton
-  // ya queda deshabilitado sin texto, pero se revalida aqui por si acaso.
+  // Rechazar siempre exige un motivo real escrito por quien resuelve
+  // (ADMIN/SUPERADMIN) — el boton ya queda deshabilitado sin texto, pero
+  // se revalida aqui por si acaso.
   const motivoEfectivo = decisionMotivoEfectivo(decision, decisionMotivos.value[row.id] ?? '');
   if (!motivoEfectivo) return;
   if (!window.confirm(decision === 'aprobada' ? '¿Aprobar esta ausencia?' : '¿Rechazar esta ausencia?')) return;
@@ -127,7 +128,7 @@ onMounted(load);
     </div>
   </section>
 
-  <!-- Bandeja de administracion (SUPERADMIN): tarjetas anchas, 1 por -->
+  <!-- Bandeja de administracion (ADMIN/SUPERADMIN): tarjetas anchas, 1 por -->
   <!-- solicitud. Antes usaba `class="input"` — una clase que no existe en -->
   <!-- style.css (la real es field-input/field-label) — por eso se veia sin -->
   <!-- estilo, diminuto y amontonado a la izquierda. Misma logica/RPC/RLS. -->
@@ -166,7 +167,7 @@ onMounted(load);
 
         <!-- Ya resuelta: quien y cuando, hora real de Peru. -->
         <div v-if="row.estado !== 'pendiente'" class="text-sm text-slate-500 border-t border-slate-100 mt-4 pt-3">
-          <p>{{ row.estado === 'aprobada' ? 'Aprobado' : 'Rechazado' }} por {{ row.resolver?.full_name || row.resolver?.email || 'SUPERADMIN' }} · {{ formatFechaHora(row.resolved_at) }}</p>
+          <p>{{ row.estado === 'aprobada' ? 'Aprobado' : 'Rechazado' }} por {{ row.resolver?.full_name || row.resolver?.email || 'administración' }} · {{ formatFechaHora(row.resolved_at) }}</p>
           <p v-if="row.decision_motivo" class="mt-1 text-slate-600">«{{ row.decision_motivo }}»</p>
         </div>
 

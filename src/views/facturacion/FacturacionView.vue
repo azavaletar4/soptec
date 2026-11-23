@@ -24,9 +24,12 @@ const infraStore = useInfraElementosStore();
 const descuentosStore = useDescuentosCompensacionStore();
 
 // Edicion completa de una factura ya creada (corregir monto, fechas,
-// contrato, notas) es solo para SUPERADMIN — crear/marcar pagada/cancelar
-// sigue disponible para todo el staff de facturacion.
-const isSuperadmin = computed(() => auth.role === 'SUPERADMIN');
+// contrato, notas) y el borrado definitivo son para ADMIN/SUPERADMIN
+// (ampliacion 2026-11-24, antes solo SUPERADMIN — ver
+// supabase/migrations/20261124120000_admin_operational_parity.sql,
+// invoices_delete_staff) — crear/marcar pagada/cancelar ya estaba
+// disponible para todo el staff de facturacion, sin cambios.
+const isSuperadmin = computed(() => auth.isAdminOrAbove);
 // Descuento por averia (Fase 34) — pedido explicito: solo ADMIN/SUPERADMIN.
 const canApplyAveria = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 const napBoxes = computed(() => infraStore.elementos.filter((e) => e.tipo === 'caja_nap'));

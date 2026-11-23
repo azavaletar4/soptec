@@ -16,7 +16,7 @@ const inventoryStore = useInventoryStore();
 const auth = useAuthStore();
 
 // Fase 58: eliminar productos queda acotado a SUPERADMIN (antes tambien ADMIN).
-const canDelete = computed(() => auth.isSuperAdmin);
+const canDelete = computed(() => auth.isAdminOrAbove);
 
 const showModal = ref(false);
 const searchQuery = ref(String(route.query.q ?? ''));
