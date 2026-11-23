@@ -1,0 +1,84 @@
+{
+  "status": "DEPLOYED_PENDING_PHYSICAL_DEVICE_VALIDATION",
+  "completedAt": "2026-11-24T00:30:00Z",
+  "authorizedBy": "propietario, expresamente, en este mismo turno",
+  "reusedFromPreparation": "docs/CAMPO-EVIDENCIAS-FOTOS-INVALIDBLOB-20261124-PREPARACION.json — mismo paquete (db9d517), sin recompilar ni reinvestigar.",
+  "preflight": {
+    "productionBaseReverifiedNoRedo": true,
+    "method": "docker inspect smartrayco-frontend-1 + release-manifest.json servido en vivo + docker compose ps, antes de tocar nada",
+    "productionCommitConfirmed": "60be4738365f03665922a5ad5fd6858c92dbf352",
+    "productionImageIdConfirmed": "sha256:6dfc36c16fe775c652fa7443a4f02b02af51d787c35d45fffa120fa807d51baf",
+    "drift": "ninguno — identico a la verificacion de la preparacion anterior",
+    "servicesUpBeforeDeploy": "backend Up 2 dias, caddy/genieacs/mongo Up 4 dias, frontend Up 5 horas"
+  },
+  "candidateIntegrityReconfirmedNoRecompile": {
+    "candidateTarSha256OnVm": "c1190056e7697b8478ba89cf4770a0d0d40c191a156033f293c05541f381c6fe",
+    "matchesPreparationTransferHash": true,
+    "candidateReleaseManifestCommit": "db9d5178afd46fded7a12d7ae9d9451ff25ce6a2",
+    "candidateExtractedFileCount": 136,
+    "note": "Solo se reverifico (hash + conteo de archivos), no se recompilo ni se repitio la comparacion byte a byte completa — ya hecha y documentada en la preparacion de esta misma noche."
+  },
+  "git": {
+    "sourceCommit": "761723c (fix/campo-evidencias-invalidblob-20261124)",
+    "productionBaseCommit": "60be4738365f03665922a5ad5fd6858c92dbf352",
+    "releaseCommit": "db9d5178afd46fded7a12d7ae9d9451ff25ce6a2",
+    "releaseBranch": "release/campo-invalidblob-20261124",
+    "filesInScope": [
+      "src/lib/safeBlob.ts",
+      "src/lib/offlineQueue.ts",
+      "src/views/campo/CampoTrabajoDetailView.vue",
+      "src/lib/__tests__/safeBlob.test.ts",
+      "scripts/tests/photo-evidence-invalidblob-browser.html",
+      "scripts/tests/photo-evidence-invalidblob-browser.mjs",
+      "docs/CAMPO-EVIDENCIAS-FOTOS-INVALIDBLOB-20261124.md"
+    ],
+    "merge": false,
+    "push": false,
+    "otherPendingWorkUntouched": true
+  },
+  "images": {
+    "before": {
+      "tag": "smartrayco-frontend:latest (antes de este deploy)",
+      "id": "sha256:6dfc36c16fe775c652fa7443a4f02b02af51d787c35d45fffa120fa807d51baf",
+      "rollbackTagConfirmed": "smartrayco-frontend:rollback-pre-campo-invalidblob-20261124"
+    },
+    "after": {
+      "tag": "smartrayco-frontend:latest y :campo-invalidblob-db9d517",
+      "id": "sha256:2d4310fa9cff12a301c57748a2a5a760392f496925f84e8b112997b578ae3ee0"
+    }
+  },
+  "deployCommand": "docker compose -p smartrayco -f docker-compose.onprem.yml up -d --no-deps --no-build --pull never frontend",
+  "postDeployVerification": {
+    "frontendImageIdRunning": "sha256:2d4310fa9cff12a301c57748a2a5a760392f496925f84e8b112997b578ae3ee0",
+    "releaseManifestCommitServed": "db9d5178afd46fded7a12d7ae9d9451ff25ce6a2",
+    "rootRoute200": true,
+    "campoDashboardRoute200": true,
+    "campoSpaFallbackRoute200 (/campo/ticket/:id)": true,
+    "backendApiHealth200": true,
+    "changedChunksServedOverHttps200": true,
+    "newCodeConfirmedLiveViaHttp": {
+      "CampoTrabajoDetailView chunk": "contiene 'Vuelve a capturarla'",
+      "usePersonalRead chunk": "contiene 'Vuelve a capturar esa foto' y conserva 'rejectedFinal' (correccion anterior intacta)"
+    },
+    "otherServicesUnchanged": {
+      "backend": "Up 2 dias, sin reinicio",
+      "genieacs": "healthy, Up 4 dias, sin cambios",
+      "caddy": "Up 4 dias, sin cambios",
+      "mongo": "healthy, Up 4 dias, sin cambios"
+    }
+  },
+  "androidPhysicalDeviceValidation": {
+    "done": false,
+    "reason": "Sin dispositivo/emulador Android en este entorno (confirmado: sin adb, flutter devices solo Windows/Chrome/Edge).",
+    "statusLabel": "Desplegado, pendiente de prueba en dispositivo físico",
+    "nextStep": "Un tecnico debe cerrar una averia NORMAL con fotografias reales en su Android. Si vuelve a aparecer InvalidBlob, NO eliminar las fotos para forzar el cierre -- conservar la informacion y reportarlo antes de continuar."
+  },
+  "migrationsApplied": 0,
+  "realOrdersOrPhotosModified": 0,
+  "supabaseWrites": 0,
+  "rollbackProcedure": {
+    "verified": "La imagen anterior quedo intacta y re-etiquetada (rollback-pre-campo-invalidblob-20261124); no se reconstruyo ni se modifico.",
+    "command": "ssh -i ~/.ssh/smartrayco-deploy root@192.168.55.201 \"docker tag smartrayco-frontend:rollback-pre-campo-invalidblob-20261124 smartrayco-frontend:latest && cd /opt/smartrayco && docker compose -p smartrayco -f docker-compose.onprem.yml up -d --no-deps --no-build --pull never frontend\"",
+    "executed": false
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "status": "PREPARED_NOT_DEPLOYED",
+  "completedAt": "2026-11-24T00:00:00Z",
+  "androidDeviceValidation": {
+    "available": false,
+    "checked": ["adb (no instalado/en PATH)", "flutter devices (solo windows/chrome/edge, sin Android SDK ni emulador)"],
+    "conclusion": "No hay dispositivo ni emulador Android disponible en este entorno. No se pudo validar en Android WebView real. Se reprodujo la CLASE EQUIVALENTE de fallo (origen de Blob ilegible, mismo sintoma que un content:// URI liberado por Android) en un entorno aislado de escritorio, documentado en la sesion anterior (docs/CAMPO-EVIDENCIAS-FOTOS-INVALIDBLOB-20261124.md) y reverificado aqui sin cambios. Esto NO sustituye una prueba real en un dispositivo Android.",
+    "recommendation": "No declarar esta correccion validada en campo hasta que un tecnico la pruebe en su propio Android con fotografias reales (varias fotos, reconexion, reinicio de la app)."
+  },
+  "automatedCoverageReverified": {
+    "note": "Mismas suites de la sesion anterior, re-ejecutadas aqui DENTRO del worktree aislado construido sobre la base real de produccion (60be473), para confirmar que tambien pasan sobre esa base exacta y no solo sobre la rama de desarrollo.",
+    "safeBlobUnit": "incluido en test:fetch-timeout",
+    "photoEvidenceInvalidBlobBrowserSuite": "19/19 PASS (varias fotos, foto grande 3MB, reinicio real de app via reload, cola offline, origen ilegible en foto/equipo/firma sin dejar basura, QuotaExceededError real)",
+    "workOrderFinalityBrowserSuite": "20/20 PASS (confirma que la correccion de rechazo administrativo definitivo, ya desplegada, sigue intacta junto al nuevo cambio)",
+    "iptvOfflineQueueRegressionSuite": "30/30 PASS (sin regresion en la cola offline general)",
+    "fullLibTestSuite": "603/603 PASS (npm run test:fetch-timeout, incluye los 5 nuevos de safeBlob.test.ts)",
+    "vueTsc": "limpio, 0 errores",
+    "viteBuild": "exitoso (aviso preexistente de tamaño de chunk, no relacionado)"
+  },
+  "git": {
+    "originalCommit": "761723c (fix/campo-evidencias-invalidblob-20261124)",
+    "productionBaseCommitBeforeCherryPick": "60be4738365f03665922a5ad5fd6858c92dbf352",
+    "releaseBranch": "release/campo-invalidblob-20261124",
+    "releaseCommit": "db9d5178afd46fded7a12d7ae9d9451ff25ce6a2",
+    "sourceWorktree": "scripts/inventory-auth-lab/runtime/campo-invalidblob-worktree",
+    "cherryPick": "limpio (git reporto 'Auto-merging' en CampoTrabajoDetailView.vue por el 3-way merge normal de ramas divergentes, sin marcadores de conflicto)",
+    "filesInScope": [
+      "src/lib/safeBlob.ts",
+      "src/lib/offlineQueue.ts",
+      "src/views/campo/CampoTrabajoDetailView.vue",
+      "src/lib/__tests__/safeBlob.test.ts",
+      "scripts/tests/photo-evidence-invalidblob-browser.html",
+      "scripts/tests/photo-evidence-invalidblob-browser.mjs",
+      "docs/CAMPO-EVIDENCIAS-FOTOS-INVALIDBLOB-20261124.md"
+    ],
+    "merge": false,
+    "push": false,
+    "otherPendingWorkUntouched": true
+  },
+  "preflight": {
+    "productionFrontendReverified": true,
+    "method": "docker inspect smartrayco-frontend-1 + release-manifest.json servido en vivo",
+    "productionCommitConfirmed": "60be4738365f03665922a5ad5fd6858c92dbf352",
+    "productionImageIdConfirmed": "sha256:6dfc36c16fe775c652fa7443a4f02b02af51d787c35d45fffa120fa807d51baf",
+    "servicesUp": "backend Up 2 dias, caddy/genieacs/mongo Up 4 dias, frontend Up 5 horas -- sin drift desde el despliegue anterior"
+  },
+  "candidateVerification": {
+    "method": "Comparacion byte a byte de los 136 archivos de /usr/share/nginx/html entre la imagen EN VIVO y el candidato, con nombres de archivo normalizados (hash de Vite) y referencias internas neutralizadas antes de comparar -- mismo metodo ya usado en el despliegue anterior.",
+    "logicalFilesCompared": 135,
+    "filesAddedOrRemoved": 0,
+    "logicalFilesWithRealContentChange": 2,
+    "changedFiles": [
+      "assets/CampoTrabajoDetailView.js (contiene el string literal 'Vuelve a capturarla', nuevo; ausente en la imagen en vivo)",
+      "assets/usePersonalRead.js (contiene 'Vuelve a capturar esa foto' y 'espacio de almacenamiento suficiente', nuevos; conserva intacto 'rejectedFinal' de la correccion anterior ya desplegada)"
+    ],
+    "unrelatedStringsSearched": ["pasivo", "contract_id null", "exigir contrato"],
+    "unrelatedStringsFound": 0,
+    "noUnexpectedDifference": true
+  },
+  "images": {
+    "productionCurrent": {
+      "tag": "smartrayco-frontend:latest (sin cambios)",
+      "id": "sha256:6dfc36c16fe775c652fa7443a4f02b02af51d787c35d45fffa120fa807d51baf"
+    },
+    "rollbackTagCreated": "smartrayco-frontend:rollback-pre-campo-invalidblob-20261124 (misma imagen que la actual, preparado por si se necesita tras un futuro deploy)",
+    "candidateBuiltAndVerified": {
+      "localTagUsedDuringVerificacion": "smartrayco-frontend:campo-invalidblob-db9d517",
+      "id": "sha256:2d4310fa9cff12a301c57748a2a5a760392f496925f84e8b112997b578ae3ee0",
+      "transferVerifiedSha256": "c1190056e7697b8478ba89cf4770a0d0d40c191a156033f293c05541f381c6fe",
+      "note": "Candidato cargado y verificado en /opt/smartrayco-staging/campo-invalidblob-20261124 en la VM. NO se promovio a :latest. NO se ejecuto docker compose up. La imagen candidata se borro del daemon local de este equipo tras verificarla (sigue disponible para recargar desde el tar transferido si se autoriza el deploy)."
+    }
+  },
+  "deployment": {
+    "executed": false,
+    "reason": "Instruccion explicita de no desplegar todavia; falta validacion esencial en Android real.",
+    "readyCommandIfAuthorized": "ssh -i ~/.ssh/smartrayco-deploy root@192.168.55.201 \"docker load -i /opt/smartrayco-staging/campo-invalidblob-20261124/candidate.tar && docker tag smartrayco-frontend:campo-invalidblob-db9d517 smartrayco-frontend:latest && cd /opt/smartrayco && docker compose -p smartrayco -f docker-compose.onprem.yml up -d --no-deps --no-build --pull never frontend\"",
+    "rollbackCommandIfNeededAfterDeploy": "ssh -i ~/.ssh/smartrayco-deploy root@192.168.55.201 \"docker tag smartrayco-frontend:rollback-pre-campo-invalidblob-20261124 smartrayco-frontend:latest && cd /opt/smartrayco && docker compose -p smartrayco -f docker-compose.onprem.yml up -d --no-deps --no-build --pull never frontend\""
+  },
+  "writesDuringThisSession": {
+    "supabase": 0,
+    "oltOrMikrotikCommands": 0,
+    "migrationsApplied": 0,
+    "realOrdersModified": 0,
+    "productionFrontendChanged": false
+  }
+}
