@@ -11,7 +11,7 @@ const props = defineProps<{ administracion?: boolean }>();
 const emit = defineEmits<{ changed: [] }>();
 const auth = useAuthStore();
 const catalogs = useCatalogsStore();
-const configura = computed(() => props.administracion && auth.role === 'SUPERADMIN');
+const configura = computed(() => props.administracion && auth.isAdminOrAbove);
 const consulta = computed(() => !props.administracion && ['ADMIN', 'TECNICO_RED'].includes(auth.role ?? ''));
 const empleados = computed(() => catalogs.staff.filter(p => ['ADMIN', 'TECNICO_RED'].includes(p.role)));
 const rows = ref<Intercambio[]>([]);

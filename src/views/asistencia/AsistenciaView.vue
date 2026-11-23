@@ -29,7 +29,7 @@ import type { AsistenciaRegistro, StaffProfile } from '@/types/domain';
 
 const store = useAsistenciaStore();
 const auth = useAuthStore();
-const canConfigure = computed(() => auth.role === 'SUPERADMIN');
+const canConfigure = computed(() => auth.isAdminOrAbove);
 const tabs = [
   { id: 'asistencia', label: 'Asistencia' },
   { id: 'ausencias', label: 'Ausencias' },
@@ -434,16 +434,16 @@ async function handleSaveSettings() {
     <section v-show="activeTab === 'ausencias'" id="attendance-panel-ausencias" role="tabpanel" aria-labelledby="attendance-tab-ausencias" class="attendance-panel">
       <p class="text-sm text-slate-500 mb-4">{{ ausenciasDia.filter(a => a.estado === 'pendiente').length }} pendientes · {{ ausenciasDia.filter(a => a.estado === 'aprobada').length }} justificadas · {{ ausenciasDia.filter(a => a.estado === 'rechazada').length }} rechazadas en la fecha del tablero. Las justificaciones no alteran las marcaciones.</p>
       <AusenciasPanel administracion @changed="loadTablero(); cargarReporte()" />
-      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">La aprobación de solicitudes está a cargo de SUPERADMIN. Puedes consultar tus solicitudes desde «Marcar asistencia».</p>
+      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">La aprobación de solicitudes está a cargo de administración (ADMIN/SUPERADMIN). Puedes consultar tus solicitudes desde «Marcar asistencia».</p>
     </section>
     <section v-show="activeTab === 'descansos'" id="attendance-panel-descansos" role="tabpanel" aria-labelledby="attendance-tab-descansos" class="attendance-panel space-y-8">
       <IntercambiosPanel administracion @changed="loadTablero(); cargarReporte()" />
       <NovedadesPanel administracion @changed="loadTablero(); cargarReporte()" />
-      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">SUPERADMIN programa los descansos y permisos. Tus días autorizados están disponibles en «Marcar asistencia».</p>
+      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">Administración (ADMIN/SUPERADMIN) programa los descansos y permisos. Tus días autorizados están disponibles en «Marcar asistencia».</p>
     </section>
     <section v-show="activeTab === 'horarios'" id="attendance-panel-horarios" role="tabpanel" aria-labelledby="attendance-tab-horarios" class="attendance-panel">
       <HorariosPersonalesPanel administracion @changed="loadTablero()" />
-      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">SUPERADMIN administra los horarios habituales. Puedes consultar tu horario desde «Marcar asistencia».</p>
+      <p v-if="!canConfigure" class="surface p-5 text-sm text-slate-500">Administración (ADMIN/SUPERADMIN) administra los horarios habituales. Puedes consultar tu horario desde «Marcar asistencia».</p>
     </section>
     <section v-show="activeTab === 'asistencia'" id="attendance-panel-asistencia" role="tabpanel" aria-labelledby="attendance-tab-asistencia" class="attendance-panel">
     <!-- Tablero en vivo -->

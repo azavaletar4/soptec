@@ -14,10 +14,17 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(true);
   let initialized = false;
 
-  // Control total (eliminar productos/unidades, revertir Kardex, etc.) —
-  // ver Fase 58. Getter centralizado para no repetir `role === 'SUPERADMIN'`
-  // suelto en cada vista que necesite esta misma puerta.
+  // Exclusivo de verdad: gestión de roles/cuentas de staff (Usuarios),
+  // reset de contraseña ajena (Fase 80) y exenciones de asistencia ligadas
+  // a la identidad de SUPERADMIN — nada operativo debería depender de este
+  // getter directamente, usar isAdminOrAbove para eso (ver abajo).
   const isSuperAdmin = computed(() => role.value === 'SUPERADMIN');
+  // Control operativo total (inventario, contratos, facturación, mapa de
+  // red, Altas/Averías/Rutinas cerradas, asistencia) — ampliación de ADMIN
+  // a la par de SUPERADMIN, 2026-11-24. Getter centralizado para no repetir
+  // `role === 'ADMIN' || isSuperAdmin` suelto en cada vista que necesite
+  // esta misma puerta (antes era exclusiva de isSuperAdmin, ver Fase 58).
+  const isAdminOrAbove = computed(() => role.value === 'SUPERADMIN' || role.value === 'ADMIN');
 
   async function loadRole(userId: string) {
     const { data } = await supabase.from('profiles').select('role, must_change_password').eq('id', userId).single();
@@ -82,6 +89,7 @@ export const useAuthStore = defineStore('auth', () => {
     mustChangePassword,
     loading,
     isSuperAdmin,
+    isAdminOrAbove,
     init,
     signIn,
     signOut,

@@ -95,19 +95,21 @@ function canDelete(inst: Installation) {
   return !administrativelyClosed.value && inst.status === 'cancelled' && auth.role !== 'TECNICO_RED';
 }
 
-// ---- Fase 151: ordenes cerradas (completed/cancelled) quedan en solo
-// lectura por defecto — ADMIN ya no puede escribir ahi ni a nivel de RLS
-// (ver supabase/migrations/20261012150000_fase151_proteger_ordenes_cerradas.sql,
-// PROPUESTA sin aplicar todavia). SUPERADMIN conserva edicion excepcional,
-// pero debe activarla explicitamente aca — por defecto arranca en solo
-// lectura igual que todos. "Habilitar edicion" es una confirmacion de UX,
-// no un mecanismo de permisos nuevo: SUPERADMIN ya tiene el permiso real
-// de por si: lo unico que hace este flag es ocultar los controles hasta
-// que decida activarlos, para no editar una orden cerrada sin querer.
+// ---- Ampliacion de permisos ADMIN (2026-11-24): ordenes cerradas
+// (completed/cancelled) quedan en solo lectura por defecto para
+// TECNICO_RED; ADMIN y SUPERADMIN conservan edicion excepcional a nivel
+// de RLS (ver supabase/migrations/20261124120000_admin_operational_parity.sql
+// — installations_update_staff ya no excluye a ADMIN por status, igual
+// que Averias/Rutinas, que nunca lo excluyeron). Ambos deben activarla
+// explicitamente aca — por defecto arranca en solo lectura igual que
+// todos. "Habilitar edicion" es una confirmacion de UX, no un mecanismo
+// de permisos nuevo: quien la ve ya tiene el permiso real de por si: lo
+// unico que hace este flag es ocultar los controles hasta que decida
+// activarlos, para no editar una orden cerrada sin querer.
 const editModeForClosed = ref(false);
 const isClosedOrder = computed(() => installation.value?.status === 'completed' || installation.value?.status === 'cancelled');
-const closedReadOnly = computed(() => administrativelyClosed.value || (isClosedOrder.value && !(auth.role === 'SUPERADMIN' && editModeForClosed.value)));
-const canRequestEditMode = computed(() => !administrativelyClosed.value && auth.role === 'SUPERADMIN' && isClosedOrder.value && !editModeForClosed.value);
+const closedReadOnly = computed(() => administrativelyClosed.value || (isClosedOrder.value && !(auth.isAdminOrAbove && editModeForClosed.value)));
+const canRequestEditMode = computed(() => !administrativelyClosed.value && auth.isAdminOrAbove && isClosedOrder.value && !editModeForClosed.value);
 
 function requestEditMode() {
   if (administrativelyClosed.value) return;
@@ -887,7 +889,7 @@ onMounted(async () => {
               Estado, prioridad, notas, cuadrilla, materiales y equipos quedan cerrados para evitar una edición accidental.
             </p>
             <button v-if="canRequestEditMode" type="button" class="btn-ghost text-xs mt-2" @click="requestEditMode">
-              🔓 Habilitar edición (excepcional, solo Super admin)
+              🔓 Habilitar edición (excepcional, solo ADMIN/Super admin)
             </button>
           </div>
           <div v-else-if="isClosedOrder && editModeForClosed" class="surface p-4 text-sm bg-amber-50 border border-amber-300">

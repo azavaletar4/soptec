@@ -39,7 +39,7 @@ const technicians = computed(() => catalogs.staff.filter((s) => s.role === 'TECN
 // Fase 58: eliminar productos/unidades y revertir el Kardex queda acotado a
 // SUPERADMIN — ADMIN y el resto del staff conservan crear/editar productos
 // y registrar movimientos (+Ingreso/-Egreso), pero ya no eliminan nada.
-const canDelete = computed(() => auth.isSuperAdmin);
+const canDelete = computed(() => auth.isAdminOrAbove);
 
 const productId = computed(() => route.params.id as string);
 const product = computed(() => inventoryStore.products.find((p) => p.id === productId.value));

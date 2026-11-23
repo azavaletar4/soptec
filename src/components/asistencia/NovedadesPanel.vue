@@ -9,15 +9,16 @@ import { NOVEDAD_BADGE_CLASS, NOVEDAD_TIPO_LABEL, novedadTexto } from '@/lib/asi
 import type { AsistenciaNovedad, NovedadTipo, NovedadTurno } from '@/types/domain';
 import { getErrorMessage } from '@/lib/errors';
 
-// A2: vacaciones/descanso/permiso por horas/media jornada. SUPERADMIN
-// configura y aprueba en un solo paso (no hay "pendiente" como en A1) —
-// ver asistencia_novedad_crear/cancelar. ADMIN/TECNICO_RED solo consultan
-// sus propias filas (RLS ya limita la lectura a eso).
+// A2: vacaciones/descanso/permiso por horas/media jornada. ADMIN/SUPERADMIN
+// configuran y aprueban en un solo paso (no hay "pendiente" como en A1) —
+// ver asistencia_novedad_crear/cancelar. TECNICO_RED solo consulta sus
+// propias filas (RLS ya limita la lectura a eso); ADMIN ve todas, igual
+// que SUPERADMIN, desde la ampliación 2026-11-24.
 const props = defineProps<{ administracion?: boolean }>();
 const emit = defineEmits<{ changed: [] }>();
 const auth = useAuthStore();
 const catalogs = useCatalogsStore();
-const canConfigure = computed(() => auth.role === 'SUPERADMIN' && props.administracion);
+const canConfigure = computed(() => auth.isAdminOrAbove && props.administracion);
 const canConsultar = computed(() => ['ADMIN', 'TECNICO_RED'].includes(auth.role ?? '') && !props.administracion);
 
 const rows = ref<AsistenciaNovedad[]>([]);
@@ -105,7 +106,7 @@ const misNovedades = computed(() => rows.value.filter((n) => n.fecha_fin >= fech
     </div>
   </section>
 
-  <!-- Configuración SUPERADMIN: programar y cancelar vacaciones/descansos/permisos/medias jornadas. -->
+  <!-- Configuración ADMIN/SUPERADMIN: programar y cancelar vacaciones/descansos/permisos/medias jornadas. -->
   <section v-else-if="canConfigure" class="my-4">
     <div class="mb-4">
       <h2 class="text-lg font-semibold text-slate-900">Vacaciones, descansos y permisos</h2>

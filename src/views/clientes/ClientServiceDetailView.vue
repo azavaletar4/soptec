@@ -86,12 +86,12 @@ const clientPhotosStore = useClientPhotosStore();
 const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 
-const canDeleteContracts = computed(() => auth.role === 'SUPERADMIN');
+const canDeleteContracts = computed(() => auth.isAdminOrAbove);
 // "Cancelar contratación no instalada" — solo SUPERADMIN, más estricto que
 // la baja normal (ADMIN/SUPERADMIN, ver inventoryAdmin). La RPC vuelve a
 // exigir SUPERADMIN del lado del servidor; esto es solo para no mostrar un
 // botón que el backend rechazaría.
-const canCancelUnfulfilled = computed(() => auth.role === 'SUPERADMIN');
+const canCancelUnfulfilled = computed(() => auth.isAdminOrAbove);
 const inventoryAdmin = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? ''));
 function assertInventoryAdmin() {
   if (!inventoryAdmin.value) throw new Error('Estas operaciones de inventario requieren ADMIN o SUPERADMIN. Utiliza tu orden autorizada de Campo.');

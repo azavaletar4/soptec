@@ -11,14 +11,15 @@ import { getErrorMessage } from '@/lib/errors';
 // A2.1: horario parcial RECURRENTE por trabajador (ej. dos tecnicos que
 // todos los sabados trabajan media jornada, uno por la manana y otro por
 // la tarde) — distinto de un permiso EXCEPCIONAL de un solo dia
-// (NovedadesPanel, tipo "media_jornada"). Solo SUPERADMIN configura;
-// ADMIN/TECNICO_RED solo consultan su propio horario (RLS).
+// (NovedadesPanel, tipo "media_jornada"). ADMIN/SUPERADMIN configuran y
+// ven todos los horarios (ampliación 2026-11-24); TECNICO_RED solo
+// consulta su propio horario (RLS).
 const props = defineProps<{ administracion?: boolean }>();
 const emit = defineEmits<{ changed: [] }>();
 const auth = useAuthStore();
 const catalogs = useCatalogsStore();
 const store = useAsistenciaStore();
-const canConfigure = computed(() => auth.role === 'SUPERADMIN' && props.administracion);
+const canConfigure = computed(() => auth.isAdminOrAbove && props.administracion);
 const canConsultar = computed(() => ['ADMIN', 'TECNICO_RED'].includes(auth.role ?? '') && !props.administracion);
 
 const error = ref('');
@@ -70,7 +71,7 @@ async function eliminar(userId: string, diaSemana: number) {
     </div>
   </section>
 
-  <!-- Configuración SUPERADMIN: horarios parciales recurrentes por trabajador. -->
+  <!-- Configuración ADMIN/SUPERADMIN: horarios parciales recurrentes por trabajador. -->
   <section v-else-if="canConfigure" class="my-4">
     <div class="mb-4">
       <h2 class="text-lg font-semibold text-slate-900">Horarios parciales habituales</h2>
