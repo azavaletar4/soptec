@@ -120,7 +120,7 @@ if ACTION=='prepare':
    # coinciden, el contenedor cambio entre medio y se detiene en vez de
    # asumir cual de las dos es la real.
    assert isinstance(svc.get('build'),dict)and svc['build'].get('dockerfile'),'SERVICE_MISSING_IMAGE_OR_BUILD_'+s
-   assert cid['Config']['Image']==before[s]['image'],'LIVE_IMAGE_DRIFT_'+s
+   assert cid['Image']==before[s]['image'],'LIVE_IMAGE_DRIFT_'+s
  m['oldBackendEnvironmentHashes']=environment_hashes('backend');m['expectedBackendEnvironmentHashes']=dict(m['oldBackendEnvironmentHashes'])
  for key,value in hosts_environment.items():
   assert key not in config['services']['backend'].get('environment',{})or config['services']['backend']['environment'][key]==value,'HOSTS_ENVIRONMENT_OVERRIDDEN_'+key
