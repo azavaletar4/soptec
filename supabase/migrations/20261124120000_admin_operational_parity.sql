@@ -370,11 +370,27 @@ create policy installations_update_staff on public.installations
     )
   );
 
+-- Ojo: la paridad es solo para ADMIN. SOPORTE mantiene EXACTAMENTE su
+-- restricción original (no puede tocar la cuadrilla de una instalación ya
+-- completed/cancelled) — no se toca su política existente (regla
+-- permanente de CLAUDE.md: SOPORTE no recibe funcionalidades nuevas).
 drop policy if exists job_assignees_write_dispatch on public.job_assignees;
 create policy job_assignees_write_dispatch on public.job_assignees
   for all
-  using (current_user_role() = any (array['SUPERADMIN'::user_role, 'ADMIN'::user_role, 'SOPORTE'::user_role]))
-  with check (current_user_role() = any (array['SUPERADMIN'::user_role, 'ADMIN'::user_role, 'SOPORTE'::user_role]));
+  using (
+    (current_user_role() = any (array['SUPERADMIN'::user_role, 'ADMIN'::user_role]))
+    or (
+      (current_user_role() = 'SOPORTE'::user_role)
+      and (not ((job_type = 'installation'::text) and (exists (select 1 from installations i where i.id = job_assignees.job_id and i.status = any (array['completed'::installation_status, 'cancelled'::installation_status])))))
+    )
+  )
+  with check (
+    (current_user_role() = any (array['SUPERADMIN'::user_role, 'ADMIN'::user_role]))
+    or (
+      (current_user_role() = 'SOPORTE'::user_role)
+      and (not ((job_type = 'installation'::text) and (exists (select 1 from installations i where i.id = job_assignees.job_id and i.status = any (array['completed'::installation_status, 'cancelled'::installation_status])))))
+    )
+  );
 
 -- Auditoría de la edición excepcional en sí (antes no quedaba ningún
 -- rastro de qué cambió en una orden ya cerrada, más allá de updated_at).
