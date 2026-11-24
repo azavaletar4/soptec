@@ -170,6 +170,48 @@ class ReleaseContractTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'AMBIGUOUS_ASSET_CONTENT_CHANGED'):
             validate_frontend(before, self.rehash_metadata(after), sample_scope(frontend=True))
 
+    def test_vite_metadata_tolerates_node_modules_symlink_src_prefix(self):
+        # Caso real (build remoto contra la VM, confirmado con manifiestos
+        # reales descargados de produccion): el Dockerfile de build enlaza
+        # node_modules con un symlink (ln -s /app/node_modules node_modules);
+        # Rollup puede resolver el MISMO archivo fisico (mismo hash, mismo
+        # contenido) con un prefijo relativo distinto segun por donde
+        # atraviese el symlink -- "node_modules/qr-scanner/..." en la imagen
+        # ya desplegada vs "../../app/node_modules/qr-scanner/..." en la
+        # candidata recien construida. No es un cambio real de codigo.
+        before, workers, importer = self.qr_assets()
+        before = self.metadata_fixture(before)
+        old_key = '_' + workers[0].split('/')[-1]
+        manifest = json.loads(before[VITE_MANIFEST])
+        entry = manifest.pop(old_key)
+        entry['src'] = 'node_modules/qr-scanner/qr-scanner-worker.min.js'
+        entry['isDynamicEntry'] = True
+        manifest[entry['src']] = entry
+        before[VITE_MANIFEST] = json.dumps(manifest).encode()
+        before = self.rehash_metadata(before)
+
+        def rekey(files, new_src):
+            files = dict(files)
+            manifest = json.loads(files[VITE_MANIFEST])
+            entry = dict(manifest.pop('node_modules/qr-scanner/qr-scanner-worker.min.js'))
+            entry['src'] = new_src
+            manifest[new_src] = entry
+            files[VITE_MANIFEST] = json.dumps(manifest).encode()
+            return files
+
+        after = rekey(before, '../../app/node_modules/qr-scanner/qr-scanner-worker.min.js')
+        after['assets/Tr069View-AAAAAAAA.js'] = b'export const hosts=2'
+        after = self.rehash_metadata(after)
+        self.assertEqual(validate_frontend(before, after, sample_scope(frontend=True)), ['assets/Tr069View.js'])
+
+        # Pero un cambio real de PAQUETE (no solo el prefijo del symlink)
+        # sigue detectandose -- la normalizacion solo tolera el prefijo.
+        swapped = rekey(before, '../../app/node_modules/otro-paquete/qr-scanner-worker.min.js')
+        swapped['assets/Tr069View-AAAAAAAA.js'] = b'export const hosts=2'
+        swapped = self.rehash_metadata(swapped)
+        with self.assertRaisesRegex(AssertionError, 'VITE_METADATA_IDENTITY_CHANGED'):
+            validate_frontend(before, swapped, sample_scope(frontend=True))
+
     def test_vite_metadata_requires_artifact_hashes_presence_and_explicit_classification(self):
         before, after = self.metadata_pair()
         bad = dict(after)
