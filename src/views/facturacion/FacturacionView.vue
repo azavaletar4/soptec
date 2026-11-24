@@ -24,12 +24,18 @@ const infraStore = useInfraElementosStore();
 const descuentosStore = useDescuentosCompensacionStore();
 
 // Edicion completa de una factura ya creada (corregir monto, fechas,
-// contrato, notas) y el borrado definitivo son para ADMIN/SUPERADMIN
-// (ampliacion 2026-11-24, antes solo SUPERADMIN — ver
-// supabase/migrations/20261124120000_admin_operational_parity.sql,
-// invoices_delete_staff) — crear/marcar pagada/cancelar ya estaba
-// disponible para todo el staff de facturacion, sin cambios.
-const isSuperadmin = computed(() => auth.isAdminOrAbove);
+// contrato, notas) es para ADMIN/SUPERADMIN (ampliacion 2026-11-24 — antes
+// solo SUPERADMIN); crear/marcar pagada/cancelar ya estaba disponible para
+// todo el staff de facturacion, sin cambios.
+const canEditInvoice = computed(() => auth.isAdminOrAbove);
+// El borrado definitivo SIGUE EXCLUSIVO de SUPERADMIN — se evaluo
+// ampliarlo junto con la edicion, pero el propietario pidio dejarlo
+// exclusivo (decision final 2026-11-24, antes de publicar). La policy RLS
+// invoices_delete_superadmin (supabase/migrations/
+// 20261124120000_admin_operational_parity.sql) vuelve a exigir SUPERADMIN
+// del lado del servidor; esto es solo para no mostrar un boton que el
+// backend rechazaria.
+const canDeleteInvoice = computed(() => auth.role === 'SUPERADMIN');
 // Descuento por averia (Fase 34) — pedido explicito: solo ADMIN/SUPERADMIN.
 const canApplyAveria = computed(() => auth.role === 'SUPERADMIN' || auth.role === 'ADMIN');
 const napBoxes = computed(() => infraStore.elementos.filter((e) => e.tipo === 'caja_nap'));
@@ -232,7 +238,7 @@ function openCreate() {
   showModal.value = true;
 }
 
-// Solo SUPERADMIN (ver isSuperadmin) — permite corregir una factura ya
+// ADMIN/SUPERADMIN (ver canEditInvoice) — permite corregir una factura ya
 // creada, en cualquier estado (incluida pagada/cancelada, para arreglar
 // datos mal cargados despues).
 function openEdit(inv: Invoice) {
@@ -498,8 +504,9 @@ async function confirmCancel() {
   }
 }
 
-// Borrado definitivo — solo SUPERADMIN (ver isSuperadmin), para limpiar
-// facturas de prueba. La RLS (Fase 35) tambien lo exige a nivel de base.
+// Borrado definitivo — solo SUPERADMIN (ver canDeleteInvoice), para limpiar
+// facturas de prueba. La RLS (Fase 35, conservada exclusiva por decision
+// del propietario 2026-11-24) tambien lo exige a nivel de base.
 async function confirmDelete() {
   if (!deleteTarget.value) return;
   deletingInvoice.value = true;
@@ -595,7 +602,8 @@ async function confirmDelete() {
         :key="group.zoneKey"
         :group="group"
         :expanded="isZoneExpanded(group.zoneKey)"
-        :is-superadmin="isSuperadmin"
+        :can-edit="canEditInvoice"
+        :can-delete="canDeleteInvoice"
         @toggle="toggleZone(group.zoneKey)"
         @pay="openPay"
         @cancel="askCancel"

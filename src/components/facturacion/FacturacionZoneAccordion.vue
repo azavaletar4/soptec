@@ -19,7 +19,12 @@ export interface ZoneGroup {
 defineProps<{
   group: ZoneGroup;
   expanded: boolean;
-  isSuperadmin: boolean;
+  // Separados 2026-11-24: editar una factura ya se amplio a ADMIN;
+  // eliminarla sigue exclusiva de SUPERADMIN (decision final del
+  // propietario) — antes un solo booleano ("isSuperadmin") gobernaba las
+  // dos acciones juntas.
+  canEdit: boolean;
+  canDelete: boolean;
 }>();
 
 defineEmits<{
@@ -114,14 +119,15 @@ function semaphoreClass(group: ZoneGroup) {
                 <button class="text-green-600 hover:text-green-700 text-xs" @click="$emit('pay', inv)">Marcar pagada</button>
                 <!-- "Cancelar" (reversible) en color neutro a proposito, distinto del
                      rojo de "Eliminar" (irreversible) — antes ambos eran rojos y
-                     quedaban pegados cuando isSuperadmin, facil de tocar el que no era. -->
+                     quedaban pegados cuando se podia editar/eliminar, facil de tocar
+                     el que no era. -->
                 <button class="text-slate-600 hover:text-slate-900 text-xs" @click="$emit('cancel', inv)">Cancelar</button>
               </template>
               <button v-if="inv.status === 'paid'" class="text-sky-700 hover:text-sky-700 text-xs" @click="$emit('recibo', inv)">Imprimir recibo</button>
-              <button v-if="isSuperadmin" class="text-slate-600 hover:text-slate-900 text-xs" @click="$emit('edit', inv)">Editar</button>
-              <span v-if="isSuperadmin" class="inline-block w-px h-3 bg-slate-300 align-middle mx-0.5"></span>
-              <button v-if="isSuperadmin" class="text-red-500/80 hover:text-red-600 text-xs" @click="$emit('delete', inv)">Eliminar</button>
-              <span v-if="inv.status === 'cancelled' && !isSuperadmin" class="text-xs text-slate-400">—</span>
+              <button v-if="canEdit" class="text-slate-600 hover:text-slate-900 text-xs" @click="$emit('edit', inv)">Editar</button>
+              <span v-if="canEdit && canDelete" class="inline-block w-px h-3 bg-slate-300 align-middle mx-0.5"></span>
+              <button v-if="canDelete" class="text-red-500/80 hover:text-red-600 text-xs" @click="$emit('delete', inv)">Eliminar</button>
+              <span v-if="inv.status === 'cancelled' && !canEdit && !canDelete" class="text-xs text-slate-400">—</span>
             </td>
           </tr>
         </tbody>
