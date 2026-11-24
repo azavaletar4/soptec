@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "ed8e491afc40e9c52f1f9ada4fc47b62321d47ec",
+  "sourceCommit": "795c72cd098632f497689f451513143bf45f51cb",
   "backendSources": [],
   "frontendSources": [
     "src/components/asistencia/AusenciasPanel.vue",
