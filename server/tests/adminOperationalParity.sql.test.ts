@@ -8,6 +8,7 @@ const sqlFile = (path: string) => readFileSync(new URL(path, import.meta.url), '
 const superadmin = '00000000-0000-0000-0000-000000000001';
 const admin = '00000000-0000-0000-0000-000000000002';
 const tecnico = '00000000-0000-0000-0000-000000000003';
+const soporte = '00000000-0000-0000-0000-000000000004';
 
 test('PostgreSQL isolated: ampliacion de permisos operativos de ADMIN (paridad con SUPERADMIN)', { timeout: 60000 }, async t => {
   const container = `smartrayco-adminparity-test-${process.pid}-${Date.now()}`;
@@ -28,7 +29,8 @@ test('PostgreSQL isolated: ampliacion de permisos operativos de ADMIN (paridad c
              public.asistencia_horarios_personales, public.service_contracts, public.clients,
              public.contract_unfulfilled_cancellations, public.profiles restart identity cascade;
     insert into public.profiles (id, role, active) values
-      ('${superadmin}', 'SUPERADMIN', true), ('${admin}', 'ADMIN', true), ('${tecnico}', 'TECNICO_RED', true);
+      ('${superadmin}', 'SUPERADMIN', true), ('${admin}', 'ADMIN', true), ('${tecnico}', 'TECNICO_RED', true),
+      ('${soporte}', 'SOPORTE', true);
   `);
 
   try {
@@ -218,6 +220,16 @@ test('PostgreSQL isolated: ampliacion de permisos operativos de ADMIN (paridad c
       const installE = asSuper(`insert into public.installations (status) values ('completed') returning id;`);
       asUser(`insert into public.job_assignees values ('installation','${installE}','${tecnico}','leader');`, admin);
       assert.equal(asSuper(`select count(*) from public.job_assignees where job_id='${installE}';`), '1');
+    });
+
+    await t.test('SOPORTE sigue SIN poder tocar la cuadrilla de una instalacion cerrada (su restriccion original no cambia; la paridad es solo para ADMIN)', () => {
+      reset();
+      const installE = asSuper(`insert into public.installations (status) values ('completed') returning id;`);
+      assert.throws(
+        () => asUser(`insert into public.job_assignees values ('installation','${installE}','${tecnico}','leader');`, soporte),
+        /new row violates row-level security policy/
+      );
+      assert.equal(asSuper(`select count(*) from public.job_assignees where job_id='${installE}';`), '0');
     });
 
     // ==================================================================

@@ -36,7 +36,7 @@ veces el hallazgo inicial no coincidía con el estado real (ver sección 6,
 | Facturación | Editar factura ya creada | ADMIN (ya, UI bloqueaba) | **+ADMIN (UI)** | sin RLS propia; cambio solo de frontend (`canEditInvoice`) |
 | Facturación | **Eliminar factura** | SUPERADMIN | **SUPERADMIN (sin cambio — decisión final)** | policy `invoices_delete_superadmin`, revertida antes de publicar (`canDeleteInvoice` en frontend) |
 | Altas | Editar/reabrir una instalación `completed`/`cancelled` (edición excepcional) | SUPERADMIN | **+ADMIN** | policy `installations_update_staff` |
-| Altas | Tocar la cuadrilla de una instalación cerrada | SUPERADMIN | **+ADMIN** | policy `job_assignees_write_dispatch` |
+| Altas | Tocar la cuadrilla de una instalación cerrada | SUPERADMIN | **+ADMIN** | policy `job_assignees_write_dispatch` — SOPORTE queda **exactamente igual** (su restricción original sobre `completed`/`cancelled` no se toca; hallazgo corregido antes de publicar, ver sección 8) |
 | Altas | Formulario web "Completar instalación" | SUPERADMIN | **sin cambio, a propósito** | decisión deliberada de Fase 166 — ver sección 5 |
 | Averías/Rutinas | Editar orden resuelta/cerrada | ADMIN (ya) | ADMIN (ya) | `tickets_update_staff`/`routines_update_staff` nunca excluyeron a ADMIN — sin cambio |
 | Mapa de red | **Eliminar NAP/MUFA/cable/hilo del mapa en vivo** | SUPERADMIN | **SUPERADMIN (sin cambio — decisión final)** | RPC `remove_from_network_map`, revertida antes de publicar (`canDeleteMapPassive` en frontend) |
@@ -175,7 +175,7 @@ Ningún archivo de `routes/users.ts`, `UsuariosView.vue`, `auth.ts`
 ## 8. Pruebas
 
 - **`server/tests/adminOperationalParity.sql.test.ts`** (PostgreSQL 17
-  real en Docker, aislado, sin red, sin datos reales) — **28/28 PASS**:
+  real en Docker, aislado, sin red, sin datos reales) — **29/29 PASS**:
   cada ampliación real (ADMIN ahora SÍ puede) con su contraparte negativa
   (TECNICO_RED sigue SIN poder); para las **4 operaciones revertidas**,
   prueba explícita de que **ADMIN sigue SIN poder** ejecutarlas por acceso
@@ -204,23 +204,42 @@ con un test ejecutado; mismo caso para la auditoría de cambios de rol vía
 el camino `service_role` real de `users.ts` (se simuló el escenario, no se
 tocó el backend real).
 
-## 9. Procedimiento de despliegue (NO ejecutado — requiere autorización explícita)
+## 9. Procedimiento de despliegue
 
-1. Confirmar de nuevo, en vivo, que `main`/`origin/main` y la base real no
-   divergieron desde esta auditoría (mismo principio que las sesiones
-   anteriores — nunca asumir desde memoria).
-2. Aplicar `supabase/migrations/20261124120000_admin_operational_parity.sql`
+**Autorizado expresamente por el propietario (24/11/2026)**, SQL y
+frontend juntos, condicionado a: pruebas satisfactorias, base real
+verificada, respaldo/rollback verificable, sin cambios de otras fases, sin
+credenciales expuestas, sin pruebas destructivas con datos reales.
+
+1. Confirmar de nuevo, en vivo, que la base real no divergió desde esta
+   auditoría (mismo principio que las sesiones anteriores — nunca asumir
+   desde memoria): Supabase (`mzupdnjegfwmpajywckd`, hosted — confirmado
+   leyendo el bundle real servido por `panel.rayconetworks.com`, que apunta
+   ahí; el `supabase-db` local de la VM no es el que usa el panel) y el
+   frontend realmente corriendo en la VM.
+2. **Hallazgo antes de construir**: el frontend en vivo (`db9d517`) NO es
+   descendiente de `origin/main` (`377f42d`) — diverge en 64 archivos,
+   incluida la migración `20261121190726_fo_cable_endpoint_unlink_guard.sql`
+   que solo vive en la rama ya desplegada `release/mapa-control-total-
+   superadmin-20261121`. Construir desde `origin/main` habría sido una
+   regresión silenciosa de esos cambios ya en producción. Se aplicó el
+   mismo patrón ya usado en este proyecto para releases selectivas:
+   cherry-pick de los 2 commits de esta fase sobre la base REAL (`db9d517`),
+   no sobre `origin/main` — de los 13 archivos de frontend que toca esta
+   fase, 12 eran idénticos entre `db9d517` y `377f42d`; el único que
+   difería (`InstalacionDetailView.vue`, cambios de otra fase en líneas no
+   solapadas) se fusionó automáticamente sin conflicto real.
+3. Aplicar `supabase/migrations/20261124120000_admin_operational_parity.sql`
    contra Supabase real (`mzupdnjegfwmpajywckd`) — es solo SQL de roles/
-   auditoría, no migra datos, no toca el frontend/backend desplegado.
-3. Verificar en vivo (solo lectura): las 28 aserciones de la suite aislada
+   auditoría, no migra datos.
+4. Verificar en vivo (solo lectura): las 29 aserciones de la suite aislada
    tienen su equivalente real verificable por `pg_get_functiondef`/
    `pg_policies` tal como quedaron aplicadas.
-4. No hace falta reconstruir ni redesplegar frontend/backend — los cambios
-   de UI (`isAdminOrAbove`) solo destraban botones ya presentes; se
-   publican con el siguiente release de frontend normal, cuando se
-   autorice.
-5. Actualizar `ESTADO_DESARROLLO.md` marcando esta fase como DESPLEGADA
-   recién cuando el paso 2 se ejecute de verdad contra producción.
+5. Build + deploy del frontend (imagen nueva sobre la base real `db9d517`,
+   solo los archivos de esta fase), rollback a la imagen anterior
+   verificado antes de publicar.
+6. Actualizar `ESTADO_DESARROLLO.md` marcando esta fase como DESPLEGADA
+   solo cuando los pasos 3 y 5 se ejecuten de verdad contra producción.
 
 ## 10. Rollback
 
