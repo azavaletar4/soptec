@@ -107,7 +107,20 @@ if ACTION=='prepare':
    if s=='frontend':assert tree(cid,'/usr/share/nginx/html')==tree(before[s]['id'],'/usr/share/nginx/html'),'ROLLBACK_RESTORE_MISMATCH_frontend'
    else:assert backend_tree(cid)==backend_tree(before[s]['id']),'ROLLBACK_RESTORE_MISMATCH_backend'
   finally:run(['docker','rm',cid])
- config=json.loads(run(compose(m)+['config','--format','json']));assert config['services']['backend']['image']==b['Config']['Image']and config['services']['frontend']['image']==f['Config']['Image'],'LIVE_COMPOSE_IMAGE_MISMATCH'
+ config=json.loads(run(compose(m)+['config','--format','json']))
+ for s,cid in [('backend',b),('frontend',f)]:
+  svc=config['services'][s]
+  if 'image' in svc:assert svc['image']==cid['Config']['Image'],'LIVE_COMPOSE_IMAGE_MISMATCH_'+s
+  else:
+   # Servicio definido por build: (docker-compose.onprem.yml), sin tag de
+   # imagen fijo que comparar -- 'docker compose config' nunca declara cual
+   # Id resultaria sin ejecutar el build real. La identidad de lo que corre
+   # AHORA se toma directo de docker inspect (antes[s]['image'], antes[s]
+   # viene de states() segundos antes que b/f): si ambas lecturas no
+   # coinciden, el contenedor cambio entre medio y se detiene en vez de
+   # asumir cual de las dos es la real.
+   assert isinstance(svc.get('build'),dict)and svc['build'].get('dockerfile'),'SERVICE_MISSING_IMAGE_OR_BUILD_'+s
+   assert cid['Config']['Image']==before[s]['image'],'LIVE_IMAGE_DRIFT_'+s
  m['oldBackendEnvironmentHashes']=environment_hashes('backend');m['expectedBackendEnvironmentHashes']=dict(m['oldBackendEnvironmentHashes'])
  for key,value in hosts_environment.items():
   assert key not in config['services']['backend'].get('environment',{})or config['services']['backend']['environment'][key]==value,'HOSTS_ENVIRONMENT_OVERRIDDEN_'+key
