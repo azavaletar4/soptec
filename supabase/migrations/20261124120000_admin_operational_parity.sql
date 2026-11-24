@@ -117,14 +117,19 @@ create trigger trg_inventory_units_audit_delete
   for each row execute function public.audit_inventory_unit_delete();
 
 -- =====================================================================
--- 3) Facturación — eliminar factura (ampliado a ADMIN) + auditoría.
---    Editar/crear/marcar pagada ya eran compartidas; solo DELETE era
---    exclusiva de SUPERADMIN (fase35_eliminar_facturas_superadmin.sql).
+-- 3) Facturación — eliminar factura SIGUE EXCLUSIVA DE SUPERADMIN
+--    (decisión final del propietario, 2026-11-24 — no se amplía a ADMIN).
+--    Se recrea la policy original tal cual (mismo nombre e idéntico
+--    chequeo que fase35_eliminar_facturas_superadmin.sql) y se conserva
+--    la auditoría nueva de abajo, que faltaba antes de esta migración.
+--    Editar/crear/marcar pagada ya eran compartidas con ADMIN desde antes
+--    y no se tocan aquí.
 -- =====================================================================
 
+drop policy if exists invoices_delete_staff on public.invoices;
 drop policy if exists invoices_delete_superadmin on public.invoices;
-create policy invoices_delete_staff on public.invoices
-  for delete using (public.current_user_role() in ('SUPERADMIN', 'ADMIN'));
+create policy invoices_delete_superadmin on public.invoices
+  for delete using (public.current_user_role() = 'SUPERADMIN');
 
 create or replace function public.audit_invoice_delete()
 returns trigger
@@ -142,9 +147,13 @@ create trigger trg_invoices_audit_delete
 
 -- =====================================================================
 -- 4) Mapa de red — eliminar NAP/MUFA/cable/hilo del mapa en vivo, y
---    desvincular un extremo de cable ya conectado (ambos ampliados a
---    ADMIN). `guard_map_passive_delete` (baja digital/catálogo) ya
---    incluía ADMIN/TECNICO_RED — no se toca, es un mecanismo distinto.
+--    desvincular un extremo de cable ya conectado: AMBAS SIGUEN
+--    EXCLUSIVAS DE SUPERADMIN (decisión final del propietario,
+--    2026-11-24 — no se amplían a ADMIN). Se conserva la auditoría nueva
+--    (log_admin_audit / fo_cable_endpoint_unlink_log), que faltaba antes
+--    de esta migración; solo se revierte el chequeo de rol al original.
+--    `guard_map_passive_delete` (baja digital/catálogo) ya incluía
+--    ADMIN/TECNICO_RED desde antes — no se toca, es un mecanismo distinto.
 -- =====================================================================
 
 create or replace function public.remove_from_network_map(p_kind text, p_id uuid, p_token text, p_hilo integer default null)
@@ -152,7 +161,7 @@ returns jsonb
 language plpgsql security definer set search_path = pg_catalog, public as $$
 declare s jsonb; at_time timestamptz = clock_timestamp(); fusion_ids uuid[];
 begin
-  if public.current_user_role() not in ('SUPERADMIN', 'ADMIN') then raise exception using errcode='42501',message='Solo SUPERADMIN o ADMIN pueden eliminar elementos del mapa.'; end if;
+  if public.current_user_role() is distinct from 'SUPERADMIN' then raise exception using errcode='42501',message='Solo SUPERADMIN puede eliminar elementos del mapa.'; end if;
   perform set_config('lock_timeout','2s',true);
   lock table public.infra_elementos,public.fo_cables,public.fo_hilo_estados,public.fo_fusiones,public.fo_nap_puertos,public.routines in share row exclusive mode;
   s=public.map_removal_snapshot(p_kind,p_id,p_hilo);
@@ -176,9 +185,12 @@ end $$;
 
 -- `guard_cable_endpoint_unlink` NO vive en esta rama (solo en la release ya
 -- desplegada `release/mapa-control-total-superadmin-20261121`, migración
--- 20261121190726). Se recrea aquí de cero con el mismo comportamiento real
--- verificado en producción, solo ampliando el rol — no se arrastra el
--- resto de esa rama ni se cherry-pickea su historial.
+-- 20261121190726). Se recrea aquí de cero, IDÉNTICA a su comportamiento
+-- real verificado en producción (sigue exclusiva de SUPERADMIN) — no se
+-- arrastra el resto de esa rama ni se cherry-pickea su historial. La
+-- tabla de log y su policy de lectura (ADMIN/TECNICO_RED pueden CONSULTAR
+-- el historial, nunca ejecutar la acción) ya existían en producción tal
+-- cual quedan aquí.
 create table if not exists public.fo_cable_endpoint_unlink_log (
   id uuid primary key default gen_random_uuid(),
   cable_id uuid not null,
@@ -191,9 +203,12 @@ create table if not exists public.fo_cable_endpoint_unlink_log (
 
 alter table public.fo_cable_endpoint_unlink_log enable row level security;
 
+-- Nombre y lista de roles exactos verificados contra la tabla real ya
+-- desplegada (solo lectura del historial — nunca autoriza la acción).
 drop policy if exists fo_cable_endpoint_unlink_log_select_staff on public.fo_cable_endpoint_unlink_log;
-create policy fo_cable_endpoint_unlink_log_select_staff on public.fo_cable_endpoint_unlink_log
-  for select using (public.current_user_role() in ('SUPERADMIN', 'ADMIN', 'TECNICO_RED'));
+drop policy if exists fo_cable_endpoint_unlink_log_staff_read on public.fo_cable_endpoint_unlink_log;
+create policy fo_cable_endpoint_unlink_log_staff_read on public.fo_cable_endpoint_unlink_log
+  for select using (public.current_user_role() in ('SUPERADMIN', 'ADMIN', 'TECNICO_RED', 'SOPORTE', 'FACTURACION'));
 
 grant select on public.fo_cable_endpoint_unlink_log to authenticated;
 
@@ -213,9 +228,9 @@ begin
     return new;
   end if;
 
-  if public.current_user_role() not in ('SUPERADMIN', 'ADMIN') then
+  if public.current_user_role() is distinct from 'SUPERADMIN' then
     raise exception using errcode = '42501',
-      message = 'Solo SUPERADMIN o ADMIN pueden desvincular un extremo ya conectado.';
+      message = 'Solo SUPERADMIN puede desvincular un extremo ya conectado.';
   end if;
 
   if unlinking_origen then
@@ -236,9 +251,12 @@ create trigger trg_fo_cables_endpoint_unlink_guard
 
 -- =====================================================================
 -- 4b) Clientes y contratos — "Cancelar contratación no instalada"
---    (ampliado a ADMIN). Eliminar un contrato ya era compartido con ADMIN
---    por `service_contracts_staff_only` (FOR ALL) — eso NO cambia aquí,
---    solo esta RPC puntual que tenía su propio candado aparte.
+--    SIGUE EXCLUSIVA DE SUPERADMIN (decisión final del propietario,
+--    2026-11-24 — se recrea la función tal cual, sin ningún cambio de
+--    rol, solo para dejar constancia explícita en esta migración de que
+--    se revisó y se mantiene). Eliminar un contrato ya era compartido con
+--    ADMIN por `service_contracts_staff_only` (FOR ALL) — eso NO cambia,
+--    es una operación distinta de esta RPC puntual.
 -- =====================================================================
 
 create or replace function public.contract_cancel_unfulfilled(p_contract_id uuid, p_updated_at timestamp with time zone, p_reason text, p_confirm boolean)
@@ -252,8 +270,11 @@ declare
   v_reason text; v_installation_id uuid; previous_context text;
   v_previous_contract_status public.contract_status;
 begin
-  perform 1 from public.profiles where id = auth.uid() and active and role::text in ('SUPERADMIN', 'ADMIN') for share;
-  if not found then raise exception 'Requiere SUPERADMIN o ADMIN activo' using errcode = '42501'; end if;
+  -- Ajuste 2026-11-24 (mismo día, antes de publicar): el propietario pidió
+  -- que esta operación quede EXCLUSIVA de SUPERADMIN — no se amplía a
+  -- ADMIN. Vuelve al chequeo original tal cual vive en producción.
+  perform 1 from public.profiles where id = auth.uid() and active and role::text = 'SUPERADMIN' for share;
+  if not found then raise exception 'Requiere SUPERADMIN activo' using errcode = '42501'; end if;
   if p_confirm is distinct from true then raise exception 'Confirme la cancelación' using errcode = 'PNI00'; end if;
   v_reason := trim(coalesce(p_reason, ''));
   if char_length(v_reason) < 5 then raise exception 'Ingrese un motivo (mínimo 5 caracteres)' using errcode = 'PNI01'; end if;

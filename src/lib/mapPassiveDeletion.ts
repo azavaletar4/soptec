@@ -23,8 +23,11 @@ export interface MapRemovalResult {
   thread?: FoHiloEstado;
 }
 
+// Ajuste 2026-11-24 (antes de publicar): el propietario pidió que eliminar
+// elementos del mapa en vivo (remove_from_network_map) siga EXCLUSIVO de
+// SUPERADMIN — no se amplía a ADMIN. Vuelve al chequeo original.
 export function canDeleteMapPassive(role: string | null): boolean {
-  return role === 'SUPERADMIN' || role === 'ADMIN';
+  return role === 'SUPERADMIN';
 }
 
 function checkError(error: { code?: string; message?: string } | null) {

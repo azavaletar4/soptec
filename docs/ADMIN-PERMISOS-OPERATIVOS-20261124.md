@@ -1,5 +1,11 @@
 # Ampliación de permisos operativos de ADMIN (paridad con SUPERADMIN) — 24/11/2026
 
+**Ajuste final de alcance (mismo día, antes de publicar):** el propietario
+pidió que 4 operaciones queden EXCLUSIVAS de SUPERADMIN, sin ampliar a
+ADMIN — se revirtieron solo esas 4, en frontend, backend/RPC, triggers y
+RLS, conservando toda la auditoría ya agregada. Este documento refleja el
+**alcance final**, no el intermedio. Ver sección 2 para la lista exacta.
+
 Implementado y probado **solo localmente**, en rama aislada
 `feature/admin-permisos-operativos-20261124` (worktree
 `scripts/inventory-auth-lab/runtime/admin-permisos-worktree`), sobre la
@@ -26,15 +32,15 @@ veces el hallazgo inicial no coincidía con el estado real (ver sección 6,
 | Inventario | Eliminar unidad serializada | ADMIN (ya) | ADMIN (ya) | policy `inventory_admin_only` — sin cambio de permiso, solo se agregó auditoría |
 | Inventario | Revertir movimiento de Kardex | ADMIN (ya, UI bloqueaba) | **+ADMIN (UI)** | sin RLS propia; cambio solo de frontend |
 | Clientes/Contratos | Eliminar contrato | ADMIN (ya) | ADMIN (ya) | `service_contracts_staff_only` — sin cambio de permiso, solo de frontend |
-| Clientes/Contratos | Cancelar contratación no instalada | SUPERADMIN | **+ADMIN** | RPC `contract_cancel_unfulfilled` |
-| Facturación | Editar factura ya creada | ADMIN (ya, UI bloqueaba) | **+ADMIN (UI)** | sin RLS propia; cambio solo de frontend |
-| Facturación | Eliminar factura | SUPERADMIN | **+ADMIN** | policy `invoices_delete_superadmin` → `invoices_delete_staff` |
+| Clientes/Contratos | **Cancelar contratación no instalada** | SUPERADMIN | **SUPERADMIN (sin cambio — decisión final)** | RPC `contract_cancel_unfulfilled`, revertida antes de publicar |
+| Facturación | Editar factura ya creada | ADMIN (ya, UI bloqueaba) | **+ADMIN (UI)** | sin RLS propia; cambio solo de frontend (`canEditInvoice`) |
+| Facturación | **Eliminar factura** | SUPERADMIN | **SUPERADMIN (sin cambio — decisión final)** | policy `invoices_delete_superadmin`, revertida antes de publicar (`canDeleteInvoice` en frontend) |
 | Altas | Editar/reabrir una instalación `completed`/`cancelled` (edición excepcional) | SUPERADMIN | **+ADMIN** | policy `installations_update_staff` |
 | Altas | Tocar la cuadrilla de una instalación cerrada | SUPERADMIN | **+ADMIN** | policy `job_assignees_write_dispatch` |
 | Altas | Formulario web "Completar instalación" | SUPERADMIN | **sin cambio, a propósito** | decisión deliberada de Fase 166 — ver sección 5 |
 | Averías/Rutinas | Editar orden resuelta/cerrada | ADMIN (ya) | ADMIN (ya) | `tickets_update_staff`/`routines_update_staff` nunca excluyeron a ADMIN — sin cambio |
-| Mapa de red | Eliminar NAP/MUFA/cable/hilo del mapa en vivo | SUPERADMIN | **+ADMIN** | RPC `remove_from_network_map` |
-| Mapa de red | Desvincular extremo de cable ya conectado | SUPERADMIN | **+ADMIN** | trigger `guard_cable_endpoint_unlink` |
+| Mapa de red | **Eliminar NAP/MUFA/cable/hilo del mapa en vivo** | SUPERADMIN | **SUPERADMIN (sin cambio — decisión final)** | RPC `remove_from_network_map`, revertida antes de publicar (`canDeleteMapPassive` en frontend) |
+| Mapa de red | **Desvincular extremo de cable ya conectado** | SUPERADMIN | **SUPERADMIN (sin cambio — decisión final)** | trigger `guard_cable_endpoint_unlink`, revertido antes de publicar (sin gate de frontend, nunca lo tuvo) |
 | Mapa de red | Baja digital de elementos pasivos (catálogo) | ADMIN/TECNICO_RED (ya) | sin cambio | `guard_map_passive_delete` ya los incluía |
 | Asistencia | Configurar horarios personales/feriados | SUPERADMIN | **+ADMIN** | triggers `asistencia_horario_personal_guard`/`asistencia_feriado_guard` + policy de escritura |
 | Asistencia | Resolver ausencias reportadas | SUPERADMIN | **+ADMIN** | RPC `resolver_ausencia` (+ bug de auditoría corregido, ver sección 4) |
@@ -45,7 +51,26 @@ veces el hallazgo inicial no coincidía con el estado real (ver sección 6,
 | ONT/OLT/TR-069 | Todo | ADMIN (ya) | ADMIN (ya) | ya compartido en frontend, backend y SQL — nada que ampliar |
 | Técnicos | Todo | sin cambios | sin cambios | fuera de alcance a propósito (punto 7 del pedido) |
 
-## 3. Se mantiene exclusivo de SUPERADMIN (a propósito, no tocado)
+## 3. Se mantiene exclusivo de SUPERADMIN
+
+**Por pedido final del propietario (ajuste del mismo día, antes de publicar) — revertido después de haberse ampliado:**
+
+- **Cancelar una contratación no instalada** (`contract_cancel_unfulfilled`).
+- **Eliminar una factura** (`invoices_delete_superadmin`).
+- **Eliminar un elemento del mapa en vivo** — NAP/MUFA/cable/hilo (`remove_from_network_map`).
+- **Desvincular un extremo de cable ya conectado** (`guard_cable_endpoint_unlink`).
+
+Las 4 fueron ampliadas a ADMIN en un primer pase, probadas, y luego
+revertidas EXACTAMENTE antes de publicar — frontend, RPC, triggers y RLS.
+La auditoría agregada para estas 4 (`log_admin_audit` dentro de
+`remove_from_network_map`, y el log ya existente de
+`fo_cable_endpoint_unlink_log`) **se conservó intacta** — solo se revirtió
+quién puede ejecutar la acción, nunca el registro de quién la ejecutó.
+Verificado expresamente con la suite SQL aislada que ADMIN no puede
+ejecutar ninguna de las 4 ni por acceso directo a Postgres/RLS (ver
+sección 8).
+
+**A propósito, no tocado (sin relación con el ajuste de arriba):**
 
 - **Gestión de roles/cuentas de staff** (`routes/users.ts`, `UsuariosView.vue`): crear, editar, eliminar cuentas, cambiar el rol de alguien, resetear contraseña ajena.
 - **Guarda anti-escalamiento** `trg_profiles_authorization_guard`/`guard_profile_authorization()` — ya aplicada en producción (vive en la rama `fix/profiles-role-security-20261119`, no en `main`); **no se tocó, no se recreó, no se debilitó**. Solo se le agregó un trigger de auditoría nuevo e independiente (`trg_profiles_audit_role_change`) que no cambia quién puede hacer qué.
@@ -136,7 +161,8 @@ una línea (`auth.role === 'SUPERADMIN'` → `auth.isAdminOrAbove`).
 - `src/views/clientes/ClientServiceDetailView.vue`
 - `src/views/instalaciones/InstalacionDetailView.vue`
 - `src/views/facturacion/FacturacionView.vue`
-- `src/lib/mapPassiveDeletion.ts`
+- `src/lib/mapPassiveDeletion.ts` (ampliado y luego revertido — queda SUPERADMIN-only)
+- `src/components/facturacion/FacturacionZoneAccordion.vue` (prop `isSuperadmin` separado en `canEdit`/`canDelete`)
 - `src/views/asistencia/AsistenciaView.vue`
 - `src/components/asistencia/AusenciasPanel.vue`
 - `src/components/asistencia/HorariosPersonalesPanel.vue`
@@ -149,14 +175,19 @@ Ningún archivo de `routes/users.ts`, `UsuariosView.vue`, `auth.ts`
 ## 8. Pruebas
 
 - **`server/tests/adminOperationalParity.sql.test.ts`** (PostgreSQL 17
-  real en Docker, aislado, sin red, sin datos reales) — **24/24 PASS**:
-  cada ampliación (ADMIN ahora SÍ puede) con su contraparte negativa
-  (TECNICO_RED sigue SIN poder), verificación de auditoría generada con el
-  contenido correcto, el bug de `resolver_ausencia` corregido, inmutabilidad
-  de `admin_audit_log` (ni SUPERADMIN puede editar/borrar una fila),
-  visibilidad del historial restringida a ADMIN/SUPERADMIN, y un rollback
-  de punta a punta (revierte el rol exacto, confirma que NO borra auditoría
-  ya escrita).
+  real en Docker, aislado, sin red, sin datos reales) — **28/28 PASS**:
+  cada ampliación real (ADMIN ahora SÍ puede) con su contraparte negativa
+  (TECNICO_RED sigue SIN poder); para las **4 operaciones revertidas**,
+  prueba explícita de que **ADMIN sigue SIN poder** ejecutarlas por acceso
+  directo a Postgres/RLS (lo más cercano a "API/Supabase directo" que se
+  puede verificar en un entorno aislado) y que **SUPERADMIN sí puede**,
+  sin cambios de comportamiento ni pérdida de auditoría; verificación de
+  auditoría generada con el contenido correcto, el bug de
+  `resolver_ausencia` corregido, inmutabilidad de `admin_audit_log` (ni
+  SUPERADMIN puede editar/borrar una fila), visibilidad del historial
+  restringida a ADMIN/SUPERADMIN, y un rollback de punta a punta (revierte
+  el rol exacto de las operaciones SÍ ampliadas, confirma que NO borra
+  auditoría ya escrita).
 - Regresión, sin tocar: `server/tests/closedOrders.sql.test.ts` (20/20
   PASS) y `server/tests/contractCancelUnfulfilled.sql.test.ts` (14/14
   PASS) — ambos cargan su propio estado histórico de forma aislada, no se
@@ -181,7 +212,7 @@ tocó el backend real).
 2. Aplicar `supabase/migrations/20261124120000_admin_operational_parity.sql`
    contra Supabase real (`mzupdnjegfwmpajywckd`) — es solo SQL de roles/
    auditoría, no migra datos, no toca el frontend/backend desplegado.
-3. Verificar en vivo (solo lectura): las 24 aserciones de la suite aislada
+3. Verificar en vivo (solo lectura): las 28 aserciones de la suite aislada
    tienen su equivalente real verificable por `pg_get_functiondef`/
    `pg_policies` tal como quedaron aplicadas.
 4. No hace falta reconstruir ni redesplegar frontend/backend — los cambios

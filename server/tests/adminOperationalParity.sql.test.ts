@@ -80,12 +80,21 @@ test('PostgreSQL isolated: ampliacion de permisos operativos de ADMIN (paridad c
     });
 
     // ==================================================================
-    // 2) Facturacion — eliminar factura (ampliado) + auditoria
+    // 2) Facturacion — eliminar factura: decision final del propietario
+    // (2026-11-24, antes de publicar) SIGUE EXCLUSIVA DE SUPERADMIN.
+    // Se conserva la auditoria nueva para el camino que SI funciona.
     // ==================================================================
-    await t.test('ADMIN ahora SI puede eliminar una factura (antes solo SUPERADMIN) y queda auditada con la fila completa', () => {
+    await t.test('ADMIN sigue SIN poder eliminar una factura (exclusivo SUPERADMIN, decision final)', () => {
       reset();
       const invoice = asSuper(`insert into public.invoices (invoice_number, amount) values ('F-001', 150.50) returning id;`);
       asUser(`delete from public.invoices where id='${invoice}';`, admin);
+      assert.equal(asSuper(`select count(*) from public.invoices where id='${invoice}';`), '1');
+    });
+
+    await t.test('SUPERADMIN SI puede eliminar una factura y queda auditada con la fila completa', () => {
+      reset();
+      const invoice = asSuper(`insert into public.invoices (invoice_number, amount) values ('F-001b', 150.50) returning id;`);
+      asUser(`delete from public.invoices where id='${invoice}';`, superadmin);
       assert.equal(asSuper(`select count(*) from public.invoices where id='${invoice}';`), '0');
       const amount = asSuper(`select anterior->>'amount' from public.admin_audit_log where tabla='invoices';`);
       assert.equal(amount, '150.50');
@@ -99,14 +108,24 @@ test('PostgreSQL isolated: ampliacion de permisos operativos de ADMIN (paridad c
     });
 
     // ==================================================================
-    // 2b) Clientes y contratos — contract_cancel_unfulfilled (ampliado)
+    // 2b) Clientes y contratos — contract_cancel_unfulfilled: decision
+    // final del propietario (2026-11-24) SIGUE EXCLUSIVA DE SUPERADMIN.
     // ==================================================================
-    await t.test('ADMIN ahora SI puede cancelar una contratacion no instalada (antes solo SUPERADMIN)', () => {
+    await t.test('ADMIN sigue SIN poder cancelar una contratacion no instalada (exclusivo SUPERADMIN, decision final)', () => {
       reset();
       const client = asSuper(`insert into public.clients (status) values ('prospect') returning id;`);
       const contract = asSuper(`insert into public.service_contracts (client_id) values ('${client}') returning id;`);
       const updatedAt = asSuper(`select updated_at from public.service_contracts where id='${contract}';`);
-      asUser(`select public.contract_cancel_unfulfilled('${contract}', '${updatedAt}'::timestamptz, 'Cliente desistio antes de instalar', true);`, admin);
+      assert.throws(() => asUser(`select public.contract_cancel_unfulfilled('${contract}', '${updatedAt}'::timestamptz, 'motivo', true);`, admin), /Requiere SUPERADMIN activo/);
+      assert.equal(asSuper(`select status from public.service_contracts where id='${contract}';`), 'active');
+    });
+
+    await t.test('SUPERADMIN SI puede cancelar una contratacion no instalada (sin cambios de comportamiento)', () => {
+      reset();
+      const client = asSuper(`insert into public.clients (status) values ('prospect') returning id;`);
+      const contract = asSuper(`insert into public.service_contracts (client_id) values ('${client}') returning id;`);
+      const updatedAt = asSuper(`select updated_at from public.service_contracts where id='${contract}';`);
+      asUser(`select public.contract_cancel_unfulfilled('${contract}', '${updatedAt}'::timestamptz, 'Cliente desistio antes de instalar', true);`, superadmin);
       assert.equal(asSuper(`select status from public.service_contracts where id='${contract}';`), 'cancelled');
       assert.equal(asSuper(`select count(*) from public.contract_unfulfilled_cancellations where contract_id='${contract}';`), '1');
     });
@@ -116,43 +135,62 @@ test('PostgreSQL isolated: ampliacion de permisos operativos de ADMIN (paridad c
       const client = asSuper(`insert into public.clients (status) values ('prospect') returning id;`);
       const contract = asSuper(`insert into public.service_contracts (client_id) values ('${client}') returning id;`);
       const updatedAt = asSuper(`select updated_at from public.service_contracts where id='${contract}';`);
-      assert.throws(() => asUser(`select public.contract_cancel_unfulfilled('${contract}', '${updatedAt}'::timestamptz, 'motivo', true);`, tecnico), /Requiere SUPERADMIN o ADMIN/);
+      assert.throws(() => asUser(`select public.contract_cancel_unfulfilled('${contract}', '${updatedAt}'::timestamptz, 'motivo', true);`, tecnico), /Requiere SUPERADMIN activo/);
     });
 
     // ==================================================================
-    // 3) Mapa de red — remove_from_network_map y guard_cable_endpoint_unlink
+    // 3) Mapa de red — remove_from_network_map y guard_cable_endpoint_unlink:
+    // decision final del propietario (2026-11-24) SIGUEN EXCLUSIVAS DE
+    // SUPERADMIN. Se conserva la auditoria nueva para el camino que SI
+    // funciona (SUPERADMIN).
     // ==================================================================
-    await t.test('ADMIN ahora SI puede desvincular un extremo de cable ya conectado (antes solo SUPERADMIN) y queda logueado', () => {
+    await t.test('ADMIN sigue SIN poder desvincular un extremo de cable ya conectado (exclusivo SUPERADMIN, decision final)', () => {
       reset();
       const infra = asSuper(`insert into public.infra_elementos (tipo) values ('nap') returning id;`);
       const cable = asSuper(`insert into public.fo_cables (origen_infra_id) values ('${infra}') returning id;`);
-      asUser(`update public.fo_cables set origen_infra_id=null where id='${cable}';`, admin);
+      assert.throws(() => asUser(`update public.fo_cables set origen_infra_id=null where id='${cable}';`, admin), /Solo SUPERADMIN puede desvincular/);
+      assert.equal(asSuper(`select origen_infra_id from public.fo_cables where id='${cable}';`), infra);
+    });
+
+    await t.test('SUPERADMIN SI puede desvincular un extremo de cable ya conectado y queda logueado', () => {
+      reset();
+      const infra = asSuper(`insert into public.infra_elementos (tipo) values ('nap') returning id;`);
+      const cable = asSuper(`insert into public.fo_cables (origen_infra_id) values ('${infra}') returning id;`);
+      asUser(`update public.fo_cables set origen_infra_id=null where id='${cable}';`, superadmin);
       assert.equal(asSuper(`select origen_infra_id from public.fo_cables where id='${cable}';`), '');
-      assert.equal(asSuper(`select unlinked_by from public.fo_cable_endpoint_unlink_log where cable_id='${cable}';`), admin);
+      assert.equal(asSuper(`select unlinked_by from public.fo_cable_endpoint_unlink_log where cable_id='${cable}';`), superadmin);
     });
 
     await t.test('TECNICO_RED sigue SIN poder desvincular un extremo ya conectado', () => {
       reset();
       const infra = asSuper(`insert into public.infra_elementos (tipo) values ('nap') returning id;`);
       const cable = asSuper(`insert into public.fo_cables (origen_infra_id) values ('${infra}') returning id;`);
-      assert.throws(() => asUser(`update public.fo_cables set origen_infra_id=null where id='${cable}';`, tecnico), /Solo SUPERADMIN o ADMIN pueden desvincular/);
+      assert.throws(() => asUser(`update public.fo_cables set origen_infra_id=null where id='${cable}';`, tecnico), /Solo SUPERADMIN puede desvincular/);
     });
 
-    await t.test('ADMIN ahora SI puede llamar remove_from_network_map (antes solo SUPERADMIN) y queda auditado', () => {
+    await t.test('ADMIN sigue SIN poder llamar remove_from_network_map (exclusivo SUPERADMIN, decision final)', () => {
       reset();
       const infra = asSuper(`insert into public.infra_elementos (tipo) values ('mufa') returning id;`);
       const token = asSuper(`select md5(public.map_removal_snapshot('infra','${infra}',null)::text);`);
-      asUser(`select public.remove_from_network_map('infra','${infra}','${token}',null);`, admin);
+      assert.throws(() => asUser(`select public.remove_from_network_map('infra','${infra}','${token}',null);`, admin), /Solo SUPERADMIN puede eliminar elementos del mapa/);
+      assert.equal(asSuper(`select coalesce(map_removed_at::text,'null') from public.infra_elementos where id='${infra}';`), 'null');
+    });
+
+    await t.test('SUPERADMIN SI puede llamar remove_from_network_map y queda auditado', () => {
+      reset();
+      const infra = asSuper(`insert into public.infra_elementos (tipo) values ('mufa') returning id;`);
+      const token = asSuper(`select md5(public.map_removal_snapshot('infra','${infra}',null)::text);`);
+      asUser(`select public.remove_from_network_map('infra','${infra}','${token}',null);`, superadmin);
       assert.notEqual(asSuper(`select map_removed_at from public.infra_elementos where id='${infra}';`), '');
       const audit = asSuper(`select actor_role, accion from public.admin_audit_log where tabla='network_map';`);
-      assert.equal(audit, 'ADMIN|infra_remove');
+      assert.equal(audit, 'SUPERADMIN|infra_remove');
     });
 
     await t.test('TECNICO_RED sigue SIN poder llamar remove_from_network_map', () => {
       reset();
       const infra = asSuper(`insert into public.infra_elementos (tipo) values ('mufa') returning id;`);
       const token = asSuper(`select md5(public.map_removal_snapshot('infra','${infra}',null)::text);`);
-      assert.throws(() => asUser(`select public.remove_from_network_map('infra','${infra}','${token}',null);`, tecnico), /Solo SUPERADMIN o ADMIN pueden eliminar elementos del mapa/);
+      assert.throws(() => asUser(`select public.remove_from_network_map('infra','${infra}','${token}',null);`, tecnico), /Solo SUPERADMIN puede eliminar elementos del mapa/);
     });
 
     // ==================================================================

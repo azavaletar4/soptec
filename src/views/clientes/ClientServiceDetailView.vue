@@ -86,12 +86,19 @@ const clientPhotosStore = useClientPhotosStore();
 const clientEquipmentPhotosStore = useClientEquipmentPhotosStore();
 const auth = useAuthStore();
 
+// canDeleteContracts: eliminar el contrato en sí, ampliado a ADMIN
+// (ampliación 2026-11-24) — ya estaba compartido con ADMIN por RLS
+// (service_contracts_staff_only) desde antes de esta fase, solo la UI
+// lo bloqueaba.
 const canDeleteContracts = computed(() => auth.isAdminOrAbove);
-// "Cancelar contratación no instalada" — solo SUPERADMIN, más estricto que
-// la baja normal (ADMIN/SUPERADMIN, ver inventoryAdmin). La RPC vuelve a
-// exigir SUPERADMIN del lado del servidor; esto es solo para no mostrar un
-// botón que el backend rechazaría.
-const canCancelUnfulfilled = computed(() => auth.isAdminOrAbove);
+// "Cancelar contratación no instalada" — EXCLUSIVO de SUPERADMIN, más
+// estricto que la baja normal. Se evaluó ampliarlo a ADMIN junto con el
+// resto de esta fase, pero el propietario pidió dejarlo exclusivo
+// (decisión final 2026-11-24, antes de publicar) — la RPC
+// contract_cancel_unfulfilled vuelve a exigir SUPERADMIN del lado del
+// servidor; esto es solo para no mostrar un botón que el backend
+// rechazaría.
+const canCancelUnfulfilled = computed(() => auth.role === 'SUPERADMIN');
 const inventoryAdmin = computed(() => ['ADMIN', 'SUPERADMIN'].includes(auth.role ?? ''));
 function assertInventoryAdmin() {
   if (!inventoryAdmin.value) throw new Error('Estas operaciones de inventario requieren ADMIN o SUPERADMIN. Utiliza tu orden autorizada de Campo.');
