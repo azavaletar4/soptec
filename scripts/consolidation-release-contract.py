@@ -183,6 +183,17 @@ def validate_vite_manifest(files, pinned_paths):
         if 'src' in record and re.fullmatch(r'_[\w.\-]+-!~\{[A-Za-z0-9]+\}~\.js', record['src']):
             assert p.endswith('.css') and set(entry) == {'file', 'src'} and record['src'].split('-!~{')[0] == '_' + stripname(p).split('/')[-1][:-4], 'INVALID_VITE_CSS_PLACEHOLDER'
             record['src'] = '@vite-css:' + name
+        elif 'src' in record and 'node_modules/' in record['src']:
+            # El Dockerfile de build enlaza node_modules con un symlink (ln -s
+            # /app/node_modules node_modules); Rollup puede resolver el MISMO
+            # archivo físico (mismo hash, confirmado real) con un prefijo
+            # relativo distinto según por dónde atraviese el symlink
+            # (ej. "node_modules/qr-scanner/..." vs
+            # "../../app/node_modules/qr-scanner/..."), sin que el paquete ni
+            # el archivo cambien. Solo se compara la parte posterior a
+            # "node_modules/" — el paquete/ruta real importado — nunca se
+            # ignora un cambio real de paquete o de archivo.
+            record['src'] = record['src'].split('node_modules/', 1)[-1]
         for field in ['imports', 'dynamicImports']:
             record[field] = sorted(identity(manifest[k]['file']) for k in entry.get(field, []))
         for field in ['css', 'assets']:
