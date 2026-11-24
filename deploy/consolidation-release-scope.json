@@ -1,16 +1,31 @@
 {
   "version": 1,
-  "sourceCommit": "40e43c155b51d9fa847caf665c81b32ecd59c64a",
-  "backendSources": [
-    "server/src/routes/olt.ts",
-    "server/src/services/oltImportDescriptionGuard.ts",
-    "server/src/services/oltScanCandidates.ts",
-    "server/src/services/oltSyncService.ts"
-  ],
+  "sourceCommit": "ed8e491afc40e9c52f1f9ada4fc47b62321d47ec",
+  "backendSources": [],
   "frontendSources": [
-    "src/lib/oltConnectionStatus.ts",
-    "src/stores/olt.ts",
-    "src/views/olt/OltDetailView.vue"
+    "src/components/asistencia/AusenciasPanel.vue",
+    "src/components/asistencia/HorariosPersonalesPanel.vue",
+    "src/components/asistencia/IntercambiosPanel.vue",
+    "src/components/asistencia/NovedadesPanel.vue",
+    "src/components/facturacion/FacturacionZoneAccordion.vue",
+    "src/lib/mapPassiveDeletion.ts",
+    "src/stores/auth.ts",
+    "src/views/asistencia/AsistenciaView.vue",
+    "src/views/clientes/ClientServiceDetailView.vue",
+    "src/views/facturacion/FacturacionView.vue",
+    "src/views/instalaciones/InstalacionDetailView.vue",
+    "src/views/inventario/InventarioProductoView.vue",
+    "src/views/inventario/InventarioView.vue"
   ],
-  "frontendAssets": ["assets/OltDetailView.js", "assets/olt.js"]
+  "frontendAssets": [
+    "assets/AsistenciaPanel.vue_vue_type_script_setup_true_lang.js",
+    "assets/AsistenciaView.css",
+    "assets/AsistenciaView.js",
+    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
+    "assets/FacturacionView.js",
+    "assets/InstalacionDetailView.js",
+    "assets/InventarioProductoView.js",
+    "assets/InventarioView.js",
+    "assets/index.js"
+  ]
 }
