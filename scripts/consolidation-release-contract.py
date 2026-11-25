@@ -24,10 +24,17 @@ def validate_scope(scope):
     assert release_services(scope), 'EMPTY_RELEASE_SCOPE'
     if 'frontendGraphTransition' in scope:
         proof = scope['frontendGraphTransition']
-        assert scope['frontendSources'] and isinstance(proof, dict) and set(proof) == {'before', 'after', 'added'}, 'INVALID_GRAPH_TRANSITION'
+        assert scope['frontendSources'] and isinstance(proof, dict) and {'before', 'after'} <= set(proof) <= {'before', 'after', 'added', 'removed'}, 'INVALID_GRAPH_TRANSITION'
         assert all(isinstance(proof[k], str) and re.fullmatch('[a-f0-9]{64}', proof[k]) for k in ['before', 'after']), 'INVALID_GRAPH_DIGEST'
-        assert isinstance(proof['added'], list) and proof['added'] and len(proof['added']) == len(set(proof['added'])), 'INVALID_GRAPH_ADDITIONS'
-        assert all(p in scope['frontendAssets'] and p.startswith('assets/') and p.endswith('.js') for p in proof['added']), 'UNDECLARED_GRAPH_ADDITION'
+        added, removed = proof.get('added', []), proof.get('removed', [])
+        assert isinstance(added, list) and len(added) == len(set(added)), 'INVALID_GRAPH_ADDITIONS'
+        assert isinstance(removed, list) and len(removed) == len(set(removed)), 'INVALID_GRAPH_REMOVALS'
+        assert added or removed, 'EMPTY_GRAPH_TRANSITION'
+        assert all(p in scope['frontendAssets'] and p.startswith('assets/') and p.endswith('.js') for p in added), 'UNDECLARED_GRAPH_ADDITION'
+        # Un chunk fusionado (desaparece como entrada propia) sigue exigiendo la
+        # misma huella completa before/after; declararlo aquí solo documenta su
+        # naturaleza simétrica a 'added', nunca afloja esa huella.
+        assert all(p in scope['frontendAssets'] and p.startswith('assets/') and p.endswith('.js') for p in removed), 'UNDECLARED_GRAPH_REMOVAL'
     backend_environment(scope)
 
 
@@ -218,13 +225,19 @@ def validate_generated_metadata(before, after, scope, pinned_paths, extraction):
     old, new = [validate_vite_manifest(files, pinned_paths) for files in [before, after]]
     proof = scope.get('frontendGraphTransition')
     if proof:
-        # Transición explícita revisada. Fija ambos grafos completos; no permite
-        # retirar chunks, cambiar flags/CSS ni ocultar código de otros módulos.
+        # Transición explícita revisada. Fija ambos grafos completos byte a
+        # byte (digest de la estructura normalizada entera); 'added'/'removed'
+        # solo describen qué claves pueden faltar de un lado al otro — ninguna
+        # tercera clave puede diferir, y el contenido de todo lo demás sigue
+        # protegido por la propia huella completa.
         digest = lambda value: hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
         assert digest(old) == proof['before'] and digest(new) == proof['after'], 'GRAPH_TRANSITION_DIGEST_MISMATCH'
-        assert not set(old) - set(new) and set(new) - set(old) == set(proof['added']), 'GRAPH_TRANSITION_STRUCTURE_MISMATCH'
-        for p in proof['added']:
+        added, removed = proof.get('added', []), proof.get('removed', [])
+        assert set(new) - set(old) == set(added) and set(old) - set(new) == set(removed), 'GRAPH_TRANSITION_STRUCTURE_MISMATCH'
+        for p in added:
             del new[p]
+        for p in removed:
+            del old[p]
     if extraction:
         proof = VERIFIED_CHUNK_EXTRACTION
         leaf = proof['leaf']
@@ -322,9 +335,11 @@ def validate_frontend(before, after, scope):
         return result
     old_norm, new_norm = normalized(before, old_reach), normalized(after, new_reach)
     extraction = verified_chunk_extraction(before, after, old_norm, new_norm, scope)
-    additions = {('logical', p) for p in scope.get('frontendGraphTransition', {}).get('added', [])}
-    assert not additions or VITE_MANIFEST in before and VITE_MANIFEST in after, 'GRAPH_TRANSITION_REQUIRES_METADATA'
-    assert set(new_norm) - set(old_norm) == additions and not set(old_norm) - set(new_norm), 'HISTORICAL_ASSETS_STRUCTURE_CHANGED:removed=' + ','.join(sorted(k[1] for k in set(old_norm) - set(new_norm))) + ';added=' + ','.join(sorted(k[1] for k in set(new_norm) - set(old_norm)))
+    transition = scope.get('frontendGraphTransition', {})
+    additions = {('logical', p) for p in transition.get('added', [])}
+    removals = {('logical', p) for p in transition.get('removed', [])}
+    assert not (additions or removals) or VITE_MANIFEST in before and VITE_MANIFEST in after, 'GRAPH_TRANSITION_REQUIRES_METADATA'
+    assert set(new_norm) - set(old_norm) == additions and set(old_norm) - set(new_norm) == removals, 'HISTORICAL_ASSETS_STRUCTURE_CHANGED:removed=' + ','.join(sorted(k[1] for k in set(old_norm) - set(new_norm))) + ';added=' + ','.join(sorted(k[1] for k in set(new_norm) - set(old_norm)))
     changed = {key[1] for key in differences(old_norm, new_norm)}
     if normcontent(before['index.html'], pinned_names) != normcontent(after['index.html'], pinned_names):
         changed.add('index.html')

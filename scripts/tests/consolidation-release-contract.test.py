@@ -51,7 +51,7 @@ class ReleaseContractTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(AssertionError):
                 validate_frontend(before, bad, scope)
 
-    def test_graph_proof_cannot_remove_chunks_or_change_identity(self):
+    def test_graph_proof_cannot_remove_chunks_without_declaring_it(self):
         before, after, scope = self.graph_pair()
         bad = dict(after)
         bad['assets/index-AAAAAAAA.js'] = b'import "./Tr069View-AAAAAAAA.js"'
@@ -59,11 +59,69 @@ class ReleaseContractTests(unittest.TestCase):
             validate_frontend(before, self.metadata_fixture(bad), scope)
         bad = copy.deepcopy(scope)
         bad['frontendGraphTransition']['added'] = []
+        with self.assertRaisesRegex(AssertionError, 'EMPTY_GRAPH_TRANSITION'):
+            validate_scope(bad)
+        bad['frontendGraphTransition']['added'] = ['assets/closureSubmission.js'] * 2
         with self.assertRaisesRegex(AssertionError, 'INVALID_GRAPH_ADDITIONS'):
             validate_scope(bad)
         bad['frontendGraphTransition']['added'] = ['assets/unlisted.js']
         with self.assertRaisesRegex(AssertionError, 'UNDECLARED_GRAPH_ADDITION'):
             validate_scope(bad)
+
+    def merge_pair(self):
+        # Fusión real de chunk (sentido inverso a graph_pair): un chunk antes
+        # independiente ('absorbed') desaparece, su código queda dentro de
+        # 'Asistencia' — mismo fenómeno que descuentosCompensacion.js fusionado
+        # en ClientServiceDetailView por el heurístico de chunking de Vite.
+        raw_before = frontend()
+        raw_before['assets/Asistencia-AAAAAAAA.js'] = b'import "./absorbed-AAAAAAAA.js";export const asistencia=true'
+        raw_before['assets/absorbed-AAAAAAAA.js'] = b'export const absorbed=1'
+        raw_after = dict(raw_before)
+        del raw_after['assets/absorbed-AAAAAAAA.js']
+        raw_after['assets/Asistencia-AAAAAAAA.js'] = b'export const asistencia=true;export const absorbed=1'
+        before, after = self.metadata_fixture(raw_before), self.metadata_fixture(raw_after)
+        digest = lambda files: hashlib.sha256(json.dumps(validate_vite_manifest(files, set()), sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+        scope = sample_scope(frontend=True)
+        scope['frontendAssets'] = ['assets/Asistencia.js', 'assets/absorbed.js']
+        scope['frontendGraphTransition'] = {'before': digest(before), 'after': digest(after), 'removed': ['assets/absorbed.js']}
+        return before, after, scope
+
+    def test_explicit_graph_removal_validates_both_graphs(self):
+        before, after, scope = self.merge_pair()
+        validate_scope(scope)
+        self.assertEqual(validate_frontend(before, after, scope), sorted(scope['frontendAssets']))
+        for key in ['before', 'after']:
+            bad = copy.deepcopy(scope)
+            bad['frontendGraphTransition'][key] = '0' * 64
+            with self.subTest(key=key), self.assertRaisesRegex(AssertionError, 'GRAPH_TRANSITION_DIGEST_MISMATCH'):
+                validate_frontend(before, after, bad)
+
+    def test_graph_removal_proof_never_hides_unrelated_code_or_orphans(self):
+        before, after, scope = self.merge_pair()
+        for path in ['assets/Tr069View-AAAAAAAA.js', 'assets/old-orphan-AAAAAAAA.js', 'logo.png']:
+            bad = self.metadata_fixture({**after, path: b'unexpected'})
+            with self.subTest(path=path), self.assertRaises(AssertionError):
+                validate_frontend(before, bad, scope)
+
+    def test_graph_removal_requires_explicit_consistent_declaration(self):
+        before, after, scope = self.merge_pair()
+        without_removed = copy.deepcopy(scope)
+        without_removed['frontendGraphTransition']['removed'] = []
+        with self.assertRaisesRegex(AssertionError, 'EMPTY_GRAPH_TRANSITION'):
+            validate_scope(without_removed)
+        duplicated = copy.deepcopy(scope)
+        duplicated['frontendGraphTransition']['removed'] = ['assets/absorbed.js'] * 2
+        with self.assertRaisesRegex(AssertionError, 'INVALID_GRAPH_REMOVALS'):
+            validate_scope(duplicated)
+        undeclared = copy.deepcopy(scope)
+        undeclared['frontendGraphTransition']['removed'] = ['assets/unlisted.js']
+        with self.assertRaisesRegex(AssertionError, 'UNDECLARED_GRAPH_REMOVAL'):
+            validate_scope(undeclared)
+        wrong_name = copy.deepcopy(scope)
+        wrong_name['frontendAssets'] = wrong_name['frontendAssets'] + ['assets/other.js']
+        wrong_name['frontendGraphTransition']['removed'] = ['assets/other.js']
+        with self.assertRaisesRegex(AssertionError, 'HISTORICAL_ASSETS_STRUCTURE_CHANGED'):
+            validate_frontend(before, after, wrong_name)
 
     def metadata_fixture(self, files):
         files = dict(files)
