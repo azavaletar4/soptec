@@ -8,7 +8,8 @@
     "server/src/services/debtHoldScheduler.ts",
     "server/src/services/debtHoldService.ts",
     "server/src/services/invoiceScheduler.ts",
-    "server/src/lib/supabaseUser.ts"
+    "server/src/lib/supabaseUser.ts",
+    "src/lib/financeMoney.ts"
   ],
   "frontendSources": [
     "src/views/facturacion/FacturacionView.vue",
