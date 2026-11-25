@@ -6,8 +6,7 @@
     "src/components/facturacion/FinanceReconciliation.vue"
   ],
   "frontendAssets": [
-    "assets/index.js",
-    "assets/FacturacionView.js",
-    "assets/FacturacionView.css"
+    "assets/FinanceReconciliation.js",
+    "assets/FinanceReconciliation.css"
   ]
 }
