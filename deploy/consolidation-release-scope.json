@@ -87,6 +87,33 @@
     "assets/DispatchBoardView.js",
     "assets/RutinasView.js",
     "assets/ClientRetirementDialog.vue_vue_type_script_setup_true_lang.js",
-    "assets/CambiarPasswordView.js"
-  ]
+    "assets/CambiarPasswordView.js",
+    "assets/finance.css",
+    "assets/FinanceReconciliation.css",
+    "assets/descuentosCompensacion.js",
+    "assets/receipt-logo-horizontal-Blh7a3OM.webp"
+  ],
+  "frontendGraphTransition": {
+    "before": "420faccb7528cf49f49e08e18b0446c4db08f5715db0dccd55609a55da218792",
+    "after": "cbd55482470aab1219cf5fcf2a0c2dc0ce595423b3fbb45e17444ee48ab67ed0",
+    "removed": ["assets/descuentosCompensacion.js"],
+    "contentAdded": [
+      "assets/FinanceReconciliation.css",
+      "assets/FinanceReconciliation.js",
+      "assets/_commonjsHelpers.js",
+      "assets/finance.css",
+      "assets/financeMoney.js",
+      "assets/invoices.js",
+      "assets/jszip.min.js"
+    ],
+    "manifestAdded": [
+      "assets/FinanceReconciliation.js",
+      "assets/_commonjsHelpers.js",
+      "assets/finance.css",
+      "assets/financeMoney.js",
+      "assets/invoices.js",
+      "assets/jszip.min.js",
+      "assets/receipt-logo-horizontal-Blh7a3OM.webp"
+    ]
+  }
 }
