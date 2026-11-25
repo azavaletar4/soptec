@@ -9,26 +9,30 @@ import type { Invoice, InvoiceAdjustment } from '@/types/domain';
 // -> invoices.id), asi que hay que especificar la FK o PostgREST tira
 // "more than one relationship was found".
 const INVOICE_SELECT =
-  '*, clients(id, first_name, last_name, document_number), service_contracts!contract_id(id, contract_number)';
+  '*, clients(id, first_name, last_name, document_number), service_contracts!contract_id(id, contract_number,zone_id,service_type,zones(id,name),plans(id,name))';
 
 export const useInvoicesStore = defineStore('invoices', () => {
   const invoices = ref<Invoice[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const total = ref(0);
 
-  async function fetchInvoices() {
+  async function fetchInvoices(filters: { page?: number; from?: string; to?: string; status?: string; contractId?: string; search?: string; zone?: string } = {}) {
     loading.value = true;
     error.value = null;
-    const { data, error: err } = await supabase
-      .from('invoices')
-      .select(INVOICE_SELECT)
-      .order('created_at', { ascending: false });
+    const { data: result, error: err } = await supabase.rpc('finance_list', {
+      p_from: filters.from ?? new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10), p_to: filters.to ?? new Date().toISOString().slice(0,10),
+      p_page: filters.page ?? 1, p_search: filters.search ?? '', p_status: filters.status ?? '',
+      p_zone: filters.zone || null, p_contract: filters.contractId || null,
+    });
+    const data = result?.rows ?? [], count = result?.total ?? 0;
     loading.value = false;
     if (err) {
       error.value = err.message;
       throw err;
     }
     invoices.value = (data ?? []) as unknown as Invoice[];
+    total.value = count ?? 0;
   }
 
   async function fetchInvoicesByClient(clientId: string) {
@@ -57,21 +61,6 @@ export const useInvoicesStore = defineStore('invoices', () => {
     if (err) throw err;
     invoices.value.unshift(data as unknown as Invoice);
     return data as unknown as Invoice;
-  }
-
-  // Pasa por el backend (no supabase-js directo, como el resto de este
-  // store) porque marcar pagada una factura puede necesitar reactivar al
-  // cliente en MikroTik/OLT si estaba en corte por deuda (ver Fase 25), y
-  // desde la Fase 33 tambien calcula el sobrepago (saldo a favor) contra el
-  // monto ya neto de descuentos de referido/saldo previo.
-  async function markPaid(id: string, paymentMethod: string, amountPaid?: number) {
-    const { invoice, reactivation } = await apiFetch<{
-      invoice: Invoice;
-      reactivation: { attempted: boolean; ok?: boolean; error?: string };
-    }>(`/api/invoices/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({ paymentMethod, amountPaid }) });
-    const idx = invoices.value.findIndex((i) => i.id === id);
-    if (idx !== -1) invoices.value[idx] = invoice;
-    return { invoice, reactivation };
   }
 
   // Facturacion recurrente (Fase 33b) — genera todas las facturas pendientes
@@ -135,5 +124,8 @@ export const useInvoicesStore = defineStore('invoices', () => {
     invoices.value = invoices.value.filter((i) => i.id !== id);
   }
 
-  return { invoices, loading, error, fetchInvoices, fetchInvoicesByClient, fetchInvoicesByContract, createInvoice, updateInvoice, markPaid, fetchAdjustments, generateDue, cancelInvoice, deleteInvoice };
+  function recordPayment(payload: { requestId: string; contractId: string; invoiceIds: string[]; amount: string; method: string; reference: string; reason: string }) {
+    return apiFetch<{ paymentId: string; received: string; applied: string; credit: string; reactivation: { attempted: false } }>('/api/invoices/payments', { method: 'POST', body: JSON.stringify(payload) });
+  }
+  return { invoices, total, loading, error, fetchInvoices, fetchInvoicesByClient, fetchInvoicesByContract, createInvoice, updateInvoice, recordPayment, fetchAdjustments, generateDue, cancelInvoice, deleteInvoice };
 });

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
-import { flagOverdueContracts, applyDebtHold, reactivateContract } from '../services/debtHoldService';
+import { flagOverdueContracts, applyDebtHold, reactivateContract, previewDebtService } from '../services/debtHoldService';
 
 // Corte y reactivacion por deuda — ver Fase 25. Lectura (y re-escaneo, que
 // solo marca) para todo el staff de facturacion; aplicar/reactivar el corte
@@ -19,7 +19,7 @@ const CORTE_CONFIRM = ['SUPERADMIN', 'ADMIN'] as const;
 debtHoldRoutes.use('*', requireAuth, requireRole(...STAFF_READ));
 
 const CONTRACT_SELECT =
-  'id, contract_number, client_id, debt_hold_status, debt_hold_flagged_at, debt_hold_applied_at, debt_hold_invoice_id, ' +
+  'id, contract_number, client_id, status, service_type, zone_id, finance_reconciled_at, finance_start_date, debt_hold_status, debt_hold_flagged_at, debt_hold_applied_at, debt_hold_invoice_id, ' +
   'clients(id, first_name, last_name, document_number, phone), plans(id, name), ' +
   'invoices:debt_hold_invoice_id(id, invoice_number, due_date, amount)';
 
@@ -28,7 +28,7 @@ debtHoldRoutes.get('/pending', async (c) => {
     .from('service_contracts')
     .select(CONTRACT_SELECT)
     .in('debt_hold_status', ['pending', 'suspended'])
-    .order('debt_hold_flagged_at', { ascending: true });
+    .order('debt_hold_flagged_at', { ascending: true }).range(0, 199);
   if (error) return c.json({ error: error.message }, 400);
   return c.json(data ?? []);
 });
@@ -38,9 +38,14 @@ debtHoldRoutes.get('/:contractId/events', async (c) => {
     .from('debt_hold_events')
     .select('*')
     .eq('contract_id', c.req.param('contractId'))
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }).limit(100);
   if (error) return c.json({ error: error.message }, 400);
   return c.json(data ?? []);
+});
+
+debtHoldRoutes.get('/:contractId/preview', async (c) => {
+  try { return c.json(await previewDebtService(c.req.param('contractId'))); }
+  catch (e) { return c.json({ error: e instanceof Error ? e.message : 'No se pudo verificar el servicio' }, 409); }
 });
 
 // Disparo manual del escaneo (ademas del scheduler automatico) — util para

@@ -155,6 +155,8 @@ export interface ClientEquipmentPhoto {
 export type ContractServiceType = 'internet_combo' | 'solo_iptv';
 
 export interface ServiceContract {
+  finance_reconciled_at?: string | null;
+  finance_start_date?: string | null;
   id: string;
   contract_number: string | null;
   /** Internet/Combo (requiere ONT/TV Box) o Solo IPTV (Fase 45) — cliente ya tiene internet de otro proveedor, solo activa su cuenta IPTV. */
@@ -733,6 +735,7 @@ export interface TicketComment {
 }
 
 export interface Invoice {
+  finance_reconciled?: boolean;
   id: string;
   invoice_number: string | null;
   contract_id: string;
@@ -753,11 +756,11 @@ export interface Invoice {
   created_at: string;
   updated_at: string;
   clients?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'document_number'> | null;
-  service_contracts?: Pick<ServiceContract, 'id' | 'contract_number'> | null;
+  service_contracts?: (Pick<ServiceContract, 'id' | 'contract_number'> & Partial<Pick<ServiceContract, 'zone_id' | 'service_type' | 'zones' | 'plans'>>) | null;
 }
 
 export type ReferidoEstado = 'pendiente' | 'aplicado' | 'cancelado';
-export type InvoiceAdjustmentTipo = 'averia' | 'referido' | 'saldo_a_favor' | 'promo_4to_gratis';
+export type InvoiceAdjustmentTipo = 'averia' | 'referido' | 'saldo_a_favor' | 'promo_4to_gratis' | 'exoneracion';
 export type ClientCreditMovementTipo =
   | 'pago_excedente'
   | 'consumo_saldo_favor'

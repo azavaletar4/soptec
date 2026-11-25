@@ -1,74 +1,37 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
+import { penCents, penDecimal } from '@/lib/financeMoney';
 import type { DescuentoCompensacion, DescuentoCompensacionCriterio } from '@/types/domain';
-
-const SELECT = '*, clients(id, first_name, last_name)';
-
-// Descuentos manuales por averia/compensacion de servicio (Fase 34) — solo
-// ADMIN/SUPERADMIN (lo exige la RLS de la tabla). El descuento en si lo
-// aplica el trigger apply_invoice_credits() sobre la siguiente factura del
-// cliente (mismo mecanismo que referidos, Fase 33), no este store.
-export const useDescuentosCompensacionStore = defineStore('descuentosCompensacion', () => {
-  const loading = ref(false);
-
-  /**
-   * `contractId` (Fase 37): sin el, el descuento aplica a la siguiente
-   * factura de CUALQUIER servicio del cliente (compensacion general);
-   * con el, solo a las facturas de esa linea puntual (ej. se cayo la fibra
-   * de una sola casa).
-   */
-  async function createIndividual(clientId: string, monto: number, motivo: string, contractId?: string) {
-    const { data, error: err } = await supabase
-      .from('descuentos_compensacion')
-      .insert({ client_id: clientId, contract_id: contractId ?? null, monto, motivo })
-      .select(SELECT)
-      .single();
-    if (err) throw err;
+const SELECT='*, clients(id, first_name, last_name)';
+export const useDescuentosCompensacionStore=defineStore('descuentosCompensacion',()=>{
+  const loading=ref(false);
+  const attempts=new Map<string,string>();
+  async function createIndividual(clientId:string,monto:number,motivo:string,contractId?:string){
+    const key=JSON.stringify([clientId,contractId,monto,motivo]);
+    const request=attempts.get(key)??crypto.randomUUID();attempts.set(key,request);
+    const {data,error}=await supabase.rpc('finance_schedule_compensation',{
+      p_operation_id:request,p_client_id:clientId,p_contract_id:contractId??null,
+      p_amount:penDecimal(penCents(monto)),p_reason:motivo,
+    });
+    if(error)throw error;
     return data as unknown as DescuentoCompensacion;
   }
-
-  // Masivo por zona/OLT/caja NAP — RPC porque resuelve N clientes afectados
-  // y crea N filas en una sola operacion atomica (ver migracion Fase 34).
-  async function createMasivo(params: {
-    criterio: DescuentoCompensacionCriterio;
-    criterioId: string;
-    motivo: string;
-    monto?: number;
-    porcentaje?: number;
-  }) {
-    const { data, error: err } = await supabase.rpc('crear_descuento_compensacion_masivo', {
-      p_criterio: params.criterio,
-      p_criterio_id: params.criterioId,
-      p_motivo: params.motivo,
-      p_monto: params.monto ?? null,
-      p_porcentaje: params.porcentaje ?? null,
+  async function createMasivo(params:{criterio:DescuentoCompensacionCriterio;criterioId:string;motivo:string;monto?:number;porcentaje?:number}){
+    const {data,error}=await supabase.rpc('crear_descuento_compensacion_masivo',{
+      p_criterio:params.criterio,p_criterio_id:params.criterioId,p_motivo:params.motivo,
+      p_monto:params.monto===undefined?null:penDecimal(penCents(params.monto)),p_porcentaje:params.porcentaje??null,
     });
-    if (err) throw err;
-    // La funcion devuelve `returns table(...)`, PostgREST lo entrega como un arreglo de 1 fila.
-    const row = (Array.isArray(data) ? data[0] : data) as { lote_id: string; clientes_afectados: number };
-    return row;
+    if(error)throw error;
+    return (Array.isArray(data)?data[0]:data) as {lote_id:string;clientes_afectados:number};
   }
-
-  async function fetchPendientesByClient(clientId: string) {
-    loading.value = true;
-    try {
-      const { data, error: err } = await supabase
-        .from('descuentos_compensacion')
-        .select(SELECT)
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false });
-      if (err) throw err;
-      return (data ?? []) as unknown as DescuentoCompensacion[];
-    } finally {
-      loading.value = false;
-    }
+  async function fetchPendientesByClient(clientId:string){loading.value=true;try{
+    const {data,error}=await supabase.from('descuentos_compensacion').select(SELECT).eq('client_id',clientId).order('created_at',{ascending:false});
+    if(error)throw error;return (data??[]) as unknown as DescuentoCompensacion[];
+  }finally{loading.value=false;}}
+  async function cancelar(id:string){
+    const {error}=await supabase.rpc('finance_cancel_compensation',{p_id:id,p_reason:'Cancelación administrativa de compensación pendiente desde ficha'});
+    if(error)throw error;
   }
-
-  async function cancelar(id: string) {
-    const { error: err } = await supabase.from('descuentos_compensacion').update({ estado: 'cancelado' }).eq('id', id).eq('estado', 'pendiente');
-    if (err) throw err;
-  }
-
-  return { loading, createIndividual, createMasivo, fetchPendientesByClient, cancelar };
+  return {loading,createIndividual,createMasivo,fetchPendientesByClient,cancelar};
 });
