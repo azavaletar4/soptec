@@ -1,20 +1,13 @@
 {
   "version": 1,
-  "sourceCommit": "2804c4b0599e8486ee33ca0d171b8a3b76f0ff85",
+  "sourceCommit": "1940a181b3cc6b6b1653c7716cbac08e61132c12",
   "backendSources": [],
   "frontendSources": [
-    "src/components/facturacion/FinanceWorkspace.vue",
-    "src/components/facturacion/PonCollections.vue",
-    "src/components/facturacion/finance.css",
-    "src/types/domain.ts",
-    "src/views/clientes/ClientServiceDetailView.vue"
+    "src/components/facturacion/FinanceReconciliation.vue"
   ],
   "frontendAssets": [
     "assets/index.js",
     "assets/FacturacionView.js",
-    "assets/FacturacionView.css",
-    "assets/finance.css",
-    "assets/ClientServiceDetailView.js",
-    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js"
+    "assets/FacturacionView.css"
   ]
 }
