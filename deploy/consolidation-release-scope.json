@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "10f53272e2a787392c827f857fb04719f74ba42e",
+  "sourceCommit": "8441ddfe7eba4c554dcca899866ca0858f4b83fb",
   "backendSources": [
     "server/src/routes/invoices.ts",
     "server/src/routes/debtHold.ts",
@@ -100,28 +100,5 @@
     "assets/RedMapView.js",
     "assets/mapIcons.js",
     "assets/vue3-apexcharts.js"
-  ],
-  "frontendGraphTransition": {
-    "before": "420faccb7528cf49f49e08e18b0446c4db08f5715db0dccd55609a55da218792",
-    "after": "cbd55482470aab1219cf5fcf2a0c2dc0ce595423b3fbb45e17444ee48ab67ed0",
-    "removed": ["assets/descuentosCompensacion.js"],
-    "contentAdded": [
-      "assets/FinanceReconciliation.css",
-      "assets/FinanceReconciliation.js",
-      "assets/_commonjsHelpers.js",
-      "assets/finance.css",
-      "assets/financeMoney.js",
-      "assets/invoices.js",
-      "assets/jszip.min.js"
-    ],
-    "manifestAdded": [
-      "assets/FinanceReconciliation.js",
-      "assets/_commonjsHelpers.js",
-      "assets/finance.css",
-      "assets/financeMoney.js",
-      "assets/invoices.js",
-      "assets/jszip.min.js",
-      "assets/receipt-logo-horizontal-Blh7a3OM.webp"
-    ]
-  }
+  ]
 }
