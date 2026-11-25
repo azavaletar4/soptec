@@ -123,6 +123,78 @@ class ReleaseContractTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'HISTORICAL_ASSETS_STRUCTURE_CHANGED'):
             validate_frontend(before, after, wrong_name)
 
+    def split_pair(self):
+        # Caso real (Fase 7C, descuentosCompensacion.js): el nivel de
+        # contenido (reachable()+stripname()) y el de manifiesto Vite
+        # (validate_vite_manifest) necesitan declarar un 'added' DISTINTO -
+        # un CSS perezoso inyectado desde un SFC Vue es alcanzable por texto
+        # pero no tiene clave propia de manifiesto (se fusiona como css:[]
+        # del chunk que lo importa); una imagen nueva SI es clave propia del
+        # manifiesto pero reachable() jamas la sigue (solo seguye .js/.css).
+        raw_before = frontend()
+        raw_after = dict(raw_before)
+        raw_after['assets/index-AAAAAAAA.js'] += b';import "./newFeature-CCCCCCCC.js"'
+        # Cadena plana (no "import ..."), igual que la inyección de CSS
+        # perezoso real de Vite: reachable() la sigue (REF_HASH_TXT_RE no
+        # exige sintaxis de import), pero no genera una entrada en el campo
+        # "imports" del manifiesto (STATIC_IMPORT_RE sí la exige).
+        raw_after['assets/newFeature-CCCCCCCC.js'] = b'const s="./lazyStyle-CCCCCCCC.css";export const feature=1'
+        raw_after['assets/lazyStyle-CCCCCCCC.css'] = b'.x{color:red}'
+        raw_after['assets/logo-ZZZZZZZZ.webp'] = b'binary-image-bytes'
+        before = self.metadata_fixture(raw_before)
+        after = self.metadata_fixture(raw_after)
+        manifest = json.loads(after[VITE_MANIFEST])
+        del manifest['_lazyStyle-CCCCCCCC.css']
+        manifest['_newFeature-CCCCCCCC.js']['css'] = ['assets/lazyStyle-CCCCCCCC.css']
+        manifest['_logo-ZZZZZZZZ.webp'] = {'file': 'assets/logo-ZZZZZZZZ.webp'}
+        manifest['_newFeature-CCCCCCCC.js']['assets'] = ['assets/logo-ZZZZZZZZ.webp']
+        after[VITE_MANIFEST] = json.dumps(manifest).encode()
+        after = self.rehash_metadata(after)
+        digest = lambda files: hashlib.sha256(json.dumps(validate_vite_manifest(files, set()), sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+        scope = sample_scope(frontend=True)
+        scope['frontendAssets'] = ['assets/index.js', 'assets/newFeature.js', 'assets/lazyStyle.css', 'assets/logo-ZZZZZZZZ.webp']
+        scope['frontendGraphTransition'] = {
+            'before': digest(before), 'after': digest(after),
+            'contentAdded': ['assets/newFeature.js', 'assets/lazyStyle.css'],
+            'manifestAdded': ['assets/newFeature.js', 'assets/logo-ZZZZZZZZ.webp'],
+        }
+        return before, after, scope
+
+    def test_split_level_graph_transition_handles_assets_each_level_sees_differently(self):
+        before, after, scope = self.split_pair()
+        validate_scope(scope)
+        self.assertEqual(validate_frontend(before, after, scope), sorted(['assets/index.js', 'assets/newFeature.js', 'assets/lazyStyle.css']))
+
+    def test_single_added_field_cannot_satisfy_both_levels_when_they_really_differ(self):
+        # Demuestra por que hace falta el campo por nivel: un 'added'
+        # compartido (sin contentAdded/manifestAdded) no puede describir
+        # ambos diffs reales a la vez para este caso.
+        before, after, scope = self.split_pair()
+        shared = copy.deepcopy(scope)
+        del shared['frontendGraphTransition']['contentAdded']
+        del shared['frontendGraphTransition']['manifestAdded']
+        shared['frontendGraphTransition']['added'] = ['assets/newFeature.js', 'assets/lazyStyle.css']
+        with self.assertRaisesRegex(AssertionError, 'GRAPH_TRANSITION_STRUCTURE_MISMATCH'):
+            validate_frontend(before, after, shared)
+        shared['frontendGraphTransition']['added'] = ['assets/newFeature.js', 'assets/logo-ZZZZZZZZ.webp']
+        with self.assertRaisesRegex(AssertionError, 'HISTORICAL_ASSETS_STRUCTURE_CHANGED'):
+            validate_frontend(before, after, shared)
+
+    def test_split_level_transition_rejects_undeclared_or_duplicated_manifest_entries(self):
+        before, after, scope = self.split_pair()
+        undeclared = copy.deepcopy(scope)
+        undeclared['frontendAssets'] = [p for p in undeclared['frontendAssets'] if p != 'assets/logo-ZZZZZZZZ.webp']
+        with self.assertRaisesRegex(AssertionError, 'UNDECLARED_GRAPH_MANIFEST_ADDITION'):
+            validate_scope(undeclared)
+        duplicated = copy.deepcopy(scope)
+        duplicated['frontendGraphTransition']['manifestAdded'] = duplicated['frontendGraphTransition']['manifestAdded'] * 2
+        with self.assertRaisesRegex(AssertionError, 'INVALID_GRAPH_LIST:manifestAdded'):
+            validate_scope(duplicated)
+        mismatched = copy.deepcopy(scope)
+        mismatched['frontendGraphTransition']['manifestAdded'] = ['assets/newFeature.js']
+        with self.assertRaisesRegex(AssertionError, 'GRAPH_TRANSITION_STRUCTURE_MISMATCH'):
+            validate_frontend(before, after, mismatched)
+
     def metadata_fixture(self, files):
         files = dict(files)
         reach = reachable(files)

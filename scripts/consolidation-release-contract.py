@@ -24,18 +24,54 @@ def validate_scope(scope):
     assert release_services(scope), 'EMPTY_RELEASE_SCOPE'
     if 'frontendGraphTransition' in scope:
         proof = scope['frontendGraphTransition']
-        assert scope['frontendSources'] and isinstance(proof, dict) and {'before', 'after'} <= set(proof) <= {'before', 'after', 'added', 'removed'}, 'INVALID_GRAPH_TRANSITION'
+        assert scope['frontendSources'] and isinstance(proof, dict) and {'before', 'after'} <= set(proof) <= {'before', 'after'} | GRAPH_TRANSITION_FIELDS, 'INVALID_GRAPH_TRANSITION'
         assert all(isinstance(proof[k], str) and re.fullmatch('[a-f0-9]{64}', proof[k]) for k in ['before', 'after']), 'INVALID_GRAPH_DIGEST'
         added, removed = proof.get('added', []), proof.get('removed', [])
         assert isinstance(added, list) and len(added) == len(set(added)), 'INVALID_GRAPH_ADDITIONS'
         assert isinstance(removed, list) and len(removed) == len(set(removed)), 'INVALID_GRAPH_REMOVALS'
-        assert added or removed, 'EMPTY_GRAPH_TRANSITION'
-        assert all(p in scope['frontendAssets'] and p.startswith('assets/') and p.endswith('.js') for p in added), 'UNDECLARED_GRAPH_ADDITION'
-        # Un chunk fusionado (desaparece como entrada propia) sigue exigiendo la
-        # misma huella completa before/after; declararlo aquí solo documenta su
-        # naturaleza simétrica a 'added', nunca afloja esa huella.
-        assert all(p in scope['frontendAssets'] and p.startswith('assets/') and p.endswith('.js') for p in removed), 'UNDECLARED_GRAPH_REMOVAL'
+        for key in GRAPH_TRANSITION_LEVEL_FIELDS:
+            value = proof.get(key, [])
+            assert isinstance(value, list) and len(value) == len(set(value)), 'INVALID_GRAPH_LIST:' + key
+        lists = graph_transition_lists(proof)
+        assert any(lists.values()), 'EMPTY_GRAPH_TRANSITION'
+        # Nivel de contenido (reachable()+stripname(), el que usa
+        # HISTORICAL_ASSETS_STRUCTURE_CHANGED): solo existen identidades
+        # js/css en ese grafo - nunca una imagen/fuente (reachable() jamás
+        # las seguiría).
+        assert all(p in scope['frontendAssets'] and p.startswith('assets/') and p.endswith(('.js', '.css')) for p in lists['content_added']), 'UNDECLARED_GRAPH_ADDITION'
+        assert all(p in scope['frontendAssets'] and p.startswith('assets/') and p.endswith(('.js', '.css')) for p in lists['content_removed']), 'UNDECLARED_GRAPH_REMOVAL'
+        # Nivel de manifiesto Vite (validate_vite_manifest, el que usa
+        # GRAPH_TRANSITION_STRUCTURE_MISMATCH): cualquier tipo de asset con
+        # entrada propia en el manifiesto - imágenes/fuentes incluidas -, no
+        # solo js/css.
+        assert all(p in scope['frontendAssets'] and p.startswith('assets/') for p in lists['manifest_added']), 'UNDECLARED_GRAPH_MANIFEST_ADDITION'
+        assert all(p in scope['frontendAssets'] and p.startswith('assets/') for p in lists['manifest_removed']), 'UNDECLARED_GRAPH_MANIFEST_REMOVAL'
     backend_environment(scope)
+
+
+# Un chunk/activo fusionado o eliminado (desaparece como entrada propia) sigue
+# exigiendo la misma huella completa before/after; declararlo aquí solo
+# documenta qué clave puede faltar de cada lado, nunca afloja esa huella.
+# 'added'/'removed' siguen siendo el valor COMPARTIDO por defecto para ambos
+# niveles (compatibilidad total con releases anteriores, que nunca
+# necesitaron distinguirlos); 'contentAdded'/'contentRemoved' y
+# 'manifestAdded'/'manifestRemoved' permiten declarar un valor DISTINTO por
+# nivel cuando de verdad difieren (ver UNDECLARED_GRAPH_MANIFEST_ADDITION):
+# un CSS importado desde un SFC Vue es alcanzable por reachable() pero no es
+# clave propia del manifiesto; una imagen/fuente nueva es clave propia del
+# manifiesto pero reachable() nunca la seguiría (solo seguye texto .js/.css).
+GRAPH_TRANSITION_LEVEL_FIELDS = {'contentAdded', 'contentRemoved', 'manifestAdded', 'manifestRemoved'}
+GRAPH_TRANSITION_FIELDS = {'added', 'removed'} | GRAPH_TRANSITION_LEVEL_FIELDS
+
+
+def graph_transition_lists(proof):
+    added, removed = proof.get('added', []), proof.get('removed', [])
+    return {
+        'content_added': proof.get('contentAdded', added),
+        'content_removed': proof.get('contentRemoved', removed),
+        'manifest_added': proof.get('manifestAdded', added),
+        'manifest_removed': proof.get('manifestRemoved', removed),
+    }
 
 
 def backend_environment(scope):
@@ -224,19 +260,24 @@ def validate_generated_metadata(before, after, scope, pinned_paths, extraction):
     assert VITE_MANIFEST in before and VITE_MANIFEST in after, 'VITE_MANIFEST_PRESENCE_CHANGED'
     old, new = [validate_vite_manifest(files, pinned_paths) for files in [before, after]]
     proof = scope.get('frontendGraphTransition')
+    manifest_added, manifest_removed = [], []
     if proof:
         # Transición explícita revisada. Fija ambos grafos completos byte a
-        # byte (digest de la estructura normalizada entera); 'added'/'removed'
-        # solo describen qué claves pueden faltar de un lado al otro — ninguna
-        # tercera clave puede diferir, y el contenido de todo lo demás sigue
-        # protegido por la propia huella completa.
+        # byte (digest de la estructura normalizada entera); 'manifestAdded'/
+        # 'manifestRemoved' (o 'added'/'removed' si no se distinguió por
+        # nivel) solo describen qué claves pueden faltar de un lado al otro
+        # EN EL MANIFIESTO — ninguna tercera clave puede diferir, y el
+        # contenido de todo lo demás sigue protegido por la propia huella
+        # completa. Puede incluir cualquier tipo de asset (imágenes/fuentes
+        # incluidas), a diferencia del nivel de contenido más abajo.
         digest = lambda value: hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
         assert digest(old) == proof['before'] and digest(new) == proof['after'], 'GRAPH_TRANSITION_DIGEST_MISMATCH'
-        added, removed = proof.get('added', []), proof.get('removed', [])
-        assert set(new) - set(old) == set(added) and set(old) - set(new) == set(removed), 'GRAPH_TRANSITION_STRUCTURE_MISMATCH'
-        for p in added:
+        lists = graph_transition_lists(proof)
+        manifest_added, manifest_removed = lists['manifest_added'], lists['manifest_removed']
+        assert set(new) - set(old) == set(manifest_added) and set(old) - set(new) == set(manifest_removed), 'GRAPH_TRANSITION_STRUCTURE_MISMATCH'
+        for p in manifest_added:
             del new[p]
-        for p in removed:
+        for p in manifest_removed:
             del old[p]
     if extraction:
         proof = VERIFIED_CHUNK_EXTRACTION
@@ -255,7 +296,14 @@ def validate_generated_metadata(before, after, scope, pinned_paths, extraction):
         assert invariant(old[p]) == invariant(new[p]), 'VITE_METADATA_IDENTITY_CHANGED:' + p
         if p not in scope['frontendAssets']:
             assert old[p] == new[p], 'VITE_PROTECTED_DEPENDENCIES_CHANGED:' + p
-    return {VITE_MANIFEST}
+    # Un asset nuevo/retirado declarado a nivel de manifiesto (p.ej. una
+    # imagen) puede no ser alcanzable nunca por reachable() (solo sigue texto
+    # .js/.css) — ya validado arriba byte a byte contra la huella completa del
+    # manifiesto; eximirlo aquí es lo que evita que el control de estáticos
+    # fuera del grafo (más abajo, en validate_frontend) lo trate como un
+    # cambio no declarado. Las claves ya cubiertas por el grafo alcanzable no
+    # se ven afectadas por esta unión (siguen protegidas igual).
+    return {VITE_MANIFEST} | set(manifest_added) | set(manifest_removed)
 
 
 # Transición revisada mediante AST con bindings y remapeo exacto de precargas.
@@ -336,8 +384,9 @@ def validate_frontend(before, after, scope):
     old_norm, new_norm = normalized(before, old_reach), normalized(after, new_reach)
     extraction = verified_chunk_extraction(before, after, old_norm, new_norm, scope)
     transition = scope.get('frontendGraphTransition', {})
-    additions = {('logical', p) for p in transition.get('added', [])}
-    removals = {('logical', p) for p in transition.get('removed', [])}
+    transition_lists = graph_transition_lists(transition)
+    additions = {('logical', p) for p in transition_lists['content_added']}
+    removals = {('logical', p) for p in transition_lists['content_removed']}
     assert not (additions or removals) or VITE_MANIFEST in before and VITE_MANIFEST in after, 'GRAPH_TRANSITION_REQUIRES_METADATA'
     assert set(new_norm) - set(old_norm) == additions and set(old_norm) - set(new_norm) == removals, 'HISTORICAL_ASSETS_STRUCTURE_CHANGED:removed=' + ','.join(sorted(k[1] for k in set(old_norm) - set(new_norm))) + ';added=' + ','.join(sorted(k[1] for k in set(new_norm) - set(old_norm)))
     changed = {key[1] for key in differences(old_norm, new_norm)}
