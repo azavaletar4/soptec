@@ -172,6 +172,10 @@ export interface ServiceContract {
   /** Servicio gratuito (Fase 47) — sus facturas se generan como 'exonerada' (S/0), no pasan por cobro. */
   is_courtesy: boolean;
   courtesy_reason: string | null;
+  /** Ciclo comercial de cobranza (Fase 7C) — confirmado vía finance_set_billing_terms, distinto de billing_day (emisión operativa). Null hasta que el administrador lo confirme. */
+  finance_billing_modality?: 'adelantado' | 'cumplido' | null;
+  finance_billing_day?: number | null;
+  finance_grace_days?: number | null;
   start_date: string;
   end_date: string | null;
   billing_day: number;

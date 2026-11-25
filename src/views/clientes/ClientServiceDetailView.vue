@@ -29,6 +29,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { syncOltZoneForContract, OLT_ZONE_SYNC_ROLES } from '@/lib/ontZoneSync';
 import { EQUIPMENT_TYPE_LABEL, EQUIPMENT_TYPE_OPTIONS } from '@/lib/equipmentPhotoType';
 import { resolveOntPlanName } from '@/lib/ontPlanDisplay';
+import { nextCycleDate, billingModalityLabels } from '@/lib/billingCycle';
 import { countOcupadosReales, occupiesCommercialCapacity, COMMERCIAL_STATUS_LABEL, COMMERCIAL_STATUS_CLASS } from '@/lib/napOccupancy';
 import {
   NAP_CLIENT_LIMIT,
@@ -152,6 +153,24 @@ const emissionDuePreview = computed(() => {
   dueDate.setDate(dueDate.getDate() + 7);
   const fmt = (d: Date) => d.toLocaleDateString('es', { day: '2-digit', month: 'short' });
   return { emission: fmt(emissionDate), due: fmt(dueDate) };
+});
+
+// Ciclo COMERCIAL de cobranza (fase 7C) — concepto distinto del ejemplo de
+// emision operativa de arriba (fase 2/119). Solo lectura: la modalidad/dia/
+// prorroga se confirman en Cobranzas -> Confirmar condiciones
+// (finance_set_billing_terms), nunca desde este formulario. Null mientras
+// el contrato no tenga condiciones comerciales confirmadas.
+const commercialDuePreview = computed(() => {
+  const c = contract.value;
+  if (!c?.finance_billing_modality || !c.finance_billing_day) return null;
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const nextDue = nextCycleDate(todayISO, c.finance_billing_day);
+  const fmt = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('es', { day: '2-digit', month: 'short' });
+  return {
+    modality: billingModalityLabels[c.finance_billing_modality],
+    due: fmt(nextDue),
+    graceDays: c.finance_billing_modality === 'adelantado' ? (c.finance_grace_days ?? 7) : 0,
+  };
 });
 
 async function loadContract() {
@@ -1728,9 +1747,23 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="mb-3 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2 text-xs text-sky-700">
-          Ejemplo este mes: emite el <strong>{{ emissionDuePreview.emission }}</strong> · vence el
-          <strong>{{ emissionDuePreview.due }}</strong> (vencimiento = emisión + 7 días).
+        <div v-if="!contractForm.is_courtesy" class="mb-3 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2 text-xs text-sky-700">
+          Ejemplo este mes (emisión operativa): emite el <strong>{{ emissionDuePreview.emission }}</strong> · vence el
+          <strong>{{ emissionDuePreview.due }}</strong> (vencimiento = emisión + 7 días). Este ejemplo es solo la
+          emisión del cargo, no el ciclo comercial de cobranza.
+          <template v-if="commercialDuePreview">
+            <br />Condición comercial confirmada: pago <strong>{{ commercialDuePreview.modality.toLowerCase() }}</strong>
+            · próximo vencimiento <strong>{{ commercialDuePreview.due }}</strong>
+            <template v-if="commercialDuePreview.graceDays > 0"> · {{ commercialDuePreview.graceDays }} días de prórroga</template>
+            <template v-else> · sin prórroga (exigible el mismo día)</template>.
+          </template>
+          <template v-else>
+            <br />Condición comercial sin confirmar todavía — confírmala en Cobranzas → Confirmar condiciones para
+            que el aviso de vencimiento refleje pago adelantado (con prórroga) o pago cumplido (sin prórroga).
+          </template>
+        </div>
+        <div v-else class="mb-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
+          Servicio gratuito (cortesía): no se emite cobro, el ejemplo de vencimiento no aplica.
         </div>
 
         <div class="mb-3">
