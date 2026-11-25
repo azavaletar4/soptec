@@ -195,6 +195,37 @@ class ReleaseContractTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'GRAPH_TRANSITION_STRUCTURE_MISMATCH'):
             validate_frontend(before, after, mismatched)
 
+    def test_declared_asset_may_gain_or_lose_css_assets_references(self):
+        # Caso real (Fase 7C/Facturacion): CortesView.js (ya declarado,
+        # su contenido ya cambia) gana una referencia 'css' legitima a
+        # finance.css nuevo - antes bloqueado por VITE_METADATA_IDENTITY_CHANGED
+        # incluso estando declarado. Permitido SOLO si el propio chunk esta
+        # en frontendAssets; el contenido real de lo referenciado sigue
+        # protegido aparte (nivel de contenido + su propia clave de manifiesto).
+        before, after = self.metadata_pair()
+        after = dict(after)
+        after['assets/newstyle-CCCCCCCC.css'] = b'.y{color:blue}'
+        after['assets/Tr069View-BBBBBBBB.js'] += b';const s="./newstyle-CCCCCCCC.css"'
+        after = self.metadata_fixture(after)
+        manifest = json.loads(after[VITE_MANIFEST])
+        manifest['_Tr069View-BBBBBBBB.js']['css'] = ['assets/newstyle-CCCCCCCC.css']
+        after[VITE_MANIFEST] = json.dumps(manifest).encode()
+        after = self.rehash_metadata(after)
+        digest = lambda files: hashlib.sha256(json.dumps(validate_vite_manifest(files, set()), sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+        scope = sample_scope(frontend=True)
+        scope['frontendAssets'] = ['assets/Tr069View.js', 'assets/newstyle.css']
+        scope['frontendGraphTransition'] = {'before': digest(before), 'after': digest(after), 'added': ['assets/newstyle.css']}
+        self.assertEqual(validate_frontend(before, after, scope), sorted(['assets/Tr069View.js', 'assets/newstyle.css']))
+        # Lo mismo en un chunk NO declarado (Asistencia, nunca cambia) falla:
+        # identidad de un chunk ajeno protegida siempre, aunque el archivo
+        # referenciado sí este declarado.
+        manifest2 = json.loads(after[VITE_MANIFEST])
+        manifest2['_Asistencia-AAAAAAAA.js']['assets'] = ['assets/newstyle-CCCCCCCC.css']
+        bad = self.rehash_metadata({**after, VITE_MANIFEST: json.dumps(manifest2).encode()})
+        bad_scope = {**scope, 'frontendGraphTransition': {**scope['frontendGraphTransition'], 'after': digest(bad)}}
+        with self.assertRaisesRegex(AssertionError, 'VITE_METADATA_IDENTITY_CHANGED'):
+            validate_frontend(before, bad, bad_scope)
+
     def metadata_fixture(self, files):
         files = dict(files)
         reach = reachable(files)

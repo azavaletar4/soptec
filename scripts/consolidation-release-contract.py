@@ -290,9 +290,17 @@ def validate_generated_metadata(before, after, scope, pinned_paths, extraction):
             new[importer]['imports'].remove(leaf)
     assert set(old) == set(new), 'VITE_METADATA_STRUCTURE_CHANGED'
     for p in old:
-        # Las fuentes, flags, CSS y assets no son imports JS; no pueden cambiar
-        # amparándose en un permiso de edición de código de otro chunk.
-        invariant = lambda r: {k: v for k, v in r.items() if k not in ['imports', 'dynamicImports']}
+        # Identidad (nombre/fuente/isEntry/isDynamicEntry) nunca puede cambiar
+        # amparándose en un permiso de edición de código de otro chunk - eso
+        # cambiaría su ROL, no solo su contenido. 'css'/'assets' (QUÉ otros
+        # archivos referencia este chunk) sí puede cambiar, pero únicamente
+        # para un chunk ya declarado en frontendAssets (p.ej. CortesView.js
+        # ganando una referencia legítima a finance.css nuevo) - el contenido
+        # real de cada archivo referenciado sigue protegido aparte por el
+        # nivel de contenido (old_norm/new_norm) y por este mismo nivel de
+        # manifiesto para la propia clave de ese archivo.
+        mutable = ['imports', 'dynamicImports'] + (['css', 'assets'] if p in scope['frontendAssets'] else [])
+        invariant = lambda r, mutable=mutable: {k: v for k, v in r.items() if k not in mutable}
         assert invariant(old[p]) == invariant(new[p]), 'VITE_METADATA_IDENTITY_CHANGED:' + p
         if p not in scope['frontendAssets']:
             assert old[p] == new[p], 'VITE_PROTECTED_DEPENDENCIES_CHANGED:' + p
