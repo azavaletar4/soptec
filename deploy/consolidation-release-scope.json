@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "de1f905d1161000315adaacd3ca65eb76a888f06",
+  "sourceCommit": "10f53272e2a787392c827f857fb04719f74ba42e",
   "backendSources": [
     "server/src/routes/invoices.ts",
     "server/src/routes/debtHold.ts",
@@ -34,7 +34,8 @@
     "src/stores/invoices.ts",
     "src/stores/pagosAdelantados.ts",
     "src/stores/descuentosCompensacion.ts",
-    "src/types/domain.ts"
+    "src/types/domain.ts",
+    "src/lib/billingCycle.ts"
   ],
   "frontendAssets": [
     "assets/index.css",
