@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "cda2dbc7f74ff14b75a74afd536931151ce7462b",
+  "sourceCommit": "697ce164c410f01d2e5db0291b592f4956761357",
   "backendSources": [],
   "frontendSources": [
     "src/components/facturacion/FinanceReconciliation.vue",
@@ -10,5 +10,11 @@
     "assets/FinanceReconciliation.js",
     "assets/FinanceReconciliation.css",
     "assets/billingCycle.js"
-  ]
+  ],
+  "frontendGraphTransition": {
+    "before": "33f18b217f2266f5e2391505bab47fc20f5b8102c5e60373171d23b0267ef483",
+    "after": "725c2fa1813420d8a805519f972855c62d04dfe46742b7178855ef9d67fec318",
+    "contentAdded": ["assets/billingCycle.js"],
+    "manifestAdded": ["assets/billingCycle.js"]
+  }
 }
