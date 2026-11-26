@@ -223,7 +223,15 @@ def validate_vite_manifest(files, pinned_paths):
         record = {k: entry[k] for k in ['src', 'name', 'isEntry', 'isDynamicEntry'] if k in entry}
         # Vite asigna IDs de orden a las entradas CSS puras. Solo este formato
         # sintético cambia de identidad; la hoja CSS real sigue comparada.
-        if 'src' in record and re.fullmatch(r'_[\w.\-]+-!~\{[A-Za-z0-9]+\}~\.js', record['src']):
+        # El id de orden entre llaves es un contador interno de Vite en un
+        # alfabeto compacto (confirmado real: incluye al menos dígitos,
+        # minúsculas y el símbolo "$" - ej. "01$", "020") - puramente volátil,
+        # sin significado semántico; se neutraliza más abajo sin importar su
+        # alfabeto exacto. Antes "[A-Za-z0-9]+" excluía "$" sin querer, lo que
+        # dejaba esta rama sin aplicarse en silencio cada vez que el id tocaba
+        # ese símbolo - comparando entonces el id crudo como si fuera parte de
+        # la identidad real y fallando si cambiaba de lado solo por casualidad.
+        if 'src' in record and re.fullmatch(r'_[\w.\-]+-!~\{[^}]+\}~\.js', record['src']):
             assert p.endswith('.css') and set(entry) == {'file', 'src'}, 'INVALID_VITE_CSS_PLACEHOLDER'
             prefix = record['src'].split('-!~{')[0]
             leaf = stripname(p).split('/')[-1]
