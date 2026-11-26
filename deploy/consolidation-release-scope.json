@@ -8,7 +8,8 @@
   ],
   "frontendAssets": [
     "assets/FinanceWorkspace.js",
-    "assets/FinanceDueInvoices.js"
+    "assets/FinanceDueInvoices.js",
+    "assets/FacturacionView.js"
   ],
   "frontendGraphTransition": {
     "before": "725c2fa1813420d8a805519f972855c62d04dfe46742b7178855ef9d67fec318",
