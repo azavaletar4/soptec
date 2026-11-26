@@ -1,24 +1,11 @@
 {
   "version": 1,
-  "sourceCommit": "2aa3c0b5aee2a75bdaf2b5c490543aa421841fbd",
+  "sourceCommit": "2bdf3478382af008e3bd3fdfd42909634ab50ab8",
   "backendSources": [],
   "frontendSources": [
-    "src/components/facturacion/FinanceDueInvoices.vue",
-    "src/components/facturacion/FinanceWorkspace.vue"
+    "src/lib/financeReconciliation.ts",
+    "src/components/facturacion/FinanceReconciliation.vue",
+    "src/views/clientes/ClientDetailView.vue"
   ],
-  "frontendAssets": [
-    "assets/FinanceWorkspace.js",
-    "assets/FinanceDueInvoices.js",
-    "assets/FacturacionView.js"
-  ],
-  "frontendGraphTransition": {
-    "before": "725c2fa1813420d8a805519f972855c62d04dfe46742b7178855ef9d67fec318",
-    "after": "f89c9078ae64d791b6106992977970fe80dc48db54513b8194f3ad2efe83b01a",
-    "contentAdded": [
-      "assets/FinanceDueInvoices.js"
-    ],
-    "manifestAdded": [
-      "assets/FinanceDueInvoices.js"
-    ]
-  }
+  "frontendAssets": ["assets/FinanceReconciliation.js", "assets/FinanceReconciliation.css", "assets/ClientDetailView.js"]
 }
