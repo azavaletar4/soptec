@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "7c29fa946716f063c2e9a92b9a283df37bc4d86f",
+  "sourceCommit": "2aa3c0b5aee2a75bdaf2b5c490543aa421841fbd",
   "backendSources": [],
   "frontendSources": [
     "src/components/facturacion/FinanceDueInvoices.vue",
