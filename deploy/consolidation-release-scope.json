@@ -1,12 +1,8 @@
 {
   "version": 1,
-  "sourceCommit": "08fa12075e4506451749bccc4ff8135b4aa2c7fd",
-  "backendSources": [
-    "server/src/services/invoiceScheduler.ts"
-  ],
+  "sourceCommit": "7c29fa946716f063c2e9a92b9a283df37bc4d86f",
+  "backendSources": [],
   "frontendSources": [
-    "src/components/facturacion/FinanceReconciliation.vue",
-    "src/lib/billingCycle.ts",
     "src/components/facturacion/FinanceDueInvoices.vue",
     "src/components/facturacion/FinanceWorkspace.vue"
   ],
