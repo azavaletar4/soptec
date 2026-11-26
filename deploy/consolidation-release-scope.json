@@ -9,5 +9,15 @@
   "frontendAssets": [
     "assets/FinanceWorkspace.js",
     "assets/FinanceDueInvoices.js"
-  ]
+  ],
+  "frontendGraphTransition": {
+    "before": "725c2fa1813420d8a805519f972855c62d04dfe46742b7178855ef9d67fec318",
+    "after": "d56c59485d066fa67901775c77fdcfc61f599036011c3b8b6d90c71e4ee6f97a",
+    "contentAdded": [
+      "assets/FinanceDueInvoices.js"
+    ],
+    "manifestAdded": [
+      "assets/FinanceDueInvoices.js"
+    ]
+  }
 }
