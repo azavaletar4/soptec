@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "e02273b90947d54e522f1fc7973e606a8403c4bf",
+  "sourceCommit": "f8118d43b8753c247b6ffb41b51d88d66bc37844",
   "backendSources": [],
   "frontendSources": [
     "src/components/facturacion/FinanceReconciliation.vue",
