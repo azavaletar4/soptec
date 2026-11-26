@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "1afbd225e88c73c5153e4fb5531131fbf9d78343",
+  "sourceCommit": "ce8166b27da1daad3e95fe19ed4cc1169cdb8ebc",
   "backendSources": [],
   "frontendSources": [
     "src/components/facturacion/FinanceReconciliation.vue",
@@ -14,7 +14,8 @@
     "assets/ClientServiceDetailView.js",
     "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
     "assets/FacturacionView.js",
-    "assets/index.js"
+    "assets/index.js",
+    "assets/finance.css"
   ],
   "frontendGraphTransition": {
     "before": "33f18b217f2266f5e2391505bab47fc20f5b8102c5e60373171d23b0267ef483",
