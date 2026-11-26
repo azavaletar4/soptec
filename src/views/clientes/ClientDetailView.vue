@@ -35,6 +35,7 @@ const canApplyAveria = computed(() => auth.role === 'SUPERADMIN' || auth.role ==
 const clientId = computed(() => route.params.id as string);
 const client = computed(() => clientsStore.clients.find((c) => c.id === clientId.value));
 const contracts = ref<ServiceContract[]>([]);
+const loadingClient = ref(true);
 
 // Con un solo servicio (el 99% de los casos) la tarjeta "Dirección de
 // contacto" del encabezado muestra en vivo la ubicación de ESE servicio en
@@ -200,7 +201,11 @@ async function handleCreateNewService() {
 }
 
 onMounted(async () => {
-  if (!clientsStore.clients.length) await clientsStore.fetchClients();
+  try {
+    if (!clientsStore.clients.length) await clientsStore.fetchClients();
+  } finally {
+    loadingClient.value = false;
+  }
   await Promise.all([catalogs.fetchPlans(), loadContracts()]);
 });
 
@@ -220,7 +225,8 @@ function goBackToClients() {
       ← Volver a clientes
     </button>
 
-    <div v-if="!client" class="text-slate-500">Cliente no encontrado.</div>
+    <div v-if="loadingClient" class="text-slate-500">Cargando ficha del cliente…</div>
+    <div v-else-if="!client" class="text-slate-500">Cliente no encontrado.</div>
     <template v-else>
       <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
