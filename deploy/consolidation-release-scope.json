@@ -18,5 +18,13 @@
     "assets/financeCash.js",
     "assets/FacturacionView.js",
     "assets/index.js"
-  ]
+  ],
+  "frontendGraphTransition": {
+    "contentAdded": ["assets/CajaChicaView.css", "assets/financeCash.js"],
+    "contentRemoved": [],
+    "manifestAdded": ["assets/financeCash.js"],
+    "manifestRemoved": [],
+    "before": "f89c9078ae64d791b6106992977970fe80dc48db54513b8194f3ad2efe83b01a",
+    "after": "c3c2fb831ee27435562a1b91f4c3d171efb3bee069fd11342562f4b42b730608"
+  }
 }

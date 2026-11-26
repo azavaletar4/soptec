@@ -29,19 +29,37 @@ def backend_tree(cid):
 def compose_file_list(c):return c['Config']['Labels']['com.docker.compose.project.config_files'].split(',')
 def resolve_compose_files(containers):
  # Cada "docker compose up" solo actualiza la etiqueta de los servicios que
- # de verdad recreo -- dos releases consecutivas de un solo servicio (ej.
- # frontend dos veces seguidas, sin un release de backend entremedio) dejan
- # la cadena del OTRO contenedor un paso atras, nunca al reves. Nunca se
- # asume que concatenar alcanza (duplicaria u ordenaria mal los archivos):
- # se exige que la cadena mas corta sea, en el mismo orden, un prefijo
- # exacto de la mas larga -- es lo unico que certifica que ambas describen
- # el mismo historial de releases y que la mas larga es sencillamente la
- # mas al dia. Si divergen de cualquier otra forma, se detiene -- nunca se
- # adivina cual lista es la correcta.
+ # de verdad recreo. Durante mucho tiempo esto bastaba porque frontend y
+ # backend siempre se liberaban juntos, así que la cadena mas corta era
+ # siempre un prefijo exacto de la mas larga (la mas al dia). Desde que
+ # ambos servicios empezaron a tener releases INDEPENDIENTES (frontend:
+ # Fase 18/19.1; backend: los pasos de scheduler de Fase 24/25/26/28), esa
+ # suposicion ya no se cumple -- cada cadena tiene su propio tramo final
+ # que la otra nunca vio, y ninguna es prefijo de la otra (Fase 28,
+ # COMPOSE_FILE_CHAINS_DIVERGED). La fusion solo es segura si cada archivo
+ # del tramo final de un servicio nunca toca la configuracion del OTRO
+ # servicio -- eso no se asume, se COMPRUEBA en vivo antes de usar el
+ # resultado: la configuracion efectiva de cada servicio calculada con SU
+ # PROPIA cadena debe ser IDENTICA a la calculada con la cadena fusionada.
+ # Si cualquier archivo nuevo de un servicio alterara al otro, la
+ # comparacion fallaria y se detiene -- nunca se adivina ni se ignora.
  lists=[compose_file_list(c)for c in containers]
- longest=max(lists,key=len)
- for files in lists:assert longest[:len(files)]==files,'COMPOSE_FILE_CHAINS_DIVERGED'
- return longest
+ common=[]
+ for i in range(min(len(l)for l in lists)):
+  if all(l[i]==lists[0][i]for l in lists):common.append(lists[0][i])
+  else:break
+ for l in lists:assert l[:len(common)]==common,'COMPOSE_FILE_CHAINS_NO_COMMON_PREFIX'
+ merged=list(common);seen=set(common)
+ for l in lists:
+  for f in l[len(common):]:
+   if f not in seen:merged.append(f);seen.add(f)
+ base=['docker','compose','-p','smartrayco','--project-directory',str(repo)]
+ merged_cfg=json.loads(run(base+sum((['-f',f]for f in merged),[])+['config','--format','json']))
+ for c,l in zip(containers,lists):
+  name=c['Config']['Labels']['com.docker.compose.service']
+  own_cfg=json.loads(run(base+sum((['-f',f]for f in l),[])+['config','--format','json']))
+  assert name in own_cfg['services']and own_cfg['services'][name]==merged_cfg['services'][name],'COMPOSE_MERGE_CROSS_CONTAMINATION_'+name
+ return merged
 def compose(m,extras=[]):
  a=['docker','compose','-p','smartrayco','--project-directory',str(repo)]
  for f in m['composeFiles']+extras:a+=['-f',f]
