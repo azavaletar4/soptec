@@ -142,7 +142,7 @@ export function draftSheet(sheet:ImportSheet,mapping:SheetMapping):{rows:ImportR
  return {rows:result,warnings};
 }
 /** Normaliza un código de cliente/contrato para cruzarlo entre el Excel y SmartRayco tolerando ceros a la izquierda y espacios ("001449" == "1449" == " 1449 "). Vacío si no hay nada comparable. */
-export function normalizeContractCode(code:string):string{return code.trim().toUpperCase().replace(/^0+(?=\d)/,'');}
+export function normalizeContractCode(code:string|null|undefined):string{return (code??'').trim().toUpperCase().replace(/^0+(?=\d)/,'');}
 export interface ExcelContractHint {fee:string[];lastPeriod:string;periodsWithAmount:number;colorCounts:Record<string,number>;rowKeys:string[]}
 /**
  * Agrupa las filas ya extraídas de una hoja (`rows.value` del asistente,
@@ -173,8 +173,9 @@ export function groupExcelRowsByContract(rows:ImportRow[]):Map<string,ExcelContr
  return map;
 }
 /** Busca el cruce de un contrato de SmartRayco (por cintillo, luego por número de contrato) dentro del mapa ya agrupado del Excel. */
-export function findExcelHint(map:Map<string,ExcelContractHint>,clientCode:string,contractNumber:string):ExcelContractHint|null{
- return map.get(normalizeContractCode(clientCode))??map.get(normalizeContractCode(contractNumber))??null;
+export function findExcelHint(map:Map<string,ExcelContractHint>,clientCode:string|null|undefined,contractNumber:string|null|undefined):ExcelContractHint|null{
+ const code=normalizeContractCode(clientCode),contract=normalizeContractCode(contractNumber);
+ return (code?map.get(code):undefined)??(contract?map.get(contract):undefined)??null;
 }
 export type ModalitySuggestion='adelantado'|'cumplido'|null;
 /**

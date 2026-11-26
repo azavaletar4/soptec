@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed,onMounted,ref} from 'vue';import {supabase} from '@/lib/supabase';
+import {computed,onBeforeUnmount,onMounted,ref,watch} from 'vue';import {supabase} from '@/lib/supabase';
 import {readFinanceWorkbook,listWorkbookSheetNames,zoneSheetAbbreviation,draftSheet,importTotals,monthCandidate,normalizeHeader,groupExcelRowsByContract,findExcelHint,suggestModalityFromColors,type WorkbookPreview,type ImportRow,type SheetMapping,type ExcelContractHint,type ModalitySuggestion} from '@/lib/financeReconciliation';
 import {formatPen,penCents,limaDate} from '@/lib/financeMoney';
 import {advanceCycles,nextCycleDate,addDays} from '@/lib/billingCycle';
@@ -21,13 +21,39 @@ function duplicateOf(row:ImportRow){if(!['payment','advance','promotion'].includ
 async function rpc<T>(name:string,args:Record<string,unknown>={}){const r=await supabase.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data as T;}
 onMounted(async()=>{try{context.value=await rpc('finance_import_context');}catch(e){error.value=String(e);}});
 function configure(){const headers=sheet.value?.headers??[],find=(re:RegExp)=>headers.find(h=>re.test(normalizeHeader(h.label)))?.column??'';mapping.value={...mapping.value,contract:find(/^contrato|codigo.*contrato/),subscriber:find(/cintillo|^cod$|codigo.*abonado|codigo.*cliente/),customer:find(/^cliente|^nombre/),fee:find(/mensualidad|tarifa|^pago$/),date:find(/fecha.*pago|fecha.*cobro/),method:find(/metodo|^medio$|medio.*pago/),reference:find(/operacion|referencia/),observation:find(/observaci|anotaci|nota/),amountColumn:find(/^importe|^monto/),periodColumn:find(/^periodo/)};monthColumns.value=headers.filter(h=>monthCandidate(h.label)).map(h=>h.column);confirmedMapping.value=false;}
-async function upload(event:Event){const selected=(event.target as HTMLInputElement).files?.[0];if(!selected)return;busy.value=true;error.value='';notice.value='';try{if(!/\.xlsx$/i.test(selected.name))throw Error('Exporta desde Sheets como Excel .xlsx, sin macros.');const bytes=await selected.arrayBuffer();fileBytes.value=bytes;availableSheetNames.value=await listWorkbookSheetNames(bytes);file.value=null;rows.value=[];compared.value={};outcome.value=null;const zoneName=props.zones.find(z=>z.id===mapping.value.zoneId)?.name??'';const guess=zoneName?zoneSheetAbbreviation(zoneName):'';pickedSheetName.value=availableSheetNames.value.includes(guess)?guess:(availableSheetNames.value.length===1?availableSheetNames.value[0]!:'');if(pickedSheetName.value)await loadSheet();else notice.value=`${availableSheetNames.value.length} hojas en el archivo. Selecciona cuál PON cargar — se procesa una sola hoja a la vez, nunca todo el archivo junto (evita el tope de 10 000 filas).`;}catch(e){error.value=String(e);}finally{busy.value=false;}}
+let sourceRevision=0,uploadRevision=0,openingRevision=0,previewRevision=0,searchRevision=0,comparisonRevision=0;
+function resetImport(){rows.value=[];warnings.value={};compared.value={};outcome.value=null;page.value=1;confirmedMapping.value=false;reviewOpen.value=false;batchId.value='';reviewedBatch.value='';startedOn.value='';label.value='Conciliación de Google Sheets';batchReason.value='';originalCollector.value='';comparisonRevision++;}
+function resetOpening(){openingRevision++;previewRevision++;searchRevision++;openingRows.value=[];openingDrafts.value={};openingCorrection.value={};openingSelected.value=new Set();openingResults.value=[];openingPicked.value=[];openingSearch.value='';openingBusy.value=false;openingError.value='';openingNotice.value='';openingOutcome.value=null;openingBatchId.value='';openingReviewOpen.value=false;openingReviewedSnapshot.value='';openingLabel.value='Apertura financiera real';openingDate.value=limaDate();openingReason.value='';termsDrafts.value={};termsSelected.value=new Set();termsResults.value=null;termsReason.value='';termsError.value='';termsBusy.value=false;}
+function resetSheet(){sourceRevision++;resetImport();resetOpening();file.value=null;sheetIndex.value=0;error.value='';notice.value='';year.value='';monthColumns.value=[];mapping.value={zoneId:'',contract:'',subscriber:'',customer:'',fee:'',date:'',method:'',reference:'',observation:'',months:{},mode:'matrix',amountColumn:'',periodColumn:''};}
+async function upload(event:Event){
+ const selected=(event.target as HTMLInputElement).files?.[0];if(!selected)return;
+ const previousZone=props.zones.find(z=>z.id===mapping.value.zoneId)?.name??'';
+ const guess=previousZone?zoneSheetAbbreviation(previousZone):'';
+ const request=++uploadRevision;let loadingSheet=false;resetSheet();fileBytes.value=null;availableSheetNames.value=[];pickedSheetName.value='';openingZone.value='';busy.value=true;
+ try{
+  if(!/\.xlsx$/i.test(selected.name))throw Error('Exporta desde Sheets como Excel .xlsx, sin macros.');
+  const bytes=await selected.arrayBuffer();if(request!==uploadRevision)return;
+  const names=await listWorkbookSheetNames(bytes);if(request!==uploadRevision)return;
+  fileBytes.value=bytes;availableSheetNames.value=names;pickedSheetName.value=names.includes(guess)?guess:(names.length===1?names[0]!:'');
+  if(pickedSheetName.value){loadingSheet=true;await loadSheet();}else notice.value=`${names.length} hojas en el archivo. Selecciona cuál PON cargar — se procesa una sola hoja a la vez, nunca todo el archivo junto (evita el tope de 10 000 filas).`;
+ }catch(e){if(request===uploadRevision)error.value=String(e);}finally{if(request===uploadRevision&&!loadingSheet)busy.value=false;}
+}
 /** Procesa UNA sola hoja del archivo ya subido (nunca todo el libro junto) — así ninguna PON agota el tope de filas por culpa de las demás hojas del mismo Excel. */
-async function loadSheet(){if(!fileBytes.value||!pickedSheetName.value)return;busy.value=true;error.value='';try{file.value=await readFinanceWorkbook(fileBytes.value,pickedSheetName.value);sheetIndex.value=0;rows.value=[];compared.value={};outcome.value=null;confirmedMapping.value=false;configure();notice.value=`Hoja "${pickedSheetName.value}" cargada: ${file.value.sheets[0]?.rows.length??0} filas con datos.`;}catch(e){error.value=String(e);file.value=null;}finally{busy.value=false;}}
+async function loadSheet(){
+ const bytes=fileBytes.value,name=pickedSheetName.value;resetSheet();const request=sourceRevision;
+ const matches=props.zones.filter(z=>zoneSheetAbbreviation(z.name)===name.toUpperCase());
+ const zoneId=matches.length===1?matches[0]!.id:'';mapping.value.zoneId=zoneId;openingZone.value=zoneId;
+ if(!bytes||!name){busy.value=false;return;}busy.value=true;
+ try{
+  const loaded=await readFinanceWorkbook(bytes,name);if(request!==sourceRevision)return;
+  file.value=loaded;configure();notice.value=loaded.sheets.length?`Hoja "${name}" cargada: ${loaded.sheets[0]?.rows.length??0} filas con datos.`:`Hoja "${name}" vacía. No hay contratos ni saldos del Excel para revisar.`;
+ }catch(e){if(request===sourceRevision){error.value=String(e);file.value=null;}}
+ finally{if(request===sourceRevision)busy.value=false;}
+}
 function addSheet(){error.value='';try{if(!sheet.value||!mapping.value.zoneId||!confirmedMapping.value)throw Error('Selecciona PON y confirma el significado financiero de las columnas.');if(mapping.value.mode==='matrix'){if(!/^\d{4}$/.test(year.value)||Number(year.value)<2020||Number(year.value)>2100||!monthColumns.value.length)throw Error('Indica año real de la fuente y mensualidades a revisar.');mapping.value.months=Object.fromEntries(monthColumns.value.map(column=>{const h=sheet.value!.headers.find(h=>h.column===column)!;const stated=/\b(\d{4})\b/.exec(h.label)?.[1];if(stated&&stated!==year.value)throw Error('El año del encabezado no coincide con el año elegido.');return[column,`${year.value}-${String(monthCandidate(h.label)).padStart(2,'0')}`];}));}else if(!mapping.value.amountColumn)throw Error('Selecciona la columna de importe.');const draft=draftSheet(sheet.value,mapping.value);for(const r of draft.rows)r.method=method(r.method);const existing=new Set(rows.value.map(r=>r.key));const added=draft.rows.filter(r=>!existing.has(r.key));if(rows.value.length+added.length>5000)throw Error('Procesa por PON: máximo 5000 registros en esta sesión.');rows.value.push(...added);warnings.value={...warnings.value,...draft.warnings};page.value=1;notice.value=`${draft.rows.length} celdas no vacías de la hoja; vacíos ignorados. Nada importado.`;}catch(e){error.value=String(e);}}
 function invalidate(row:ImportRow){delete compared.value[row.key];row.reviewed=false;batchId.value='';reviewOpen.value=false;}
-async function compare(){if(busy.value||!visible.value.length)return;busy.value=true;error.value='';try{const data=await rpc<{rows:Compared[]}>('finance_import_preview',{p_rows:visible.value});for(const r of data.rows)compared.value[r.key]=r;notice.value='Comparación de solo lectura. Selecciona el contrato exacto y verifica cargos, fechas y evidencia.';}catch(e){error.value=String(e);}finally{busy.value=false;}}
-async function resolveExact(){for(const r of visible.value){const c=compared.value[r.key];if(c?.candidateCount!==1)continue;const target=c.candidates[0]!;if((r.contractCode||r.subscriber)&&(!r.contractCode||r.contractCode===target.contract_number)&&(!r.subscriber||r.subscriber===target.client_code)){r.contractId=target.id;r.reviewed=false;}}await compare();for(const r of visible.value){const data=compared.value[r.key];if(r.contractId&&data?.candidateCount===1&&data.invoices.length===1&&['payment','discount','exemption'].includes(r.kind)){r.invoiceId=data.invoices[0]!.id;r.expectedDue=String(data.invoices[0]!.amount_due);}}}
+async function compare(){if(busy.value||!visible.value.length)return;const source=sourceRevision,request=++comparisonRevision;busy.value=true;error.value='';try{const data=await rpc<{rows:Compared[]}>('finance_import_preview',{p_rows:visible.value});if(source!==sourceRevision||request!==comparisonRevision)return;for(const r of data.rows)compared.value[r.key]=r;notice.value='Comparación de solo lectura. Selecciona el contrato exacto y verifica cargos, fechas y evidencia.';}catch(e){if(source===sourceRevision&&request===comparisonRevision)error.value=String(e);}finally{if(source===sourceRevision&&request===comparisonRevision)busy.value=false;}}
+async function resolveExact(){const source=sourceRevision,zone=mapping.value.zoneId;for(const r of visible.value){const c=compared.value[r.key];if(c?.candidateCount!==1)continue;const target=c.candidates[0]!;if((r.contractCode||r.subscriber)&&(!r.contractCode||r.contractCode===target.contract_number)&&(!r.subscriber||r.subscriber===target.client_code)){r.contractId=target.id;r.reviewed=false;}}await compare();if(source!==sourceRevision||zone!==mapping.value.zoneId)return;for(const r of visible.value){const data=compared.value[r.key];if(r.contractId&&data?.candidateCount===1&&data.invoices.length===1&&['payment','discount','exemption'].includes(r.kind)){r.invoiceId=data.invoices[0]!.id;r.expectedDue=String(data.invoices[0]!.amount_due);}}}
 function match(row:ImportRow,id:string){row.contractId=id;row.invoiceId='';row.invoiceIds=[];row.expectedDue='';invalidate(row);}
 function invoice(row:ImportRow,id:string){row.invoiceId=id;const i=compared.value[row.key]?.invoices.find(i=>i.id===id);row.expectedDue=i?String(i.amount_due):'';row.reviewed=false;batchId.value='';}
 function method(value:string){const aliases:Record<string,string>={efectivo:'cash',cash:'cash',yape:'yape',plin:'plin',transferencia:'transfer',transfer:'transfer',otros:'other',other:'other'};return aliases[normalizeHeader(value)]??value;}
@@ -36,7 +62,7 @@ const ready=computed(()=>visible.value.filter(r=>!issues(r).length)),counts=comp
 function applyCollector(){if(!originalCollector.value)return;for(const r of visible.value)if(['payment','advance','promotion','link'].includes(r.kind)){r.collectorId=originalCollector.value;r.reviewed=false;}batchId.value='';}
 function review(){error.value='';try{if(!context.value?.canApply)throw Error('Ejecución cerrada fuera del laboratorio sintético.');if(!startedOn.value||startedOn.value>limaDate()||batchReason.value.trim().length<10||!ready.value.length)throw Error('Confirma fecha financiera, motivo de lote y al menos un registro válido.');for(const r of ready.value)r.method=method(r.method);batchId.value=crypto.randomUUID();reviewedBatch.value=JSON.stringify([ready.value,startedOn.value,label.value,batchReason.value]);reviewOpen.value=true;}catch(e){error.value=String(e);}}
 async function commit(){if(busy.value||!reviewOpen.value)return;busy.value=true;error.value='';try{if(reviewedBatch.value!==JSON.stringify([ready.value,startedOn.value,label.value,batchReason.value])){reviewOpen.value=false;throw Error('La vista revisada cambi\u00f3. Revisa el lote nuevamente.');}const accepted=ready.value;const result=await rpc<Record<string,unknown>>('finance_import_commit',{p_batch_id:batchId.value,p_label:label.value,p_started_on:startedOn.value,p_rows:accepted,p_reason:batchReason.value,p_expected_totals:importTotals(accepted)});outcome.value=result;reviewOpen.value=false;notice.value='Lote confirmado en laboratorio; revisa totales aplicados y registros ya existentes. No hubo operaciones de red.';emit('changed');}catch(e){error.value=String(e);}finally{busy.value=false;}}
-type OpeningRow={contractId:string;contractNumber:string;clientCode:string;customer:string;monthlyFee:string;billingModality:string|null;billingDay:number|null;graceDays:number|null;legacyBillingDay:number|null;isCourtesy:boolean;billingTermsConfirmed:boolean;alreadyAnchored:boolean;existingAnchorDate:string|null;hasRealPayment:boolean;alreadyOpened:boolean;warnings:string[]};
+type OpeningRow={contractId:string;contractNumber:string;clientCode:string|null;customer:string;monthlyFee:string;billingModality:string|null;billingDay:number|null;graceDays:number|null;legacyBillingDay:number|null;isCourtesy:boolean;billingTermsConfirmed:boolean;alreadyAnchored:boolean;existingAnchorDate:string|null;hasRealPayment:boolean;alreadyOpened:boolean;warnings:string[]};
 type OpeningDraft={mode:'direct'|'advance';anchorDate:string;receivedDate:string;months:string;promo3plus1:boolean;debtAmount:string;debtDueDate:string;creditAmount:string;rowReason:string};
 function openingAdvanceCycles(d:OpeningDraft):number|null{if(d.promo3plus1)return 4;const n=Number(d.months);return Number.isInteger(n)&&n>=1&&n<=12?n:null;}
 /** Día de pago a usar para la vista previa: el confirmado (finance_billing_day) si ya existe, si no el sugerido (legacy_billing_day, fase 8) — nunca inventado. `confirmed:false` avisa que es solo una sugerencia, todavía sin confirmar en "Cobranzas". */
@@ -66,7 +92,7 @@ function excelColorSummary(hint:ExcelContractHint|null):string{
  if(!entries.length)return'sin color';
  return entries.map(([hex,count])=>`${colorLabel(hex)} (${count})`).join(' · ');
 }
-function excelHint(r:OpeningRow){return findExcelHint(excelHints.value,r.clientCode,r.contractNumber);}
+function excelHint(r:OpeningRow){if(openingMode.value==='zone'&&openingZone.value!==mapping.value.zoneId)return null;return findExcelHint(excelHints.value,r.clientCode,r.contractNumber);}
 /** Compara, sin modificar nada, la mensualidad vista en la columna PAGO/mensualidad del Excel contra la ya registrada en el contrato — solo para mostrar la diferencia; la corrección la hace la persona en la ficha del servicio, nunca aquí. */
 function excelFeeDiffers(r:OpeningRow):string|null{
  const hint=excelHint(r);if(!hint||!hint.fee.length)return null;
@@ -115,28 +141,36 @@ async function termsConfirmSelected(){
  if(termsBusy.value||!termsReady.value.length)return;
  if(termsReason.value.trim().length<5){termsError.value='Indica un motivo de al menos cinco caracteres para el lote.';return;}
  termsBusy.value=true;termsError.value='';termsResults.value=null;
+ const scope=openingRevision,selected=termsReady.value.map(r=>({r,d:{...termsDrafts.value[r.contractId]!}}));
  const ok:string[]=[],failed:{contractId:string;contractNumber:string;error:string}[]=[];
- for(const r of termsReady.value){
-  const d=termsDrafts.value[r.contractId]!;
+ for(const {r,d} of selected){
+  if(scope!==openingRevision)return;
   try{
    await rpc('finance_set_billing_terms',{p_operation_id:crypto.randomUUID(),p_contract_id:r.contractId,p_modality:d.modality,p_billing_day:d.day,p_grace_days:d.modality==='adelantado'?d.grace:0,p_reason:termsReason.value.trim()});
    ok.push(r.contractId);
   }catch(e){failed.push({contractId:r.contractId,contractNumber:r.contractNumber,error:String(e)});}
  }
+ if(scope!==openingRevision)return;
  termsSelected.value=new Set();
  termsBusy.value=false;
  await openingLoadPreview();
+ if(scope!==openingRevision)return;
  termsResults.value={ok,failed};
  emit('changed');
 }
-async function openingSearchContracts(){if(!openingSearch.value.trim())return;openingError.value='';try{const data=await rpc<{id:string;contract_number:string;client_code:string;customer:string}[]>('finance_search_contracts',{p_search:openingSearch.value});openingResults.value=data??[];}catch(e){openingError.value=String(e);}}
+watch([openingMode,openingZone],resetOpening,{flush:'sync'});
+watch(openingSearch,()=>{searchRevision++;openingResults.value=[];},{flush:'sync'});
+watch(()=>mapping.value.zoneId,()=>{resetImport();if(openingMode.value==='zone')openingZone.value=mapping.value.zoneId;},{flush:'sync'});
+onBeforeUnmount(()=>{uploadRevision++;sourceRevision++;openingRevision++;previewRevision++;searchRevision++;comparisonRevision++;});
+async function openingSearchContracts(){if(!openingSearch.value.trim())return;const scope=openingRevision,request=++searchRevision;openingError.value='';try{const data=await rpc<{id:string;contract_number:string;client_code:string;customer:string}[]>('finance_search_contracts',{p_search:openingSearch.value});if(scope===openingRevision&&request===searchRevision)openingResults.value=data??[];}catch(e){if(scope===openingRevision&&request===searchRevision)openingError.value=String(e);}}
 function openingPick(c:{id:string;contract_number:string;client_code:string;customer:string}){if(!openingPicked.value.some(p=>p.id===c.id))openingPicked.value.push({id:c.id,contract_number:c.contract_number,customer:c.customer});}
 function openingUnpick(id:string){openingPicked.value=openingPicked.value.filter(p=>p.id!==id);}
-async function openingLoadPreview(){openingBusy.value=true;openingError.value='';openingOutcome.value=null;try{
+async function openingLoadPreview(){const scope=openingRevision,request=++previewRevision;openingBusy.value=true;openingError.value='';openingOutcome.value=null;try{
  const args=openingMode.value==='zone'?{p_zone:openingZone.value||null,p_contract_ids:null}:{p_zone:null,p_contract_ids:openingPicked.value.map(p=>p.id)};
  if(openingMode.value==='zone'&&!openingZone.value)throw Error('Selecciona la PON a abrir.');
  if(openingMode.value==='individual'&&!openingPicked.value.length)throw Error('Agrega al menos un contrato exacto.');
  const data=await rpc<{rows:OpeningRow[]}>('finance_opening_balance_preview',args);
+ if(scope!==openingRevision||request!==previewRevision)return;
  openingRows.value=data.rows??[];
  const drafts:Record<string,OpeningDraft>={};
  const corrections:Record<string,{date:string;reason:string}>={};
@@ -146,7 +180,7 @@ async function openingLoadPreview(){openingBusy.value=true;openingError.value=''
  const newTermsDrafts:Record<string,TermsDraft>={};
  for(const r of openingRows.value)if(!r.isCourtesy&&!r.billingTermsConfirmed)newTermsDrafts[r.contractId]=termsDrafts.value[r.contractId]??{modality:null,day:r.legacyBillingDay??1,grace:7};
  termsDrafts.value=newTermsDrafts;termsSelected.value=new Set();termsResults.value=null;
-}catch(e){openingError.value=String(e);}finally{openingBusy.value=false;}}
+}catch(e){if(scope===openingRevision&&request===previewRevision)openingError.value=String(e);}finally{if(scope===openingRevision&&request===previewRevision)openingBusy.value=false;}}
 /** Aplica, solo a los que todavía no tienen modalidad elegida a mano, la sugerencia de color del Excel ya cargado — explícito (un botón), nunca automático al cargar. Cada fila sigue siendo editable/corregible antes de confirmar. */
 function termsApplySuggestions(){for(const r of termsCandidates.value){const d=termsDrafts.value[r.contractId];if(!d||d.modality)continue;const s=termsSuggestion(r);if(s.confidence==='clear')termsDrafts.value[r.contractId]={...d,modality:s.modality};}}
 function openingIssues(r:OpeningRow):string[]{const out:string[]=[];if(openingBlocked(r))return out;const d=openingDrafts.value[r.contractId];if(!d)return['Sin datos'];
@@ -155,13 +189,14 @@ function openingIssues(r:OpeningRow):string[]{const out:string[]=[];if(openingBl
  try{if(d.debtAmount&&penCents(d.debtAmount)>0&&!d.debtDueDate)out.push('Vencimiento de la deuda inicial requerido');}catch{out.push('Importe de deuda inválido');}try{if(d.creditAmount&&penCents(d.creditAmount)<0)out.push('Saldo a favor inválido');}catch{out.push('Saldo a favor inválido');}return out;}
 const openingEligible=computed(()=>openingRows.value.filter(r=>!openingBlocked(r))),openingReady=computed(()=>openingEligible.value.filter(r=>openingSelected.value.has(r.contractId)&&!openingIssues(r).length));
 function openingReview(){openingError.value='';try{const name=openingLabel.value.trim();if(name.length<3||name.length>120)throw Error('Nombre de lote inválido.');if(!openingDate.value||openingDate.value>limaDate())throw Error('Fecha de apertura inválida.');if(openingReason.value.trim().length<10)throw Error('Motivo del lote requerido (mínimo 10 caracteres).');if(!openingReady.value.length)throw Error('No hay contratos listos para abrir.');openingBatchId.value=crypto.randomUUID();openingReviewedSnapshot.value=JSON.stringify([openingReady.value.map(r=>r.contractId),openingDrafts.value,openingLabel.value,openingDate.value,openingReason.value]);openingReviewOpen.value=true;}catch(e){openingError.value=String(e);}}
-async function openingCommit(){if(openingBusy.value||!openingReviewOpen.value)return;openingBusy.value=true;openingError.value='';try{
+async function openingCommit(){if(openingBusy.value||!openingReviewOpen.value)return;const scope=openingRevision;openingBusy.value=true;openingError.value='';try{
  if(openingReviewedSnapshot.value!==JSON.stringify([openingReady.value.map(r=>r.contractId),openingDrafts.value,openingLabel.value,openingDate.value,openingReason.value])){openingReviewOpen.value=false;throw Error('La vista revisada cambió. Vuelve a revisar el lote.');}
  const rows=openingReady.value.map(r=>{const d=openingDrafts.value[r.contractId]!;const debt=penCents(d.debtAmount||'0');const base={contractId:r.contractId,debtAmount:debt/100,debtDueDate:debt>0?d.debtDueDate:null,creditAmount:penCents(d.creditAmount||'0')/100,rowReason:d.rowReason.trim()||undefined};return d.mode==='advance'?{...base,receivedDate:d.receivedDate,coverageThroughDate:openingCoverageThrough(r,d),promo3plus1:d.promo3plus1}:{...base,anchorDate:d.anchorDate};});
  const result=await rpc<Record<string,unknown>>('finance_opening_balance_commit',{p_batch_id:openingBatchId.value,p_label:openingLabel.value,p_opening_date:openingDate.value,p_reason:openingReason.value,p_rows:rows});
+ if(scope!==openingRevision)return;
  openingOutcome.value=result;openingReviewOpen.value=false;openingNotice.value='Apertura confirmada. No se registró ningún pago; el ancla y el saldo inicial quedan separados de la recaudación real. Vuelve a cargar la vista previa para ver el estado actualizado.';emit('changed');
-}catch(e){openingError.value=String(e);}finally{openingBusy.value=false;}}
-async function openingCorrect(r:OpeningRow){const c=openingCorrection.value[r.contractId];if(!c)return;openingError.value='';try{if(!c.date||c.date>limaDate())throw Error('Fecha de corrección inválida.');if(c.reason.trim().length<5)throw Error('Motivo de corrección requerido.');await rpc('finance_correct_opening_anchor',{p_operation_id:crypto.randomUUID(),p_contract_id:r.contractId,p_new_anchor_date:c.date,p_reason:c.reason});delete openingCorrection.value[r.contractId];openingNotice.value=`Ancla corregida para ${r.contractNumber}.`;await openingLoadPreview();}catch(e){openingError.value=String(e);}}
+}catch(e){if(scope===openingRevision)openingError.value=String(e);}finally{if(scope===openingRevision)openingBusy.value=false;}}
+async function openingCorrect(r:OpeningRow){const c=openingCorrection.value[r.contractId];if(!c)return;const scope=openingRevision;openingError.value='';try{if(!c.date||c.date>limaDate())throw Error('Fecha de corrección inválida.');if(c.reason.trim().length<5)throw Error('Motivo de corrección requerido.');await rpc('finance_correct_opening_anchor',{p_operation_id:crypto.randomUUID(),p_contract_id:r.contractId,p_new_anchor_date:c.date,p_reason:c.reason});if(scope!==openingRevision)return;delete openingCorrection.value[r.contractId];openingNotice.value=`Ancla corregida para ${r.contractNumber}.`;await openingLoadPreview();}catch(e){if(scope===openingRevision)openingError.value=String(e);}}
 function exportReview(){const safe=(v:unknown)=>'"'+String(v??'').replace(/^\s*[=+@-]/,"'").replaceAll('"','""')+'"';const data=[['Hoja','Fila','Columna','Cintillo','Contrato fuente','Tipo','Periodo','Importe fuente','Importe revisado','Estado / diferencias'],...rows.value.map(r=>[r.sheet,r.row,r.column,r.subscriber,r.contractCode,kinds[r.kind],r.period,r.sourceAmount,r.amount,issues(r).join(' / ')||'Verificado'])];const url=URL.createObjectURL(new Blob(['\uFEFF'+data.map(r=>r.map(safe).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='conciliacion-vista-previa.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 </script>
 <template><section class="finance-reconciliation"><header class="finance-table-tools"><h2>Conciliación desde Google Sheets</h2><button class="btn-ghost" :disabled="!rows.length" @click="exportReview">Exportar revisión (CSV)</button></header><p class="finance-warning"><b>Sin habilitación productiva</b><span>Archivos procesados en memoria. No se sube Excel ni se activan cortes. La muestra real sigue pendiente de validación.</span></p><p v-if="error" role="alert" class="finance-error">{{error}}</p><p v-if="notice" role="status" class="finance-notice">{{notice}}</p>
