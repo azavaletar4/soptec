@@ -13,7 +13,7 @@
   ],
   "frontendGraphTransition": {
     "before": "725c2fa1813420d8a805519f972855c62d04dfe46742b7178855ef9d67fec318",
-    "after": "d56c59485d066fa67901775c77fdcfc61f599036011c3b8b6d90c71e4ee6f97a",
+    "after": "f89c9078ae64d791b6106992977970fe80dc48db54513b8194f3ad2efe83b01a",
     "contentAdded": [
       "assets/FinanceDueInvoices.js"
     ],
