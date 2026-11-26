@@ -53,6 +53,40 @@ export function compareISO(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/**
+ * Fase 13.1 — adelantos verificados (apertura financiera real). Avanza
+ * `cycles` ciclos completos desde una fecha real de recepción del dinero
+ * (`fromISO`, siempre verificable, nunca futura) para llegar a la fecha de
+ * "cobertura pagada hasta" — que SÍ puede ser futura, porque se deriva de un
+ * hecho ya ocurrido (el dinero ya se recibió) más un número acotado de
+ * ciclos (1 a 12; la promoción 3+1 usa exactamente 4). Nunca se inventa una
+ * fecha de cobertura libre: siempre es `fromISO` + N aplicaciones de
+ * `nextCycleDate`, igual que calcula el servidor (finance_advance_cycles).
+ */
+export function advanceCycles(fromISO: string, billingDay: number, cycles: number): string {
+  if (!Number.isInteger(cycles) || cycles < 1 || cycles > 12) throw Error('Ciclos de adelanto inválidos (1-12)');
+  let d = fromISO;
+  for (let n = 0; n < cycles; n++) d = nextCycleDate(d, billingDay);
+  return d;
+}
+/**
+ * Inversa de `advanceCycles`: ¿a cuántos ciclos completos exactos de
+ * `fromISO` corresponde `throughISO`? `null` si no coincide con ningún
+ * número entero de ciclos dentro del límite de 12 — nunca se acepta una
+ * cobertura pagada que no case exacto con el ciclo de facturación real del
+ * contrato (evita que se invente o se redondee una fecha).
+ */
+export function cyclesBetween(fromISO: string, billingDay: number, throughISO: string): number | null {
+  if (compareISO(throughISO, fromISO) <= 0) return null;
+  let d = fromISO;
+  for (let n = 1; n <= 12; n++) {
+    d = nextCycleDate(d, billingDay);
+    if (d === throughISO) return n;
+    if (compareISO(d, throughISO) > 0) return null;
+  }
+  return null;
+}
+
 export interface BillingTerms {
   modality: BillingModality;
   billingDay: number;
