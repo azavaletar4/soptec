@@ -1,11 +1,23 @@
 {
   "version": 1,
-  "sourceCommit": "2bdf3478382af008e3bd3fdfd42909634ab50ab8",
-  "backendSources": [],
+  "sourceCommit": "97a912883ac809d6de51eaed67c92d21c7872c60",
+  "backendSources": ["server/src/routes/invoices.ts"],
   "frontendSources": [
-    "src/lib/financeReconciliation.ts",
-    "src/components/facturacion/FinanceReconciliation.vue",
-    "src/views/clientes/ClientDetailView.vue"
+    "server/src/routes/invoices.ts",
+    "src/components/caja-chica/CajaFinancePanel.vue",
+    "src/components/facturacion/FinanceWorkspace.vue",
+    "src/components/facturacion/MixedPaymentReceipt.vue",
+    "src/lib/financeCash.ts",
+    "src/stores/cajaChica.ts",
+    "src/stores/invoices.ts",
+    "src/types/domain.ts",
+    "src/views/caja-chica/CajaChicaView.vue"
   ],
-  "frontendAssets": ["assets/FinanceReconciliation.js", "assets/FinanceReconciliation.css", "assets/ClientDetailView.js"]
+  "frontendAssets": [
+    "assets/CajaChicaView.js",
+    "assets/CajaChicaView.css",
+    "assets/financeCash.js",
+    "assets/FacturacionView.js",
+    "assets/index.js"
+  ]
 }
