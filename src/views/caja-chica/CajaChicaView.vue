@@ -6,6 +6,9 @@ import { useVehiculosStore } from '@/stores/vehiculos';
 import { useCatalogsStore } from '@/stores/catalogs';
 import { getErrorMessage } from '@/lib/errors';
 import type { CajaChicaTipo } from '@/types/domain';
+import CajaFinancePanel from '@/components/caja-chica/CajaFinancePanel.vue';
+import {operatingExpenseCents} from '@/lib/financeCash';
+import {limaDate} from '@/lib/financeMoney';
 
 const cajaChicaStore = useCajaChicaStore();
 const vehiculosStore = useVehiculosStore();
@@ -14,11 +17,10 @@ const catalogs = useCatalogsStore();
 const TIPO_LABEL: Record<CajaChicaTipo, string> = { ingreso: 'Ingreso', egreso: 'Egreso' };
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return limaDate();
 }
 function firstOfMonthIso() {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return limaDate().slice(0,7)+'-01';
 }
 
 function staffLabel(s: { full_name: string | null; email: string }) {
@@ -52,15 +54,17 @@ const summary = computed(() => {
   let gastadoHoy = 0;
   let gastadoMes = 0;
   const porCategoria = new Map<string, number>();
+  const byId=new Map(cajaChicaStore.movimientos.map(m=>[m.id,m]));
 
   for (const m of cajaChicaStore.movimientos) {
     const monto = Number(m.monto);
     saldo += m.tipo === 'ingreso' ? monto : -monto;
-    if (m.tipo === 'egreso') {
-      if (m.fecha === today) gastadoHoy += monto;
+    const expense=operatingExpenseCents(m,byId)/100;
+    if (expense!==0) {
+      if (m.fecha === today) gastadoHoy += expense;
       if (m.fecha >= monthStart) {
-        gastadoMes += monto;
-        porCategoria.set(m.categoria_id, (porCategoria.get(m.categoria_id) ?? 0) + monto);
+        gastadoMes += expense;
+        porCategoria.set(m.categoria_id, (porCategoria.get(m.categoria_id) ?? 0) + expense);
       }
     }
   }
@@ -74,17 +78,17 @@ const summary = computed(() => {
   return { saldo, gastadoHoy, gastadoMes, categorias, maxCategoria };
 });
 
-// ---- Modal crear/editar ----
+// ---- Registrar movimiento; las correcciones conservan el original ----
 const showModal = ref(false);
-const editing = ref<CajaChicaMovimientoWithUrl | null>(null);
 const saving = ref(false);
 const formError = ref<string | null>(null);
 const comprobanteFile = ref<File | null>(null);
+const manualCategories=computed(()=>cajaChicaStore.categorias.filter(c=>!['Cobros de clientes','Retiros del propietario'].includes(c.nombre)));
 
 const emptyForm = () => ({
   fecha: todayIso(),
   tipo: 'egreso' as CajaChicaTipo,
-  categoria_id: cajaChicaStore.categorias[0]?.id ?? '',
+  categoria_id: manualCategories.value[0]?.id ?? '',
   monto: 0,
   descripcion: '',
   responsable: '',
@@ -118,25 +122,7 @@ async function handleCreateCategoria() {
 }
 
 function openCreate() {
-  editing.value = null;
   form.value = emptyForm();
-  comprobanteFile.value = null;
-  showNewCategoria.value = false;
-  formError.value = null;
-  showModal.value = true;
-}
-
-function openEdit(m: CajaChicaMovimientoWithUrl) {
-  editing.value = m;
-  form.value = {
-    fecha: m.fecha,
-    tipo: m.tipo,
-    categoria_id: m.categoria_id,
-    monto: Number(m.monto),
-    descripcion: m.descripcion,
-    responsable: m.responsable,
-    vehiculo_id: m.vehiculo_id ?? '',
-  };
   comprobanteFile.value = null;
   showNewCategoria.value = false;
   formError.value = null;
@@ -152,9 +138,9 @@ async function handleSubmit() {
   saving.value = true;
   formError.value = null;
   try {
-    let comprobantePath = editing.value?.comprobante_path ?? null;
+    let comprobantePath: string|null = null;
     if (comprobanteFile.value) {
-      comprobantePath = await cajaChicaStore.uploadComprobante(comprobanteFile.value, editing.value?.comprobante_path);
+      comprobantePath = await cajaChicaStore.uploadComprobante(comprobanteFile.value);
     }
     const payload = {
       fecha: form.value.fecha,
@@ -166,11 +152,8 @@ async function handleSubmit() {
       vehiculo_id: selectedCategoria.value?.permite_vehiculo && form.value.vehiculo_id ? form.value.vehiculo_id : null,
       comprobante_path: comprobantePath,
     };
-    if (editing.value) {
-      await cajaChicaStore.updateMovimiento(editing.value.id, payload);
-    } else {
-      await cajaChicaStore.createMovimiento(payload);
-    }
+    await cajaChicaStore.createMovimiento(payload);
+    if(cajaChicaStore.daily?.enabled)await cajaChicaStore.fetchDaily(limaDate());
     showModal.value = false;
   } catch (e) {
     formError.value = getErrorMessage(e, 'Error al guardar el movimiento');
@@ -179,13 +162,16 @@ async function handleSubmit() {
   }
 }
 
-async function handleDelete(m: CajaChicaMovimientoWithUrl) {
-  const ok = confirm(`¿Eliminar el movimiento "${m.descripcion}" (S/ ${Number(m.monto).toFixed(2)})? Esta acción no se puede deshacer.`);
-  if (!ok) return;
+const reversalKeys=new Map<string,string>();
+async function handleReverse(m: CajaChicaMovimientoWithUrl) {
+  const reason=window.prompt('Motivo de anulación (se conservará el movimiento original y su compensación)');
+  if(!reason||reason.trim().length<5)return;
+  const key=reversalKeys.get(m.id)??crypto.randomUUID();reversalKeys.set(m.id,key);
   try {
-    await cajaChicaStore.deleteMovimiento(m.id, m.comprobante_path);
+    await cajaChicaStore.reverseMovimiento(key,m.id,reason.trim());
+    await cajaChicaStore.fetchDaily(limaDate());
   } catch (e) {
-    alert(getErrorMessage(e, 'Error al eliminar el movimiento'));
+    alert(getErrorMessage(e, 'No se pudo anular el movimiento'));
   }
 }
 
@@ -204,6 +190,7 @@ onMounted(async () => {
       </div>
       <button class="btn-primary" @click="openCreate">+ Nuevo movimiento</button>
     </div>
+    <CajaFinancePanel/>
 
     <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr))">
       <div class="text-left rounded-xl p-5 flex items-start justify-between" :style="{ background: summary.saldo >= 0 ? '#16a34a' : '#dc2626' }">
@@ -317,8 +304,8 @@ onMounted(async () => {
               <span v-else class="text-slate-300">—</span>
             </td>
             <td class="px-4 py-3 text-right space-x-3 whitespace-nowrap">
-              <button class="text-slate-600 hover:text-slate-900 text-xs" @click="openEdit(m)">Editar</button>
-              <button class="text-red-500/80 hover:text-red-600 text-xs" @click="handleDelete(m)">Eliminar</button>
+              <button v-if="!m.reversed_at&&(!m.finance_kind||['manual','owner_withdrawal'].includes(m.finance_kind))" class="text-red-500/80 hover:text-red-600 text-xs" @click="handleReverse(m)">Anular</button>
+              <span v-else class="text-xs text-slate-500">{{m.reversed_at?'Anulado':m.finance_kind==='collection'?'Vinculado al recibo':'Compensación auditada'}}</span>
             </td>
           </tr>
         </tbody>
@@ -328,7 +315,7 @@ onMounted(async () => {
     <Teleport to="body">
       <div v-if="showModal" class="modal-overlay">
         <form class="w-full max-w-lg modal-panel max-h-[90vh] overflow-y-auto" @submit.prevent="handleSubmit">
-          <h2 class="text-lg font-semibold mb-4">{{ editing ? 'Editar movimiento' : 'Nuevo movimiento' }}</h2>
+          <h2 class="text-lg font-semibold mb-4">Nuevo movimiento</h2>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
@@ -353,7 +340,7 @@ onMounted(async () => {
             </div>
             <select v-if="!showNewCategoria" v-model="form.categoria_id" required class="field-input">
               <option value="" disabled>Selecciona una categoría</option>
-              <option v-for="cat in cajaChicaStore.categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+              <option v-for="cat in manualCategories" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
             </select>
             <div v-else class="flex gap-2">
               <input
@@ -403,9 +390,6 @@ onMounted(async () => {
 
           <div class="mb-4">
             <label class="block text-xs text-slate-600 mb-1">Comprobante (opcional)</label>
-            <a v-if="editing?.url" :href="editing.url" target="_blank" rel="noopener" class="text-xs text-sky-700 hover:underline mb-1 inline-block">
-              Ver comprobante actual
-            </a>
             <input type="file" accept="image/*,.pdf" class="field-input" @change="onComprobanteChange" />
           </div>
 
@@ -414,7 +398,7 @@ onMounted(async () => {
           <div class="flex justify-end gap-2">
             <button type="button" class="btn-ghost" @click="showModal = false">Cancelar</button>
             <button type="submit" :disabled="saving" class="btn-primary">
-              {{ saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear movimiento' }}
+              {{ saving ? 'Guardando...' : 'Crear movimiento' }}
             </button>
           </div>
         </form>

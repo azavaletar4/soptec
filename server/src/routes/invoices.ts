@@ -2,6 +2,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseUser } from '../lib/supabaseUser';
 import { penCents, penDecimal } from '../../../src/lib/financeMoney';
+import {validateMixedParts} from '../../../src/lib/financeCash';
 type FinanceDb = { rpc(name: string, args: Record<string, unknown>): PromiseLike<{data: unknown; error: {message: string; code?: string} | null}> };
 export function createInvoiceRoutes(authenticate: MiddlewareHandler = requireAuth, database: (authorization: string | undefined) => FinanceDb = supabaseUser) {
 const invoicesRoutes = new Hono();
@@ -14,6 +15,13 @@ invoicesRoutes.post('/payments', async c => {
     if (!uuid(body.requestId) || !uuid(body.contractId) || !Array.isArray(body.invoiceIds) || body.invoiceIds.length > 50 || !body.invoiceIds.every(uuid)) return c.json({ error: 'Contrato, operación o facturas inválidos.' }, 400);
     const cents = penCents(body.amount);
     if (cents <= 0) return c.json({ error: 'El importe recibido debe ser mayor a cero.' }, 400);
+    if(body.method==='mixed'){
+      const mixed=validateMixedParts(body.parts);
+      if(mixed.totalCents!==cents)return c.json({error:'La suma de los medios debe coincidir con el importe recibido.'},400);
+      const {data,error}=await database(c.req.header('Authorization')).rpc('finance_record_payment_mixed',{p_request_id:body.requestId,p_contract_id:body.contractId,p_invoice_ids:body.invoiceIds,p_parts:mixed.parts,p_reason:body.reason});
+      if(error)return c.json({error:error.message},error.code==='42501'?403:409);
+      return c.json(data);
+    }
     const { data, error } = await database(c.req.header('Authorization')).rpc('finance_record_payment', { p_request_id: body.requestId, p_contract_id: body.contractId, p_invoice_ids: body.invoiceIds, p_amount: penDecimal(cents), p_method: body.method, p_reference: body.reference ?? null, p_reason: body.reason });
     if (error) return c.json({ error: error.message }, error.code === '42501' ? 403 : 409);
     return c.json(data);

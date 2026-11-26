@@ -989,6 +989,13 @@ export interface CajaChicaMovimiento {
   id: string;
   fecha: string;
   tipo: CajaChicaTipo;
+  finance_kind?: 'manual'|'collection'|'payment_reversal'|'owner_withdrawal'|'movement_reversal';
+  source_payment_id?: string|null;
+  source_movement_id?: string|null;
+  collector_id?: string|null;
+  reversed_at?: string|null;
+  reversed_by?: string|null;
+  reversal_reason?: string|null;
   categoria_id: string;
   monto: number;
   descripcion: string;

@@ -124,8 +124,8 @@ export const useInvoicesStore = defineStore('invoices', () => {
     invoices.value = invoices.value.filter((i) => i.id !== id);
   }
 
-  function recordPayment(payload: { requestId: string; contractId: string; invoiceIds: string[]; amount: string; method: string; reference: string; reason: string }) {
-    return apiFetch<{ paymentId: string; received: string; applied: string; credit: string; reactivation: { attempted: false } }>('/api/invoices/payments', { method: 'POST', body: JSON.stringify(payload) });
+  function recordPayment(payload: { requestId: string; contractId: string; invoiceIds: string[]; amount: string; method: string; reference: string; reason: string;parts?:import('@/lib/financeCash').MixedPaymentPart[] }) {
+    return apiFetch<{ paymentId: string;groupId?:string; received: string; applied: string; credit: string; reactivation: { attempted: false } }>('/api/invoices/payments', { method: 'POST', body: JSON.stringify(payload) });
   }
   return { invoices, total, loading, error, fetchInvoices, fetchInvoicesByClient, fetchInvoicesByContract, createInvoice, updateInvoice, recordPayment, fetchAdjustments, generateDue, cancelInvoice, deleteInvoice };
 });
