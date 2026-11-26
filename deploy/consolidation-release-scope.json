@@ -7,24 +7,7 @@
     "src/components/facturacion/FinanceWorkspace.vue"
   ],
   "frontendAssets": [
-    "assets/FinanceReconciliation.js",
-    "assets/FinanceReconciliation.css",
-    "assets/billingCycle.js",
-    "assets/ClientDetailView.js",
-    "assets/ClientServiceDetailView.js",
-    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
-    "assets/FacturacionView.js",
-    "assets/index.js",
-    "assets/finance.css"
-  ],
-  "frontendGraphTransition": {
-    "before": "6d0dcc9d8bb6b154373158f30ddf617da11b8bb71eb1c58a0a517b7a6689ac26",
-    "after": "725c2fa1813420d8a805519f972855c62d04dfe46742b7178855ef9d67fec318",
-    "contentAdded": [
-      "assets/billingCycle.js"
-    ],
-    "manifestAdded": [
-      "assets/billingCycle.js"
-    ]
-  }
+    "assets/FinanceWorkspace.js",
+    "assets/FinanceDueInvoices.js"
+  ]
 }
