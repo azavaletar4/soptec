@@ -224,19 +224,19 @@ def validate_vite_manifest(files, pinned_paths):
         # Vite asigna IDs de orden a las entradas CSS puras. Solo este formato
         # sintético cambia de identidad; la hoja CSS real sigue comparada.
         if 'src' in record and re.fullmatch(r'_[\w.\-]+-!~\{[A-Za-z0-9]+\}~\.js', record['src']):
-            assert p.endswith('.css') and set(entry) == {'file', 'src'} and record['src'].split('-!~{')[0] == '_' + stripname(p).split('/')[-1][:-4], 'INVALID_VITE_CSS_PLACEHOLDER'
+            assert p.endswith('.css') and set(entry) == {'file', 'src'}, 'INVALID_VITE_CSS_PLACEHOLDER'
+            prefix = record['src'].split('-!~{')[0]
+            leaf = stripname(p).split('/')[-1]
+            # Dos formas reales observadas: un .css importado directo (prefijo =
+            # nombre sin extensión, ej. "_leaflet") o un .css re-exportado desde
+            # el bloque <style> de un SFC Vue, cuyo id virtual real conserva la
+            # extensión del archivo importado seguida del sufijo fijo de Vite
+            # (ej. "_finance.css_vue_type_style_index_0_src_true_lang" para
+            # finance.css). Confirmado con el manifiesto real del candidato de
+            # Fase 13.1 (antes nunca se alcanzaba esta rama: el id de orden solía
+            # incluir un símbolo como "$" que ya rompía el regex de arriba).
+            assert prefix == '_' + leaf[:-4] or re.fullmatch(re.escape('_' + leaf) + r'_vue_type_style_index_\d+_src_true_lang', prefix), 'INVALID_VITE_CSS_PLACEHOLDER'
             record['src'] = '@vite-css:' + name
-        elif 'src' in record and 'node_modules/' in record['src']:
-            # El Dockerfile de build enlaza node_modules con un symlink (ln -s
-            # /app/node_modules node_modules); Rollup puede resolver el MISMO
-            # archivo físico (mismo hash, confirmado real) con un prefijo
-            # relativo distinto según por dónde atraviese el symlink
-            # (ej. "node_modules/qr-scanner/..." vs
-            # "../../app/node_modules/qr-scanner/..."), sin que el paquete ni
-            # el archivo cambien. Solo se compara la parte posterior a
-            # "node_modules/" — el paquete/ruta real importado — nunca se
-            # ignora un cambio real de paquete o de archivo.
-            record['src'] = record['src'].split('node_modules/', 1)[-1]
         for field in ['imports', 'dynamicImports']:
             record[field] = sorted(identity(manifest[k]['file']) for k in entry.get(field, []))
         for field in ['css', 'assets']:
