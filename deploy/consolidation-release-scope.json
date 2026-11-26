@@ -3,7 +3,6 @@
   "sourceCommit": "97a912883ac809d6de51eaed67c92d21c7872c60",
   "backendSources": ["server/src/routes/invoices.ts"],
   "frontendSources": [
-    "server/src/routes/invoices.ts",
     "src/components/caja-chica/CajaFinancePanel.vue",
     "src/components/facturacion/FinanceWorkspace.vue",
     "src/components/facturacion/MixedPaymentReceipt.vue",
