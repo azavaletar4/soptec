@@ -1,9 +1,10 @@
 {
   "version": 1,
-  "sourceCommit": "9335016a3fd7f33904bcac43e9e74e584abe103d",
+  "sourceCommit": "1d3913ff71e04144c0ad6bccbd69e0fe62b74313",
   "backendSources": [],
   "frontendSources": [
-    "src/components/facturacion/FinanceReconciliation.vue"
+    "src/components/facturacion/FinanceReconciliation.vue",
+    "src/lib/billingCycle.ts"
   ],
   "frontendAssets": [
     "assets/FinanceReconciliation.js",
