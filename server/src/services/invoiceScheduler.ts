@@ -25,6 +25,22 @@ import { supabaseAdmin } from '../lib/supabaseAdmin';
 const SCAN_INTERVAL_MS = Number(process.env.FINANCE_AUTO_INVOICE_SCAN_INTERVAL_MINUTES ?? 180) * 60_000;
 const INITIAL_DELAY_MS = 30_000;
 const MAX_PERIODS_PER_RUN = 3; // tope defensivo por corrida; una caída larga se recupera en varias corridas sucesivas, nunca de un solo golpe
+// finance_generate_due_invoices_system rechaza más de 500 contratos por
+// llamada (misma guarda de Fase 21: 'Lote, contratos o motivo inválidos').
+// Desde que el alcance autorizado superó los 500 (Fase 28, 524 contratos),
+// una sola llamada con la lista completa fallaba siempre — confirmado real:
+// cero facturas generadas en ningún escaneo desde esa ampliación. Se parte
+// en lotes de como mucho 500; cada lote usa su propio operation_id (sin
+// necesidad de ser estable entre corridas — la idempotencia real que
+// evita duplicar una factura ya la da la clave natural (contrato, período)
+// dentro de finance_generate_due_invoices_system, no el operation_id).
+const MAX_CONTRACTS_PER_CALL = 500;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 let scanRunning = false;
 
@@ -46,20 +62,24 @@ async function runScan() {
       console.error('[invoice-scheduler] configuración incompleta (FINANCE_AUTO_INVOICE_CONTRACT_IDS/FINANCE_AUTO_INVOICE_SYSTEM_ACTOR_ID) — no se genera nada');
       return;
     }
-    const operationId = crypto.randomUUID();
-    const { data, error } = await supabaseAdmin.rpc('finance_generate_due_invoices_system', {
-      p_system_actor_id: systemActorId,
-      p_operation_id: operationId,
-      p_contract_ids: contractIds,
-      p_reason: 'Generación automática programada (invoice-scheduler, Fase 14)',
-      p_max_periods: MAX_PERIODS_PER_RUN,
-    });
-    if (error) throw new Error(error.message);
-    const created = (data as { created?: unknown[] } | null)?.created?.length ?? 0;
-    const skipped = (data as { skipped?: unknown[] } | null)?.skipped?.length ?? 0;
-    if (created > 0 || skipped > 0) {
+    let totalCreated = 0;
+    let totalSkipped = 0;
+    for (const batch of chunk(contractIds, MAX_CONTRACTS_PER_CALL)) {
+      const operationId = crypto.randomUUID();
+      const { data, error } = await supabaseAdmin.rpc('finance_generate_due_invoices_system', {
+        p_system_actor_id: systemActorId,
+        p_operation_id: operationId,
+        p_contract_ids: batch,
+        p_reason: 'Generación automática programada (invoice-scheduler, Fase 14)',
+        p_max_periods: MAX_PERIODS_PER_RUN,
+      });
+      if (error) throw new Error(error.message);
+      totalCreated += (data as { created?: unknown[] } | null)?.created?.length ?? 0;
+      totalSkipped += (data as { skipped?: unknown[] } | null)?.skipped?.length ?? 0;
+    }
+    if (totalCreated > 0 || totalSkipped > 0) {
       // eslint-disable-next-line no-console
-      console.log(`[invoice-scheduler] generadas ${created} facturas, ${skipped} contratos no elegibles omitidos`);
+      console.log(`[invoice-scheduler] generadas ${totalCreated} facturas, ${totalSkipped} contratos no elegibles omitidos`);
     }
   } catch (e) {
     // eslint-disable-next-line no-console
