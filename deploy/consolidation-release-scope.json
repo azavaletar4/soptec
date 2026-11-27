@@ -1,8 +1,11 @@
 {
   "version": 1,
-  "sourceCommit": "a00f639a5ec9d62ddde0c13d665cca0b263b76c9",
+  "sourceCommit": "58defa31da8a94f6af1ffaad8e8721e3e19f3b74",
   "backendSources": [],
-  "frontendSources": ["src/components/clientes/ContractFinanceSummary.vue"],
+  "frontendSources": [
+    "src/components/clientes/ContractFinanceSummary.vue",
+    "src/lib/contractFinanceStatus.ts"
+  ],
   "frontendAssets": [
     "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
     "assets/index.css"
