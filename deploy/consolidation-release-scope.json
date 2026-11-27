@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "39ff1d5b4f918515060e9dfa6d4abb17c5584ea3",
+  "sourceCommit": "30b3dc876217f0236a939b7367b9e9a1cfd6f598",
   "backendSources": ["server/src/routes/invoices.ts"],
   "frontendSources": [
     "src/components/caja-chica/CajaFinancePanel.vue",
