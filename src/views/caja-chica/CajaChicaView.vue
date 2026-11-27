@@ -92,6 +92,11 @@ const summary = computed(() => {
 // Cobranzas del día (efectivo) para la tarjeta de Resumen — misma fuente
 // (caja_finance_daily) que Cobranzas y cierre, nunca un valor aparte.
 const cobranzasHoy = computed(() => Number(cajaChicaStore.daily?.linkedCashCollections ?? 0));
+// Total de cobranzas del día (todos los medios) y el desglose efectivo vs.
+// digital (Yape/Plin/Transferencia/Otros) — lo digital nunca pasa por la
+// caja física, por eso se muestra aparte del efectivo.
+const cobranzasTotalHoy = computed(() => (cajaChicaStore.daily?.methods ?? []).reduce((n, m) => n + Number(m.net), 0));
+const cobranzasDigitalHoy = computed(() => (cajaChicaStore.daily?.methods ?? []).filter((m) => m.method !== 'cash').reduce((n, m) => n + Number(m.net), 0));
 const retirosPropietarioMes = computed(() => {
   const monthStart = firstOfMonthIso();
   return cajaChicaStore.movimientos
@@ -230,15 +235,40 @@ async function handleReverse(m: CajaChicaMovimientoWithUrl) {
   }
 }
 
-onMounted(async () => {
-  await Promise.all([
-    cajaChicaStore.fetchMovimientos(),
-    cajaChicaStore.fetchCategorias(),
-    cajaChicaStore.fetchResponsablesConfig(),
-    catalogs.fetchStaff(),
-  ]);
-  cajaChicaStore.fetchDaily(todayIso()).catch(() => {});
-  vehiculosStore.fetchVehiculos().catch(() => {});
+// Carga de cada sección — SIEMPRE independiente entre sí (nunca un
+// Promise.all sin manejo individual): antes, si fetchCategorias o
+// fetchResponsablesConfig fallaban (p. ej. por una migración todavía no
+// aplicada), el await conjunto lanzaba y las líneas siguientes —incluida
+// la carga del arqueo del día— nunca llegaban a ejecutarse. Resumen
+// terminaba mostrando "S/ 0.00" con normalidad mientras Cobranzas y cierre
+// (que carga aparte, al entrar a esa pestaña) sí tenía datos reales — un
+// error silencioso disfrazado de "caja vacía". Cada sección ahora reporta
+// su propio error, y el resumen nunca confunde "todavía cargando" o
+// "falló la consulta" con "S/ 0.00 real".
+const sectionErrors = ref<Record<string, string>>({});
+const dailyLoading = ref(true);
+async function safeLoad(key: string, fn: () => Promise<unknown>) {
+  try {
+    await fn();
+    if (sectionErrors.value[key]) { const { [key]: _omit, ...rest } = sectionErrors.value; sectionErrors.value = rest; }
+  } catch (e) {
+    sectionErrors.value = { ...sectionErrors.value, [key]: getErrorMessage(e, 'No se pudo cargar esta sección.') };
+  }
+}
+async function loadDaily() {
+  dailyLoading.value = true;
+  await safeLoad('daily', () => cajaChicaStore.fetchDaily(todayIso()));
+  dailyLoading.value = false;
+}
+const hasLoadErrors = computed(() => Object.keys(sectionErrors.value).length > 0);
+
+onMounted(() => {
+  safeLoad('movimientos', () => cajaChicaStore.fetchMovimientos());
+  safeLoad('categorias', () => cajaChicaStore.fetchCategorias());
+  safeLoad('responsables', () => cajaChicaStore.fetchResponsablesConfig());
+  safeLoad('staff', () => catalogs.fetchStaff());
+  safeLoad('vehiculos', () => vehiculosStore.fetchVehiculos());
+  loadDaily();
 });
 </script>
 
@@ -265,50 +295,80 @@ onMounted(async () => {
 
     <!-- ===================== RESUMEN ===================== -->
     <section v-if="tab === 'resumen'">
-      <div class="grid gap-4 mb-6" style="grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(180px, 1fr))">
+      <p v-if="hasLoadErrors" class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4 flex items-center justify-between gap-3">
+        <span>No se pudo cargar completamente esta sección ({{ Object.values(sectionErrors).join(' · ') }}). Las cifras de abajo NO deben leerse como "en cero" — vuelve a intentarlo.</span>
+        <button type="button" class="btn-ghost shrink-0" @click="safeLoad('movimientos', () => cajaChicaStore.fetchMovimientos()); safeLoad('categorias', () => cajaChicaStore.fetchCategorias()); safeLoad('responsables', () => cajaChicaStore.fetchResponsablesConfig()); loadDaily()">Reintentar</button>
+      </p>
+      <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
         <div class="rounded-xl p-5 flex items-start justify-between" style="background:#102d49">
           <div>
-            <div class="text-3xl font-bold text-white">{{ formatPen(summary.saldo) }}</div>
+            <div class="text-3xl font-bold text-white">
+              <span v-if="sectionErrors.movimientos">Error al cargar</span>
+              <span v-else>{{ formatPen(summary.saldo) }}</span>
+            </div>
             <div class="text-sm text-white/80 mt-1">Efectivo disponible en caja</div>
           </div>
-          <span class="w-10 h-10 rounded-lg flex items-center justify-center text-lg" style="background:#ffffff26">💰</span>
+          <span class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style="background:#ffffff26">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="white" stroke-width="1.6"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M3 10h2M19 10h2M3 14h2M19 14h2"/></svg>
+          </span>
         </div>
         <div class="surface p-5 flex items-start justify-between">
           <div>
-            <div class="text-xl font-semibold text-slate-900">{{ formatPen(cobranzasHoy) }}</div>
-            <div class="text-xs text-slate-500 mt-1">Cobranzas en efectivo (hoy)</div>
+            <div class="text-xl font-semibold text-slate-900">
+              <span v-if="dailyLoading">Cargando…</span>
+              <span v-else-if="sectionErrors.daily">Error al cargar</span>
+              <span v-else>{{ formatPen(cobranzasTotalHoy) }}</span>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">Cobranzas del día (todos los medios)</div>
+            <div v-if="!dailyLoading && !sectionErrors.daily" class="text-[11px] text-slate-400 mt-1">Efectivo {{ formatPen(cobranzasHoy) }} · Digital {{ formatPen(cobranzasDigitalHoy) }}</div>
           </div>
-          <span class="w-9 h-9 rounded-lg bg-green-50 text-green-700 flex items-center justify-center text-base">💵</span>
+          <span class="w-9 h-9 rounded-lg bg-green-50 text-green-700 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M6 10h.01M18 14h.01"/><circle cx="12" cy="12" r="2"/></svg>
+          </span>
         </div>
         <div class="surface p-5 flex items-start justify-between">
           <div>
-            <div class="text-xl font-semibold text-slate-900">{{ formatPen(summary.gastadoHoy) }}</div>
+            <div class="text-xl font-semibold text-slate-900">
+              <span v-if="sectionErrors.movimientos">Error al cargar</span>
+              <span v-else>{{ formatPen(summary.gastadoHoy) }}</span>
+            </div>
             <div class="text-xs text-slate-500 mt-1">Gastado hoy</div>
           </div>
-          <span class="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center text-base">📅</span>
+          <span class="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 2.5v3M16 2.5v3"/></svg>
+          </span>
         </div>
         <div class="surface p-5 flex items-start justify-between">
           <div>
-            <div class="text-xl font-semibold text-slate-900">{{ formatPen(summary.gastadoMes) }}</div>
+            <div class="text-xl font-semibold text-slate-900">
+              <span v-if="sectionErrors.movimientos">Error al cargar</span>
+              <span v-else>{{ formatPen(summary.gastadoMes) }}</span>
+            </div>
             <div class="text-xs text-slate-500 mt-1">Gastado este mes</div>
           </div>
-          <span class="w-9 h-9 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center text-base">📊</span>
+          <span class="w-9 h-9 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V11M12 20V4M20 20v-7"/></svg>
+          </span>
         </div>
-      </div>
-      <div class="grid gap-4 mb-6" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))">
-        <div class="surface p-4 flex items-center justify-between">
+        <div class="surface p-5 flex items-start justify-between">
           <div>
-            <div class="text-lg font-semibold text-slate-900">{{ formatPen(retirosPropietarioMes) }}</div>
+            <div class="text-xl font-semibold text-slate-900">
+              <span v-if="sectionErrors.movimientos">Error al cargar</span>
+              <span v-else>{{ formatPen(retirosPropietarioMes) }}</span>
+            </div>
             <div class="text-xs text-slate-500 mt-1">Retiros del propietario (mes)</div>
           </div>
-          <span class="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center text-base">🏦</span>
+          <span class="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10l8-6 8 6"/><rect x="5" y="10" width="14" height="9" rx="1"/><path d="M9 19v-5M15 19v-5"/></svg>
+          </span>
         </div>
       </div>
 
       <div class="grid gap-4 mb-6" style="grid-template-columns: 1.1fr 0.9fr">
         <div class="surface p-5">
           <h2 class="text-sm font-semibold mb-3">Gasto por categoría (este mes)</h2>
-          <p v-if="!summary.categorias.length" class="text-xs text-slate-400">Sin egresos manuales este mes.</p>
+          <p v-if="sectionErrors.movimientos" class="text-xs text-red-600">No se pudo cargar — ver aviso de arriba.</p>
+          <p v-else-if="!summary.categorias.length" class="text-xs text-slate-400">Sin egresos manuales este mes.</p>
           <div v-else class="space-y-2">
             <div v-for="c in summary.categorias" :key="c.nombre" class="flex items-center gap-3 text-sm">
               <span class="w-36 shrink-0 text-slate-600 text-xs truncate">{{ c.nombre }}</span>
@@ -321,18 +381,27 @@ onMounted(async () => {
         </div>
         <div class="surface p-5">
           <h2 class="text-sm font-semibold mb-3">Medios de pago (hoy)</h2>
-          <p v-if="!cajaChicaStore.daily?.methods?.length" class="text-xs text-slate-400">Sin cobranzas registradas hoy.</p>
-          <div v-for="m in cajaChicaStore.daily?.methods ?? []" :key="m.method" class="flex items-center justify-between py-1.5 text-sm border-b border-slate-50 last:border-0">
-            <span>{{ cashMethodLabel(m.method) }}</span>
-            <b class="font-variant-numeric-tabular">{{ formatPen(m.net) }}</b>
+          <p v-if="dailyLoading" class="text-xs text-slate-400">Cargando…</p>
+          <p v-else-if="sectionErrors.daily" class="text-xs text-red-600">No se pudo cargar — ver aviso de arriba.</p>
+          <p v-else-if="!cajaChicaStore.daily?.methods?.length" class="text-xs text-slate-400">Sin cobranzas registradas hoy.</p>
+          <div v-else class="space-y-2">
+            <div v-for="m in cajaChicaStore.daily?.methods ?? []" :key="m.method" class="flex items-center gap-3 text-sm">
+              <span class="w-28 shrink-0 text-slate-600 text-xs truncate">{{ cashMethodLabel(m.method) }}</span>
+              <div class="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                <div class="h-full rounded-full" :class="m.method === 'cash' ? 'bg-green-500' : 'bg-sky-500'" :style="{ width: (Number(m.net) / Math.max(1, cobranzasTotalHoy)) * 100 + '%' }"></div>
+              </div>
+              <span class="w-20 shrink-0 text-right font-medium text-xs">{{ formatPen(m.net) }}</span>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="surface p-5 mb-6">
         <h2 class="text-sm font-semibold mb-3">Cobranzas por administradora (hoy)</h2>
-        <p v-if="!cajaChicaStore.daily?.collectors?.length" class="text-xs text-slate-400">Sin cobranzas registradas hoy.</p>
-        <div v-for="c in cajaChicaStore.daily?.collectors ?? []" :key="c.id + c.method" class="flex items-center justify-between py-1.5 text-sm border-b border-slate-50 last:border-0">
+        <p v-if="dailyLoading" class="text-xs text-slate-400">Cargando…</p>
+        <p v-else-if="sectionErrors.daily" class="text-xs text-red-600">No se pudo cargar — ver aviso de arriba.</p>
+        <p v-else-if="!cajaChicaStore.daily?.collectors?.length" class="text-xs text-slate-400">Sin cobranzas registradas hoy.</p>
+        <div v-else v-for="c in cajaChicaStore.daily?.collectors ?? []" :key="c.id + c.method" class="flex items-center justify-between py-1.5 text-sm border-b border-slate-50 last:border-0">
           <span>{{ c.name }} <span class="text-slate-400">· {{ cashMethodLabel(c.method) }}</span></span>
           <b>{{ formatPen(c.received) }}</b>
         </div>
