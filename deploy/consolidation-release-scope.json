@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "f84d9013e064408b8919141c098e8e9c2d64b938",
+  "sourceCommit": "a00f639a5ec9d62ddde0c13d665cca0b263b76c9",
   "backendSources": [],
   "frontendSources": ["src/components/clientes/ContractFinanceSummary.vue"],
   "frontendAssets": [
