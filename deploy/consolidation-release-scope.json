@@ -1,7 +1,7 @@
 {
   "version": 1,
   "sourceCommit": "3c93ed2b266c4bbecc05811e3a57f8b30c16bfc3",
-  "backendSources": ["server/src/routes/invoices.ts", "src/lib/financeCash.ts", "server/src/services/invoiceScheduler.ts"],
+  "backendSources": ["server/src/services/invoiceScheduler.ts"],
   "frontendSources": [],
   "frontendAssets": []
 }
