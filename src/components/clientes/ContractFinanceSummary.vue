@@ -75,11 +75,24 @@ const deudaPendienteCents = computed(() => pendingInvoices.value.reduce((n, i) =
 const lastPayment = computed(() => history.value?.payments.find((p) => !p.reversed_at) ?? null);
 const autoBilled = computed(() => props.invoices.some((i) => i.finance_origin === 'operational' || i.finance_origin === undefined));
 
+function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
 // Estado visual — nunca inventa "al día" para un contrato sin conciliar ni
 // confunde cortesía/suspendido con morosidad (reglas permanentes del
 // proyecto). "cargando"/"error" son estados DISTINTOS de "sin_conciliar":
 // un fallo de consulta nunca se muestra como si fuera un dato comercial
 // real (ver nota en load()).
+//
+// La deuda/gracia se decide con las facturas PENDIENTES REALES ya
+// cargadas (due_date de cada una), nunca solo con el pronóstico de ciclo
+// (cycle.nextCycleDate) — ese pronóstico avanza en cuanto el contrato YA
+// FUE FACTURADO, sin importar si esa factura se pagó. Caso real que esto
+// corrige: Roberto Gil Gil (CTR-2026-00679) tiene FAC-2026-00106
+// pendiente y vencida, pero su próximo ciclo ya apunta al mes siguiente —
+// sin este ajuste se habría mostrado "Al día" pese a la deuda real.
 type Status = 'cargando' | 'error' | 'cortesia' | 'sin_conciliar' | 'suspendido' | 'moroso' | 'en_gracia' | 'al_dia';
 const status = computed<Status>(() => {
   if (loading.value) return 'cargando';
@@ -88,11 +101,12 @@ const status = computed<Status>(() => {
   if (c.isCourtesy) return 'cortesia';
   if (!c.reconciled) return 'sin_conciliar';
   if (c.status === 'suspended') return 'suspendido';
-  if (!c.nextCycleDate) return 'al_dia';
+  if (!pendingInvoices.value.length) return 'al_dia';
   const today = c.asOf;
-  if (c.nextCycleDate > today) return 'al_dia';
-  if (c.graceEndDate && c.graceEndDate >= today) return 'en_gracia';
-  return 'moroso';
+  const earliestDue = pendingInvoices.value.reduce((min, i) => (i.due_date < min ? i.due_date : min), pendingInvoices.value[0].due_date);
+  if (earliestDue >= today) return 'al_dia'; // factura pendiente pero aún no vencida: ciclo en curso, no es mora ni gracia todavía
+  if (c.billingModality !== 'adelantado') return 'moroso';
+  return addDaysIso(earliestDue, c.graceDays ?? 7) >= today ? 'en_gracia' : 'moroso';
 });
 const STATUS_LABEL: Record<Status, string> = {
   cargando: 'Verificando…', error: 'Error al consultar', cortesia: 'Cortesía',
