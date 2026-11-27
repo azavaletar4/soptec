@@ -5,6 +5,7 @@ import { enforceOntEvidence } from '@/lib/ontTelemetryEvidence';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '@/components/layout/AppLayout.vue';
 import ClientSectionCard from '@/components/clientes/ClientSectionCard.vue';
+import ContractFinanceSummary from '@/components/clientes/ContractFinanceSummary.vue';
 import RecoveryModal from '@/components/inventario/RecoveryModal.vue';
 import PhotoLightbox, { type LightboxPhoto } from '@/components/PhotoLightbox.vue';
 import { useClientsStore } from '@/stores/clients';
@@ -2051,8 +2052,13 @@ onMounted(async () => {
         </button>
       </div>
 
-      <!-- ---- Facturación: Descuentos ---- -->
+      <!-- ---- Facturación: Resumen financiero (Fase 29) ---- -->
       <div v-if="activeTab === 'facturacion'">
+      <ClientSectionCard v-if="contract && client" title="Resumen financiero" icon="💳">
+        <ContractFinanceSummary :contract="contract" :invoices="invoices" :saldo-a-favor="client.saldo_a_favor" @changed="loadInvoices" />
+      </ClientSectionCard>
+
+      <!-- ---- Facturación: Descuentos ---- -->
       <ClientSectionCard title="Descuentos" icon="🏷️">
       <div class="max-w-lg">
         <h3 class="text-sm font-semibold mb-2">Descuentos que aplican a la próxima factura</h3>

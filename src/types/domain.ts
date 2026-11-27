@@ -740,6 +740,8 @@ export interface TicketComment {
 
 export interface Invoice {
   finance_reconciled?: boolean;
+  /** 'operational' (scheduler/manual) vs 'opening_balance' (apertura financiera, Fase 12) — nunca un ingreso nuevo. */
+  finance_origin?: 'operational' | 'opening_balance';
   id: string;
   invoice_number: string | null;
   contract_id: string;
