@@ -235,15 +235,22 @@ def validate_vite_manifest(files, pinned_paths):
             assert p.endswith('.css') and set(entry) == {'file', 'src'}, 'INVALID_VITE_CSS_PLACEHOLDER'
             prefix = record['src'].split('-!~{')[0]
             leaf = stripname(p).split('/')[-1]
-            # Dos formas reales observadas: un .css importado directo (prefijo =
-            # nombre sin extensión, ej. "_leaflet") o un .css re-exportado desde
+            base = leaf[:-4]
+            # Tres formas reales observadas: un .css importado directo (prefijo =
+            # nombre sin extensión, ej. "_leaflet"); un .css re-exportado desde
             # el bloque <style> de un SFC Vue, cuyo id virtual real conserva la
             # extensión del archivo importado seguida del sufijo fijo de Vite
             # (ej. "_finance.css_vue_type_style_index_0_src_true_lang" para
-            # finance.css). Confirmado con el manifiesto real del candidato de
-            # Fase 13.1 (antes nunca se alcanzaba esta rama: el id de orden solía
-            # incluir un símbolo como "$" que ya rompía el regex de arriba).
-            assert prefix == '_' + leaf[:-4] or re.fullmatch(re.escape('_' + leaf) + r'_vue_type_style_index_\d+_src_true_lang', prefix), 'INVALID_VITE_CSS_PLACEHOLDER'
+            # finance.css, confirmado con el manifiesto real del candidato de
+            # Fase 13.1); y un .css cuyo chunk quedó compartido entre dos
+            # importadores (ej. MixedPaymentReceipt.vue usado desde /facturacion
+            # y desde la ficha del cliente, Fase 29) — ahí Vite referencia la
+            # identidad del propio <script setup> del componente en vez de su
+            # bloque de estilo (ej. "_MixedPaymentReceipt.vue_vue_type_script_setup_true_lang"
+            # para MixedPaymentReceipt.css), pero sigue siendo el MISMO nombre
+            # base que el .css (nunca el de otro componente) — se exige esa
+            # misma correspondencia exacta, no un comodín.
+            assert prefix == '_' + base or re.fullmatch(re.escape('_' + leaf) + r'_vue_type_style_index_\d+_src_true_lang', prefix) or prefix == '_' + base + '.vue_vue_type_script_setup_true_lang', 'INVALID_VITE_CSS_PLACEHOLDER'
             record['src'] = '@vite-css:' + name
         for field in ['imports', 'dynamicImports']:
             record[field] = sorted(identity(manifest[k]['file']) for k in entry.get(field, []))

@@ -32,9 +32,9 @@
   "frontendGraphTransition": {
     "contentAdded": ["assets/CajaChicaView.css", "assets/financeCash.js", "assets/MixedPaymentReceipt.css", "assets/MixedPaymentReceipt.vue_vue_type_script_setup_true_lang.js"],
     "contentRemoved": ["assets/invoices.js"],
-    "manifestAdded": ["assets/financeCash.js"],
-    "manifestRemoved": [],
-    "before": "0000000000000000000000000000000000000000000000000000000000000000",
-    "after": "0000000000000000000000000000000000000000000000000000000000000000"
+    "manifestAdded": ["assets/MixedPaymentReceipt.css", "assets/MixedPaymentReceipt.vue_vue_type_script_setup_true_lang.js", "assets/financeCash.js"],
+    "manifestRemoved": ["assets/invoices.js"],
+    "before": "f89c9078ae64d791b6106992977970fe80dc48db54513b8194f3ad2efe83b01a",
+    "after": "44d260b66eda32d78c840911bb9cb3d5ecef04c240c2e612870920ecb16c151a"
   }
 }
