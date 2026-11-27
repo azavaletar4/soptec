@@ -9,6 +9,7 @@ import { CASH_METHODS, cashMethodLabel, validateMixedParts, type MixedPaymentPar
 import PaymentReceipt from '@/components/facturacion/PaymentReceipt.vue';
 import MixedPaymentReceipt from '@/components/facturacion/MixedPaymentReceipt.vue';
 import type { Invoice, ServiceContract } from '@/types/domain';
+import { deriveContractFinanceStatus, deriveGraceEndDate, type ContractFinanceStatus } from '@/lib/contractFinanceStatus';
 
 // Resumen financiero de ESTE contrato en la ficha del cliente (Fase 29).
 // Reutiliza las RPC y el store financiero ya existentes (finance_record_payment/
@@ -75,38 +76,32 @@ const deudaPendienteCents = computed(() => pendingInvoices.value.reduce((n, i) =
 const lastPayment = computed(() => history.value?.payments.find((p) => !p.reversed_at) ?? null);
 const autoBilled = computed(() => props.invoices.some((i) => i.finance_origin === 'operational' || i.finance_origin === undefined));
 
-function addDaysIso(iso: string, days: number): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
-}
-
-// Estado visual — nunca inventa "al día" para un contrato sin conciliar ni
-// confunde cortesía/suspendido con morosidad (reglas permanentes del
-// proyecto). "cargando"/"error" son estados DISTINTOS de "sin_conciliar":
-// un fallo de consulta nunca se muestra como si fuera un dato comercial
-// real (ver nota en load()).
-//
-// La deuda/gracia se decide con las facturas PENDIENTES REALES ya
-// cargadas (due_date de cada una), nunca solo con el pronóstico de ciclo
-// (cycle.nextCycleDate) — ese pronóstico avanza en cuanto el contrato YA
-// FUE FACTURADO, sin importar si esa factura se pagó. Caso real que esto
-// corrige: Roberto Gil Gil (CTR-2026-00679) tiene FAC-2026-00106
-// pendiente y vencida, pero su próximo ciclo ya apunta al mes siguiente —
-// sin este ajuste se habría mostrado "Al día" pese a la deuda real.
-type Status = 'cargando' | 'error' | 'cortesia' | 'sin_conciliar' | 'suspendido' | 'moroso' | 'en_gracia' | 'al_dia';
+// Estado visual y "Plazo de gracia" — delegados a src/lib/contractFinanceStatus.ts
+// (puro, con pruebas aisladas) para que ambos usen SIEMPRE la misma base: la
+// factura PENDIENTE REAL más antigua (su propio due_date), nunca el
+// pronóstico de próximo ciclo de la RPC (cycle.nextCycleDate/graceEndDate) —
+// ese pronóstico avanza en cuanto el contrato ya fue facturado, sin importar
+// si esa factura se pagó. Caso real: Roberto Gil Gil (CTR-2026-00679),
+// FAC-2026-00106 vencida 2026-11-26, mostraba "gracia hasta 2027-01-02" (un
+// ciclo completo adelantado) en vez de 2026-12-03 (vencimiento real + 7
+// días de gracia) — y antes de la corrección anterior (Fase 29.1), el
+// mismo pronóstico habría mostrado "Al día" pese a la deuda real.
+// "cargando"/"error" son estados DISTINTOS de "sin_conciliar": un fallo de
+// consulta nunca se muestra como si fuera un dato comercial real (ver nota
+// en load()).
+type Status = 'cargando' | 'error' | ContractFinanceStatus;
 const status = computed<Status>(() => {
   if (loading.value) return 'cargando';
   if (cycleError.value || !cycle.value) return 'error';
   const c = cycle.value;
-  if (c.isCourtesy) return 'cortesia';
-  if (!c.reconciled) return 'sin_conciliar';
-  if (c.status === 'suspended') return 'suspendido';
-  if (!pendingInvoices.value.length) return 'al_dia';
-  const today = c.asOf;
-  const earliestDue = pendingInvoices.value.reduce((min, i) => (i.due_date < min ? i.due_date : min), pendingInvoices.value[0].due_date);
-  if (earliestDue >= today) return 'al_dia'; // factura pendiente pero aún no vencida: ciclo en curso, no es mora ni gracia todavía
-  if (c.billingModality !== 'adelantado') return 'moroso';
-  return addDaysIso(earliestDue, c.graceDays ?? 7) >= today ? 'en_gracia' : 'moroso';
+  return deriveContractFinanceStatus(
+    { isCourtesy: c.isCourtesy, reconciled: c.reconciled, contractStatus: c.status, billingModality: c.billingModality, graceDays: c.graceDays, asOf: c.asOf },
+    pendingInvoices.value,
+  );
+});
+const displayGraceEndDate = computed<string | null>(() => {
+  if (!cycle.value) return null;
+  return deriveGraceEndDate({ billingModality: cycle.value.billingModality, graceDays: cycle.value.graceDays }, pendingInvoices.value, cycle.value.graceEndDate);
 });
 const STATUS_LABEL: Record<Status, string> = {
   cargando: 'Verificando…', error: 'Error al consultar', cortesia: 'Cortesía',
@@ -200,7 +195,7 @@ function formatDateLima(v?: string | null): string {
         <div class="surface p-3"><div class="text-xs text-slate-500">Último pago verificado</div><div class="text-sm font-medium">{{ lastPayment ? formatPen(lastPayment.amount) + ' · ' + dateLabel(lastPayment.received_at) : 'Sin pagos en el libro nuevo' }}</div></div>
         <div class="surface p-3"><div class="text-xs text-slate-500">Servicio cubierto hasta</div><div class="text-sm font-medium">{{ formatDateLima(cycle.coveredUntil) }}</div></div>
         <div class="surface p-3"><div class="text-xs text-slate-500">Próxima mensualidad</div><div class="text-sm font-medium">{{ formatDateLima(cycle.nextCycleDate) }}</div></div>
-        <div class="surface p-3"><div class="text-xs text-slate-500">Plazo de gracia</div><div class="text-sm font-medium">{{ cycle.graceEndDate ? 'Hasta ' + formatDateLima(cycle.graceEndDate) : (cycle.billingModality === 'cumplido' ? 'No aplica (pago cumplido)' : '—') }}</div></div>
+        <div class="surface p-3"><div class="text-xs text-slate-500">Plazo de gracia</div><div class="text-sm font-medium">{{ displayGraceEndDate ? 'Hasta ' + formatDateLima(displayGraceEndDate) : (cycle.billingModality === 'cumplido' ? 'No aplica (pago cumplido)' : '—') }}</div></div>
         <div class="surface p-3"><div class="text-xs text-slate-500">Facturación automática</div><div class="text-sm font-medium">{{ cycle.isCourtesy ? 'No aplica (cortesía)' : autoBilled ? 'Ya se generaron facturas automáticas' : 'Aún no se generó ninguna factura automática' }}</div></div>
       </div>
       <div v-if="cycle.promo3plus1" class="text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 mb-4">
