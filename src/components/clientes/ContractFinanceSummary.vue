@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { supabase } from '@/lib/supabase';
 import { useInvoicesStore } from '@/stores/invoices';
 import { useAuthStore } from '@/stores/auth';
-import { formatPen, penCents, penDecimal } from '@/lib/financeMoney';
+import { formatPen, penCents, penDecimal, formatDateLima } from '@/lib/financeMoney';
 import { CASH_METHODS, cashMethodLabel, validateMixedParts, type MixedPaymentPart } from '@/lib/financeCash';
 import PaymentReceipt from '@/components/facturacion/PaymentReceipt.vue';
 import MixedPaymentReceipt from '@/components/facturacion/MixedPaymentReceipt.vue';
@@ -158,17 +158,13 @@ async function confirmPayment() {
   } catch (e) { payError.value = e instanceof Error ? e.message : 'No se pudo registrar el pago. Reintenta con esta misma operación.'; } finally { paying.value = false; }
 }
 const dateLabel = (v?: string | null) => (v ? new Date(v).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : '—');
-// cycle.coveredUntil/nextCycleDate/graceEndDate/promoCoverageThrough son
-// DATE puras (YYYY-MM-DD) ya calculadas en hora de Perú por el propio RPC
-// (finance_last_covered_period/finance_next_cycle_date) — se reordena el
-// texto directo a DD/MM/AAAA, sin pasar por `new Date()` (evita el
-// corrimiento de un día que esa conversión puede introducir según la zona
-// horaria del navegador).
-function formatDateLima(v?: string | null): string {
-  if (!v) return '—';
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : v;
-}
+// cycle.coveredUntil/nextCycleDate/graceEndDate/promoCoverageThrough son DATE
+// puras (YYYY-MM-DD) ya calculadas en hora de Perú por el propio RPC —
+// formatDateLima (src/lib/financeMoney.ts, Fase 30) las reordena a
+// DD/MM/AAAA sin pasar por `new Date()`, compartido con PonCollections.vue
+// y FinanceDueInvoices.vue para que toda la UI financiera use el mismo
+// formato (antes esta función solo vivía aquí, duplicada/ausente en las
+// otras dos vistas).
 </script>
 
 <template>
@@ -239,6 +235,27 @@ function formatDateLima(v?: string | null): string {
             <label>Método<select v-model="method"><option value="cash">Efectivo</option><option value="yape">Yape</option><option value="plin">Plin</option><option value="transfer">Transferencia</option><option value="other">Otros</option><option v-if="mixedEnabled" value="mixed">Mixto</option></select></label>
             <label v-if="method !== 'mixed'">Número de operación<input v-model="reference" maxlength="100" placeholder="Requerido para medios digitales"></label>
             <label>Motivo<input v-model="reason" maxlength="500"></label>
+          </div>
+        </template>
+        <!-- Fase 30: confirmación con desglose completo antes de aplicar el
+             pago — antes solo se veía el total (A aplicar/Saldo restante/
+             Saldo a favor), sin método, número de operación ni qué facturas
+             se afectan. El cálculo del importe total (mixedParts) y los
+             permisos/idempotencia no cambian, solo se muestra más detalle. -->
+        <template v-if="review">
+          <div class="finance-confirm-summary">
+            <h3>Facturas afectadas</h3>
+            <p v-for="i in pendingInvoices.filter((i) => selected.includes(i.id))" :key="i.id">
+              {{ i.invoice_number }} · {{ i.period_start }} <b>{{ formatPen(i.amount_due) }}</b>
+            </p>
+            <p v-if="!selected.length" class="finance-help">Sin facturas seleccionadas — se registrará como anticipo (saldo a favor).</p>
+            <h3>Desglose del pago</h3>
+            <template v-if="method === 'mixed'">
+              <p v-for="part in mixedParts.filter((p) => p.amount.trim() && penCents(p.amount) !== 0)" :key="part.method">
+                {{ cashMethodLabel(part.method) }}<span v-if="part.reference"> · op. {{ part.reference }}</span> <b>{{ formatPen(part.amount) }}</b>
+              </p>
+            </template>
+            <p v-else>{{ cashMethodLabel(method) }}<span v-if="reference"> · op. {{ reference }}</span> <b>{{ formatPen(payAmount) }}</b></p>
           </div>
         </template>
         <p v-if="payAmount" class="finance-help">A aplicar {{ formatPen(penDecimal(Math.min(pendingSumCents, receivedCents))) }} · Saldo restante {{ formatPen(penDecimal(Math.max(0, pendingSumCents - receivedCents))) }} · Saldo a favor nuevo {{ formatPen(penDecimal(Math.max(0, receivedCents - pendingSumCents))) }}</p>

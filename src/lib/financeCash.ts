@@ -20,5 +20,5 @@ export function operatingExpenseCents(m:CashMovement,all:ReadonlyMap<string,Cash
  const original=m.source_movement_id?all.get(m.source_movement_id):null;
  return kind==='movement_reversal'&&(original?.finance_kind??'manual')==='manual'&&original?.tipo==='egreso'?-penCents(String(m.monto)):0;
 }
-export interface CashClosure {id:string;day:string;counted_cash:string|number;expected_cash:string|number;difference:string|number;created_at:string;reopened_at:string|null;reason:string}
+export interface CashClosure {id:string;day:string;actor_id:string|null;counted_cash:string|number;expected_cash:string|number;difference:string|number;created_at:string;reopened_at:string|null;reason:string}
 export interface CashDaily {day:string;enabled:boolean;expectedCashCollections:string|number;linkedCashCollections:string|number;unmatchedCash:string|number;openingCash:string|number;closingCash:string|number;operatingExpenses:string|number;ownerWithdrawals:string|number;methods:{method:CashMethod;received:string|number;reversed:string|number;net:string|number}[]|null;collectors:{id:string;name:string;method:CashMethod;received:string|number}[]|null;closures:CashClosure[]}

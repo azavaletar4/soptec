@@ -6,10 +6,26 @@ import type {CashDaily} from '@/lib/financeCash';
 
 const BUCKET = 'caja-chica-comprobantes';
 const SIGNED_URL_TTL = 3600;
-const MOVIMIENTO_SELECT = '*, vehiculos(id, placa, marca, modelo), caja_chica_categorias(id, nombre, permite_vehiculo)';
+// created_by_profile: quién usó el sistema para registrar el movimiento
+// (Fase 30) — separado de "responsable" (texto libre: quién hizo/autorizó
+// el gasto en campo). caja_chica_movimientos tiene varias FK a profiles
+// (created_by/collector_id/reversed_by); se usa el nombre exacto de la
+// restricción para que PostgREST no las confunda.
+const MOVIMIENTO_SELECT = '*, vehiculos(id, placa, marca, modelo), caja_chica_categorias(id, nombre, permite_vehiculo, tipo), created_by_profile:profiles!caja_chica_movimientos_created_by_fkey(id, full_name, email)';
 
 export interface CajaChicaMovimientoWithUrl extends CajaChicaMovimiento {
   url: string | null;
+}
+
+// Fase 30: configuración administrable de responsables visibles en el
+// selector de Caja Chica — nunca una lista de nombres en el código.
+export interface CajaChicaResponsableConfig {
+  profileId: string;
+  fullName: string;
+  role: string;
+  visible: boolean;
+  updatedAt: string | null;
+  reason: string | null;
 }
 
 async function withSignedUrl(row: CajaChicaMovimiento): Promise<CajaChicaMovimientoWithUrl> {
@@ -39,10 +55,12 @@ export const useCajaChicaStore = defineStore('cajaChica', () => {
 
   // Se crea desde el formulario (igual patron que catalogs.createZone) —
   // queda disponible de inmediato para elegirla en este y otros movimientos.
-  async function createCategoria(nombre: string, permiteVehiculo = false) {
+  // Fase 30: tipo obligatorio (ingreso/egreso) — conserva las categorías ya
+  // existentes y sus relaciones, solo agrega la dimensión de tipo a las nuevas.
+  async function createCategoria(nombre: string, tipo: 'ingreso' | 'egreso', permiteVehiculo = false) {
     const { data, error: err } = await supabase
       .from('caja_chica_categorias')
-      .insert({ nombre, permite_vehiculo: permiteVehiculo })
+      .insert({ nombre, tipo, permite_vehiculo: permiteVehiculo })
       .select()
       .single();
     if (err) throw err;
@@ -50,6 +68,23 @@ export const useCajaChicaStore = defineStore('cajaChica', () => {
     categorias.value.push(created);
     categorias.value.sort((a, b) => a.nombre.localeCompare(b.nombre));
     return created;
+  }
+
+  // ---- Fase 30: responsables visibles (configuración administrable, nunca
+  // nombres hardcodeados) ----
+  const responsablesConfig = ref<CajaChicaResponsableConfig[]>([]);
+  async function fetchResponsablesConfig() {
+    const { data, error: err } = await supabase.rpc('caja_responsables_config');
+    if (err) throw err;
+    responsablesConfig.value = (data ?? []) as CajaChicaResponsableConfig[];
+  }
+  async function setResponsableVisible(operationId: string, profileId: string, visible: boolean, reason: string) {
+    const { data, error: err } = await supabase.rpc('caja_set_responsable_visible', {
+      p_operation_id: operationId, p_profile_id: profileId, p_visible: visible, p_reason: reason,
+    });
+    if (err) throw err;
+    await fetchResponsablesConfig();
+    return data;
   }
 
   async function fetchMovimientos() {
@@ -97,6 +132,7 @@ export const useCajaChicaStore = defineStore('cajaChica', () => {
     createCategoria,
     fetchMovimientos,
     createMovimiento,
+    responsablesConfig, fetchResponsablesConfig, setResponsableVisible,
     daily,fetchDaily,reverseMovimiento,ownerWithdraw,closeDay,reopenDay,
     uploadComprobante,
   };

@@ -982,6 +982,10 @@ export type CajaChicaTipo = 'ingreso' | 'egreso';
 export interface CajaChicaCategoria {
   id: string;
   nombre: string;
+  /** Fase 30: separa las categorías manuales de ingreso/egreso — las automáticas
+   *  ("Cobros de clientes"=ingreso, "Retiros del propietario"=egreso) nunca
+   *  aparecen en el selector manual, sin importar este valor. */
+  tipo: CajaChicaTipo;
   /** Si true, el formulario ofrece vincular el movimiento a un vehiculo de Flota. */
   permite_vehiculo: boolean;
   created_at: string;
@@ -1008,8 +1012,10 @@ export interface CajaChicaMovimiento {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  caja_chica_categorias?: Pick<CajaChicaCategoria, 'id' | 'nombre' | 'permite_vehiculo'> | null;
+  caja_chica_categorias?: Pick<CajaChicaCategoria, 'id' | 'nombre' | 'permite_vehiculo' | 'tipo'> | null;
   vehiculos?: Pick<Vehiculo, 'id' | 'placa' | 'marca' | 'modelo'> | null;
+  /** Fase 30: quién usó el sistema para registrar el movimiento — separado de "responsable". */
+  created_by_profile?: { id: string; full_name: string | null; email: string } | null;
 }
 
 // ---- Control de Asistencia (Fase 117) ----

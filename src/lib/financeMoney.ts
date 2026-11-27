@@ -15,3 +15,18 @@ export const formatPen = (value: string | number | null | undefined) => new Intl
 export function limaDate(at = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
 }
+
+/**
+ * Formatea una fecha YYYY-MM-DD (DATE pura, ya calculada en hora de Perú
+ * por el backend) como DD/MM/AAAA — reordena el texto directo, sin pasar
+ * por `new Date()` (evita el corrimiento de un día que esa conversión
+ * puede introducir según la zona horaria del navegador). Única fuente
+ * para toda la UI financiera (Fase 30 — antes solo existía una copia
+ * local en ContractFinanceSummary.vue, dejando fechas ISO crudas sin
+ * formatear en PonCollections.vue y FinanceDueInvoices.vue).
+ */
+export function formatDateLima(v?: string | null): string {
+  if (!v) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : v;
+}
