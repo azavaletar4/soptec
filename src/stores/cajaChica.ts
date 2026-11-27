@@ -11,7 +11,15 @@ const SIGNED_URL_TTL = 3600;
 // el gasto en campo). caja_chica_movimientos tiene varias FK a profiles
 // (created_by/collector_id/reversed_by); se usa el nombre exacto de la
 // restricción para que PostgREST no las confunda.
-const MOVIMIENTO_SELECT = '*, vehiculos(id, placa, marca, modelo), caja_chica_categorias(id, nombre, permite_vehiculo, tipo), created_by_profile:profiles!caja_chica_movimientos_created_by_fkey(id, full_name, email)';
+// linked_payment: el pago real detrás de una fila de cobranza/reversión
+// (finance_kind='collection'/'payment_reversal') — su receipt_number solo
+// se asigna DESPUÉS de insertar el movimiento (finance_number_receipt es un
+// trigger de restricción diferido), así que la descripción guardada en el
+// propio movimiento nunca lo alcanza a incluir y queda con el UUID del pago
+// como respaldo. Fase 30.2: se usa este embed para mostrar el recibo real
+// en vez del UUID, sin tocar la descripción ya guardada (nunca se reescribe
+// un dato histórico).
+const MOVIMIENTO_SELECT = '*, vehiculos(id, placa, marca, modelo), caja_chica_categorias(id, nombre, permite_vehiculo, tipo), created_by_profile:profiles!caja_chica_movimientos_created_by_fkey(id, full_name, email), linked_payment:invoice_payments!caja_chica_movimientos_source_payment_id_fkey(receipt_number)';
 
 export interface CajaChicaMovimientoWithUrl extends CajaChicaMovimiento {
   url: string | null;

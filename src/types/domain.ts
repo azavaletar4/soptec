@@ -1016,6 +1016,8 @@ export interface CajaChicaMovimiento {
   vehiculos?: Pick<Vehiculo, 'id' | 'placa' | 'marca' | 'modelo'> | null;
   /** Fase 30: quién usó el sistema para registrar el movimiento — separado de "responsable". */
   created_by_profile?: { id: string; full_name: string | null; email: string } | null;
+  /** Fase 30.2: recibo real del pago vinculado (solo collection/payment_reversal) — para mostrar un identificador comprensible en vez del UUID. */
+  linked_payment?: { receipt_number: string | null } | null;
 }
 
 // ---- Control de Asistencia (Fase 117) ----

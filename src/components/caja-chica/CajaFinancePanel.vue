@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import {ref,computed,onMounted} from 'vue';import {useCajaChicaStore} from '@/stores/cajaChica';import {useCatalogsStore} from '@/stores/catalogs';import {formatPen,limaDate,penCents,penDecimal} from '@/lib/financeMoney';import {cashMethodLabel} from '@/lib/financeCash';
+import {ref,computed,onMounted,watch} from 'vue';import {useCajaChicaStore} from '@/stores/cajaChica';import {useCatalogsStore} from '@/stores/catalogs';import {formatPen,limaDate,penCents,penDecimal} from '@/lib/financeMoney';import {cashMethodLabel,otherCashIncomeCents} from '@/lib/financeCash';
 const store=useCajaChicaStore(),catalogs=useCatalogsStore(),day=ref(limaDate()),busy=ref(false),error=ref(''),notice=ref(''),available=ref(true),counted=ref(''),closeReason=ref(''),withdraw=ref(''),withdrawReason=ref(''),reopenReason=ref('');
 const closeId=ref(crypto.randomUUID()),withdrawId=ref(crypto.randomUUID()),reopenId=ref(crypto.randomUUID());
 const activeClosure=computed(()=>store.daily?.closures.find(c=>!c.reopened_at)),canWithdraw=computed(()=>day.value===limaDate()&&!activeClosure.value);
 const difference=computed(()=>{try{return formatPen(penDecimal(penCents(counted.value)-penCents(String(store.daily?.closingCash??0))));}catch{return '—';}});
+// Fase 30.2 — "otros ingresos de efectivo" del día (aportes del propietario
+// u otros ingresos manuales): el saldo esperado YA los incluye (suma todos
+// los movimientos), pero antes no se desglosaban aparte — se calculan aquí
+// sobre los mismos movimientos ya cargados por la vista (store.movimientos,
+// nunca una consulta paralela), nunca sobre cobranzas ni compensaciones.
+const otrosIngresosEfectivo=computed(()=>otherCashIncomeCents(store.movimientos,day.value)/100);
 const money=(n:unknown)=>formatPen(String(n??0));
 function actorName(id:string|null|undefined){if(!id)return '—';const p=catalogs.staff.find(s=>s.id===id);return p?(p.full_name||p.email):'—';}
 async function load(){busy.value=true;error.value='';try{await store.fetchDaily(day.value);available.value=true;}catch{available.value=false;store.daily=null;}finally{busy.value=false;}}
+// Fase 30.2: cambiar de día nunca debe arrastrar lo que el usuario estaba
+// escribiendo para el día anterior — el efectivo contado de ayer no tiene
+// ningún significado hoy; "esperado" y "contado" son datos independientes
+// a propósito (nunca se precarga uno con el otro).
+watch(day,()=>{counted.value='';closeReason.value='';withdraw.value='';withdrawReason.value='';reopenReason.value='';error.value='';notice.value='';});
 // Fase 30: confirmación previa obligatoria para cierre/retiro/reapertura —
 // antes se ejecutaban directo al enviar el formulario.
 const pendingAction=ref<'close'|'withdraw'|'reopen'|null>(null);
@@ -18,7 +29,7 @@ async function action(kind:'close'|'withdraw'|'reopen'){busy.value=true;error.va
  if(kind==='reopen'&&activeClosure.value){await store.reopenDay(reopenId.value,activeClosure.value.id,reopenReason.value.trim());reopenId.value=crypto.randomUUID();reopenReason.value='';notice.value='Caja reabierta; el cierre anterior queda en el historial.';}
  await store.fetchDaily(day.value);
  }catch(e){error.value=e instanceof Error?e.message:String((e as {message?:string})?.message??'No se pudo registrar la operación.');}finally{busy.value=false;pendingAction.value=null;}}
-onMounted(()=>{load();catalogs.fetchStaff().catch(()=>{});});
+onMounted(()=>{load();catalogs.fetchStaff().catch(()=>{});store.fetchMovimientos().catch(()=>{});});
 </script>
 <template><section class="surface p-5 mb-6 caja-finance" aria-labelledby="cash-finance-title">
 <div class="cash-heading">
@@ -32,6 +43,7 @@ onMounted(()=>{load();catalogs.fetchStaff().catch(()=>{});});
 <div class="cash-metrics">
  <div><span class="cash-metric-label">Saldo inicial</span><b>{{money(store.daily.openingCash)}}</b></div>
  <div><span class="cash-metric-label">Efectivo de cobranzas</span><b>{{money(store.daily.linkedCashCollections)}}</b></div>
+ <div><span class="cash-metric-label">Otros ingresos de efectivo</span><b>{{money(otrosIngresosEfectivo)}}</b></div>
  <div><span class="cash-metric-label">Gastos operativos</span><b>{{money(store.daily.operatingExpenses)}}</b></div>
  <div><span class="cash-metric-label">Retiros del propietario</span><b>{{money(store.daily.ownerWithdrawals)}}</b></div>
  <div><span class="cash-metric-label">Efectivo esperado</span><b>{{money(store.daily.closingCash)}}</b></div>
@@ -39,8 +51,8 @@ onMounted(()=>{load();catalogs.fetchStaff().catch(()=>{});});
 <p :class="Number(store.daily.unmatchedCash)===0?'text-green-700':'text-red-600'">{{Number(store.daily.unmatchedCash)===0?'Cobranzas de efectivo registradas en el libro: conciliadas con las facturas pagadas en efectivo.':'Diferencia entre las cobranzas registradas y los movimientos de caja: '+money(store.daily.unmatchedCash)}}</p>
 <p class="cash-disclaimer">Esto NO es el conteo físico del dinero — esa confirmación es el arqueo de abajo ("Cierre diario de efectivo"); la caja física solo queda conciliada cuando se guarda ese cierre.</p>
 <div class="cash-columns">
- <div class="surface p-4"><h3>Medios de pago</h3><p v-for="m in store.daily.methods??[]" :key="m.method">{{cashMethodLabel(m.method)}}: <b>{{money(m.net)}}</b><small v-if="m.method!=='cash'"> · separado del efectivo</small></p></div>
- <div class="surface p-4"><h3>Administradoras responsables</h3><p v-for="c in store.daily.collectors??[]" :key="c.id+c.method">{{c.name}} · {{cashMethodLabel(c.method)}} · {{money(c.received)}}</p></div>
+ <div class="surface p-4"><h3>Medios de pago</h3><p v-for="m in store.daily.methods??[]" :key="m.method">{{cashMethodLabel(m.method)}}: <b class="cash-amount">{{money(m.net)}}</b><small v-if="m.method!=='cash'"> · separado del efectivo</small></p><p v-if="!(store.daily.methods??[]).length" class="text-sm text-slate-500">Sin cobranzas registradas este día.</p></div>
+ <div class="surface p-4"><h3>Administradoras responsables</h3><p v-for="c in store.daily.collectors??[]" :key="c.id+c.method">{{c.name}} · {{cashMethodLabel(c.method)}} · <b class="cash-amount">{{money(c.received)}}</b></p><p v-if="!(store.daily.collectors??[]).length" class="text-sm text-slate-500">Sin responsables con movimientos este día.</p></div>
 </div>
 <div class="cash-columns">
  <div class="surface p-4">
@@ -52,7 +64,7 @@ onMounted(()=>{load();catalogs.fetchStaff().catch(()=>{});});
   <p v-if="!canWithdraw" class="text-xs text-slate-400 mt-2">{{ activeClosure ? 'La caja está cerrada — reábrela con auditoría para registrar un retiro.' : 'Solo se puede retirar en el día de hoy.' }}</p>
  </div>
 </div>
-<details v-if="store.daily.closures.length"><summary>Historial de cierres</summary><p v-for="c in store.daily.closures" :key="c.id">{{new Date(c.created_at).toLocaleString('es-PE',{timeZone:'America/Lima'})}} · {{money(c.counted_cash)}} · {{c.reopened_at?'Reabierto':'Cerrado'}} · {{actorName(c.actor_id)}} · {{c.reason}}</p></details>
+<details v-if="store.daily.closures.length"><summary>Historial de cierres</summary><div v-for="c in store.daily.closures" :key="c.id" class="cash-closure-row"><p>{{new Date(c.created_at).toLocaleString('es-PE',{timeZone:'America/Lima'})}} · <b class="cash-amount">{{money(c.counted_cash)}}</b> · {{c.reopened_at?'Reabierto':'Cerrado'}} · {{actorName(c.actor_id)}} · {{c.reason}}</p><p v-if="c.reopened_at" class="text-xs text-slate-500">Reapertura: {{new Date(c.reopened_at).toLocaleString('es-PE',{timeZone:'America/Lima'})}} · {{actorName(c.reopened_by)}} · {{c.reopen_reason}}</p></div></details>
 </template>
 <p v-if="error" class="text-red-600" role="alert">{{error}}</p><p v-if="notice" class="text-green-700" role="status">{{notice}}</p>
 <Teleport to="body"><div v-if="pendingAction" class="modal-overlay"><div class="modal-panel w-full max-w-sm">
@@ -63,5 +75,5 @@ onMounted(()=>{load();catalogs.fetchStaff().catch(()=>{});});
  <div class="flex justify-end gap-2"><button type="button" class="btn-ghost" :disabled="busy" @click="cancelConfirm">Cancelar</button><button type="button" class="btn-primary" :disabled="busy" @click="action(pendingAction)">{{busy?'Guardando…':'Confirmar'}}</button></div>
 </div></div></Teleport>
 </section></template>
-<style scoped>.cash-heading{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}.cash-heading h2{margin-right:auto}.cash-heading label{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:#64748b}.cash-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin:1rem 0}.cash-metrics>div{background:#f8fafc;border-radius:10px;padding:10px 12px}.cash-metrics b{display:block;font-size:1.2rem;margin-top:2px}.cash-metric-label{font-size:.7rem;color:#64748b}.cash-disclaimer{font-size:.75rem;color:var(--text-muted,#64748b);margin-top:-.25rem}.cash-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1.5rem;margin:1rem 0}.cash-columns h3{font-weight:600;margin:.5rem 0}.cash-columns label{display:block;margin:.5rem 0}.cash-columns button{margin-top:.7rem}
+<style scoped>.cash-heading{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}.cash-heading h2{margin-right:auto}.cash-heading label{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:#64748b}.cash-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin:1rem 0}.cash-metrics>div{background:#f8fafc;border-radius:10px;padding:10px 12px}.cash-metrics b{display:block;font-size:1.2rem;margin-top:2px;white-space:nowrap}.cash-metric-label{font-size:.7rem;color:#64748b}.cash-disclaimer{font-size:.75rem;color:var(--text-muted,#64748b);margin-top:-.25rem}.cash-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1.5rem;margin:1rem 0}.cash-columns h3{font-weight:600;margin:.5rem 0}.cash-columns label{display:block;margin:.5rem 0}.cash-columns button{margin-top:.7rem}.cash-amount{white-space:nowrap}.cash-closure-row{margin-bottom:.5rem}.cash-closure-row p{margin:0}
 @media(max-width:640px){.cash-heading{flex-direction:column;align-items:stretch}.cash-heading h2{margin-right:0}}</style>

@@ -9,8 +9,8 @@ import { getErrorMessage } from '@/lib/errors';
 import type { CajaChicaTipo } from '@/types/domain';
 import CajaFinancePanel from '@/components/caja-chica/CajaFinancePanel.vue';
 import CajaChicaConfigPanel from '@/components/caja-chica/CajaChicaConfigPanel.vue';
-import { operatingExpenseCents, cashMethodLabel } from '@/lib/financeCash';
-import { limaDate, formatPen } from '@/lib/financeMoney';
+import { operatingExpenseCents, cashMethodLabel, movimientoDisplayLabel } from '@/lib/financeCash';
+import { limaDate, formatPen, formatDateLima } from '@/lib/financeMoney';
 
 const cajaChicaStore = useCajaChicaStore();
 const vehiculosStore = useVehiculosStore();
@@ -469,17 +469,17 @@ onMounted(() => {
               <td colspan="9" class="px-4 py-6 text-center text-slate-500">No hay movimientos en este filtro.</td>
             </tr>
             <tr v-for="m in filteredMovimientos" :key="m.id" class="border-t border-slate-200 hover:bg-slate-50">
-              <td class="px-4 py-3 text-slate-600 text-xs">{{ m.fecha }}</td>
+              <td class="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{{ formatDateLima(m.fecha) }}</td>
               <td class="px-4 py-3">
                 <span class="badge bg-slate-500/15 text-slate-600">{{ m.caja_chica_categorias?.nombre ?? '—' }}</span>
               </td>
               <td class="px-4 py-3">
-                {{ m.descripcion }}
+                {{ movimientoDisplayLabel(m) }}
                 <div v-if="m.vehiculos" class="text-[11px] text-slate-400">🚗 {{ m.vehiculos.placa }} — {{ m.vehiculos.marca }}</div>
               </td>
               <td class="px-4 py-3 text-slate-600">{{ m.responsable || '—' }}</td>
               <td class="px-4 py-3 text-slate-400 text-xs">{{ m.created_by_profile?.full_name || m.created_by_profile?.email || '—' }}</td>
-              <td class="px-4 py-3 font-medium" :class="m.tipo === 'ingreso' ? 'text-green-600' : 'text-slate-900'">
+              <td class="px-4 py-3 font-medium whitespace-nowrap" :class="m.tipo === 'ingreso' ? 'text-green-600' : 'text-slate-900'">
                 {{ m.tipo === 'ingreso' ? '+' : '-' }} {{ formatPen(m.monto) }}
               </td>
               <td class="px-4 py-3">
@@ -578,9 +578,9 @@ onMounted(() => {
             </div>
 
             <div class="mb-3">
-              <label class="block text-xs text-slate-600 mb-1">Responsable del gasto</label>
+              <label class="block text-xs text-slate-600 mb-1">{{ form.tipo === 'ingreso' ? 'Responsable del ingreso' : 'Responsable del gasto' }}</label>
               <select v-model="form.responsable" required class="field-input">
-                <option value="" disabled>Selecciona quién hizo o autorizó el gasto</option>
+                <option value="" disabled>{{ form.tipo === 'ingreso' ? 'Selecciona quién recibió o registró el ingreso' : 'Selecciona quién hizo o autorizó el gasto' }}</option>
                 <option v-for="s in visibleStaff" :key="s.id" :value="staffLabel(s)">{{ staffLabel(s) }}</option>
               </select>
               <p class="text-xs text-slate-400 mt-1">Precargado con tu usuario si está habilitado — puedes cambiarlo. Lista administrable en la pestaña "Configuración".</p>

@@ -20,5 +20,28 @@ export function operatingExpenseCents(m:CashMovement,all:ReadonlyMap<string,Cash
  const original=m.source_movement_id?all.get(m.source_movement_id):null;
  return kind==='movement_reversal'&&(original?.finance_kind??'manual')==='manual'&&original?.tipo==='egreso'?-penCents(String(m.monto)):0;
 }
-export interface CashClosure {id:string;day:string;actor_id:string|null;counted_cash:string|number;expected_cash:string|number;difference:string|number;created_at:string;reopened_at:string|null;reason:string}
+export interface CashClosure {id:string;day:string;actor_id:string|null;counted_cash:string|number;expected_cash:string|number;difference:string|number;created_at:string;reopened_at:string|null;reopened_by:string|null;reopen_reason:string|null;reason:string}
 export interface CashDaily {day:string;enabled:boolean;expectedCashCollections:string|number;linkedCashCollections:string|number;unmatchedCash:string|number;openingCash:string|number;closingCash:string|number;operatingExpenses:string|number;ownerWithdrawals:string|number;methods:{method:CashMethod;received:string|number;reversed:string|number;net:string|number}[]|null;collectors:{id:string;name:string;method:CashMethod;received:string|number}[]|null;closures:CashClosure[]}
+
+// Fase 30.2 — "otros ingresos de efectivo" del día: movimientos manuales de
+// tipo ingreso (nunca cobranzas de clientes ni compensaciones/reversos) —
+// el aporte del propietario u otro ingreso en efectivo distinto a una
+// cobranza. Se calcula en el frontend, sobre los movimientos ya cargados
+// (nunca una fuente paralela), para no duplicar con linkedCashCollections.
+export interface CashMovementForIncome {fecha:string;tipo:string;finance_kind?:string;monto:number|string}
+export function otherCashIncomeCents(movs:readonly CashMovementForIncome[],day:string):number{
+ return movs.filter((m)=>m.fecha===day&&m.tipo==='ingreso'&&(m.finance_kind??'manual')==='manual').reduce((n,m)=>n+penCents(String(m.monto)),0);
+}
+
+// Fase 30.2 — sustituye el UUID crudo de una cobranza/reversión por su
+// recibo real cuando ya existe (finance_number_receipt es un trigger
+// diferido: el recibo se asigna DESPUÉS de insertar el movimiento, así que
+// la descripción guardada nunca lo alcanza a incluir — nunca se reescribe
+// ese dato histórico, solo se mejora lo que se muestra).
+export interface CashMovementForLabel {finance_kind?:string;descripcion:string;linked_payment?:{receipt_number:string|null}|null}
+export function movimientoDisplayLabel(m:CashMovementForLabel):string{
+ const kind=m.finance_kind??'manual';const receipt=m.linked_payment?.receipt_number;
+ if(kind==='collection'&&receipt)return 'Cobranza · '+receipt;
+ if(kind==='payment_reversal'&&receipt)return 'Reversión de cobranza · '+receipt;
+ return m.descripcion;
+}
