@@ -2,39 +2,6 @@
   "version": 1,
   "sourceCommit": "3c93ed2b266c4bbecc05811e3a57f8b30c16bfc3",
   "backendSources": ["server/src/routes/invoices.ts", "src/lib/financeCash.ts", "server/src/services/invoiceScheduler.ts"],
-  "frontendSources": [
-    "src/components/caja-chica/CajaFinancePanel.vue",
-    "src/components/facturacion/FinanceWorkspace.vue",
-    "src/components/facturacion/MixedPaymentReceipt.vue",
-    "src/lib/financeCash.ts",
-    "src/stores/cajaChica.ts",
-    "src/stores/invoices.ts",
-    "src/types/domain.ts",
-    "src/views/caja-chica/CajaChicaView.vue",
-    "src/components/clientes/ContractFinanceSummary.vue",
-    "src/views/clientes/ClientServiceDetailView.vue"
-  ],
-  "frontendAssets": [
-    "assets/CajaChicaView.js",
-    "assets/CajaChicaView.css",
-    "assets/financeCash.js",
-    "assets/FacturacionView.js",
-    "assets/FacturacionView.css",
-    "assets/index.js",
-    "assets/index.css",
-    "assets/ClientDetailView.js",
-    "assets/ClientServiceDetailView.js",
-    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
-    "assets/MixedPaymentReceipt.css",
-    "assets/MixedPaymentReceipt.vue_vue_type_script_setup_true_lang.js",
-    "assets/invoices.js"
-  ],
-  "frontendGraphTransition": {
-    "contentAdded": ["assets/CajaChicaView.css", "assets/financeCash.js", "assets/MixedPaymentReceipt.css", "assets/MixedPaymentReceipt.vue_vue_type_script_setup_true_lang.js"],
-    "contentRemoved": ["assets/invoices.js"],
-    "manifestAdded": ["assets/MixedPaymentReceipt.css", "assets/MixedPaymentReceipt.vue_vue_type_script_setup_true_lang.js", "assets/financeCash.js"],
-    "manifestRemoved": ["assets/invoices.js"],
-    "before": "f89c9078ae64d791b6106992977970fe80dc48db54513b8194f3ad2efe83b01a",
-    "after": "44d260b66eda32d78c840911bb9cb3d5ecef04c240c2e612870920ecb16c151a"
-  }
+  "frontendSources": [],
+  "frontendAssets": []
 }
