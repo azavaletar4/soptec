@@ -36,8 +36,15 @@ const history = ref<History | null>(null);
 const mixedEnabled = ref(false);
 const loading = ref(true);
 
+function rpcErrorMessage(e: unknown): string {
+  if (e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
+    return (e as { message: string }).message;
+  }
+  return e instanceof Error ? e.message : 'No se pudo consultar el estado financiero de este contrato.';
+}
+
 async function load() {
-  loading.value = true; cycleError.value = '';
+  loading.value = true; cycleError.value = ''; cycle.value = null;
   try {
     const [{ data: cycleData, error: cycleErr }, { data: historyData, error: historyErr }] = await Promise.all([
       supabase.rpc('finance_contract_cycle_status', { p_contract_id: props.contract.id }),
@@ -47,7 +54,14 @@ async function load() {
     cycle.value = cycleData as CycleStatus;
     if (!historyErr) history.value = historyData as History;
   } catch (e) {
-    cycleError.value = e instanceof Error ? e.message : 'No se pudo cargar el resumen financiero.';
+    // Nunca se confunde con "sin_conciliar": un fallo de consulta (función
+    // ausente, permisos, red) es un estado DISTINTO de "contrato no
+    // conciliado" — cycle.value queda en null y el badge debe reflejar el
+    // error, no inventar un estado comercial real a partir de un dato que
+    // no se pudo leer (caso real: Diego Rojas y Roberto Gil, ambos
+    // conciliados, mostraban "Pendiente de conciliación" porque la RPC
+    // finance_contract_cycle_status nunca llegó a aplicarse en producción).
+    cycleError.value = rpcErrorMessage(e);
   } finally { loading.value = false; }
 }
 onMounted(async () => {
@@ -62,11 +76,15 @@ const lastPayment = computed(() => history.value?.payments.find((p) => !p.revers
 const autoBilled = computed(() => props.invoices.some((i) => i.finance_origin === 'operational' || i.finance_origin === undefined));
 
 // Estado visual — nunca inventa "al día" para un contrato sin conciliar ni
-// confunde cortesía/suspendido con morosidad (reglas permanentes del proyecto).
-type Status = 'cortesia' | 'sin_conciliar' | 'suspendido' | 'moroso' | 'en_gracia' | 'al_dia';
+// confunde cortesía/suspendido con morosidad (reglas permanentes del
+// proyecto). "cargando"/"error" son estados DISTINTOS de "sin_conciliar":
+// un fallo de consulta nunca se muestra como si fuera un dato comercial
+// real (ver nota en load()).
+type Status = 'cargando' | 'error' | 'cortesia' | 'sin_conciliar' | 'suspendido' | 'moroso' | 'en_gracia' | 'al_dia';
 const status = computed<Status>(() => {
+  if (loading.value) return 'cargando';
+  if (cycleError.value || !cycle.value) return 'error';
   const c = cycle.value;
-  if (!c) return 'sin_conciliar';
   if (c.isCourtesy) return 'cortesia';
   if (!c.reconciled) return 'sin_conciliar';
   if (c.status === 'suspended') return 'suspendido';
@@ -76,8 +94,13 @@ const status = computed<Status>(() => {
   if (c.graceEndDate && c.graceEndDate >= today) return 'en_gracia';
   return 'moroso';
 });
-const STATUS_LABEL: Record<Status, string> = { cortesia: 'Cortesía', sin_conciliar: 'Pendiente de conciliación', suspendido: 'Suspendido', moroso: 'Moroso', en_gracia: 'Dentro del plazo de gracia', al_dia: 'Al día' };
+const STATUS_LABEL: Record<Status, string> = {
+  cargando: 'Verificando…', error: 'Error al consultar', cortesia: 'Cortesía',
+  sin_conciliar: 'Pendiente de conciliación', suspendido: 'Suspendido', moroso: 'Moroso',
+  en_gracia: 'Dentro del plazo de gracia', al_dia: 'Al día',
+};
 const STATUS_CLASS: Record<Status, string> = {
+  cargando: 'bg-slate-300/20 text-slate-500', error: 'bg-red-500/15 text-red-700',
   cortesia: 'bg-sky-500/15 text-sky-700', sin_conciliar: 'bg-slate-400/15 text-slate-600',
   suspendido: 'bg-slate-700/15 text-slate-700', moroso: 'bg-red-500/15 text-red-600',
   en_gracia: 'bg-amber-500/15 text-amber-700', al_dia: 'bg-green-500/15 text-green-600',
@@ -126,48 +149,66 @@ async function confirmPayment() {
   } catch (e) { payError.value = e instanceof Error ? e.message : 'No se pudo registrar el pago. Reintenta con esta misma operación.'; } finally { paying.value = false; }
 }
 const dateLabel = (v?: string | null) => (v ? new Date(v).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : '—');
+// cycle.coveredUntil/nextCycleDate/graceEndDate/promoCoverageThrough son
+// DATE puras (YYYY-MM-DD) ya calculadas en hora de Perú por el propio RPC
+// (finance_last_covered_period/finance_next_cycle_date) — se reordena el
+// texto directo a DD/MM/AAAA, sin pasar por `new Date()` (evita el
+// corrimiento de un día que esa conversión puede introducir según la zona
+// horaria del navegador).
+function formatDateLima(v?: string | null): string {
+  if (!v) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : v;
+}
 </script>
 
 <template>
   <div class="mb-6">
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-sm font-semibold">Resumen financiero</h3>
       <span class="badge" :class="STATUS_CLASS[status]">{{ STATUS_LABEL[status] }}</span>
     </div>
-    <p v-if="cycleError" class="text-sm text-red-600 mb-3">{{ cycleError }}</p>
-    <p v-else-if="loading" class="text-sm text-slate-500 mb-3">Cargando resumen financiero…</p>
-    <template v-else-if="cycle">
+    <p v-if="status === 'cargando'" class="text-sm text-slate-500 mb-3">Cargando resumen financiero…</p>
+    <p v-if="status === 'error'" class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3 flex items-center justify-between gap-3">
+      <span>No se pudo consultar el estado financiero de este contrato (mensualidad, modalidad, cobertura, gracia). {{ cycleError }} La deuda y el cobro de abajo siguen disponibles con los datos ya cargados.</span>
+      <button type="button" class="btn-ghost shrink-0" @click="load">Reintentar</button>
+    </p>
+    <template v-if="cycle">
       <p v-if="!cycle.reconciled" class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
         Este contrato todavía no está conciliado — no se muestra deuda, cobertura ni próxima mensualidad porque no hay evidencia financiera confiable. Se evita mostrar "deuda S/ 0" para no sugerir que está al día.
       </p>
       <p v-if="cycle.isCourtesy" class="text-sm text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 mb-3">
         Servicio de cortesía{{ cycle.courtesyReason ? ' — ' + cycle.courtesyReason : '' }}. Nunca genera deuda ni factura automática.
       </p>
-      <div class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr))">
+      <div v-if="cycle.reconciled" class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr))">
         <div class="surface p-3"><div class="text-xs text-slate-500">Mensualidad vigente</div><div class="text-lg font-semibold">{{ formatPen(cycle.monthlyFee) }}</div></div>
         <div class="surface p-3"><div class="text-xs text-slate-500">Modalidad</div><div class="text-sm font-medium">{{ cycle.billingModality === 'adelantado' ? 'Pago adelantado' : cycle.billingModality === 'cumplido' ? 'Pago cumplido' : '—' }}</div></div>
         <div class="surface p-3"><div class="text-xs text-slate-500">Día contractual</div><div class="text-sm font-medium">{{ cycle.billingDay ?? '—' }}</div></div>
         <div class="surface p-3"><div class="text-xs text-slate-500">Último pago verificado</div><div class="text-sm font-medium">{{ lastPayment ? formatPen(lastPayment.amount) + ' · ' + dateLabel(lastPayment.received_at) : 'Sin pagos en el libro nuevo' }}</div></div>
-        <div class="surface p-3"><div class="text-xs text-slate-500">Servicio cubierto hasta</div><div class="text-sm font-medium">{{ cycle.coveredUntil ?? '—' }}</div></div>
-        <div class="surface p-3"><div class="text-xs text-slate-500">Próxima mensualidad</div><div class="text-sm font-medium">{{ cycle.nextCycleDate ?? '—' }}</div></div>
-        <div class="surface p-3"><div class="text-xs text-slate-500">Plazo de gracia</div><div class="text-sm font-medium">{{ cycle.graceEndDate ? 'Hasta ' + cycle.graceEndDate : (cycle.billingModality === 'cumplido' ? 'No aplica (pago cumplido)' : '—') }}</div></div>
-        <div class="surface p-3" :class="{ 'ring-1 ring-red-300': deudaPendienteCents > 0 }"><div class="text-xs text-slate-500">Deuda pendiente</div><div class="text-lg font-semibold" :class="deudaPendienteCents > 0 ? 'text-red-600' : ''">{{ formatPen(penDecimal(deudaPendienteCents)) }}</div></div>
-        <div class="surface p-3"><div class="text-xs text-slate-500">Saldo a favor (cliente)</div><div class="text-sm font-medium">{{ formatPen(saldoAFavor) }}</div></div>
+        <div class="surface p-3"><div class="text-xs text-slate-500">Servicio cubierto hasta</div><div class="text-sm font-medium">{{ formatDateLima(cycle.coveredUntil) }}</div></div>
+        <div class="surface p-3"><div class="text-xs text-slate-500">Próxima mensualidad</div><div class="text-sm font-medium">{{ formatDateLima(cycle.nextCycleDate) }}</div></div>
+        <div class="surface p-3"><div class="text-xs text-slate-500">Plazo de gracia</div><div class="text-sm font-medium">{{ cycle.graceEndDate ? 'Hasta ' + formatDateLima(cycle.graceEndDate) : (cycle.billingModality === 'cumplido' ? 'No aplica (pago cumplido)' : '—') }}</div></div>
         <div class="surface p-3"><div class="text-xs text-slate-500">Facturación automática</div><div class="text-sm font-medium">{{ cycle.isCourtesy ? 'No aplica (cortesía)' : autoBilled ? 'Ya se generaron facturas automáticas' : 'Aún no se generó ninguna factura automática' }}</div></div>
       </div>
       <div v-if="cycle.promo3plus1" class="text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 mb-4">
-        Promoción 3+1 aplicada{{ cycle.promoCoverageThrough ? ' — cobertura hasta ' + cycle.promoCoverageThrough : '' }}.
+        Promoción 3+1 aplicada{{ cycle.promoCoverageThrough ? ' — cobertura hasta ' + formatDateLima(cycle.promoCoverageThrough) : '' }}.
       </div>
-      <div class="flex gap-2 mb-4">
-        <button v-if="canAdmin && pendingInvoices.length" type="button" class="btn-primary" @click="openPayment">Registrar pago</button>
-        <button type="button" class="btn-ghost" @click="router.push('/facturacion')">Ver en Facturación →</button>
-      </div>
-      <details class="mb-2">
-        <summary class="text-xs text-slate-500 cursor-pointer">Auditoría financiera ({{ history?.audit.length ?? 0 }})</summary>
-        <p v-for="a in history?.audit ?? []" :key="a.id" class="text-xs text-slate-500 py-1 border-t border-slate-100">{{ dateLabel(a.created_at) }} · {{ a.accion }} · {{ a.motivo }}</p>
-        <p v-if="!history?.audit.length" class="text-xs text-slate-400">Sin registros de auditoría todavía.</p>
-      </details>
     </template>
+    <!-- Deuda, saldo a favor y Registrar pago se derivan de las facturas ya
+         cargadas por la ficha (prop invoices/saldoAFavor) — disponibles
+         SIEMPRE, incluso si la consulta de ciclo de arriba falló. -->
+    <div class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr))">
+      <div class="surface p-3" :class="{ 'ring-1 ring-red-300': deudaPendienteCents > 0 }"><div class="text-xs text-slate-500">Deuda pendiente</div><div class="text-lg font-semibold" :class="deudaPendienteCents > 0 ? 'text-red-600' : ''">{{ formatPen(penDecimal(deudaPendienteCents)) }}</div></div>
+      <div class="surface p-3"><div class="text-xs text-slate-500">Saldo a favor (cliente)</div><div class="text-sm font-medium">{{ formatPen(saldoAFavor) }}</div></div>
+    </div>
+    <div class="flex gap-2 mb-4">
+      <button v-if="canAdmin && pendingInvoices.length" type="button" class="btn-primary" @click="openPayment">Registrar pago</button>
+      <button type="button" class="btn-ghost" @click="router.push('/facturacion')">Ver en Facturación →</button>
+    </div>
+    <details v-if="history" class="mb-2">
+      <summary class="text-xs text-slate-500 cursor-pointer">Auditoría financiera ({{ history.audit.length }})</summary>
+      <p v-for="a in history.audit" :key="a.id" class="text-xs text-slate-500 py-1 border-t border-slate-100">{{ dateLabel(a.created_at) }} · {{ a.accion }} · {{ a.motivo }}</p>
+      <p v-if="!history.audit.length" class="text-xs text-slate-400">Sin registros de auditoría todavía.</p>
+    </details>
   </div>
   <PaymentReceipt ref="receiptView" />
   <MixedPaymentReceipt ref="mixedReceipt" @changed="load(); emit('changed')" />
