@@ -1,7 +1,10 @@
 {
   "version": 1,
-  "sourceCommit": "3c93ed2b266c4bbecc05811e3a57f8b30c16bfc3",
-  "backendSources": ["server/src/services/invoiceScheduler.ts"],
-  "frontendSources": [],
-  "frontendAssets": []
+  "sourceCommit": "6b3f0dc4d8a7bdc61ee92b3bda3b0222a65d7014",
+  "backendSources": [],
+  "frontendSources": ["src/components/clientes/ContractFinanceSummary.vue"],
+  "frontendAssets": [
+    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
+    "assets/index.css"
+  ]
 }
