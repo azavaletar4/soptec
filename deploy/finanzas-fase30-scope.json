@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "sourceCommit": "42c22ee8a739823b64b4444a78250271a9631ae7",
+  "backendSources": [],
+  "frontendSources": [
+    "src/components/caja-chica/CajaChicaConfigPanel.vue",
+    "src/components/caja-chica/CajaFinancePanel.vue",
+    "src/components/clientes/ContractFinanceSummary.vue",
+    "src/components/facturacion/FinanceWorkspace.vue",
+    "src/components/facturacion/PonCollections.vue",
+    "src/lib/financeCash.ts",
+    "src/lib/financeMoney.ts",
+    "src/stores/cajaChica.ts",
+    "src/types/domain.ts",
+    "src/views/caja-chica/CajaChicaView.vue"
+  ],
+  "frontendAssets": [
+    "assets/CajaChicaView.js",
+    "assets/CajaChicaView.css",
+    "assets/FacturacionView.js",
+    "assets/FacturacionView.css",
+    "assets/financeCash.js",
+    "assets/financeMoney.js",
+    "assets/ClientServiceDetailView.js",
+    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js"
+  ]
+}
