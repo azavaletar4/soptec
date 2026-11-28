@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "sourceCommit": "42c22ee8a739823b64b4444a78250271a9631ae7",
+  "sourceCommit": "37d117a9044b5d2616efe79cdc44eef55e71a9bc",
   "backendSources": [],
   "frontendSources": [
     "src/components/caja-chica/CajaChicaConfigPanel.vue",
