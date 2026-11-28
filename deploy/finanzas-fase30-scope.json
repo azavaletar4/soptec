@@ -3,11 +3,14 @@
   "sourceCommit": "37d117a9044b5d2616efe79cdc44eef55e71a9bc",
   "backendSources": [],
   "frontendSources": [
+    "package.json",
     "src/components/caja-chica/CajaChicaConfigPanel.vue",
     "src/components/caja-chica/CajaFinancePanel.vue",
     "src/components/clientes/ContractFinanceSummary.vue",
     "src/components/facturacion/FinanceWorkspace.vue",
     "src/components/facturacion/PonCollections.vue",
+    "src/lib/__tests__/financeCash.test.ts",
+    "src/lib/__tests__/financeMoneyDateFormat.test.ts",
     "src/lib/financeCash.ts",
     "src/lib/financeMoney.ts",
     "src/stores/cajaChica.ts",
@@ -22,6 +25,9 @@
     "assets/financeCash.js",
     "assets/financeMoney.js",
     "assets/ClientServiceDetailView.js",
-    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js"
+    "assets/ClientServiceDetailView.vue_vue_type_script_setup_true_lang.js",
+    "assets/FinanceReconciliation.js",
+    "assets/MixedPaymentReceipt.vue_vue_type_script_setup_true_lang.js",
+    "assets/index.css"
   ]
 }
